@@ -7,10 +7,12 @@ import {
   resolveCollabBaseUrl,
   sessionWsUrl,
 } from "../apps/geolibre-desktop/src/lib/collab-client";
+import { participantCanEdit } from "../apps/geolibre-desktop/src/lib/collab-protocol";
 import type {
   ClientMessage,
   ServerMessage,
 } from "../apps/geolibre-desktop/src/lib/collab-protocol";
+import type { CollaborationParticipant } from "@geolibre/core";
 
 describe("resolveCollabBaseUrl", () => {
   it("accepts a wss host", () => {
@@ -62,6 +64,83 @@ describe("url derivation", () => {
     assert.equal(
       sessionWsUrl("wss://collab.geolibre.app", "AB CD"),
       "wss://collab.geolibre.app/sessions/AB%20CD/ws",
+    );
+  });
+});
+
+describe("participantCanEdit", () => {
+  const base = (
+    over: Partial<CollaborationParticipant>,
+  ): CollaborationParticipant => ({
+    clientId: "x",
+    displayName: "X",
+    color: "#000000",
+    role: "guest",
+    editOverride: null,
+    ...over,
+  });
+
+  it("always lets the host edit, regardless of mode", () => {
+    assert.equal(participantCanEdit(base({ role: "host" }), "view-only"), true);
+    assert.equal(participantCanEdit(base({ role: "host" }), "co-edit"), true);
+  });
+
+  it("follows the session mode when there is no override", () => {
+    assert.equal(participantCanEdit(base({}), "co-edit"), true);
+    assert.equal(participantCanEdit(base({}), "view-only"), false);
+  });
+
+  it("lets a host-set override win over the session mode", () => {
+    // Pinned to view-only inside an otherwise co-edit session.
+    assert.equal(
+      participantCanEdit(base({ editOverride: false }), "co-edit"),
+      false,
+    );
+    // Granted edit inside an otherwise view-only session.
+    assert.equal(
+      participantCanEdit(base({ editOverride: true }), "view-only"),
+      true,
+    );
+  });
+});
+
+describe("new protocol messages round-trip", () => {
+  it("serializes a set-participant-mode client message", () => {
+    const msg: ClientMessage = {
+      type: "set-participant-mode",
+      clientId: "guest-1",
+      canEdit: false,
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(msg)), msg);
+  });
+
+  it("serializes a chat send with an attached coordinate", () => {
+    const msg: ClientMessage = {
+      type: "chat",
+      text: "look here",
+      coordinate: { lng: -122.4, lat: 37.8 },
+    };
+    assert.deepEqual(JSON.parse(JSON.stringify(msg)), msg);
+  });
+
+  it("parses a chat broadcast server message", () => {
+    const server: ServerMessage = {
+      type: "chat",
+      message: {
+        id: "m1",
+        clientId: "c1",
+        displayName: "Alex",
+        color: "#2563eb",
+        text: "hi",
+        coordinate: null,
+        ts: 1_700_000_000_000,
+      },
+    };
+    const parsed = JSON.parse(JSON.stringify(server)) as ServerMessage;
+    assert.equal(parsed.type, "chat");
+    assert.equal(
+      parsed.type === "chat" ? parsed.message.text : null,
+      "hi",
     );
   });
 });
@@ -168,6 +247,8 @@ describe("CollabConnection", () => {
       mode: "co-edit",
       participants: [],
       snapshot: null,
+      presence: {},
+      chat: [],
       rev: 0,
     };
     socket.emit("message", { data: JSON.stringify(welcome) });

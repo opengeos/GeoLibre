@@ -585,6 +585,12 @@ export interface CollaborationParticipant {
   displayName: string;
   color: string;
   role: CollaborationRole;
+  /**
+   * Host-set per-participant edit override (#754). `null` follows the session
+   * `mode`; `true`/`false` pins this participant to can-edit / view-only. Always
+   * `null` for the host (the host can always edit).
+   */
+  editOverride: boolean | null;
 }
 
 /** A remote participant's live cursor + viewport, used to render presence. */
@@ -593,6 +599,21 @@ export interface CollaborationPresence {
   color: string;
   cursor?: { lng: number; lat: number } | null;
   view?: MapViewState | null;
+}
+
+/** One in-session chat message (#754). Ephemeral; never persisted to a project. */
+export interface CollaborationChatMessage {
+  /** Server-assigned id (stable React key / dedupe). */
+  id: string;
+  /** clientId of the author. */
+  clientId: string;
+  displayName: string;
+  color: string;
+  text: string;
+  /** Optional map coordinate the author attached; clickable to recenter. */
+  coordinate?: { lng: number; lat: number } | null;
+  /** Server-assigned epoch-ms timestamp. */
+  ts: number;
 }
 
 export interface CollaborationState {
@@ -611,6 +632,8 @@ export interface CollaborationState {
   presence: Record<string, CollaborationPresence>;
   /** When true, this participant's camera follows the host's viewport. */
   followHost: boolean;
+  /** Recent session chat, oldest first, capped to a bounded window (#754). */
+  chat: CollaborationChatMessage[];
   /** Last human-readable error, surfaced in the Collaborate dialog. */
   error: string | null;
 }

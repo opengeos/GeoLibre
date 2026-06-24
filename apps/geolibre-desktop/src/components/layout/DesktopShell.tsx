@@ -76,6 +76,7 @@ import {
 } from "../../hooks/useRightPanels";
 import { BoundsRestrictionIndicator } from "./BoundsRestrictionIndicator";
 import { CollaborationStatusBadge } from "./CollaborationStatusBadge";
+import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -518,6 +519,9 @@ export function DesktopShell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
+  // Live-collaboration session. Owned here (rather than in TopToolbar) so both
+  // the Collaborate dialog and the on-canvas status badge share one socket.
+  const collaboration = useCollaboration(mapControllerRef);
   // Sync the project with an embedding host (the GeoLibre Jupyter widget) over
   // postMessage. Inert when the app is not embedded.
   useEmbedBridge(mapControllerRef);
@@ -1433,6 +1437,7 @@ export function DesktopShell({
             showLabels={layoutOptions.toolbarLabels}
             showProjectInfo={layoutOptions.showProjectInfo}
             themeMode={themeMode}
+            collaboration={collaboration}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
             onToggleThemeMode={onToggleThemeMode}
           />
@@ -1537,7 +1542,10 @@ export function DesktopShell({
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <BoundsRestrictionIndicator />
-              <CollaborationStatusBadge />
+              <CollaborationStatusBadge
+                api={collaboration}
+                mapControllerRef={mapControllerRef}
+              />
               <MapModeBanner mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>

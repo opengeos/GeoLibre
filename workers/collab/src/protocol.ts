@@ -14,11 +14,33 @@ export interface CollabParticipant {
   displayName: string;
   color: string;
   role: CollaborationRole;
+  /**
+   * Host-set per-participant edit override (#754, Part 3). `null` means "follow
+   * the session mode"; `true`/`false` pins this participant to can-edit /
+   * view-only regardless of the session default. Always `null` for the host
+   * (the host can always edit).
+   */
+  editOverride: boolean | null;
 }
 
 export interface CollabCursor {
   lng: number;
   lat: number;
+}
+
+/** One in-session chat message (#754, Part 4). Ephemeral session state. */
+export interface CollabChatMessage {
+  /** Server-assigned id (dedupes optimistic local rendering / React keys). */
+  id: string;
+  /** clientId of the author. */
+  clientId: string;
+  displayName: string;
+  color: string;
+  text: string;
+  /** Optional map coordinate the author attached; clickable in peers' UIs. */
+  coordinate?: CollabCursor | null;
+  /** Server-assigned epoch-ms timestamp. */
+  ts: number;
 }
 
 export interface CollabView {
@@ -57,11 +79,27 @@ export interface SetModeMessage {
   mode: CollaborationMode;
 }
 
+/** Host-only: pin one participant to can-edit / view-only (#754, Part 3). */
+export interface SetParticipantModeMessage {
+  type: "set-participant-mode";
+  clientId: string;
+  canEdit: boolean;
+}
+
+/** Send a chat message to the session (#754, Part 4). */
+export interface ChatSendMessage {
+  type: "chat";
+  text: string;
+  coordinate?: CollabCursor | null;
+}
+
 export type ClientMessage =
   | JoinMessage
   | ClientSnapshotMessage
   | ClientPresenceMessage
-  | SetModeMessage;
+  | SetModeMessage
+  | SetParticipantModeMessage
+  | ChatSendMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -75,6 +113,8 @@ export interface WelcomeMessage {
   /** Current presence of existing participants (keyed by clientId) so a late
    *  joiner sees their cursors/viewports without waiting for the next move. */
   presence: Record<string, PresenceEntry>;
+  /** Recent chat history so a late joiner sees the conversation so far (#754). */
+  chat: CollabChatMessage[];
   rev: number;
 }
 
@@ -107,6 +147,13 @@ export interface ModeMessage {
   mode: CollaborationMode;
 }
 
+/** Fan-out of a chat message to every participant (including the sender, so the
+ *  server's ordering is authoritative). */
+export interface ChatBroadcastMessage {
+  type: "chat";
+  message: CollabChatMessage;
+}
+
 export interface ErrorMessage {
   type: "error";
   code: "forbidden" | "too-large" | "bad-message" | "not-found";
@@ -119,4 +166,5 @@ export type ServerMessage =
   | ServerPresenceMessage
   | ParticipantsMessage
   | ModeMessage
+  | ChatBroadcastMessage
   | ErrorMessage;

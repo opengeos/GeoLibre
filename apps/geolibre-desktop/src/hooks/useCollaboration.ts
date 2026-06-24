@@ -42,8 +42,12 @@ export interface CollaborationApi {
   leave: () => void;
   /** Host-only: switch the session between view-only and co-edit. */
   setMode: (mode: CollaborationMode) => void;
+  /** Host-only: pin one participant to can-edit or view-only (#754). */
+  setParticipantMode: (clientId: string, canEdit: boolean) => void;
   /** Toggle whether this participant's camera follows the host's viewport. */
   setFollowHost: (enabled: boolean) => void;
+  /** Send a chat message to the session, optionally attaching a coordinate (#754). */
+  sendChat: (text: string, coordinate?: { lng: number; lat: number } | null) => void;
 }
 
 /**
@@ -110,7 +114,12 @@ export function useCollaboration(
     // Require an active (joined) session so a debounced snapshot can't fire in
     // the window between connect() and the `welcome` (where mode still holds its
     // default of "co-edit").
-    return c.isActive && (c.role === "host" || c.mode === "co-edit");
+    if (!c.isActive) return false;
+    if (c.role === "host") return true;
+    // A host-set per-participant override wins over the session mode (#754);
+    // fall back to the mode when there is no override for us.
+    const self = c.participants.find((p) => p.clientId === c.clientId);
+    return self?.editOverride ?? c.mode === "co-edit";
   };
 
   const sendSnapshot = (): void => {
@@ -197,6 +206,9 @@ export function useCollaboration(
           role: message.role,
           mode: message.mode,
           participants: message.participants,
+          // Bootstrap (or, on a reconnect, re-seed) the chat log from the relay's
+          // recent history so a late joiner sees the conversation so far.
+          chat: message.chat,
           error: null,
         });
         // Bootstrap existing participants' cursors/viewports so they're visible
@@ -261,6 +273,11 @@ export function useCollaboration(
       }
       case "mode":
         store.setCollaboration({ mode: message.mode });
+        break;
+      case "chat":
+        // The relay echoes our own messages back too, so the store is the single
+        // ordered source of truth; addCollaborationChat de-dupes by id.
+        store.addCollaborationChat(message.message);
         break;
       case "error":
         store.setCollaboration({ error: message.message });
@@ -449,6 +466,26 @@ export function useCollaboration(
     connRef.current?.send({ type: "set-mode", mode });
   }, []);
 
+  const setParticipantMode = useCallback(
+    (clientId: string, canEditFlag: boolean) => {
+      connRef.current?.send({
+        type: "set-participant-mode",
+        clientId,
+        canEdit: canEditFlag,
+      });
+    },
+    [],
+  );
+
+  const sendChat = useCallback(
+    (text: string, coordinate?: { lng: number; lat: number } | null) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      connRef.current?.send({ type: "chat", text: trimmed, coordinate });
+    },
+    [],
+  );
+
   const setFollowHost = useCallback((enabled: boolean) => {
     const store = useAppStore.getState();
     store.setCollaboration({ followHost: enabled });
@@ -465,7 +502,16 @@ export function useCollaboration(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { enabled, start, join, leave, setMode, setFollowHost };
+  return {
+    enabled,
+    start,
+    join,
+    leave,
+    setMode,
+    setParticipantMode,
+    setFollowHost,
+    sendChat,
+  };
 }
 
 // Reference-compares the store fields that feed a project snapshot. Every

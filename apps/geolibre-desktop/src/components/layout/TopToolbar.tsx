@@ -95,7 +95,7 @@ import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
 import { CollaborateDialog } from "./CollaborateDialog";
-import { useCollaboration } from "../../hooks/useCollaboration";
+import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { SetViewDialog } from "./SetViewDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
@@ -139,6 +139,9 @@ interface TopToolbarProps {
   showLabels?: boolean;
   showProjectInfo?: boolean;
   themeMode: ThemeMode;
+  // Lifted to DesktopShell so the on-canvas status badge can share one live
+  // session (calling useCollaboration twice would open two sockets).
+  collaboration: CollaborationApi;
   onOpenDiagnostics: () => void;
   onToggleThemeMode: () => void;
 }
@@ -151,6 +154,7 @@ export function TopToolbar({
   showLabels = true,
   showProjectInfo = true,
   themeMode,
+  collaboration,
   onOpenDiagnostics,
   onToggleThemeMode,
 }: TopToolbarProps) {
@@ -278,7 +282,6 @@ export function TopToolbar({
   const projectFiles = useProjectFileActions(mapControllerRef);
   const osmPbf = useOsmPbfLoader(appApi, projectFiles.setActionError);
   const consent = useConsentGatedActions({ appApi, isActive, toggle });
-  const collaboration = useCollaboration(mapControllerRef);
   const viewportHistory = useViewportHistory(
     mapControllerRef,
     mapReadyGeneration,

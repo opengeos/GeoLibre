@@ -6,6 +6,7 @@
 // `GeoLibreProject`. Keep the two `type` discriminants and field names in sync.
 
 import type {
+  CollaborationChatMessage,
   CollaborationMode,
   CollaborationParticipant,
   CollaborationRole,
@@ -18,6 +19,23 @@ export type { CollaborationMode, CollaborationRole };
 export interface CollabCursor {
   lng: number;
   lat: number;
+}
+
+/**
+ * Effective edit permission for a participant given the current session mode
+ * (#754). The host always edits; otherwise a host-set per-participant override
+ * wins, falling back to the session default.
+ *
+ * @param participant - The participant to evaluate.
+ * @param mode - The current session mode.
+ * @returns True when this participant may edit the project.
+ */
+export function participantCanEdit(
+  participant: CollaborationParticipant,
+  mode: CollaborationMode,
+): boolean {
+  if (participant.role === "host") return true;
+  return participant.editOverride ?? mode === "co-edit";
 }
 
 // Client -> server -----------------------------------------------------------
@@ -48,11 +66,27 @@ export interface SetModeMessage {
   mode: CollaborationMode;
 }
 
+/** Host-only: pin one participant to can-edit / view-only (#754). */
+export interface SetParticipantModeMessage {
+  type: "set-participant-mode";
+  clientId: string;
+  canEdit: boolean;
+}
+
+/** Send a chat message to the session (#754). */
+export interface ChatSendMessage {
+  type: "chat";
+  text: string;
+  coordinate?: CollabCursor | null;
+}
+
 export type ClientMessage =
   | JoinMessage
   | ClientSnapshotMessage
   | ClientPresenceMessage
-  | SetModeMessage;
+  | SetModeMessage
+  | SetParticipantModeMessage
+  | ChatSendMessage;
 
 // Server -> client -----------------------------------------------------------
 
@@ -66,6 +100,8 @@ export interface WelcomeMessage {
   /** Current presence of existing participants (keyed by clientId) so a late
    *  joiner sees their cursors/viewports without waiting for the next move. */
   presence: Record<string, PresenceEntry>;
+  /** Recent chat history so a late joiner sees the conversation so far (#754). */
+  chat: CollaborationChatMessage[];
   rev: number;
 }
 
@@ -98,6 +134,12 @@ export interface ModeMessage {
   mode: CollaborationMode;
 }
 
+/** Fan-out of a chat message to every participant (including the sender). */
+export interface ChatBroadcastMessage {
+  type: "chat";
+  message: CollaborationChatMessage;
+}
+
 export interface ErrorMessage {
   type: "error";
   code: "forbidden" | "too-large" | "bad-message" | "not-found";
@@ -110,4 +152,5 @@ export type ServerMessage =
   | ServerPresenceMessage
   | ParticipantsMessage
   | ModeMessage
+  | ChatBroadcastMessage
   | ErrorMessage;

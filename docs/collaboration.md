@@ -15,6 +15,10 @@ small teams.
   (camera). Broadcast as whole-project snapshots.
 - **Presence** — each participant's live cursor position and viewport rectangle,
   plus a name + color. Presence is ephemeral and never persisted.
+- **Chat** — short text messages with an optional attached map coordinate (#754).
+  Bounded recent history is relayed to late joiners; never written to a project.
+- **Permissions** — the host's per-participant view-only / can-edit overrides
+  (#754), broadcast on the participant list as `editOverride`.
 
 ## Architecture
 
@@ -63,16 +67,19 @@ Client → server:
 | `snapshot` | `project, rev` | a debounced project push; co-editors only |
 | `presence` | `cursor?, view?` | throttled cursor / viewport |
 | `set-mode` | `mode` | host only |
+| `set-participant-mode` | `clientId, canEdit` | host only; pin one guest to can-edit / view-only (#754) |
+| `chat` | `text, coordinate?` | a chat message, with an optional attached map coordinate (#754) |
 
 Server → client:
 
 | type | payload | notes |
 | --- | --- | --- |
-| `welcome` | `clientId, role, mode, participants[], snapshot \| null, rev` | sent once on join; the late-joiner bootstrap |
+| `welcome` | `clientId, role, mode, participants[], snapshot \| null, presence, chat[], rev` | sent once on join; the late-joiner bootstrap |
 | `snapshot` | `project, origin, rev` | fan-out of a peer's snapshot |
 | `presence` | `clientId, cursor?, view?` | fan-out of a peer's presence |
-| `participants` | `participants[]` | on join / leave / role change |
+| `participants` | `participants[]` | on join / leave / role / permission change; each carries `editOverride` |
 | `mode` | `mode` | host changed the session mode |
+| `chat` | `message` | fan-out of a chat message (echoed to the sender, so order is server-authoritative) (#754) |
 | `error` | `code, message` | e.g. `forbidden`, `too-large` |
 
 ### Echo / feedback-loop prevention
@@ -103,12 +110,14 @@ accepted MVP limitation; a coalesced-history option is a v2 item.
 `CollabSession` uses the **WebSocket Hibernation API** so idle sessions evict
 from memory while keeping sockets open. Per-socket participant metadata is kept
 via `ws.serializeAttachment()` (survives hibernation). Durable storage holds the
-`latestSnapshot`, a monotonic `rev`, the `mode`, and the `hostToken`; presence is
-in-memory only. Server-side enforcement: a `snapshot` from a guest while the
-session is `view-only` is dropped with an `error: forbidden`; `set-mode` requires
-the host token. Oversized snapshots (> ~1 MiB, the Cloudflare frame cap) are
-rejected with `error: too-large`. An empty session is reclaimed after a TTL via a
-storage alarm.
+`latestSnapshot`, a monotonic `rev`, the `mode`, the `hostToken`, and a bounded
+`chat` log; presence and per-participant permission overrides are kept on the
+in-memory / per-socket attachment. Server-side enforcement: a `snapshot` from a
+guest who cannot edit (session `view-only`, or a host-set per-participant
+view-only override) is dropped with an `error: forbidden`; `set-mode` and
+`set-participant-mode` require the host token. Oversized snapshots (> ~1 MiB, the
+Cloudflare frame cap) are rejected with `error: too-large`. An empty session is
+reclaimed after a TTL via a storage alarm.
 
 ## Frontend
 
@@ -128,6 +137,12 @@ storage alarm.
 - `components/layout/RemoteCursorsOverlay.tsx` — renders remote cursors as
   MapLibre Markers and viewport rectangles as a dedicated GeoJSON line layer.
 - `components/layout/CollaborateDialog.tsx` + a flag-gated `TopToolbar` entry.
+- `components/layout/CollaborationStatusBadge.tsx` — the persistent on-canvas
+  badge that hosts the participant roster (with the host's per-participant
+  permission toggles) and the chat drawer (#754). `useCollaboration` is owned by
+  `DesktopShell` and passed to both the dialog and this badge, so they share one
+  socket. `participantCanEdit()` (in `lib/collab-protocol.ts`) is the shared
+  effective-permission helper used by the relay-mirrored client UI.
 
 ## Identity & permissions (MVP)
 
@@ -138,11 +153,41 @@ display name and a color. The host chooses the session **mode**:
   are rejected server-side.
 - **co-edit** — anyone with the link can edit.
 
-The host token (returned only to the creator) gates `set-mode`, so a guest can't
-escalate the session to co-edit. Codes are unguessable and sessions auto-expire.
-The relay assigns each participant's `clientId` server-side (the client-supplied
-value is ignored) so one participant can't claim another's identity, and it
-validates the `color` to a hex value before storing/broadcasting it.
+**Per-participant overrides (#754).** Beyond the session-wide mode, the host can
+pin an individual guest with `set-participant-mode { clientId, canEdit }`. The
+relay records the override on that socket's attachment (so it survives a
+hibernation wake) and re-broadcasts the participant list with an `editOverride`
+field (`true` / `false`, or `null` to follow the session mode). Effective edit
+permission, computed identically on the client and the relay, is: the host
+always edits; otherwise the override wins; otherwise the session mode applies. A
+guest pinned to view-only has their `snapshot` pushes rejected with
+`error: forbidden`, exactly like the session-wide view-only path. Overrides are
+keyed to the per-socket `clientId`, so a guest who reconnects reverts to the
+session default (acceptable for the ephemeral MVP). The host roster surfaces a
+per-guest toggle; other participants see each guest's current permission read-only.
+
+The host token (returned only to the creator) gates `set-mode` and
+`set-participant-mode`, so a guest can't escalate the session or another guest.
+Codes are unguessable and sessions auto-expire. The relay assigns each
+participant's `clientId` server-side (the client-supplied value is ignored) so
+one participant can't claim another's identity, and it validates the `color` to
+a hex value before storing/broadcasting it.
+
+## Chat (#754)
+
+A lightweight, in-session text channel. A `chat { text, coordinate? }` frame is
+validated server-side (non-empty, trimmed, capped at 2000 chars; the coordinate
+runs through the same finite-number sanitizer as presence) and fanned out to
+**every** participant including the sender, so the relay's ordering is the single
+source of truth (clients render from the echo rather than optimistically). Each
+message carries a server-assigned `id` and `ts`. The relay keeps a bounded,
+persisted history (last 50 messages) so a late joiner (or a post-hibernation
+welcome) sees the recent conversation via the `welcome.chat[]` bootstrap. Chat
+is open to everyone in the session, including view-only guests; only project
+edits are gated. A message can attach the sender's current map center as a
+clickable coordinate that recenters the recipient's map. Chat lives on the
+on-canvas status badge so it is reachable while working on the map; it is
+ephemeral and never written to a project file.
 
 > **Operator note:** `POST /sessions` is unauthenticated and currently responds
 > with `Access-Control-Allow-Origin: *`, so any page can create sessions. This is
@@ -203,7 +248,9 @@ Automated:
 
 - `npm run test:worker` typechecks `workers/collab`.
 - `npm run test:frontend` runs `tests/collab-protocol.test.ts` (protocol
-  round-trip, `resolveCollabBaseUrl` validation, echo-suppression logic).
+  round-trip including the `set-participant-mode` / `chat` frames,
+  `resolveCollabBaseUrl` validation, echo-suppression logic, and the
+  `participantCanEdit` effective-permission helper).
 
 ### Testing the full feature locally
 
@@ -245,6 +292,11 @@ it.
      changing a style, or panning in A reflects in B within ~300 ms; each window
      shows the other's live **cursor** and a dashed **viewport rectangle**;
      toggling A (the host) to *view-only* blocks B's edits.
+   - Verify Parts 3 & 4 (#754) via the on-canvas status badge (bottom-left,
+     click to expand): A (the host) can flip B between **Can edit** and
+     **View-only** per-participant in the roster, and either window can send a
+     **chat** message (optionally attaching the current map center, which the
+     other side can click to recenter).
 
 **Relay-only smoke test (no UI):** with `wrangler dev` running, `POST` to
 `http://127.0.0.1:8787/sessions` to mint a code, then open a WebSocket to

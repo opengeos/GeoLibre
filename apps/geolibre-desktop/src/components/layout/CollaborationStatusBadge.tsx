@@ -1,12 +1,30 @@
 import { useAppStore } from "@geolibre/core";
-import { Button } from "@geolibre/ui";
-import { ChevronUp, Settings2, Users, X } from "lucide-react";
+import { Button, Input } from "@geolibre/ui";
+import type { MapController } from "@geolibre/map";
+import {
+  ChevronUp,
+  Eye,
+  MapPin,
+  Pencil,
+  Send,
+  Settings2,
+  Users,
+  X,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { RefObject } from "react";
+import type { CollaborationApi } from "../../hooks/useCollaboration";
+import { participantCanEdit } from "../../lib/collab-protocol";
 
 interface Announcement {
   id: number;
   text: string;
+}
+
+interface CollaborationStatusBadgeProps {
+  api: CollaborationApi;
+  mapControllerRef: RefObject<MapController | null>;
 }
 
 // How long a join/leave announcement stays on screen before auto-dismissing.
@@ -27,7 +45,10 @@ const ANNOUNCEMENT_TTL_MS = 5000;
  * above the MapLibre scale control (and the bounds-restriction badge when it is
  * showing); the roster and announcements grow upward from the collapsed pill.
  */
-export function CollaborationStatusBadge() {
+export function CollaborationStatusBadge({
+  api,
+  mapControllerRef,
+}: CollaborationStatusBadgeProps) {
   const { t } = useTranslation();
   // Narrow selectors rather than the whole `collaboration` slice: remote cursor
   // presence updates that slice many times per second, and subscribing to the
@@ -41,6 +62,12 @@ export function CollaborationStatusBadge() {
   // me" and announces the local user joining. Server client ids are UUIDs, so
   // "" can never collide with a real participant.
   const selfId = useAppStore((s) => s.collaboration.clientId) ?? "";
+  // Narrow selectors (see above): role/mode gate the host-only permission
+  // toggles; chat drives the message drawer. None update on cursor moves.
+  const role = useAppStore((s) => s.collaboration.role);
+  const mode = useAppStore((s) => s.collaboration.mode);
+  const chat = useAppStore((s) => s.collaboration.chat);
+  const isHost = role === "host";
   const setCollaborateDialogOpen = useAppStore(
     (s) => s.setCollaborateDialogOpen,
   );
@@ -51,6 +78,16 @@ export function CollaborationStatusBadge() {
 
   const [expanded, setExpanded] = useState(false);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  // Chat composer: the draft text and whether to attach the current map center
+  // (#754, Part 4). The pin captures the center at send time, not toggle time.
+  const [draft, setDraft] = useState("");
+  const [attachLocation, setAttachLocation] = useState(false);
+  // The scroll viewport for the message list, so new messages pin to the bottom.
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  // Unread chat count while the roster is collapsed, surfaced on the pill so a
+  // working host notices new messages without keeping the panel open.
+  const [unread, setUnread] = useState(0);
+  const lastSeenChatRef = useRef(0);
   // The participant set from the previous update, so we can diff join/leave.
   // Seeded on first activation so existing members (and self) aren't announced
   // as fresh arrivals when the dialog first connects.
@@ -81,6 +118,11 @@ export function CollaborationStatusBadge() {
       knownRef.current = null;
       setExpanded(false);
       setAnnouncements([]);
+      // Reset the chat composer so a fresh session starts clean.
+      setDraft("");
+      setAttachLocation(false);
+      setUnread(0);
+      lastSeenChatRef.current = 0;
       return;
     }
     const current = new Map(
@@ -143,6 +185,48 @@ export function CollaborationStatusBadge() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [expanded]);
 
+  // Track unread chat while the panel is collapsed; clear it (and remember the
+  // current length) whenever the panel is open, so the badge counts only
+  // messages that arrived while the host wasn't looking.
+  useEffect(() => {
+    if (!isActive) return;
+    if (expanded) {
+      lastSeenChatRef.current = chat.length;
+      setUnread(0);
+      return;
+    }
+    setUnread(Math.max(0, chat.length - lastSeenChatRef.current));
+  }, [isActive, expanded, chat.length]);
+
+  // Keep the message list pinned to the latest message while the panel is open.
+  useEffect(() => {
+    if (!expanded) return;
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [expanded, chat.length]);
+
+  const handleSendChat = () => {
+    const text = draft.trim();
+    if (!text) return;
+    // Capture the live map center only when the pin is active, at send time.
+    const center =
+      attachLocation && mapControllerRef.current
+        ? mapControllerRef.current.getMap()?.getCenter()
+        : null;
+    api.sendChat(
+      text,
+      center ? { lng: center.lng, lat: center.lat } : null,
+    );
+    setDraft("");
+    setAttachLocation(false);
+  };
+
+  const flyToCoordinate = (coordinate: { lng: number; lat: number }) => {
+    mapControllerRef.current
+      ?.getMap()
+      ?.flyTo({ center: [coordinate.lng, coordinate.lat] });
+  };
+
   if (!isActive) return null;
 
   return (
@@ -196,30 +280,163 @@ export function CollaborationStatusBadge() {
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
-          <ul className="max-h-48 space-y-1 overflow-y-auto p-2">
-            {participants.map((p) => (
-              <li
-                key={p.clientId}
-                className="flex items-center gap-2 text-xs"
-              >
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ backgroundColor: p.color }}
-                />
-                <span className="truncate">{p.displayName}</span>
-                {p.clientId === selfId && (
-                  <span className="text-muted-foreground">
-                    ({t("collaborate.you")})
-                  </span>
-                )}
-                {p.role === "host" && (
-                  <span className="rounded bg-muted px-1 py-0.5 text-[10px]">
-                    {t("collaborate.host")}
-                  </span>
-                )}
-              </li>
-            ))}
+          <ul className="max-h-40 space-y-1 overflow-y-auto p-2">
+            {participants.map((p) => {
+              const editable = participantCanEdit(p, mode);
+              // The host can pin any guest (not themselves) to view-only / edit.
+              const showToggle = isHost && p.role !== "host";
+              return (
+                <li
+                  key={p.clientId}
+                  className="flex items-center gap-2 text-xs"
+                >
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: p.color }}
+                  />
+                  <span className="truncate">{p.displayName}</span>
+                  {p.clientId === selfId && (
+                    <span className="text-muted-foreground">
+                      ({t("collaborate.you")})
+                    </span>
+                  )}
+                  {p.role === "host" && (
+                    <span className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                      {t("collaborate.host")}
+                    </span>
+                  )}
+                  {showToggle ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        api.setParticipantMode(p.clientId, !editable)
+                      }
+                      aria-pressed={editable}
+                      title={
+                        editable
+                          ? t("collaborate.setViewOnly")
+                          : t("collaborate.allowEdit")
+                      }
+                      className="ml-auto flex shrink-0 items-center gap-1 rounded border px-1 py-0.5 text-[10px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                    >
+                      {editable ? (
+                        <Pencil className="h-3 w-3" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-3 w-3" aria-hidden="true" />
+                      )}
+                      {editable
+                        ? t("collaborate.canEdit")
+                        : t("collaborate.viewOnly")}
+                    </button>
+                  ) : (
+                    p.role !== "host" && (
+                      <span className="ml-auto flex shrink-0 items-center gap-1 text-[10px] text-muted-foreground">
+                        {editable ? (
+                          <Pencil className="h-3 w-3" aria-hidden="true" />
+                        ) : (
+                          <Eye className="h-3 w-3" aria-hidden="true" />
+                        )}
+                        {editable
+                          ? t("collaborate.canEdit")
+                          : t("collaborate.viewOnly")}
+                      </span>
+                    )
+                  )}
+                </li>
+              );
+            })}
           </ul>
+
+          {/* Chat drawer (#754, Part 4): a lightweight text channel with an
+              optional attached map coordinate that recenters on click. */}
+          <div className="flex flex-col border-t">
+            <div
+              ref={chatScrollRef}
+              className="flex max-h-40 min-h-[3rem] flex-col gap-1.5 overflow-y-auto p-2"
+              role="log"
+              aria-label={t("collaborate.chatLog")}
+            >
+              {chat.length === 0 ? (
+                <p className="px-1 py-2 text-center text-[11px] text-muted-foreground">
+                  {t("collaborate.chatEmpty")}
+                </p>
+              ) : (
+                chat.map((m) => (
+                  <div key={m.id} className="flex flex-col gap-0.5 text-xs">
+                    <div className="flex items-baseline gap-1.5">
+                      <span
+                        className="truncate font-medium"
+                        style={{ color: m.color }}
+                      >
+                        {m.clientId === selfId
+                          ? t("collaborate.you")
+                          : m.displayName}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-foreground">
+                      {m.text}
+                    </p>
+                    {m.coordinate && (
+                      <button
+                        type="button"
+                        onClick={() => flyToCoordinate(m.coordinate!)}
+                        className="flex w-fit items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                        title={t("collaborate.chatGoToLocation")}
+                      >
+                        <MapPin className="h-3 w-3" aria-hidden="true" />
+                        {m.coordinate.lat.toFixed(4)},{" "}
+                        {m.coordinate.lng.toFixed(4)}
+                      </button>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="flex items-center gap-1 border-t p-1.5">
+              <button
+                type="button"
+                onClick={() => setAttachLocation((v) => !v)}
+                aria-pressed={attachLocation}
+                title={
+                  attachLocation
+                    ? t("collaborate.chatLocationAttached")
+                    : t("collaborate.chatAttachLocation")
+                }
+                className={`flex shrink-0 items-center rounded p-1.5 transition ${
+                  attachLocation
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendChat();
+                  }
+                }}
+                placeholder={t("collaborate.chatPlaceholder")}
+                maxLength={2000}
+                aria-label={t("collaborate.chatLog")}
+                className="h-8 text-xs"
+              />
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 shrink-0 px-2"
+                disabled={!draft.trim()}
+                onClick={handleSendChat}
+                aria-label={t("collaborate.chatSend")}
+              >
+                <Send className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+
           <div className="border-t p-2">
             <Button
               type="button"
@@ -248,11 +465,15 @@ export function CollaborationStatusBadge() {
         // Only reference the roster while it is mounted (it is conditionally
         // rendered when collapsed), so the id target always exists.
         aria-controls={expanded ? "collab-roster-panel" : undefined}
-        // Describe the action the click performs, which flips with state.
+        // Describe the action the click performs, which flips with state. When
+        // collapsed with unread chat, fold the count into the label so it is
+        // announced rather than conveyed by the badge color alone.
         aria-label={
           expanded
             ? t("collaborate.collapseRoster")
-            : t("collaborate.sessionStatusTooltip")
+            : unread > 0
+              ? t("collaborate.sessionStatusUnread", { count: unread })
+              : t("collaborate.sessionStatusTooltip")
         }
         title={
           expanded
@@ -273,6 +494,13 @@ export function CollaborationStatusBadge() {
         </span>
         <Users className="h-3.5 w-3.5" aria-hidden="true" />
         <span>{participants.length}</span>
+        {/* Unread-chat count while collapsed, so a working host sees new
+            messages without keeping the panel open. */}
+        {!expanded && unread > 0 && (
+          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
         {/* The roster grows upward above the pill: point up when collapsed
             ("reveal above"), down when expanded ("collapse"). */}
         <ChevronUp

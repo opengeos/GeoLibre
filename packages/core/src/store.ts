@@ -31,6 +31,7 @@ import {
   DEFAULT_STORY_MAP,
   MAX_DASHBOARD_COLUMNS,
   MIN_DASHBOARD_COLUMNS,
+  type CollaborationChatMessage,
   type CollaborationParticipant,
   type CollaborationPresence,
   type CollaborationState,
@@ -210,6 +211,8 @@ export interface AppState {
     clientId: string,
     presence: CollaborationPresence | null
   ) => void;
+  /** Append a chat message to the session log (bounded; #754). */
+  addCollaborationChat: (message: CollaborationChatMessage) => void;
   resetCollaboration: () => void;
   setMapView: (view: Partial<MapViewState>, markDirty?: boolean) => void;
   /**
@@ -367,8 +370,13 @@ export const DEFAULT_COLLABORATION_STATE: CollaborationState = Object.freeze({
     CollaborationPresence
   >,
   followHost: false,
+  chat: Object.freeze([] as CollaborationChatMessage[]) as CollaborationChatMessage[],
   error: null,
 });
+
+// Cap the in-store chat log so a long session can't grow it without bound; it
+// mirrors the relay's own history limit.
+const MAX_COLLABORATION_CHAT = 200;
 
 /** Derive a human-friendly display name from a file path or URL. */
 export function projectPathLabel(path: string): string {
@@ -583,6 +591,16 @@ export const useAppStore = create<AppState>()(
             next[clientId] = presence;
           }
           return { collaboration: { ...s.collaboration, presence: next } };
+        }),
+      addCollaborationChat: (message) =>
+        set((s) => {
+          // Ignore a duplicate id: the server broadcasts to the sender too, and a
+          // reconnect can replay recent history, so de-dupe defensively.
+          if (s.collaboration.chat.some((m) => m.id === message.id)) return s;
+          const chat = [...s.collaboration.chat, message].slice(
+            -MAX_COLLABORATION_CHAT
+          );
+          return { collaboration: { ...s.collaboration, chat } };
         }),
       resetCollaboration: () =>
         // Also close the Collaborate dialog: an unexpected disconnect resets the

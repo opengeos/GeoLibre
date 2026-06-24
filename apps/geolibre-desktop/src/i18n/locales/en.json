@@ -606,7 +606,20 @@
     "switchToCoEdit": "Allow everyone to edit",
     "switchToViewOnly": "Make view-only",
     "nameRequired": "Enter your name to continue.",
-    "codeRequired": "Enter a session code to join."
+    "codeRequired": "Enter a session code to join.",
+    "canEdit": "Can edit",
+    "viewOnly": "View-only",
+    "allowEdit": "Allow this person to edit",
+    "setViewOnly": "Set this person to view-only",
+    "chatLog": "Session chat",
+    "chatEmpty": "No messages yet.",
+    "chatPlaceholder": "Send a message…",
+    "chatSend": "Send message",
+    "chatAttachLocation": "Attach the current map location",
+    "chatLocationAttached": "Location attached (click to remove)",
+    "chatGoToLocation": "Go to this location",
+    "sessionStatusUnread_one": "Live collaboration session, {{count}} unread message. Click to see who's connected and chat.",
+    "sessionStatusUnread_other": "Live collaboration session, {{count}} unread messages. Click to see who's connected and chat."
   },
   "share": {
     "title": "Share project",

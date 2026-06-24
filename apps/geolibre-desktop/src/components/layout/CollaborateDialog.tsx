@@ -10,11 +10,21 @@ import {
   Label,
   Select,
 } from "@geolibre/ui";
-import { ArrowRight, Check, Copy, Loader2, LogOut, Users } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Copy,
+  Eye,
+  Loader2,
+  LogOut,
+  Pencil,
+  Users,
+} from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
+import { participantCanEdit } from "../../lib/collab-protocol";
 
 // A small fixed palette so participant colors stay distinct and legible. Each
 // entry pairs a hex value with a human-readable name for the swatch aria-label.
@@ -186,6 +196,7 @@ export function CollaborateDialog({
             onLeave={handleLeave}
             onDismiss={() => onOpenChange(false)}
             onSetMode={api.setMode}
+            onSetParticipantMode={api.setParticipantMode}
             onSetFollowHost={api.setFollowHost}
           />
         ) : (
@@ -371,6 +382,7 @@ function ActiveSession({
   onLeave,
   onDismiss,
   onSetMode,
+  onSetParticipantMode,
   onSetFollowHost,
 }: {
   shareLink: string;
@@ -379,6 +391,7 @@ function ActiveSession({
   onLeave: () => void;
   onDismiss: () => void;
   onSetMode: (mode: CollaborationMode) => void;
+  onSetParticipantMode: (clientId: string, canEdit: boolean) => void;
   onSetFollowHost: (enabled: boolean) => void;
 }) {
   const { t } = useTranslation();
@@ -482,25 +495,69 @@ function ActiveSession({
           count: collaboration.participants.length,
         })}</Label>
         <ul className="space-y-1">
-          {collaboration.participants.map((p) => (
-            <li key={p.clientId} className="flex items-center gap-2 text-sm">
-              <span
-                className="h-3 w-3 shrink-0 rounded-full"
-                style={{ backgroundColor: p.color }}
-              />
-              <span className="truncate">{p.displayName}</span>
-              {p.clientId === collaboration.clientId && (
-                <span className="text-xs text-muted-foreground">
-                  ({t("collaborate.you")})
-                </span>
-              )}
-              {p.role === "host" && (
-                <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                  {t("collaborate.host")}
-                </span>
-              )}
-            </li>
-          ))}
+          {collaboration.participants.map((p) => {
+            const editable = participantCanEdit(p, collaboration.mode);
+            // The host can pin any guest (not themselves) to view-only / edit.
+            const showToggle = isHost && p.role !== "host";
+            return (
+              <li key={p.clientId} className="flex items-center gap-2 text-sm">
+                <span
+                  className="h-3 w-3 shrink-0 rounded-full"
+                  style={{ backgroundColor: p.color }}
+                />
+                <span className="truncate">{p.displayName}</span>
+                {p.clientId === collaboration.clientId && (
+                  <span className="text-xs text-muted-foreground">
+                    ({t("collaborate.you")})
+                  </span>
+                )}
+                {p.role === "host" && (
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                    {t("collaborate.host")}
+                  </span>
+                )}
+                {showToggle ? (
+                  <button
+                    type="button"
+                    onClick={() => onSetParticipantMode(p.clientId, !editable)}
+                    aria-pressed={editable}
+                    title={
+                      editable
+                        ? t("collaborate.setViewOnly")
+                        : t("collaborate.allowEdit")
+                    }
+                    className="ml-auto flex items-center gap-1 rounded border px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-foreground"
+                  >
+                    {editable ? (
+                      <>
+                        <Pencil className="h-3 w-3" aria-hidden="true" />
+                        {t("collaborate.canEdit")}
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="h-3 w-3" aria-hidden="true" />
+                        {t("collaborate.viewOnly")}
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  // Non-host viewers still see each guest's current permission.
+                  p.role !== "host" && (
+                    <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
+                      {editable ? (
+                        <Pencil className="h-3 w-3" aria-hidden="true" />
+                      ) : (
+                        <Eye className="h-3 w-3" aria-hidden="true" />
+                      )}
+                      {editable
+                        ? t("collaborate.canEdit")
+                        : t("collaborate.viewOnly")}
+                    </span>
+                  )
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
