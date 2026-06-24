@@ -396,7 +396,11 @@ class ExternalRuntimeSession:
 
         def _drain_stderr() -> None:
             if process.stderr is not None:
-                stderr_chunks.append(process.stderr.read())
+                # Keep only a bounded prefix for the one-line error message, then
+                # drain and discard the rest so a tool that floods stderr can't
+                # balloon sidecar memory (and the pipe never fills).
+                stderr_chunks.append(process.stderr.read(8192))
+                process.stderr.read()
 
         try:
             if process.stdout is None:

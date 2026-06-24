@@ -47,6 +47,8 @@ def test_status_does_not_leak_internal_error(monkeypatch):
     assert result["available"] is False
     assert result["message"] == "Whitebox runtime is unavailable"
     assert _SECRET not in result["message"]
+    # The interpreter path must not leak through the python field either.
+    assert result["python"] is None
 
 
 def test_tools_does_not_leak_internal_error(monkeypatch):
