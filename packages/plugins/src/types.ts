@@ -36,6 +36,83 @@ export interface GeoLibreExternalNativeLayerRegistration {
 }
 
 /**
+ * Options shared by the raster/tile registration helpers
+ * ({@link GeoLibreAppAPI.addTileLayer}, {@link GeoLibreAppAPI.addWmtsLayer},
+ * {@link GeoLibreAppAPI.addWmsLayer}). They mirror the MapLibre raster `source`
+ * fields a tile service typically advertises, so the layer renders with the
+ * right extent, zoom range, and attribution without the plugin touching the
+ * map.
+ */
+export interface GeoLibreTileLayerOptions {
+  /** Tile size in pixels (default 256). */
+  tileSize?: number;
+  /** Attribution string shown in the map's attribution control. */
+  attribution?: string;
+  /** Visible extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds?: [number, number, number, number];
+  /** Minimum zoom at which tiles are requested. */
+  minzoom?: number;
+  /** Maximum zoom at which tiles are requested. */
+  maxzoom?: number;
+  /** Tile y-axis scheme; `"tms"` flips the y origin. Defaults to `"xyz"`. */
+  scheme?: "xyz" | "tms";
+  /** Initial visibility (default true). */
+  visible?: boolean;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+}
+
+/**
+ * Options for {@link GeoLibreAppAPI.addWmsLayer}. The GetMap tile URL is built
+ * from the service `url` plus `layers`, so the plugin passes the WMS request
+ * parameters instead of a tile URL template.
+ */
+export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
+  /** WMS service endpoint (the GetMap base URL). */
+  url: string;
+  /** Comma-separated WMS layer name(s) to request. */
+  layers: string;
+  /** Comma-separated style name(s) (default empty: the server default). */
+  styles?: string;
+  /** Image format, e.g. `"image/png"` (default) or `"image/jpeg"`. */
+  format?: string;
+  /** Request transparent tiles (default true). */
+  transparent?: boolean;
+}
+
+/**
+ * Options for {@link GeoLibreAppAPI.addCogLayer}: a native Cloud-Optimized
+ * GeoTIFF layer read directly from a URL and rendered client-side, with band
+ * selection, rescale, colormap, and nodata handling exposed in the Style/raster
+ * panel. All fields are optional; the renderer infers sensible defaults from
+ * the GeoTIFF when they are omitted.
+ */
+export interface GeoLibreCogLayerOptions {
+  /** Band selection, e.g. `"1"` (single band) or `"1,2,3"` (RGB). */
+  bands?: string;
+  /**
+   * Named colormap applied to a single-band COG (e.g. `"terrain"`,
+   * `"viridis"`). Deliberately typed as a loose `string` so external JS
+   * plugins are not forced to import the renderer's internal colormap union;
+   * an unrecognized name falls back to the renderer default rather than
+   * erroring.
+   */
+  colormap?: string;
+  /** Lower bound of the value range mapped to the colormap/contrast stretch. */
+  rescaleMin?: number;
+  /** Upper bound of the value range mapped to the colormap/contrast stretch. */
+  rescaleMax?: number;
+  /** Pixel value rendered as transparent (overrides the file's NoData tag). */
+  nodata?: number;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+}
+
+/**
  * Describes the file-type filter shown by the host's save/open dialog so
  * plugins can label exports/imports (e.g. JSON, GeoJSON, CSV) without knowing
  * whether they run under Tauri or in a browser.
@@ -104,7 +181,57 @@ export interface GeoLibreAppAPI {
     name: string,
     data: FeatureCollection,
     sourcePath?: string,
-  ) => void;
+  ) => string;
+  /**
+   * Add a native XYZ raster tile layer from a tile URL template (with
+   * `{x}`/`{y}`/`{z}` placeholders) and return its layer id. Unlike calling
+   * `getMap().addSource()/addLayer()` directly, the layer appears in the Layers
+   * panel with full opacity/reorder/styling support and persists with the
+   * project, matching {@link addGeoJsonLayer} for vector data. Typed optional
+   * for forward-compatibility with host variants, so call it with optional
+   * chaining.
+   */
+  addTileLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreTileLayerOptions,
+  ) => string;
+  /**
+   * Add a native WMTS raster tile layer from a WMTS tile URL template and return
+   * its layer id. Behaves like {@link addTileLayer} (the layer is a first-class
+   * panel entry that persists with the project); the separate name keeps WMTS
+   * layers labelled distinctly. Typed optional for forward-compatibility, so
+   * call it with optional chaining.
+   */
+  addWmtsLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreTileLayerOptions,
+  ) => string;
+  /**
+   * Add a native WMS raster layer and return its layer id. The host builds the
+   * GetMap tile URL from {@link GeoLibreWmsLayerOptions.url} and
+   * {@link GeoLibreWmsLayerOptions.layers}, so the plugin supplies the request
+   * parameters rather than a tile URL template. The layer persists with the
+   * project like {@link addTileLayer}. Typed optional for
+   * forward-compatibility, so call it with optional chaining.
+   */
+  addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
+  /**
+   * Add a native Cloud-Optimized GeoTIFF (COG) layer read directly from a URL
+   * and rendered client-side, returning a promise for the new layer's id.
+   * Unlike {@link addTileLayer} (which expects pre-rendered XYZ tiles), this
+   * loads the GeoTIFF itself and exposes band/rescale/colormap/nodata controls,
+   * matching the host's own COG raster layers. The layer appears in the Layers
+   * panel and persists with the project. Resolves once the layer is registered;
+   * rejects if the COG cannot be loaded. Typed optional for
+   * forward-compatibility, so call it with optional chaining.
+   */
+  addCogLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreCogLayerOptions,
+  ) => Promise<string>;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;

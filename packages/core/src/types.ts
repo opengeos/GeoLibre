@@ -480,6 +480,52 @@ export interface GeoLibreLayer {
 }
 
 /**
+ * Options for {@link AppState.addTileLayer}: a native raster tile layer (XYZ,
+ * WMS, or WMTS) that appears in the Layers panel and persists with the project,
+ * just like a layer added through the Add Data dialog. Mirrors the raster
+ * `source` fields MapLibre understands so an external plugin can register tile
+ * layers without touching the map directly.
+ */
+export interface AddTileLayerOptions {
+  /**
+   * One or more XYZ tile URL templates (with `{x}`/`{y}`/`{z}` placeholders).
+   * At least one non-empty template is required, or the layer renders nothing.
+   */
+  tiles: string[];
+  /**
+   * Layer discriminator, controlling how the layer is labelled and (for WMS)
+   * dev-server proxied. Defaults to `"xyz"`.
+   */
+  type?: "xyz" | "wms" | "wmts" | "raster";
+  /** Service or base URL recorded on the source for display and restore. */
+  url?: string;
+  /** Tile size in pixels (default 256). */
+  tileSize?: number;
+  /** Attribution string shown in the map's attribution control. */
+  attribution?: string;
+  /** Visible extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds?: [number, number, number, number];
+  /** Minimum zoom at which tiles are requested. */
+  minzoom?: number;
+  /** Maximum zoom at which tiles are requested. */
+  maxzoom?: number;
+  /** Tile y-axis scheme; `"tms"` flips the y origin. Defaults to `"xyz"`. */
+  scheme?: "xyz" | "tms";
+  /** Initial visibility (default true). */
+  visible?: boolean;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /**
+   * Extra source fields merged onto the layer's `source` (e.g. the WMS
+   * `layers`/`styles`/`format` recorded for restore). The required `type`,
+   * `tiles`, and `tileSize` always win over keys supplied here.
+   */
+  source?: Record<string, unknown>;
+  /** Extra metadata merged onto the layer record. */
+  metadata?: Record<string, unknown>;
+}
+
+/**
  * A named, collapsible folder in the layer panel that organizes a contiguous
  * run of layers (single-level nesting; groups never contain other groups).
  *
