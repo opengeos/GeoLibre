@@ -223,15 +223,19 @@ export function bandOptionsFromResults(
 /**
  * Runs `tasks` with a bounded number in flight at once, preserving result order.
  *
+ * A rejecting task is swallowed so it cannot kill its worker; its result slot is
+ * left `undefined`, which the return type reflects. Callers that care about
+ * failures should handle them inside the task or check for missing slots.
+ *
  * @param tasks - Thunks producing each result.
  * @param limit - Maximum concurrent tasks.
- * @returns The results in the same order as `tasks`.
+ * @returns The results in the same order as `tasks`; failed tasks are `undefined`.
  */
 async function runWithConcurrency<T>(
   tasks: Array<() => Promise<T>>,
   limit: number,
-): Promise<T[]> {
-  const results = new Array<T>(tasks.length);
+): Promise<(T | undefined)[]> {
+  const results = new Array<T | undefined>(tasks.length);
   let next = 0;
   async function worker(): Promise<void> {
     while (next < tasks.length) {
@@ -255,16 +259,26 @@ async function runWithConcurrency<T>(
 
 /**
  * Picks the default band index for a result: the first source's first
- * configured band (`bidx`) when that band was actually read, otherwise the first
- * available band. Returns null when nothing was read.
+ * configured band (`bidx`) when that band was actually read *for that source*,
+ * otherwise the first available band. Returns null when nothing was read.
+ *
+ * @param sources - The queried COG sources, in order.
+ * @param bands - The stack-wide union of bands read.
+ * @param firstSourcePoints - The first source's per-step points, used to confirm
+ *   its configured band was actually present (so the chart does not open on a
+ *   band that renders the first series as all gaps).
  */
 function pickDefaultBandIndex(
   sources: CogSourceSpec[],
   bands: BandOption[],
+  firstSourcePoints: PixelSeriesPoint[],
 ): number | null {
   if (bands.length === 0) return null;
   const configured = sources[0]?.bidx?.[0];
-  if (configured !== undefined && bands.some((b) => b.index === configured))
+  const firstSourceBands = new Set(
+    firstSourcePoints.flatMap((point) => point.bands.map((band) => band.index)),
+  );
+  if (configured !== undefined && firstSourceBands.has(configured))
     return configured;
   return bands[0].index;
 }
@@ -372,7 +386,10 @@ export async function queryPixelTimeSeries(
   for (const sourcePoints of points) {
     for (const point of sourcePoints) {
       for (const band of point.bands) {
-        if (!bandByIndex.has(band.index))
+        const existing = bandByIndex.get(band.index);
+        // Record a band on first sight, but upgrade a null name to a later
+        // non-null one so a name read at a later step/source is not lost.
+        if (!existing || (existing.name == null && band.name != null))
           bandByIndex.set(band.index, { index: band.index, name: band.name });
       }
     }
@@ -383,7 +400,7 @@ export async function queryPixelTimeSeries(
     lngLat,
     series,
     bands,
-    defaultBandIndex: pickDefaultBandIndex(sources, bands),
+    defaultBandIndex: pickDefaultBandIndex(sources, bands, points[0] ?? []),
     stepCount: steps.length,
     truncated,
   };

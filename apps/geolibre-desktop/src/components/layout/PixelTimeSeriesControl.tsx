@@ -275,6 +275,9 @@ export function PixelTimeSeriesControl({
   if (!timeSliderActive || !hasRasterStack) return null;
 
   const hasLoaded = loadedResults.length > 0;
+  // Block export while any point is still querying, since handleExport only
+  // includes points that already resolved and would silently omit the rest.
+  const hasLoading = points.some((p) => p.loading);
   // One chart line per (point, source) for the selected band. Single-source
   // stacks (the common case) show one line per point; the legend disambiguates
   // by source name only when a point has more than one source.
@@ -498,7 +501,7 @@ export function PixelTimeSeriesControl({
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!hasLoaded || exporting}
+                disabled={!hasLoaded || hasLoading || exporting}
                 onClick={() => handleExport("csv")}
               >
                 <Download className="h-3.5 w-3.5" aria-hidden="true" />
@@ -508,7 +511,7 @@ export function PixelTimeSeriesControl({
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!hasLoaded || exporting}
+                disabled={!hasLoaded || hasLoading || exporting}
                 onClick={() => handleExport("geoparquet")}
               >
                 <Download className="h-3.5 w-3.5" aria-hidden="true" />
