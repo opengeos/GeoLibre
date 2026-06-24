@@ -104,6 +104,7 @@ import {
 import {
   PROVIDER_DOCS_URL,
   PROVIDER_FIELDS,
+  type ProviderField,
 } from "../../lib/assistant/provider-fields";
 
 export type SettingsSection =
@@ -598,40 +599,59 @@ export function SettingsDialog({
     });
   };
 
-  // The value of an env-var-backed AI provider field, or "" when unset. Only an
-  // enabled row counts: a var the user disabled in the Environment section must
-  // read as empty here so the field matches the (also enabled-only) status, and
-  // editing it never silently re-enables a deliberately disabled var.
-  const getProviderField = (envKey: string): string =>
-    draftPreferences.environmentVariables.find(
-      (variable) => variable.key === envKey && variable.enabled,
-    )?.value ?? "";
+  // Every env var name a field is backed by: its canonical key plus any aliases
+  // provider.ts also accepts (e.g. GOOGLE_API_KEY for the Gemini field).
+  const fieldEnvKeys = (field: ProviderField): readonly string[] => [
+    field.envKey,
+    ...(field.aliases ?? []),
+  ];
 
-  // Write an AI provider field through to its backing env var. Upserts an
-  // enabled row (so provider.ts picks it up) and removes the row when cleared so
-  // the generic Environment variables list never accrues empty entries.
-  const setProviderField = (envKey: string, value: string) => {
-    setDraftPreferences((current) => {
-      const index = current.environmentVariables.findIndex(
-        (variable) => variable.key === envKey,
+  // The value of an env-var-backed AI provider field, or "" when unset. Only an
+  // enabled row counts: a var disabled in the Environment section must read as
+  // empty so the field matches the (also enabled-only) status banner. An aliased
+  // value (e.g. an existing GOOGLE_API_KEY) is surfaced rather than hidden.
+  const getProviderField = (field: ProviderField): string => {
+    for (const key of fieldEnvKeys(field)) {
+      const row = draftPreferences.environmentVariables.find(
+        (variable) => variable.key === key && variable.enabled,
       );
-      if (index === -1) {
-        if (value === "") return current;
-        return {
-          ...current,
-          environmentVariables: [
-            ...current.environmentVariables,
-            { id: createDraftId(), key: envKey, value, enabled: true },
-          ],
-        };
+      if (row) return row.value;
+    }
+    return "";
+  };
+
+  // Write an AI provider field through to its backing env var. Edits the enabled
+  // row the user already has (canonical or alias) so re-entering a credential
+  // never creates a duplicate key; otherwise drops any same-named disabled rows
+  // (so a deliberately disabled var is not silently re-enabled with its old
+  // value) and appends a fresh enabled row under the canonical name. Clearing
+  // removes the row so the Environment list never accrues empty entries.
+  const setProviderField = (field: ProviderField, value: string) => {
+    const keys = fieldEnvKeys(field);
+    setDraftPreferences((current) => {
+      const enabledIndex = current.environmentVariables.findIndex(
+        (variable) => keys.includes(variable.key) && variable.enabled,
+      );
+      if (enabledIndex !== -1) {
+        const next = current.environmentVariables.slice();
+        if (value === "") {
+          next.splice(enabledIndex, 1);
+        } else {
+          next[enabledIndex] = { ...next[enabledIndex], value };
+        }
+        return { ...current, environmentVariables: next };
       }
-      const next = current.environmentVariables.slice();
-      if (value === "") {
-        next.splice(index, 1);
-      } else {
-        next[index] = { ...next[index], value, enabled: true };
-      }
-      return { ...current, environmentVariables: next };
+      if (value === "") return current;
+      const kept = current.environmentVariables.filter(
+        (variable) => !keys.includes(variable.key),
+      );
+      return {
+        ...current,
+        environmentVariables: [
+          ...kept,
+          { id: createDraftId(), key: field.envKey, value, enabled: true },
+        ],
+      };
     });
     setError(null);
   };
@@ -1238,15 +1258,17 @@ export function SettingsDialog({
               {t("settings.menu.geocoding")}
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem
-            onSelect={() => {
-              setSection("ai");
-              setOpen(true);
-            }}
-          >
-            <Bot className="mr-2 h-3.5 w-3.5" />
-            {t("settings.menu.ai")}
-          </DropdownMenuItem>
+          {showSettingsItem("settings.ai") && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setSection("ai");
+                setOpen(true);
+              }}
+            >
+              <Bot className="mr-2 h-3.5 w-3.5" />
+              {t("settings.menu.ai")}
+            </DropdownMenuItem>
+          )}
           {showSettingsItem("settings.environment") && (
             <DropdownMenuItem
               onSelect={() => {
@@ -2125,9 +2147,9 @@ export function SettingsDialog({
                               }
                               autoComplete="off"
                               spellCheck={false}
-                              value={getProviderField(field.envKey)}
+                              value={getProviderField(field)}
                               onChange={(event) =>
-                                setProviderField(field.envKey, event.target.value)
+                                setProviderField(field, event.target.value)
                               }
                               placeholder={t(field.placeholderKey)}
                             />

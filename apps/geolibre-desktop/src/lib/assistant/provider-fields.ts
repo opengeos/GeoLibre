@@ -12,6 +12,10 @@ export interface ProviderField {
   secret: boolean;
   /** Whether the provider needs this field before it counts as configured. */
   required: boolean;
+  /** Other env var names {@link ./provider} also accepts for this field, so an
+   * existing value under an alias is surfaced (and edited) here rather than
+   * hidden behind a duplicate of the canonical name. */
+  aliases?: readonly string[];
 }
 
 /** The credential fields each provider exposes, mirroring what {@link ./provider.configForProvider} reads. */
@@ -23,6 +27,9 @@ export const PROVIDER_FIELDS = {
       placeholderKey: "settings.ai.placeholder.geminiKey",
       secret: true,
       required: true,
+      // provider.ts also honors these names; surface a value set under either
+      // so the field is not left empty while the status reads "configured".
+      aliases: ["GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"],
     },
   ],
   anthropic: [

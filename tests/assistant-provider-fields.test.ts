@@ -98,6 +98,29 @@ describe("PROVIDER_FIELDS", () => {
     }
   });
 
+  it("declares only aliases the resolver actually accepts", () => {
+    for (const provider of ASSISTANT_PROVIDER_IDS) {
+      for (const field of PROVIDER_FIELDS[provider]) {
+        const required = PROVIDER_FIELDS[provider]
+          .filter((f) => f.required)
+          .map((f) => f.envKey);
+        for (const alias of field.aliases ?? []) {
+          // Fill the required fields but swap this field's canonical key for the
+          // alias; the provider must still resolve, proving the alias is a real
+          // synonym in provider.ts rather than dead config.
+          const env: Record<string, string> = {};
+          for (const key of required) {
+            env[key === field.envKey ? alias : key] = "https://example.com/v1";
+          }
+          assert.ok(
+            availableProviders(env).includes(provider),
+            `${provider} did not accept alias ${alias}`,
+          );
+        }
+      }
+    }
+  });
+
   it("only links docs URLs over https", () => {
     for (const url of Object.values(PROVIDER_DOCS_URL)) {
       assert.match(url, /^https:\/\//);
