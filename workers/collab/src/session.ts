@@ -80,6 +80,11 @@ const MAX_CHAT_TEXT_LENGTH = 2000;
 // How many recent chat messages to retain so a late joiner sees recent history.
 // Persisted (not in-memory) so it survives a hibernation between messages.
 const CHAT_HISTORY_LIMIT = 50;
+// Minimum gap between a socket's chat frames. Each chat costs a storage
+// read+write and a fan-out, so silently drop bursts faster than this floor to
+// keep one client from exhausting the session's storage-op budget. Generous
+// enough that normal typing/sending is never affected.
+const MIN_CHAT_INTERVAL_MS = 250;
 
 // Stateless and reused across frames (snapshots can arrive several times a
 // second), so we don't allocate a new encoder per message.
@@ -97,6 +102,8 @@ interface SocketAttachment {
    * never persisted to storage (it is keyed to a clientId, which is per-socket).
    */
   editOverride?: boolean;
+  /** Epoch-ms of this socket's last accepted chat frame, for rate-limiting. */
+  lastChatTs?: number;
 }
 
 /** Effective edit permission: the host always edits; otherwise a host-set
@@ -246,7 +253,7 @@ export class CollabSession extends DurableObject<Env> {
         await this.handleSetMode(ws, attachment, message.mode);
         break;
       case "set-participant-mode":
-        await this.handleSetParticipantMode(ws, attachment, message);
+        this.handleSetParticipantMode(ws, attachment, message);
         break;
       case "chat":
         await this.handleChat(ws, attachment, message);
@@ -447,11 +454,11 @@ export class CollabSession extends DurableObject<Env> {
     this.broadcast({ type: "mode", mode: next });
   }
 
-  private async handleSetParticipantMode(
+  private handleSetParticipantMode(
     ws: WebSocket,
     attachment: SocketAttachment,
     message: Extract<ClientMessage, { type: "set-participant-mode" }>,
-  ): Promise<void> {
+  ): void {
     if (attachment.role !== "host") {
       this.send(ws, {
         type: "error",
@@ -468,7 +475,10 @@ export class CollabSession extends DurableObject<Env> {
     const targetAttachment =
       target.deserializeAttachment() as SocketAttachment | null;
     if (!targetAttachment || targetAttachment.role === "host") return;
-    targetAttachment.editOverride = message.canEdit;
+    // Coerce to a strict boolean: `message` is untrusted JSON (the static type
+    // is erased at runtime), so a crafted `"canEdit": 1` must not store a
+    // non-boolean on the attachment.
+    targetAttachment.editOverride = message.canEdit === true;
     target.serializeAttachment(targetAttachment);
     // Everyone re-derives effective permission from the participants list (the
     // affected guest learns its own change here too), so a single broadcast
@@ -488,6 +498,18 @@ export class CollabSession extends DurableObject<Env> {
         ? message.text.trim().slice(0, MAX_CHAT_TEXT_LENGTH)
         : "";
     if (!text) return;
+    // Per-socket rate limit: silently drop a burst that arrives faster than the
+    // floor so one client can't flood the storage-op budget / fan-out. The last
+    // accepted timestamp rides on the attachment, so it survives a hibernation.
+    const now = Date.now();
+    if (
+      attachment.lastChatTs !== undefined &&
+      now - attachment.lastChatTs < MIN_CHAT_INTERVAL_MS
+    ) {
+      return;
+    }
+    attachment.lastChatTs = now;
+    ws.serializeAttachment(attachment);
     const chatMessage: CollabChatMessage = {
       id: crypto.randomUUID(),
       clientId: attachment.clientId,
@@ -497,7 +519,7 @@ export class CollabSession extends DurableObject<Env> {
       // Reuse the cursor sanitizer so a crafted coordinate can't reach peers'
       // map APIs as NaN/strings.
       coordinate: sanitizeCursor(message.coordinate),
-      ts: Date.now(),
+      ts: now,
     };
     // Persist a bounded history so a late joiner (or a post-hibernation welcome)
     // sees the recent conversation. Read-modify-write is safe: a Durable Object

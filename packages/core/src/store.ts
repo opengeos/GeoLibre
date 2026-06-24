@@ -374,8 +374,10 @@ export const DEFAULT_COLLABORATION_STATE: CollaborationState = Object.freeze({
   error: null,
 });
 
-// Cap the in-store chat log so a long session can't grow it without bound; it
-// mirrors the relay's own history limit.
+// Cap the in-store chat log so a long session can't grow it without bound. This
+// is intentionally larger than the relay's persisted history (50): the live
+// session accumulates messages locally, while the relay only retains the tail
+// for late joiners.
 const MAX_COLLABORATION_CHAT = 200;
 
 /** Derive a human-friendly display name from a file path or URL. */

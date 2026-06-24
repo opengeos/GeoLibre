@@ -612,6 +612,7 @@
     "allowEdit": "Allow this person to edit",
     "setViewOnly": "Set this person to view-only",
     "chatLog": "Session chat",
+    "chatCompose": "Type a message",
     "chatEmpty": "No messages yet.",
     "chatPlaceholder": "Send a message…",
     "chatSend": "Send message",

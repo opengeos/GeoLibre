@@ -421,7 +421,7 @@ export function CollaborationStatusBadge({
                 }}
                 placeholder={t("collaborate.chatPlaceholder")}
                 maxLength={2000}
-                aria-label={t("collaborate.chatLog")}
+                aria-label={t("collaborate.chatCompose")}
                 className="h-8 text-xs"
               />
               <Button
