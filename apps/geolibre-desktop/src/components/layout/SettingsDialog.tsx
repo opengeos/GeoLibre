@@ -598,10 +598,13 @@ export function SettingsDialog({
     });
   };
 
-  // The value of an env-var-backed AI provider field, or "" when unset.
+  // The value of an env-var-backed AI provider field, or "" when unset. Only an
+  // enabled row counts: a var the user disabled in the Environment section must
+  // read as empty here so the field matches the (also enabled-only) status, and
+  // editing it never silently re-enables a deliberately disabled var.
   const getProviderField = (envKey: string): string =>
     draftPreferences.environmentVariables.find(
-      (variable) => variable.key === envKey,
+      (variable) => variable.key === envKey && variable.enabled,
     )?.value ?? "";
 
   // Write an AI provider field through to its backing env var. Upserts an

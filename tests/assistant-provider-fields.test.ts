@@ -11,9 +11,10 @@ import {
   PROVIDER_FIELDS,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider-fields";
 
-// Build a runtime env that fills exactly the chosen fields of a provider with
-// plausible dummy values. URL-shaped fields need a real-looking URL so the
-// provider resolver (which normalizes/validates them) accepts them.
+// Build a runtime env that fills exactly the chosen fields of a provider. A
+// URL-shaped value satisfies every field the resolver inspects (API keys,
+// models, regions, and the base-URL fields it actually parses), so use one
+// dummy value rather than guessing which keys must look like URLs.
 function envFrom(
   provider: AssistantProviderId,
   envKeys: readonly string[],
@@ -21,9 +22,7 @@ function envFrom(
   const env: Record<string, string> = {};
   for (const field of PROVIDER_FIELDS[provider]) {
     if (!envKeys.includes(field.envKey)) continue;
-    env[field.envKey] = /URL$/.test(field.envKey)
-      ? "https://example.com/v1"
-      : `${field.envKey.toLowerCase()}-value`;
+    env[field.envKey] = "https://example.com/v1";
   }
   return env;
 }

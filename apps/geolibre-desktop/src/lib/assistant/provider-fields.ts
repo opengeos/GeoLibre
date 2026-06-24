@@ -1,13 +1,6 @@
 import type { AssistantProviderId } from "./provider";
 
-/**
- * Declarative description of a single credential field for an AI provider, used
- * by the Settings → AI Providers section to render a labeled input instead of
- * asking the user to type a raw environment-variable name. Each field maps one
- * to one onto a runtime environment variable that {@link ./provider} already
- * reads, so the structured UI and the generic Environment variables list stay
- * two views of the same underlying storage.
- */
+/** One credential field for an AI provider, mapped onto the env var {@link ./provider} reads. */
 export interface ProviderField {
   /** The runtime environment variable this field reads from and writes to. */
   envKey: string;
@@ -21,13 +14,7 @@ export interface ProviderField {
   required: boolean;
 }
 
-/**
- * The credential fields each provider exposes, mirroring exactly what
- * {@link ./provider.configForProvider} reads. The first env var name in each
- * provider's key list is used (the alternates like `GOOGLE_API_KEY` remain
- * available through the generic Environment variables list). Selecting a
- * provider in the AI section renders this list as the dynamic template.
- */
+/** The credential fields each provider exposes, mirroring what {@link ./provider.configForProvider} reads. */
 export const PROVIDER_FIELDS = {
   google: [
     {
