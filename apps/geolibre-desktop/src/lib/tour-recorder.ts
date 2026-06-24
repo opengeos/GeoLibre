@@ -184,13 +184,16 @@ export async function recordTour({
     throw new TourRecordingUnsupportedError();
   }
 
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, { mimeType });
+
   // Aborting interrupts the in-flight camera move so the tour stops promptly
-  // instead of finishing the current segment.
+  // instead of finishing the current segment. Registered only after the
+  // recorder is constructed, so a setup failure above does not leave a stale
+  // map.stop() listener attached to the signal.
   const stopOnAbort = () => map.stop();
   signal?.addEventListener("abort", stopOnAbort, { once: true });
 
-  const stream = canvas.captureStream(fps);
-  const recorder = new MediaRecorder(stream, { mimeType });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) chunks.push(event.data);
@@ -247,6 +250,9 @@ export async function recordTour({
     cancelAnimationFrame(rafId);
     if (recorder.state !== "inactive") recorder.stop();
     signal?.removeEventListener("abort", stopOnAbort);
+    // recorder.stop() finalizes the file but does not stop the canvas capture,
+    // so end the stream's tracks to release it.
+    for (const track of stream.getTracks()) track.stop();
   }
 
   return finished;

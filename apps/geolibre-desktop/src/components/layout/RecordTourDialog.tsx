@@ -27,6 +27,7 @@ import {
   isTourRecordingSupported,
   recordTour,
   type TourKeyframe,
+  TourRecordingUnsupportedError,
 } from "../../lib/tour-recorder";
 
 interface RecordTourDialogProps {
@@ -153,20 +154,34 @@ export function RecordTourDialog({
         signal: controller.signal,
         onProgress: setProgress,
       });
-      setStatus("saving");
-      const bytes = new Uint8Array(await blob.arrayBuffer());
-      const name = await saveBinaryFileWithFallback(bytes, {
-        defaultName: "map-tour.webm",
-        filters: [{ name: "WebM Video", extensions: ["webm"] }],
-        browserTypes: [
-          { description: "WebM Video", accept: { "video/webm": [".webm"] } },
-        ],
-        mimeType: "video/webm",
-      });
-      if (name) setSavedName(name);
-      else setSaveCancelled(true);
+      // Stopping during the opening hold can yield an empty clip; treat that as
+      // a cancel rather than saving a zero-length file. A non-empty partial tour
+      // (stopped midway) is still worth saving.
+      if (controller.signal.aborted && blob.size === 0) {
+        setSaveCancelled(true);
+      } else {
+        setStatus("saving");
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const name = await saveBinaryFileWithFallback(bytes, {
+          defaultName: "map-tour.webm",
+          filters: [{ name: "WebM Video", extensions: ["webm"] }],
+          browserTypes: [
+            { description: "WebM Video", accept: { "video/webm": [".webm"] } },
+          ],
+          mimeType: "video/webm",
+        });
+        if (name) setSavedName(name);
+        else setSaveCancelled(true);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Show a translated message rather than leaking the helper's raw English
+      // string; aborts resolve cleanly above, so this only fires for real
+      // failures.
+      setError(
+        err instanceof TourRecordingUnsupportedError
+          ? t("recordTour.unsupported")
+          : t("recordTour.recordError"),
+      );
     } finally {
       abortRef.current = null;
       setStatus("idle");
