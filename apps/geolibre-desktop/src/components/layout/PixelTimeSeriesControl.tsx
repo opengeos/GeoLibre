@@ -58,6 +58,9 @@ export function PixelTimeSeriesControl({
     total: number;
   } | null>(null);
   const [exporting, setExporting] = useState(false);
+  // Export failures are kept separate from query errors so a failed export
+  // shows an inline message beside the buttons instead of replacing the chart.
+  const [exportError, setExportError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // Leaving the time-slider stack (dock closed or stack removed) cancels an
@@ -71,6 +74,7 @@ export function PixelTimeSeriesControl({
     const ac = new AbortController();
     abortRef.current = ac;
     setError(null);
+    setExportError(null);
     setResult(null);
     setProgress({ done: 0, total: 0 });
     setOpen(true);
@@ -121,13 +125,14 @@ export function PixelTimeSeriesControl({
     async (format: "csv" | "geoparquet") => {
       if (!result) return;
       setExporting(true);
+      setExportError(null);
       try {
         const collection = seriesToFeatureCollection(result);
         const [lng, lat] = result.lngLat;
         const baseName = `pixel-time-series_${lat.toFixed(4)}_${lng.toFixed(4)}`;
         await exportVectorLayer(collection, format, baseName);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        setExportError(err instanceof Error ? err.message : String(err));
       } finally {
         setExporting(false);
       }
@@ -227,6 +232,14 @@ export function PixelTimeSeriesControl({
                 </p>
               ) : null}
               <div className="flex items-center justify-end gap-2">
+                {exportError ? (
+                  <p
+                    className="mr-auto text-xs text-destructive"
+                    role="alert"
+                  >
+                    {exportError}
+                  </p>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"

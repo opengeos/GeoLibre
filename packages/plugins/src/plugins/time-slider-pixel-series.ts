@@ -126,6 +126,10 @@ export function downsampleSteps(
 ): { steps: Date[]; truncated: boolean } {
   const cap = Math.max(1, Math.floor(maxSteps));
   if (steps.length <= cap) return { steps, truncated: false };
+  // A cap of 1 keeps only the first step; the even-spacing formula below would
+  // divide by `cap - 1 === 0` and yield a NaN index (so `steps[NaN]` would be
+  // undefined), so handle it explicitly.
+  if (cap === 1) return { steps: [steps[0]], truncated: true };
   const kept: Date[] = [];
   // Even spacing across [0, length-1] inclusive of both ends.
   for (let i = 0; i < cap; i++) {
@@ -256,42 +260,53 @@ export async function queryPixelTimeSeries(
 
   const series = await Promise.all(
     sources.map(async (source) => {
-      let bandIndex = source.bidx && source.bidx.length > 0 ? source.bidx[0] : 1;
-      let bandName: string | null = null;
-      const tasks = steps.map((date) => async (): Promise<PixelSeriesPoint> => {
-        const point: PixelSeriesPoint = {
-          date: isoDate(date),
-          timestamp: date.getTime(),
-          url: "",
-          value: null,
-          isNodata: false,
-        };
-        try {
-          if (signal?.aborted) throw new Error("aborted");
-          const url = await resolveUrl(source.url, date);
-          point.url = url;
-          const reading = await readAt(url);
-          const band = reading ? pickBand(reading, source.bidx) : null;
-          if (band) {
-            bandIndex = band.index;
-            if (band.name) bandName = band.name;
-            point.isNodata = band.isNodata;
-            point.value = band.isNodata ? null : band.value;
-          }
-        } catch {
-          // Leave the point null: one missing/late COG should not fail the rest.
-        } finally {
-          completed += 1;
-          onProgress?.(completed, total);
-        }
-        return point;
-      });
-      const points = await runWithConcurrency(tasks, READ_CONCURRENCY);
+      // Each task returns its point plus the band it read; the band metadata is
+      // then taken from the first successful step (by step order) rather than
+      // mutating a shared closure under concurrency, where last-writer-wins
+      // would make bandIndex/bandName non-deterministic.
+      const tasks = steps.map(
+        (date) =>
+          async (): Promise<{
+            point: PixelSeriesPoint;
+            band: BandReading | null;
+          }> => {
+            const point: PixelSeriesPoint = {
+              date: isoDate(date),
+              timestamp: date.getTime(),
+              url: "",
+              value: null,
+              isNodata: false,
+            };
+            let band: BandReading | null = null;
+            try {
+              if (signal?.aborted) throw new Error("aborted");
+              const url = await resolveUrl(source.url, date);
+              point.url = url;
+              const reading = await readAt(url);
+              band = reading ? pickBand(reading, source.bidx) : null;
+              if (band) {
+                point.isNodata = band.isNodata;
+                point.value = band.isNodata ? null : band.value;
+              }
+            } catch {
+              // Leave the point null: one missing/late COG should not fail the rest.
+            } finally {
+              completed += 1;
+              onProgress?.(completed, total);
+            }
+            return { point, band };
+          },
+      );
+      const results = await runWithConcurrency(tasks, READ_CONCURRENCY);
+      const points = results.map((result) => result.point);
+      const firstBand = results.find((result) => result.band)?.band ?? null;
       return {
         sourceId: source.id ?? source.name ?? "cog",
         sourceName: source.name ?? source.id ?? "COG",
-        bandIndex,
-        bandName,
+        bandIndex:
+          firstBand?.index ??
+          (source.bidx && source.bidx.length > 0 ? source.bidx[0] : 1),
+        bandName: firstBand?.name ?? null,
         points,
       } satisfies PixelSeries;
     }),

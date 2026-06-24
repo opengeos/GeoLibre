@@ -30,11 +30,14 @@ describe("downsampleSteps", () => {
     );
   });
 
-  it("coerces a non-positive cap to one step", () => {
+  it("coerces a non-positive cap to the first step", () => {
     const steps = [new Date("2000-01-01"), new Date("2001-01-01")];
     const result = downsampleSteps(steps, 0);
     assert.equal(result.steps.length, 1);
     assert.equal(result.truncated, true);
+    // Guards the cap===1 path: a NaN index would leave steps[0] undefined.
+    assert.ok(result.steps[0] instanceof Date);
+    assert.equal(result.steps[0].getTime(), steps[0].getTime());
   });
 });
 
