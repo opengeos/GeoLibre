@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
   Slider,
 } from "@geolibre/ui";
-import { ClipboardList, SlidersHorizontal } from "lucide-react";
+import { ClipboardList, SlidersHorizontal, Video } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
@@ -55,6 +55,7 @@ interface ControlsMenuProps {
   onToggleReverseGeocode: () => void;
   onToggleGraticule: () => void;
   onOpenFieldCollection: () => void;
+  onOpenRecordTour: () => void;
 }
 
 /** The Controls menu: built-in map controls, atmosphere/routing toggles, and panels. */
@@ -75,6 +76,7 @@ export function ControlsMenu({
   onToggleReverseGeocode,
   onToggleGraticule,
   onOpenFieldCollection,
+  onOpenRecordTour,
 }: ControlsMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
@@ -238,14 +240,19 @@ export function ControlsMenu({
               {panels.viewState.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
+          {(show("controls.fieldCollection") ||
+            show("controls.recordTour")) && <DropdownMenuSeparator />}
           {show("controls.fieldCollection") && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={onOpenFieldCollection}>
-                <ClipboardList className="mr-2 h-3.5 w-3.5" />
-                {t("toolbar.item.fieldCollection")}
-              </DropdownMenuItem>
-            </>
+            <DropdownMenuItem onSelect={onOpenFieldCollection}>
+              <ClipboardList className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.fieldCollection")}
+            </DropdownMenuItem>
+          )}
+          {show("controls.recordTour") && (
+            <DropdownMenuItem onSelect={onOpenRecordTour}>
+              <Video className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.recordTour")}
+            </DropdownMenuItem>
           )}
         </DropdownMenuContent>
       </DropdownMenu>
