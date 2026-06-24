@@ -17,6 +17,7 @@ import {
   Loader2,
   Lock,
   Search,
+  Star,
   User,
 } from "lucide-react";
 import {
@@ -38,7 +39,7 @@ import {
 } from "../../lib/share-gallery";
 import type { TFunction } from "i18next";
 
-type GalleryScope = "public" | "mine";
+type GalleryScope = "featured" | "all" | "mine";
 
 interface ProjectGalleryDialogProps {
   open: boolean;
@@ -104,7 +105,7 @@ export function ProjectGalleryDialog({
     useDesktopSettingsStore((s) => s.desktopSettings.shareToken) ?? ""
   ).trim();
   const hasToken = trimmedToken.length > 0;
-  const [scope, setScope] = useState<GalleryScope>("public");
+  const [scope, setScope] = useState<GalleryScope>("featured");
   const [projects, setProjects] = useState<SharedProject[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "loadingMore">(
     "idle",
@@ -120,8 +121,10 @@ export function ProjectGalleryDialog({
   const [openError, setOpenError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // A signed-out user (no token) can only ever see the public scope.
-  const effectiveScope: GalleryScope = hasToken ? scope : "public";
+  // Without a token, the "My projects" scope isn't available; fall back to the
+  // featured tab.
+  const effectiveScope: GalleryScope =
+    scope === "mine" && !hasToken ? "featured" : scope;
 
   // Explicit dialog size once the user drags the corner grip (null = the
   // default responsive size). `dialogRef` reads the live element size at the
@@ -217,9 +220,12 @@ export function ProjectGalleryDialog({
           setProjects(mine);
           setHasMore(false);
         } else {
+          // "featured" and "all" both page through the public listing; featured
+          // adds the ?featured=true filter.
           const result = await fetchSharedProjects({
             limit: PAGE_SIZE,
             offset,
+            featured: effectiveScope === "featured",
             signal: controller.signal,
           });
           if (controller.signal.aborted) return;
@@ -331,22 +337,28 @@ export function ProjectGalleryDialog({
           <DialogDescription>{t("gallery.description")}</DialogDescription>
         </DialogHeader>
 
-        {hasToken ? (
-          <div className="flex w-full gap-1 rounded-md bg-muted p-1 sm:w-auto sm:self-start">
-            <ScopeTab
-              active={effectiveScope === "public"}
-              onClick={() => setScope("public")}
-              icon={<Globe2 className="h-3.5 w-3.5" />}
-              label={t("gallery.scopePublic")}
-            />
+        <div className="flex w-full gap-1 rounded-md bg-muted p-1 sm:w-auto sm:self-start">
+          <ScopeTab
+            active={effectiveScope === "featured"}
+            onClick={() => setScope("featured")}
+            icon={<Star className="h-3.5 w-3.5" />}
+            label={t("gallery.scopeFeatured")}
+          />
+          <ScopeTab
+            active={effectiveScope === "all"}
+            onClick={() => setScope("all")}
+            icon={<Globe2 className="h-3.5 w-3.5" />}
+            label={t("gallery.scopeAll")}
+          />
+          {hasToken ? (
             <ScopeTab
               active={effectiveScope === "mine"}
               onClick={() => setScope("mine")}
               icon={<User className="h-3.5 w-3.5" />}
               label={t("gallery.scopeMine")}
             />
-          </div>
-        ) : null}
+          ) : null}
+        </div>
 
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -401,7 +413,9 @@ export function ProjectGalleryDialog({
                 ? t("gallery.noMatches")
                 : effectiveScope === "mine"
                   ? t("gallery.emptyMine")
-                  : t("gallery.empty")}
+                  : effectiveScope === "featured"
+                    ? t("gallery.emptyFeatured")
+                    : t("gallery.empty")}
             </p>
           ) : (
             <>

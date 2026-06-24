@@ -69,6 +69,8 @@ export interface FetchSharedProjectsOptions {
   limit?: number;
   /** Number of records to skip, for "load more" pagination. */
   offset?: number;
+  /** When true, request only featured projects (`?featured=true`). */
+  featured?: boolean;
   /** Override the share host; defaults to the configured/production URL. */
   baseUrl?: string;
   signal?: AbortSignal;
@@ -193,6 +195,7 @@ export async function fetchSharedProjects(
   const params = new URLSearchParams();
   if (options.limit != null) params.set("limit", String(options.limit));
   if (options.offset) params.set("offset", String(options.offset));
+  if (options.featured) params.set("featured", "true");
   const query = params.toString();
   const url = `${base}/api/projects${query ? `?${query}` : ""}`;
 

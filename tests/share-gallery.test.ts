@@ -107,6 +107,21 @@ describe("fetchSharedProjects", () => {
     assert.ok(!calls[0].includes("offset="));
   });
 
+  it("adds featured=true only when requested", async () => {
+    const plain = fakeFetch(200, { projects: [] });
+    await fetchSharedProjects({ baseUrl: BASE, limit: 10, fetchImpl: plain.fn });
+    assert.ok(!plain.calls[0].includes("featured"));
+
+    const feat = fakeFetch(200, { projects: [] });
+    await fetchSharedProjects({
+      baseUrl: BASE,
+      limit: 10,
+      featured: true,
+      fetchImpl: feat.fn,
+    });
+    assert.match(feat.calls[0], /featured=true/);
+  });
+
   it("reports hasMore when a full page is returned", async () => {
     const full = Array.from({ length: 3 }, (_, i) =>
       rawProject({ id: `id-${i}` }),

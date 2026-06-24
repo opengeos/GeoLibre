@@ -681,9 +681,11 @@
     "untitled": "Untitled Project",
     "noThumbnail": "No preview",
     "resizeDialog": "Resize gallery",
-    "scopePublic": "Public gallery",
+    "scopeFeatured": "Featured",
+    "scopeAll": "All projects",
     "scopeMine": "My projects",
     "signedOutHint": "Add a share.geolibre.app API token in Settings to see your own unlisted and private projects.",
+    "emptyFeatured": "No featured projects yet.",
     "emptyMine": "You have not shared any projects yet.",
     "visibilityUnlisted": "Unlisted",
     "visibilityPrivate": "Private"
