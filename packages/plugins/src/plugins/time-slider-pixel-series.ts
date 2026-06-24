@@ -377,10 +377,12 @@ export async function queryPixelTimeSeries(
         } catch {
           // Leave bands empty: one missing/late COG should not fail the rest.
         } finally {
+          // Write the slot before onProgress so a throwing progress callback
+          // cannot leave a sparse hole that the chart would silently drop.
+          points[si][di] = point;
           completed += 1;
           onProgress?.(completed, total);
         }
-        points[si][di] = point;
       });
     });
   });

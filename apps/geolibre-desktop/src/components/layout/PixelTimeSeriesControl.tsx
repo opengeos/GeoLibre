@@ -269,7 +269,7 @@ export function PixelTimeSeriesControl({
   }, [bandOptions, selectedBand]);
 
   const truncated = loadedResults.some((r) => r.truncated);
-  const truncatedSteps = loadedResults.find((r) => r.truncated)?.stepCount;
+  const truncatedSteps = loadedResults.find((r) => r.truncated)?.stepCount ?? 0;
 
   const handleExport = useCallback(
     async (format: "csv" | "geoparquet") => {
@@ -591,8 +591,14 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
     );
   }
 
-  let min = Math.min(...values);
-  let max = Math.max(...values);
+  // Reduce instead of Math.min/max(...values) so a large multi-point series
+  // cannot blow the argument-spread stack limit.
+  let min = values[0];
+  let max = values[0];
+  for (const v of values) {
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
   if (min === max) {
     // Pad a flat series so the single value sits mid-axis with room to read.
     min -= 1;
