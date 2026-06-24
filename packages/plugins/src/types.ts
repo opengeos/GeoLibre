@@ -36,6 +36,53 @@ export interface GeoLibreExternalNativeLayerRegistration {
 }
 
 /**
+ * Options shared by the raster/tile registration helpers
+ * ({@link GeoLibreAppAPI.addTileLayer}, {@link GeoLibreAppAPI.addWmtsLayer},
+ * {@link GeoLibreAppAPI.addWmsLayer}). They mirror the MapLibre raster `source`
+ * fields a tile service typically advertises, so the layer renders with the
+ * right extent, zoom range, and attribution without the plugin touching the
+ * map.
+ */
+export interface GeoLibreTileLayerOptions {
+  /** Tile size in pixels (default 256). */
+  tileSize?: number;
+  /** Attribution string shown in the map's attribution control. */
+  attribution?: string;
+  /** Visible extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds?: [number, number, number, number];
+  /** Minimum zoom at which tiles are requested. */
+  minzoom?: number;
+  /** Maximum zoom at which tiles are requested. */
+  maxzoom?: number;
+  /** Tile y-axis scheme; `"tms"` flips the y origin. Defaults to `"xyz"`. */
+  scheme?: "xyz" | "tms";
+  /** Initial visibility (default true). */
+  visible?: boolean;
+  /** Initial opacity in [0, 1] (default 1). */
+  opacity?: number;
+  /** Insert the new layer directly beneath the layer with this id. */
+  beforeLayerId?: string;
+}
+
+/**
+ * Options for {@link GeoLibreAppAPI.addWmsLayer}. The GetMap tile URL is built
+ * from the service `url` plus `layers`, so the plugin passes the WMS request
+ * parameters instead of a tile URL template.
+ */
+export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
+  /** WMS service endpoint (the GetMap base URL). */
+  url: string;
+  /** Comma-separated WMS layer name(s) to request. */
+  layers: string;
+  /** Comma-separated style name(s) (default empty: the server default). */
+  styles?: string;
+  /** Image format, e.g. `"image/png"` (default) or `"image/jpeg"`. */
+  format?: string;
+  /** Request transparent tiles (default true). */
+  transparent?: boolean;
+}
+
+/**
  * Describes the file-type filter shown by the host's save/open dialog so
  * plugins can label exports/imports (e.g. JSON, GeoJSON, CSV) without knowing
  * whether they run under Tauri or in a browser.
@@ -105,6 +152,41 @@ export interface GeoLibreAppAPI {
     data: FeatureCollection,
     sourcePath?: string,
   ) => void;
+  /**
+   * Add a native XYZ raster tile layer from a tile URL template (with
+   * `{x}`/`{y}`/`{z}` placeholders) and return its layer id. Unlike calling
+   * `getMap().addSource()/addLayer()` directly, the layer appears in the Layers
+   * panel with full opacity/reorder/styling support and persists with the
+   * project, matching {@link addGeoJsonLayer} for vector data. Typed optional
+   * for forward-compatibility with host variants, so call it with optional
+   * chaining.
+   */
+  addTileLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreTileLayerOptions,
+  ) => string;
+  /**
+   * Add a native WMTS raster tile layer from a WMTS tile URL template and return
+   * its layer id. Behaves like {@link addTileLayer} (the layer is a first-class
+   * panel entry that persists with the project); the separate name keeps WMTS
+   * layers labelled distinctly. Typed optional for forward-compatibility, so
+   * call it with optional chaining.
+   */
+  addWmtsLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreTileLayerOptions,
+  ) => string;
+  /**
+   * Add a native WMS raster layer and return its layer id. The host builds the
+   * GetMap tile URL from {@link GeoLibreWmsLayerOptions.url} and
+   * {@link GeoLibreWmsLayerOptions.layers}, so the plugin supplies the request
+   * parameters rather than a tile URL template. The layer persists with the
+   * project like {@link addTileLayer}. Typed optional for
+   * forward-compatibility, so call it with optional chaining.
+   */
+  addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;

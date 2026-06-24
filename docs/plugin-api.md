@@ -62,6 +62,20 @@ export interface GeoLibreAppAPI {
     data: FeatureCollection,
     sourcePath?: string,
   ) => void;
+  // Native raster/tile layers (see "Raster and tile layers" below). Each
+  // returns the new layer's id and the layer appears in the Layers panel and
+  // persists with the project, like addGeoJsonLayer does for vector data.
+  addTileLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreTileLayerOptions,
+  ) => string;
+  addWmtsLayer?: (
+    name: string,
+    url: string,
+    options?: GeoLibreTileLayerOptions,
+  ) => string;
+  addWmsLayer?: (name: string, options: GeoLibreWmsLayerOptions) => string;
   getActiveBasemap: () => string;
   onBasemapChange: (callback: (styleUrl: string) => void) => () => void;
   fetchArrayBuffer?: (url: string) => Promise<ArrayBuffer>;
@@ -246,6 +260,53 @@ https://viewer.geolibre.app/?url=https://example.com/project.geolibre.json&examp
 ```
 
 A URL parameter activates only an already-registered (installed) plugin that owns it; it never loads a plugin from the URL. For external plugins, include the plugin manifest URL in the project `plugins` state (so the plugin is registered) before relying on its URL handler — the matching parameter then activates and dispatches it even if it is not in the active set.
+
+## Raster and tile layers
+
+`addGeoJsonLayer` registers vector data as a native layer. For raster and tile data there are three matching helpers — `addTileLayer` (XYZ), `addWmtsLayer` (WMTS), and `addWmsLayer` (WMS). Each returns the new layer's id, and the layer appears in the Layers panel with full opacity, reorder, and styling support and persists with the project, so a plugin no longer has to call `getMap().addSource()/addLayer()` directly (which leaves the layer invisible to GeoLibre's layer store).
+
+```typescript
+export interface GeoLibreTileLayerOptions {
+  tileSize?: number; // default 256
+  attribution?: string;
+  bounds?: [number, number, number, number]; // [west, south, east, north] in WGS84
+  minzoom?: number;
+  maxzoom?: number;
+  scheme?: "xyz" | "tms"; // default "xyz"
+  visible?: boolean; // default true
+  opacity?: number; // default 1
+  beforeLayerId?: string; // insert beneath this layer
+}
+
+export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
+  url: string; // WMS GetMap endpoint
+  layers: string; // comma-separated layer name(s)
+  styles?: string;
+  format?: string; // default "image/png"
+  transparent?: boolean; // default true
+}
+```
+
+```typescript
+// XYZ tiles (e.g. an imagery, topo, or DEM hillshade endpoint).
+app.addTileLayer?.("LINZ Aerial Imagery", "https://tiles.example.nz/aerial/{z}/{x}/{y}.png", {
+  attribution: "Sourced from LINZ. CC BY 4.0",
+  maxzoom: 22,
+  bounds: [166.0, -47.5, 178.6, -34.0],
+});
+
+// WMTS tile URL template.
+app.addWmtsLayer?.("LINZ Topo50", "https://tiles.example.nz/topo50/{z}/{x}/{y}.png");
+
+// WMS — pass the request parameters; the host builds the GetMap tile URL.
+app.addWmsLayer?.("LINZ Coverage", {
+  url: "https://wms.example.nz/wms",
+  layers: "coverage",
+  transparent: true,
+});
+```
+
+The helpers are typed optional for forward-compatibility with host variants, so call them with optional chaining (`app.addTileLayer?.(...)`).
 
 ## Right sidebar panels
 

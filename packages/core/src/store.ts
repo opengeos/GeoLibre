@@ -31,6 +31,7 @@ import {
   DEFAULT_STORY_MAP,
   MAX_DASHBOARD_COLUMNS,
   MIN_DASHBOARD_COLUMNS,
+  type AddTileLayerOptions,
   type CollaborationChatMessage,
   type CollaborationParticipant,
   type CollaborationPresence,
@@ -335,6 +336,18 @@ export interface AppState {
     name: string,
     geojson: FeatureCollection,
     sourcePath?: string,
+    beforeLayerId?: string | null
+  ) => string;
+  /**
+   * Add a native raster tile layer (XYZ, WMS, or WMTS) from one or more tile
+   * URL templates and return its id. The layer appears in the Layers panel and
+   * persists with the project exactly like a layer added through the Add Data
+   * dialog, so callers (e.g. an external plugin) do not have to touch MapLibre
+   * directly. See {@link AddTileLayerOptions}.
+   */
+  addTileLayer: (
+    name: string,
+    options: AddTileLayerOptions,
     beforeLayerId?: string | null
   ) => string;
 
@@ -1041,6 +1054,44 @@ export const useAppStore = create<AppState>()(
           metadata: {},
           geojson,
           sourcePath,
+        };
+        get().addLayer(layer, beforeLayerId);
+        return id;
+      },
+
+      addTileLayer: (name, options, beforeLayerId = null) => {
+        const id = uuidv4();
+        const tiles = options.tiles.filter(
+          (tile) => typeof tile === "string" && tile.trim() !== ""
+        );
+        const layer: GeoLibreLayer = {
+          id,
+          name,
+          type: options.type ?? "xyz",
+          source: {
+            // Extra source fields (e.g. WMS layers/styles) merge first so the
+            // required raster descriptor below always wins.
+            ...(options.source ?? {}),
+            type: "raster",
+            tiles,
+            tileSize: options.tileSize ?? 256,
+            ...(options.url !== undefined ? { url: options.url } : {}),
+            ...(options.attribution !== undefined
+              ? { attribution: options.attribution }
+              : {}),
+            ...(options.bounds !== undefined ? { bounds: options.bounds } : {}),
+            ...(options.minzoom !== undefined
+              ? { minzoom: options.minzoom }
+              : {}),
+            ...(options.maxzoom !== undefined
+              ? { maxzoom: options.maxzoom }
+              : {}),
+            ...(options.scheme !== undefined ? { scheme: options.scheme } : {}),
+          },
+          visible: options.visible ?? true,
+          opacity: options.opacity ?? 1,
+          style: { ...DEFAULT_LAYER_STYLE },
+          metadata: { ...(options.metadata ?? {}) },
         };
         get().addLayer(layer, beforeLayerId);
         return id;

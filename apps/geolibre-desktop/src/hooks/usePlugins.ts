@@ -47,6 +47,8 @@ import type {
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
+  GeoLibreTileLayerOptions,
+  GeoLibreWmsLayerOptions,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -66,6 +68,7 @@ import {
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import { createWmsTileUrl } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
 import {
@@ -94,6 +97,17 @@ function ensureFileExtension(name: string, extensions: string[]): string {
 }
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
+
+/**
+ * Translate the public {@link GeoLibreTileLayerOptions} into the store's
+ * `addTileLayer` source/render options, dropping `beforeLayerId` (which the
+ * store takes as a separate positional argument).
+ */
+function tileLayerSourceOptions(options?: GeoLibreTileLayerOptions) {
+  if (!options) return {};
+  const { beforeLayerId: _beforeLayerId, ...rest } = options;
+  return rest;
+}
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
 function reportPluginError(
@@ -473,6 +487,67 @@ export function createAppAPI(
     ) => {
       const id = store.addGeoJsonLayer(name, data, sourcePath);
       return id;
+    },
+    addTileLayer: (
+      name: string,
+      url: string,
+      options?: GeoLibreTileLayerOptions,
+    ) =>
+      store.addTileLayer(
+        name,
+        { type: "xyz", tiles: [url], url, ...tileLayerSourceOptions(options) },
+        options?.beforeLayerId ?? null,
+      ),
+    addWmtsLayer: (
+      name: string,
+      url: string,
+      options?: GeoLibreTileLayerOptions,
+    ) =>
+      store.addTileLayer(
+        name,
+        { type: "wmts", tiles: [url], url, ...tileLayerSourceOptions(options) },
+        options?.beforeLayerId ?? null,
+      ),
+    addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
+      const {
+        beforeLayerId,
+        url,
+        layers,
+        styles,
+        format,
+        transparent,
+        ...tileOptions
+      } = options;
+      const tileSize = tileOptions.tileSize ?? 256;
+      const resolvedStyles = styles ?? "";
+      const resolvedFormat = format ?? "image/png";
+      const resolvedTransparent = transparent ?? true;
+      const tileUrl = createWmsTileUrl({
+        endpoint: url,
+        layers,
+        styles: resolvedStyles,
+        format: resolvedFormat,
+        transparent: resolvedTransparent,
+        tileSize,
+      });
+      return store.addTileLayer(
+        name,
+        {
+          type: "wms",
+          tiles: [tileUrl],
+          url,
+          // Persist the WMS request parameters so the layer round-trips through
+          // a saved project, mirroring the Add Data dialog's WMS source.
+          source: {
+            layers,
+            styles: resolvedStyles,
+            format: resolvedFormat,
+            transparent: resolvedTransparent,
+          },
+          ...tileOptions,
+        },
+        beforeLayerId ?? null,
+      );
     },
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
     onBasemapChange: (callback: (styleUrl: string) => void) =>

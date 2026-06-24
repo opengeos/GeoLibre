@@ -1998,10 +1998,26 @@ function syncRasterTileLayer(
   const src = sourceId(layer.id);
   const lid = `layer-${layer.id}-raster`;
   const tiles = getRenderableRasterTiles(layer);
-  const tileSize = (layer.source.tileSize as number | undefined) ?? 256;
+  const tileSize = numberSource(layer.source.tileSize) ?? 256;
   if (tiles.length === 0) return;
   if (!map.getSource(src)) {
-    map.addSource(src, { type: "raster", tiles, tileSize });
+    const bounds = boundsSource(layer.source.bounds);
+    map.addSource(src, {
+      type: "raster",
+      tiles,
+      tileSize,
+      ...(numberSource(layer.source.minzoom) !== undefined
+        ? { minzoom: numberSource(layer.source.minzoom) }
+        : {}),
+      ...(numberSource(layer.source.maxzoom) !== undefined
+        ? { maxzoom: numberSource(layer.source.maxzoom) }
+        : {}),
+      ...(bounds ? { bounds } : {}),
+      ...(layer.source.scheme === "tms" ? { scheme: "tms" as const } : {}),
+      ...(stringSource(layer.source.attribution)
+        ? { attribution: stringSource(layer.source.attribution) }
+        : {}),
+    });
   }
   ensureLayer(
     map,
