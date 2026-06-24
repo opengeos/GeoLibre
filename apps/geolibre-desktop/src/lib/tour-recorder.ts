@@ -168,6 +168,34 @@ function flyToKeyframe(
   });
 }
 
+/** MapLibre interaction handlers disabled for the duration of a recording. */
+const INTERACTION_HANDLERS = [
+  "dragPan",
+  "scrollZoom",
+  "boxZoom",
+  "dragRotate",
+  "keyboard",
+  "doubleClickZoom",
+  "touchZoomRotate",
+  "touchPitch",
+] as const;
+
+/**
+ * Disable user map interaction while recording so a stray scroll or drag cannot
+ * interrupt the flyTo animation. Returns a function that restores each handler
+ * to the enabled state it had before.
+ */
+function freezeMapInteractions(map: MapLibreMap): () => void {
+  const handlers = INTERACTION_HANDLERS.map((key) => map[key]);
+  const wasEnabled = handlers.map((handler) => handler.isEnabled());
+  for (const handler of handlers) handler.disable();
+  return () => {
+    handlers.forEach((handler, i) => {
+      if (wasEnabled[i]) handler.enable();
+    });
+  };
+}
+
 /**
  * Record an animated camera tour and resolve with a WebM blob.
  *
@@ -199,7 +227,15 @@ export async function recordTour({
   }
 
   const stream = canvas.captureStream(fps);
-  const recorder = new MediaRecorder(stream, { mimeType });
+  let recorder: MediaRecorder;
+  try {
+    recorder = new MediaRecorder(stream, { mimeType });
+  } catch (err) {
+    // The constructor can still reject a codec that isTypeSupported accepted;
+    // stop the capture so it isn't leaked when we never reach the finally below.
+    for (const track of stream.getTracks()) track.stop();
+    throw err;
+  }
 
   // Aborting interrupts the in-flight camera move so the tour stops promptly
   // instead of finishing the current segment. Registered only after the
@@ -235,13 +271,35 @@ export async function recordTour({
 
   // Pump repaints for the whole recording so the captured stream keeps getting
   // fresh frames even during the still holds (a paused canvas emits nothing).
+  // The same loop drives progress from elapsed wall-clock against the planned
+  // tour length, so it advances smoothly (including the lone segment of a
+  // two-keyframe tour) rather than jumping at segment boundaries. Progress is
+  // throttled to whole-percent changes to avoid a re-render every frame.
+  const totalMs = estimateTourDurationMs(keyframes);
+  let startedAt = 0;
+  let lastPercent = -1;
   let rafId = 0;
   const pump = () => {
     map.triggerRepaint();
+    if (startedAt && totalMs > 0) {
+      const percent = Math.min(
+        100,
+        Math.round(((performance.now() - startedAt) / totalMs) * 100),
+      );
+      if (percent !== lastPercent) {
+        lastPercent = percent;
+        onProgress?.(percent / 100);
+      }
+    }
     rafId = requestAnimationFrame(pump);
   };
 
+  // Freeze user interaction so a stray scroll or drag can't interrupt the flyTo
+  // (which would fire an early moveend and start the next segment from the wrong
+  // camera). Restored in the finally below.
+  let restoreInteractions = () => {};
   try {
+    restoreInteractions = freezeMapInteractions(map);
     // Park on the first keyframe before the recorder starts so the opening
     // frame is the intended view, not wherever the user left the map.
     const first = keyframes[0];
@@ -253,18 +311,15 @@ export async function recordTour({
     });
 
     rafId = requestAnimationFrame(pump);
+    startedAt = performance.now();
     // Flush encoded chunks every second so memory stays flat over long tours
     // instead of buffering the whole video until stop().
     recorder.start(1000);
     await delay(START_HOLD_MS, signal);
 
-    const segments = keyframes.length - 1;
     for (let i = 1; i < keyframes.length; i++) {
       if (signal?.aborted || recorderFailed) break;
       await flyToKeyframe(map, keyframes[i], signal);
-      // Hold the final 100% until the end-hold finishes below, so the overlay
-      // doesn't read "100%" while the recorder is still capturing.
-      if (i < segments) onProgress?.(i / segments);
     }
 
     if (!signal?.aborted && !recorderFailed) {
@@ -272,6 +327,7 @@ export async function recordTour({
       onProgress?.(1);
     }
   } finally {
+    restoreInteractions();
     cancelAnimationFrame(rafId);
     if (recorder.state !== "inactive") recorder.stop();
     signal?.removeEventListener("abort", stopOnAbort);
