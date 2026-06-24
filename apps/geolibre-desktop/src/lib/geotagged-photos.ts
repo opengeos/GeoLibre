@@ -84,6 +84,9 @@ interface PhotoExif {
   /** WGS84 longitude exifr derives from the GPS block. */
   longitude?: number;
   GPSAltitude?: number;
+  /** 0 = above sea level, 1 = below; exifr leaves it for us to apply. May come
+   * back as a number or a single-element byte array. */
+  GPSAltitudeRef?: number | Uint8Array;
   GPSImgDirection?: number;
   DateTimeOriginal?: Date | string;
   CreateDate?: Date | string;
@@ -91,9 +94,16 @@ interface PhotoExif {
   Model?: string;
 }
 
-/** Whether a coordinate pair is a usable, non-null-island WGS84 position. */
-export function isValidLngLat(lng: unknown, lat: unknown): lng is number {
-  return (
+/**
+ * Validate a coordinate pair, returning the narrowed `{ lng, lat }` on success
+ * and `false` otherwise. Returning the pair (rather than a single-argument type
+ * predicate) lets callers use both values without a cast.
+ */
+export function isValidLngLat(
+  lng: unknown,
+  lat: unknown,
+): { lng: number; lat: number } | false {
+  if (
     typeof lng === "number" &&
     typeof lat === "number" &&
     Number.isFinite(lng) &&
@@ -105,7 +115,17 @@ export function isValidLngLat(lng: unknown, lat: unknown): lng is number {
     // Treat exact 0,0 as a zeroed/absent fix rather than a real Gulf-of-Guinea
     // photo: cameras write 0,0 far more often than anyone shoots the equator.
     !(lng === 0 && lat === 0)
-  );
+  ) {
+    return { lng, lat };
+  }
+  return false;
+}
+
+/** Whether the GPS altitude reference marks a below-sea-level position. */
+function isBelowSeaLevel(ref: number | Uint8Array | undefined): boolean {
+  if (typeof ref === "number") return ref === 1;
+  if (ArrayBuffer.isView(ref)) return (ref as Uint8Array)[0] === 1;
+  return false;
 }
 
 /** Round to a fixed number of decimals, dropping non-finite inputs. */
@@ -145,7 +165,11 @@ export function buildPhotoProperties(
   const timestamp = toIsoTimestamp(exif.DateTimeOriginal ?? exif.CreateDate);
   if (timestamp) properties.timestamp = timestamp;
 
-  const altitude = roundTo(exif.GPSAltitude, 2);
+  const rawAltitude = roundTo(exif.GPSAltitude, 2);
+  const altitude =
+    rawAltitude !== undefined && isBelowSeaLevel(exif.GPSAltitudeRef)
+      ? -rawAltitude
+      : rawAltitude;
   if (altitude !== undefined) properties.altitude = altitude;
 
   const direction = roundTo(exif.GPSImgDirection, 1);
@@ -255,7 +279,8 @@ export async function loadGeotaggedPhotos(
   for (const file of files) {
     const fileName = file.name || "photo";
     const exif = await readPhotoExif(file);
-    if (!exif || !isValidLngLat(exif.longitude, exif.latitude)) continue;
+    const coord = exif && isValidLngLat(exif.longitude, exif.latitude);
+    if (!exif || !coord) continue;
 
     const thumbnail = await createThumbnailDataUrl(file, fileName);
     if (!thumbnail) withoutThumbnail += 1;
@@ -264,7 +289,7 @@ export async function loadGeotaggedPhotos(
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: [exif.longitude, exif.latitude as number],
+        coordinates: [coord.lng, coord.lat],
       },
       properties: buildPhotoProperties(fileName, exif, thumbnail),
     });

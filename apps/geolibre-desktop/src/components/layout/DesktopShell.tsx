@@ -919,7 +919,16 @@ export function DesktopShell({
         .getState()
         .layers.find((existing) => existing.id === layerId);
       if (layer) mapControllerRef.current?.fitLayer(layer);
-      setDropMessage(t("addData.photos.addedSummary", { count: result.located }));
+      // Report skipped (no-GPS) photos too, mirroring the Add Data dialog's
+      // summary, so a partially-skipped drop isn't silent.
+      const summary = t("addData.photos.addedSummary", {
+        count: result.located,
+      });
+      const skippedNote =
+        result.skipped > 0
+          ? ` ${t("addData.photos.skippedNote", { count: result.skipped })}`
+          : "";
+      setDropMessage(summary + skippedNote);
       return result.located;
     },
     [addGeoJsonLayer, t],
@@ -1101,10 +1110,12 @@ export function DesktopShell({
               });
               // See the browser handler: skip finishDrop's empty-input error
               // when PBF or photo files were present (even if rejected/failed).
+              // See the browser handler: suppress the empty-input error when
+              // photos were present so it can't clobber the GPS error above.
               if (
                 importedLayers.length > 0 ||
                 rasterCount > 0 ||
-                (pbfPaths.length === 0 && photoCount === 0)
+                (pbfPaths.length === 0 && photoResult === null)
               ) {
                 finishDrop(importedLayers, rasterCount);
               }
@@ -1256,10 +1267,13 @@ export function DesktopShell({
           // drop contained no PBF/photo files at all. If those were present —
           // even if they were all rejected or failed — its empty-input error
           // would wrongly clobber their outcome.
+          // Suppress finishDrop's empty-input error whenever photos were
+          // present (photoResult !== null) — even if all lacked GPS — so its
+          // generic message can't clobber the specific GPS error set above.
           if (
             importedLayers.length > 0 ||
             rasterCount > 0 ||
-            (pbfFiles.length === 0 && photoCount === 0)
+            (pbfFiles.length === 0 && photoResult === null)
           ) {
             finishDrop(importedLayers, rasterCount);
           }

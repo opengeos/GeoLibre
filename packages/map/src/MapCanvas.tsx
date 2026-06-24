@@ -110,7 +110,7 @@ function createIdentifyPopupElement(
     // so an untrusted GeoJSON value can't smuggle one in.
     if (
       typeof value === "string" &&
-      /^data:image\/(?!svg)[\w.+-]+;base64,/.test(value)
+      /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)
     ) {
       const image = document.createElement("img");
       image.src = value;

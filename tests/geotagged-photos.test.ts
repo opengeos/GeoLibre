@@ -41,9 +41,9 @@ describe("isPhotoDropFileName", () => {
 });
 
 describe("isValidLngLat", () => {
-  it("accepts in-range coordinates", () => {
-    assert.ok(isValidLngLat(-122.4, 37.8));
-    assert.ok(isValidLngLat(0, 51.5));
+  it("returns the narrowed pair for in-range coordinates", () => {
+    assert.deepEqual(isValidLngLat(-122.4, 37.8), { lng: -122.4, lat: 37.8 });
+    assert.deepEqual(isValidLngLat(0, 51.5), { lng: 0, lat: 51.5 });
   });
 
   it("rejects out-of-range, non-finite, and exact null-island values", () => {
@@ -96,6 +96,28 @@ describe("buildPhotoProperties", () => {
     );
     assert.equal(props.timestamp, "2026:01:02 03:04:05");
     assert.equal(props.camera, "Sony");
+  });
+
+  it("negates altitude when the GPS altitude ref marks below sea level", () => {
+    const numberRef = buildPhotoProperties(
+      "below.jpg",
+      { latitude: 36, longitude: -116.8, GPSAltitude: 85, GPSAltitudeRef: 1 },
+      null,
+    );
+    assert.equal(numberRef.altitude, -85);
+
+    // exifr can hand the ref back as a single-element byte array.
+    const arrayRef = buildPhotoProperties(
+      "below2.jpg",
+      {
+        latitude: 36,
+        longitude: -116.8,
+        GPSAltitude: 85,
+        GPSAltitudeRef: new Uint8Array([1]),
+      },
+      null,
+    );
+    assert.equal(arrayRef.altitude, -85);
   });
 
   it("collapses internal whitespace in the camera string", () => {
