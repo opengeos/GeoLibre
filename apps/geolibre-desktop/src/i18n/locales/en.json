@@ -453,7 +453,6 @@
   },
   "recordTour": {
     "title": "Record Map Tour",
-    "description": "Build an animated camera tour from a sequence of map views, then record it to a video file. Pan and zoom the map, add each view as a keyframe, and set how long the camera takes to move between them.",
     "hint": "Pan and zoom the map, then capture each view. The map stays interactive while this panel is open.",
     "unsupported": "This browser cannot record the map canvas. Try a recent version of Chrome, Edge, or Firefox.",
     "addView": "Add current view",
