@@ -796,15 +796,14 @@ function NumericStyleInput({
       <div className="flex items-center gap-1.5">
         <Label htmlFor={id}>{label}</Label>
         {tooltip ? (
-          <span
-            role="img"
-            tabIndex={0}
+          <button
+            type="button"
             aria-label={tooltip}
             title={tooltip}
-            className="inline-flex cursor-help text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:text-foreground"
+            className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Info className="h-3.5 w-3.5" aria-hidden="true" />
-          </span>
+          </button>
         ) : null}
       </div>
       <div className="relative">
