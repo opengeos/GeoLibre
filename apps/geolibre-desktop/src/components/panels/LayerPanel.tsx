@@ -258,7 +258,7 @@ function LayerOpacitySlider({
           max={max}
           step={step}
           autoFocus
-          aria-label={`${ariaLabel} value`}
+          aria-label={t("layers.opacityValueInputAria", { label: ariaLabel })}
           className="h-6 w-12 px-1 py-0 text-right font-mono text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -280,7 +280,7 @@ function LayerOpacitySlider({
           type="button"
           className="w-9 shrink-0 cursor-text text-right font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
           title={t("layers.opacityExactHint")}
-          aria-label={`Edit ${ariaLabel} value`}
+          aria-label={t("layers.opacityValueEditAria", { label: ariaLabel })}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
           onDoubleClick={(e: ReactMouseEvent) => {
             e.stopPropagation();
@@ -1669,7 +1669,7 @@ export function LayerPanel({
                 )}
                 <LayerOpacitySlider
                   label={t("layers.opacity")}
-                  ariaLabel={`Opacity for ${layer.name}`}
+                  ariaLabel={t("layers.opacityFor", { name: layer.name })}
                   value={layer.opacity}
                   onChange={(v) => setLayerOpacity(layer.id, v)}
                 />
@@ -2087,7 +2087,7 @@ export function LayerPanel({
               label={t("layers.opacity")}
               ariaLabel={t("layers.basemapOpacity")}
               value={basemapOpacity}
-              onChange={(v) => setBasemapOpacity(v)}
+              onChange={setBasemapOpacity}
             />
           </div>
         </div>
