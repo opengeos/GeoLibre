@@ -168,7 +168,10 @@ function getTimeSliderSteps(maxSteps: number): {
  *
  * @param reading - The pixel reading for one COG.
  * @param bidx - The source's 1-based band indexes, if any.
- * @returns The chosen band reading, or null when the reading has no bands.
+ * @returns The chosen band reading, or null when the reading has no bands or a
+ *   configured `bidx` is absent from the COG. Returning null (rather than
+ *   falling back to band 1) makes a COG/spec mismatch render as a gap instead of
+ *   silently plotting the wrong band.
  */
 export function pickBand(
   reading: PixelReading,
@@ -177,8 +180,7 @@ export function pickBand(
   if (reading.bands.length === 0) return null;
   const wanted = bidx && bidx.length > 0 ? bidx[0] : undefined;
   if (wanted !== undefined) {
-    const match = reading.bands.find((band) => band.index === wanted);
-    if (match) return match;
+    return reading.bands.find((band) => band.index === wanted) ?? null;
   }
   return reading.bands[0];
 }

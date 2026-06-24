@@ -69,6 +69,10 @@ export function PixelTimeSeriesControl({
   const [exportError, setExportError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Abort any in-flight query when the component unmounts so it cannot call
+  // setState afterwards.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   // Leaving the time-slider stack (dock closed or stack removed) cancels an
   // in-progress pick so the crosshair cursor and click handler do not linger.
   useEffect(() => {
@@ -318,8 +322,10 @@ function axisDateLabel(date: string, annual: boolean): string {
  */
 function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
   const { t } = useTranslation();
-  const steps = result.series[0]?.points ?? [];
-  const length = steps.length;
+  // All series share the same timeline, so the first series' points drive the
+  // count, annual-date detection, and x-axis labels.
+  const firstPoints = result.series[0]?.points ?? [];
+  const length = firstPoints.length;
 
   const values: number[] = [];
   for (const series of result.series) {
@@ -343,7 +349,7 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
     max += 1;
   }
 
-  const annual = steps.every((point) => point.date.endsWith("-01-01"));
+  const annual = firstPoints.every((point) => point.date.endsWith("-01-01"));
   const scaleX = (index: number) =>
     MARGIN.left + (length > 1 ? index / (length - 1) : 0.5) * INNER_W;
   const scaleY = (value: number) =>
@@ -414,7 +420,7 @@ function PixelTimeSeriesChart({ result }: { result: PixelTimeSeriesResult }) {
             fontSize={10}
             fill={TICK}
           >
-            {axisDateLabel(steps[index]?.date ?? "", annual)}
+            {axisDateLabel(firstPoints[index]?.date ?? "", annual)}
           </text>
         ))}
         {/* One polyline per source, breaking on missing values. */}

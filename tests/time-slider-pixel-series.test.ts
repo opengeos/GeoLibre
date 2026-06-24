@@ -60,8 +60,8 @@ describe("pickBand", () => {
     assert.equal(pickBand(reading, undefined)?.value, 10);
   });
 
-  it("falls back to the first band when bidx does not match", () => {
-    assert.equal(pickBand(reading, [9])?.value, 10);
+  it("returns null when a configured bidx is absent from the COG", () => {
+    assert.equal(pickBand(reading, [9]), null);
   });
 
   it("returns null when there are no bands", () => {
