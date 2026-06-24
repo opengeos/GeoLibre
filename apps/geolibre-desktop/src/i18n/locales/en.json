@@ -654,6 +654,27 @@
     "usernameRequired": "Set a username on your share.geolibre.app account before sharing. Open your account settings to choose one, then try again.",
     "openAccountSettings": "Open account settings"
   },
+  "gallery": {
+    "title": "Project gallery",
+    "description": "Browse public projects shared on share.geolibre.app and open one in GeoLibre.",
+    "searchPlaceholder": "Filter loaded projects by title, author, or tag",
+    "loading": "Loading projects…",
+    "loadingMore": "Loading more…",
+    "loadMore": "Load more",
+    "empty": "No public projects to show yet.",
+    "noMatches": "No loaded projects match your filter.",
+    "errorFallback": "Could not load the project gallery.",
+    "retry": "Retry",
+    "open": "Open",
+    "opening": "Opening…",
+    "openOnWeb": "View on the web",
+    "openError": "Could not open this project.",
+    "byAuthor": "by {{author}}",
+    "views_one": "{{count}} view",
+    "views_other": "{{count}} views",
+    "untitled": "Untitled Project",
+    "noThumbnail": "No preview"
+  },
   "language": {
     "label": "Language",
     "description": "Choose the language used for the interface."
@@ -1280,6 +1301,7 @@
       "openFrom": "Open From",
       "fileEllipsis": "File...",
       "urlEllipsis": "URL...",
+      "galleryEllipsis": "Gallery...",
       "openRecent": "Open Recent",
       "noRecentProjects": "No recent projects",
       "removeFromRecent": "Remove {{name}} from recent projects",

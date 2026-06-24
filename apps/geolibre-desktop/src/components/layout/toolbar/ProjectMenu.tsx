@@ -21,6 +21,7 @@ import {
   HardDrive,
   HardDriveDownload,
   History,
+  LayoutGrid,
   Link2,
   Printer,
   Save,
@@ -39,6 +40,7 @@ interface ProjectMenuProps {
   onNewProject: () => void;
   onOpenFromFile: () => void;
   onOpenFromUrl: () => void;
+  onOpenGallery: () => void;
   onOpenRecent: (path: string) => void;
   onSave: () => void;
   onSaveAs: () => void;
@@ -56,6 +58,7 @@ export function ProjectMenu({
   onNewProject,
   onOpenFromFile,
   onOpenFromUrl,
+  onOpenGallery,
   onOpenRecent,
   onSave,
   onSaveAs,
@@ -121,6 +124,10 @@ export function ProjectMenu({
               <DropdownMenuItem onSelect={onOpenFromUrl}>
                 <Link2 className="mr-2 h-3.5 w-3.5" />
                 {t("toolbar.item.urlEllipsis")}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onOpenGallery}>
+                <LayoutGrid className="mr-2 h-3.5 w-3.5" />
+                {t("toolbar.item.galleryEllipsis")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

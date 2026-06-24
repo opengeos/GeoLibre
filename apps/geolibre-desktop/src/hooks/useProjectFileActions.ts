@@ -198,6 +198,39 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
+  // Load a project directly from a known URL (e.g. a Project Gallery card's raw
+  // JSON URL), bypassing the URL-input dialog. Mirrors handleOpenFromUrl's
+  // fetch → resolve → loadProject flow but takes the URL as an argument and
+  // rethrows on failure so the caller (the gallery dialog) can show the error
+  // inline next to the card it came from.
+  const openProjectFromShareUrl = async (url: string): Promise<void> => {
+    const normalizedUrl = normalizeProjectUrl(url);
+    if (!normalizedUrl) {
+      throw new Error(t("toolbar.error.invalidProjectUrl"));
+    }
+
+    projectUrlAbortRef.current?.abort();
+    const controller = new AbortController();
+    projectUrlAbortRef.current = controller;
+
+    try {
+      const result = await openRecentProjectFile(
+        normalizedUrl,
+        controller.signal,
+      );
+      const project = await resolveProjectXyzLayers(
+        result.project,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      loadProject(project, result.path);
+    } finally {
+      if (projectUrlAbortRef.current === controller) {
+        projectUrlAbortRef.current = null;
+      }
+    }
+  };
+
   const handleOpenRecent = async (path: string) => {
     // Cancel any previous in-flight open so rapid clicks cannot race and let a
     // stale fetch win by resolving last.
@@ -594,6 +627,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     cancelSaveNamePrompt,
     handleOpenFromFile,
     handleOpenFromUrl,
+    openProjectFromShareUrl,
     handleOpenRecent,
     buildCurrentProject,
     buildEmbeddedProject,
