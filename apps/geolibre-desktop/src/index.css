@@ -967,6 +967,17 @@ body,
   --vs-chip-hover-bg: hsl(var(--accent));
 }
 
+/* Make the minimap toggle and collapse buttons follow the in-app theme. The
+   upstream control defaults to prefers-color-scheme, which can disagree with
+   GeoLibre's class-based theme (e.g. the collapse icon staying dark in dark
+   mode). */
+.geolibre-minimap-control {
+  --mm-button-bg: hsl(var(--popover));
+  --mm-button-hover-bg: hsl(var(--accent));
+  --mm-button-text: hsl(var(--popover-foreground));
+  --mm-button-ring: hsl(var(--border));
+}
+
 .geolibre-stac-search-control .maplibre-gl-stac-search-button {
   display: none !important;
 }
