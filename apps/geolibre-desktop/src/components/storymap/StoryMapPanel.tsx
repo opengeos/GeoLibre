@@ -307,7 +307,15 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
           onChange={(e) => void handleImportFile(e)}
         />
 
-        <ScrollArea className="flex-1 overflow-y-auto px-5 py-4">
+        {/* Force the Radix viewport's inner wrapper to `display:block`
+            (it defaults to `display:table; min-width:100%`, which sizes to the
+            content's intrinsic width and spawns a spurious horizontal scrollbar
+            that, with the vertical one, covered the chapter action buttons —
+            #775). `!block` overrides the inline style. */}
+        <ScrollArea className="min-h-0 flex-1 [&_[data-radix-scroll-area-viewport]>div]:!block">
+          {/* Pad the content (not the ScrollArea root) so the overlay
+              scrollbar sits in the right gutter instead of over the content. */}
+          <div className="px-5 py-4">
           <StorySettings story={story} onChange={updateSettings} t={t} />
 
           <Separator className="my-4" />
@@ -320,7 +328,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline">
-                    <Download className="mr-1 h-4 w-4" />
+                    <Upload className="mr-1 h-4 w-4" />
                     {t("storymap.import")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -336,7 +344,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={chapters.length === 0}>
-                    <Upload className="mr-1 h-4 w-4" />
+                    <Download className="mr-1 h-4 w-4" />
                     {t("storymap.exportData")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -405,6 +413,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               ))}
             </div>
           )}
+          </div>
         </ScrollArea>
 
         <div className="flex items-center justify-between gap-2 border-t px-5 py-3">
@@ -418,7 +427,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               disabled={chapters.length === 0}
               onClick={() => void handleExport()}
             >
-              <Upload className="mr-1 h-4 w-4" />
+              <Download className="mr-1 h-4 w-4" />
               {t("storymap.exportHtml")}
             </Button>
             <Button
