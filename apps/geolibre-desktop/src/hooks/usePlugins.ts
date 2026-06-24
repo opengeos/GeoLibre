@@ -529,6 +529,18 @@ export function createAppAPI(
         transparent,
         ...tileOptions
       } = options;
+      // TypeScript enforces these, but an untyped JS plugin can pass "" — an
+      // empty endpoint yields a relative GetMap URL that resolves against the
+      // app origin and passes the store's empty-tile guard, persisting a layer
+      // that only 404s. Reject at the API boundary instead.
+      if (!url) {
+        throw new Error("addWmsLayer: options.url must be a non-empty string.");
+      }
+      if (!layers) {
+        throw new Error(
+          "addWmsLayer: options.layers must be a non-empty string.",
+        );
+      }
       const tileSize = tileOptions.tileSize ?? 256;
       const resolvedStyles = styles ?? "";
       const resolvedFormat = format ?? "image/png";

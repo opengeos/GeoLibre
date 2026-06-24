@@ -174,4 +174,24 @@ describe("native raster tile sync", () => {
     assert.equal(layerSpec.id, `layer-${layer.id}-raster`);
     assert.equal(layerSpec.type, "raster");
   });
+
+  it("skips addSource on a re-sync when the source already exists", () => {
+    const layer = nativeTileLayer();
+    const { map, calls } = makeEmptyMapStub();
+    // Pre-seed the stub so getSource returns a truthy value: the source was
+    // built on a prior sync, so a second pass must not rebuild it.
+    (map as unknown as { getSource: () => object }).getSource = () => ({});
+
+    syncLayer(map as never, layer);
+
+    assert.equal(
+      calls.find((c) => c.method === "addSource"),
+      undefined,
+      "addSource must not run when the source already exists",
+    );
+    assert.ok(
+      calls.find((c) => c.method === "addLayer"),
+      "ensureLayer should still create the raster layer spec",
+    );
+  });
 });

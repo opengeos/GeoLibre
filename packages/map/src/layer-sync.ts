@@ -2002,21 +2002,18 @@ function syncRasterTileLayer(
   if (tiles.length === 0) return;
   if (!map.getSource(src)) {
     const bounds = boundsSource(layer.source.bounds);
+    const minzoom = numberSource(layer.source.minzoom);
+    const maxzoom = numberSource(layer.source.maxzoom);
+    const attribution = stringSource(layer.source.attribution);
     map.addSource(src, {
       type: "raster",
       tiles,
       tileSize,
-      ...(numberSource(layer.source.minzoom) !== undefined
-        ? { minzoom: numberSource(layer.source.minzoom) }
-        : {}),
-      ...(numberSource(layer.source.maxzoom) !== undefined
-        ? { maxzoom: numberSource(layer.source.maxzoom) }
-        : {}),
+      ...(minzoom !== undefined ? { minzoom } : {}),
+      ...(maxzoom !== undefined ? { maxzoom } : {}),
       ...(bounds ? { bounds } : {}),
       ...(layer.source.scheme === "tms" ? { scheme: "tms" as const } : {}),
-      ...(stringSource(layer.source.attribution)
-        ? { attribution: stringSource(layer.source.attribution) }
-        : {}),
+      ...(attribution ? { attribution } : {}),
     });
   }
   ensureLayer(
