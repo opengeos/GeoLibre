@@ -187,7 +187,9 @@ export async function recordTour({
   const mimeType = pickSupportedMimeType(TOUR_MIME_CANDIDATES, (t) =>
     typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
   );
-  if (!mimeType || typeof MediaRecorder === "undefined") {
+  // mimeType is null when MediaRecorder is undefined (the callback returns false
+  // for every candidate), so this also covers the no-MediaRecorder case.
+  if (!mimeType) {
     throw new TourRecordingUnsupportedError();
   }
 

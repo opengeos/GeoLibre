@@ -122,6 +122,19 @@ export function ControlsMenu({
     show("controls.graticule") ||
     show("controls.directions") ||
     show("controls.reverseGeocode");
+  // Whether the middle group (panels) has any visible item. The separator that
+  // precedes the Field Collection / Record Tour group is gated on this so it
+  // never renders as a leading or doubled separator when the group above it is
+  // empty (e.g. a custom profile that hides every panel).
+  const anyMiddleControls =
+    show("controls.search") ||
+    show("controls.colorbar") ||
+    show("controls.legend") ||
+    show("controls.html") ||
+    show("controls.measure") ||
+    show("controls.bookmark") ||
+    show("controls.minimap") ||
+    show("controls.viewState");
 
   return (
     <>
@@ -240,8 +253,9 @@ export function ControlsMenu({
               {panels.viewState.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
-          {(show("controls.fieldCollection") ||
-            show("controls.recordTour")) && <DropdownMenuSeparator />}
+          {anyMiddleControls &&
+            (show("controls.fieldCollection") ||
+              show("controls.recordTour")) && <DropdownMenuSeparator />}
           {show("controls.fieldCollection") && (
             <DropdownMenuItem onSelect={onOpenFieldCollection}>
               <ClipboardList className="mr-2 h-3.5 w-3.5" />

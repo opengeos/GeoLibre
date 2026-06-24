@@ -19,7 +19,7 @@ import {
   Trash2,
   Video,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import {
@@ -57,6 +57,10 @@ function round(value: number, digits: number): number {
   return Number(value.toFixed(digits));
 }
 
+// Codec support is a static browser capability, so probe it once at module load
+// rather than re-running the MediaRecorder.isTypeSupported() checks per render.
+const RECORDING_SUPPORTED = isTourRecordingSupported();
+
 /**
  * Builds an animated camera "tour" from a sequence of keyframes captured from
  * the live map and records it to a WebM video by capturing the MapLibre canvas
@@ -85,9 +89,6 @@ export function RecordTourDialog({
   const abortRef = useRef<AbortController | null>(null);
 
   const recording = status !== "idle";
-  // Constant for the component's lifetime; computed once to avoid re-running the
-  // MediaRecorder.isTypeSupported() DOM checks on every render (e.g. FPS slider).
-  const supported = useMemo(() => isTourRecordingSupported(), []);
 
   const addCurrentView = () => {
     const view = mapControllerRef.current?.readView();
@@ -196,7 +197,7 @@ export function RecordTourDialog({
   const stopRecording = () => abortRef.current?.abort();
 
   const totalSeconds = estimateTourDurationMs(keyframes) / 1000;
-  const canRecord = keyframes.length >= 2 && supported && !recording;
+  const canRecord = keyframes.length >= 2 && RECORDING_SUPPORTED && !recording;
 
   return (
     <>
@@ -209,7 +210,7 @@ export function RecordTourDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {!supported && (
+          {!RECORDING_SUPPORTED && (
             <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-muted-foreground">
               {t("recordTour.unsupported")}
             </p>
