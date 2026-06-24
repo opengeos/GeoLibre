@@ -596,12 +596,12 @@ export const useAppStore = create<AppState>()(
         }),
       addCollaborationChat: (message) =>
         set((s) => {
+          // Default to [] in case an older relay left the slice undefined.
+          const current = s.collaboration.chat ?? [];
           // Ignore a duplicate id: the server broadcasts to the sender too, and a
           // reconnect can replay recent history, so de-dupe defensively.
-          if (s.collaboration.chat.some((m) => m.id === message.id)) return s;
-          const chat = [...s.collaboration.chat, message].slice(
-            -MAX_COLLABORATION_CHAT
-          );
+          if (current.some((m) => m.id === message.id)) return s;
+          const chat = [...current, message].slice(-MAX_COLLABORATION_CHAT);
           return { collaboration: { ...s.collaboration, chat } };
         }),
       resetCollaboration: () =>

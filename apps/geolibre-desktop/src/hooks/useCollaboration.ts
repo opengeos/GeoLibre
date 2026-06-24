@@ -207,8 +207,10 @@ export function useCollaboration(
           mode: message.mode,
           participants: message.participants,
           // Bootstrap (or, on a reconnect, re-seed) the chat log from the relay's
-          // recent history so a late joiner sees the conversation so far.
-          chat: message.chat,
+          // recent history so a late joiner sees the conversation so far. Default
+          // to [] so an older relay that omits `chat` can't leave the slice
+          // undefined (which would crash the chat UI).
+          chat: message.chat ?? [],
           error: null,
         });
         // Bootstrap existing participants' cursors/viewports so they're visible

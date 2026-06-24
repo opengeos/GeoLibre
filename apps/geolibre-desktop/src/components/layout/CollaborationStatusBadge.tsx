@@ -57,7 +57,10 @@ export function CollaborationStatusBadge({
   // toggles; chat drives the message drawer. None update on cursor moves.
   const role = useAppStore((s) => s.collaboration.role);
   const mode = useAppStore((s) => s.collaboration.mode);
-  const chat = useAppStore((s) => s.collaboration.chat);
+  // Default to [] defensively: a relay that predates the chat protocol can send
+  // a `welcome` without `chat`, and an undefined slice would crash this badge
+  // (and, since it renders inside the map's error boundary, the whole map).
+  const chat = useAppStore((s) => s.collaboration.chat) ?? [];
   const isHost = role === "host";
   const setCollaborateDialogOpen = useAppStore(
     (s) => s.setCollaborateDialogOpen,

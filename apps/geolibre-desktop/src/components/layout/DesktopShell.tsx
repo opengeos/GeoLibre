@@ -86,7 +86,10 @@ import {
   appendDiagnostic,
   useDiagnosticsSnapshot,
 } from "../../lib/diagnostics";
-import { SectionErrorBoundary } from "../common/error-boundaries";
+import {
+  SectionErrorBoundary,
+  SilentErrorBoundary,
+} from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
@@ -1557,10 +1560,15 @@ export function DesktopShell({
               />
               <RemoteCursorsOverlay mapControllerRef={mapControllerRef} />
               <BoundsRestrictionIndicator />
-              <CollaborationStatusBadge
-                api={collaboration}
-                mapControllerRef={mapControllerRef}
-              />
+              {/* Isolate the collaboration badge in its own boundary: it renders
+                  over the map, so a fault here must never take down the map
+                  itself (it shares this subtree's error boundary otherwise). */}
+              <SilentErrorBoundary label="Collaboration status">
+                <CollaborationStatusBadge
+                  api={collaboration}
+                  mapControllerRef={mapControllerRef}
+                />
+              </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>

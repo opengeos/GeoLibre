@@ -127,6 +127,29 @@ export function SectionErrorBoundary({
   );
 }
 
+/**
+ * Boundary for a non-essential overlay (e.g. a badge floating over the map): on
+ * error it renders nothing rather than a visible fallback, but still reports to
+ * diagnostics. Use it so a faulty overlay can never take down the surrounding
+ * UI it shares a subtree with.
+ */
+export function SilentErrorBoundary({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <ErrorBoundary
+      onError={(error, info) => reportBoundaryError(label, error, info)}
+      fallback={() => null}
+    >
+      {children}
+    </ErrorBoundary>
+  );
+}
+
 function SectionErrorFallback({
   label,
   reset,
