@@ -281,6 +281,50 @@ async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
   return assertFeatureCollection(JSON.parse(text));
 }
 
+/**
+ * Read a local file's bytes, falling back to the `read_local_file` Tauri command
+ * when the JS `fs` plugin denies the path.
+ *
+ * When a project is reopened, its file-referenced layer paths come from the
+ * saved `.geolibre.json` rather than from a picker or drag-drop, so they sit
+ * outside the `fs` plugin's runtime scope and `readFile` rejects them. The
+ * command reads the file directly (the caller has already guarded the path), so
+ * a referenced layer reloads after a fresh launch instead of failing with a
+ * misleading "Could not convert this vector file with DuckDB-WASM" error.
+ *
+ * @param path - Absolute local path to read.
+ * @returns The file's raw bytes.
+ */
+async function readLocalFileBytes(
+  path: string,
+): Promise<Uint8Array<ArrayBuffer>> {
+  try {
+    return await readFile(path);
+  } catch (error) {
+    if (!isTauri()) throw error;
+    const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
+    return new Uint8Array(buffer);
+  }
+}
+
+/**
+ * Text counterpart to {@link readLocalFileBytes}: read a local file as UTF-8,
+ * falling back to the `read_local_file` Tauri command when the `fs` plugin
+ * denies the path (e.g. a project-referenced layer after a fresh launch).
+ *
+ * @param path - Absolute local path to read.
+ * @returns The file's decoded UTF-8 text.
+ */
+async function readLocalFileText(path: string): Promise<string> {
+  try {
+    return await readTextFile(path);
+  } catch (error) {
+    if (!isTauri()) throw error;
+    const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
+    return new TextDecoder().decode(buffer);
+  }
+}
+
 function parseGpxText(text: string): FeatureCollection {
   const result = parseGpxLayer(text);
   return mergeFeatureCollections([
@@ -723,7 +767,7 @@ async function loadTauriVectorFile(
   if (extension === "geojson" || extension === "json") {
     try {
       return {
-        data: await parseGeoJsonText(await readTextFile(path)),
+        data: await parseGeoJsonText(await readLocalFileText(path)),
         path,
       };
     } catch {
@@ -735,7 +779,7 @@ async function loadTauriVectorFile(
   if (extension === "zip") {
     try {
       return {
-        data: await parseShapefileZip(await readFile(path)),
+        data: await parseShapefileZip(await readLocalFileBytes(path)),
         path,
       };
     } catch {
@@ -746,7 +790,7 @@ async function loadTauriVectorFile(
   if (extension === "kmz") {
     try {
       return {
-        data: await parseKmz(await readFile(path), options),
+        data: await parseKmz(await readLocalFileBytes(path), options),
         path,
       };
     } catch (error) {
@@ -759,7 +803,7 @@ async function loadTauriVectorFile(
   if (extension === "kml") {
     try {
       return {
-        data: parseKmlText(await readTextFile(path)),
+        data: parseKmlText(await readLocalFileText(path)),
         path,
       };
     } catch {
@@ -770,7 +814,7 @@ async function loadTauriVectorFile(
   if (extension === "gpx") {
     try {
       return {
-        data: parseGpxText(await readTextFile(path)),
+        data: parseGpxText(await readLocalFileText(path)),
         path,
       };
     } catch (error) {
@@ -780,7 +824,7 @@ async function loadTauriVectorFile(
   }
 
   if (isDelimitedTextFileName(path)) {
-    const points = parseDelimitedTextFile(await readTextFile(path), path);
+    const points = parseDelimitedTextFile(await readLocalFileText(path), path);
     // No lon/lat columns: fall through to DuckDB so spatial CSV variants
     // (e.g. a WKT geometry column) still load.
     if (points) {
@@ -796,7 +840,7 @@ async function loadTauriVectorFile(
         {
           name: browserSafeFileName(path),
           extension,
-          data: await readFile(path),
+          data: await readLocalFileBytes(path),
           siblingFiles,
         },
         options,
@@ -1535,7 +1579,7 @@ export async function loadDroppedVectorPaths(
     if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
     if (extension === "gpx") {
       try {
-        layers.push(...parseGpxTextLayers(await readTextFile(path), path));
+        layers.push(...parseGpxTextLayers(await readLocalFileText(path), path));
       } catch (error) {
         const detail = error instanceof Error ? error.message : "Unknown error";
         throw new Error(`Could not read this GPX file. ${detail}`);

@@ -181,6 +181,7 @@ pub fn run() {
             install_external_plugin_archive,
             load_external_plugin_bundles,
             read_admin_profile,
+            read_local_file,
             read_project_file,
             read_shapefile_siblings,
             resolve_url_redirect,
@@ -206,6 +207,25 @@ pub fn run() {
 #[tauri::command]
 fn read_project_file(path: String) -> Result<String, String> {
     fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
+}
+
+/// Read a local file's raw bytes so a project's file-referenced vector layers
+/// can be re-read when the project is reopened.
+///
+/// On reopen, a layer saved as a file reference carries only its absolute
+/// `sourcePath` (stored in the `.geolibre.json`); that path was never picked or
+/// dropped this session, so it sits outside the `fs` plugin's runtime scope and
+/// the JS `readFile`/`readTextFile` reject it. This reads the file directly,
+/// mirroring `read_project_file` (which bypasses the same scope to read the
+/// project file itself). The frontend guards the path (absolute, no `..`
+/// traversal, known vector extension) before calling. Bytes are returned as a
+/// raw IPC response (an `ArrayBuffer` on the JS side) so a large GeoJSON does
+/// not pay the cost of a JSON number array.
+#[tauri::command]
+fn read_local_file(path: String) -> Result<tauri::ipc::Response, String> {
+    fs::read(&path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|error| format!("Could not read local file: {error}"))
 }
 
 /// Shapefile sidecar extensions read alongside a `.shp` (lowercased, no dot).
