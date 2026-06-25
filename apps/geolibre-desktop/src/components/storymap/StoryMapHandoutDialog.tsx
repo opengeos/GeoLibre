@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
 import type { StoryMap } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -45,6 +46,10 @@ interface StoryMapHandoutDialogProps {
 
 /** Maximum time to wait for the map to settle (tiles loaded) per chapter. */
 const IDLE_TIMEOUT_MS = 5000;
+/** Maximum time to wait for a chapter photo to load before falling back to
+ * map-only. Shorter than the map-idle wait since a missing photo degrades
+ * gracefully and shouldn't double the per-chapter stall. */
+const PHOTO_TIMEOUT_MS = 3000;
 
 /**
  * Jump the map to a chapter location and resolve once it has rendered all
@@ -121,7 +126,7 @@ function loadChapterPhoto(url: string): Promise<LoadedPhoto | null> {
       img.onerror = null;
       resolve(value);
     };
-    const timer = setTimeout(() => finish(null), IDLE_TIMEOUT_MS);
+    const timer = setTimeout(() => finish(null), PHOTO_TIMEOUT_MS);
     // Only request CORS for real remote URLs. A data: URI has no origin, and
     // some browsers fire `onerror` for `crossOrigin` data images, which would
     // wrongly drop an embedded photo.

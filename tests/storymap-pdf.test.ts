@@ -53,6 +53,12 @@ describe("htmlToPlainText", () => {
     assert.equal(htmlToPlainText("&#99999999; ok"), "&#99999999; ok");
   });
 
+  it("leaves a null-byte entity (&#0;) untouched", () => {
+    const out = htmlToPlainText("a&#0;b");
+    assert.equal(out, "a&#0;b");
+    assert.ok(!out.includes("\0"));
+  });
+
   it("drops <script>/<style> blocks with their contents", () => {
     assert.equal(
       htmlToPlainText("<style>body{color:red}</style>Hello<script>x=1</script>"),

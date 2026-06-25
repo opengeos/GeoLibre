@@ -97,9 +97,11 @@ function decodeEntities(text: string): string {
         body[1] === "x" || body[1] === "X"
           ? parseInt(body.slice(2), 16)
           : parseInt(body.slice(1), 10);
-      // Guard the Unicode range: fromCodePoint throws (RangeError) on values
-      // above 0x10FFFF, which would otherwise abort the whole export.
-      return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
+      // Guard the Unicode range: fromCodePoint throws (RangeError) above
+      // 0x10FFFF (which would abort the export), and a code point of 0 would
+      // insert a null byte that can corrupt the PDF text stream. Both are HTML
+      // "parse errors", so leave the token as-is.
+      return Number.isInteger(code) && code >= 1 && code <= 0x10ffff
         ? String.fromCodePoint(code)
         : match;
     }
@@ -259,28 +261,33 @@ function drawChapterPage(
   }
 
   // Reserve a few lines of vertical space for the description so the image band
-  // never crowds it off the page, then give the rest to the image(s).
+  // never crowds it off the page, then give the rest to the image(s). When a
+  // long title has already consumed the page, the band can be non-positive;
+  // skip the images entirely rather than drawing a fixed-height band over the
+  // footer.
   const reservedForText = chapter.description ? 24 : 4;
-  const imageBandHeight = Math.max(20, bottomLimit - y - reservedForText);
+  const imageBandHeight = bottomLimit - y - reservedForText;
   const gap = 5;
-  if (chapter.photo) {
-    // Map on the left, the chapter photo on the right, each fit into its own
-    // half-width column and vertically centered within the band.
-    const colWidth = (contentWidth - gap) / 2;
-    drawImageInBox(pdf, chapter.map, MARGIN_MM, y, colWidth, imageBandHeight);
-    drawImageInBox(
-      pdf,
-      chapter.photo,
-      MARGIN_MM + colWidth + gap,
-      y,
-      colWidth,
-      imageBandHeight,
-    );
-  } else {
-    // No photo: the map view spans the full content width.
-    drawImageInBox(pdf, chapter.map, MARGIN_MM, y, contentWidth, imageBandHeight);
+  if (imageBandHeight >= 20) {
+    if (chapter.photo) {
+      // Map on the left, the chapter photo on the right, each fit into its own
+      // half-width column and vertically centered within the band.
+      const colWidth = (contentWidth - gap) / 2;
+      drawImageInBox(pdf, chapter.map, MARGIN_MM, y, colWidth, imageBandHeight);
+      drawImageInBox(
+        pdf,
+        chapter.photo,
+        MARGIN_MM + colWidth + gap,
+        y,
+        colWidth,
+        imageBandHeight,
+      );
+    } else {
+      // No photo: the map view spans the full content width.
+      drawImageInBox(pdf, chapter.map, MARGIN_MM, y, contentWidth, imageBandHeight);
+    }
+    y += imageBandHeight + 5;
   }
-  y += imageBandHeight + 5;
 
   const description = chapter.description
     ? htmlToPlainText(chapter.description)
@@ -314,8 +321,10 @@ function drawChapterPage(
     // clear of the right-aligned page number on both sides, even on wide pages
     // (e.g. Tabloid landscape). Only the first wrapped line is kept.
     const footerMaxWidth = Math.max(20, widthMm - 2 * (MARGIN_MM + PAGE_NUM_SLOT_MM));
+    // splitTextToSize always returns at least one element for non-empty input,
+    // and footerText is non-empty here, so `line` is always a string.
     const [line] = pdf.splitTextToSize(footerText, footerMaxWidth) as string[];
-    pdf.text(line ?? footerText, widthMm / 2, footerY, { align: "center" });
+    pdf.text(line, widthMm / 2, footerY, { align: "center" });
   }
   pdf.text(`${pageNumber} / ${pageCount}`, widthMm - MARGIN_MM, footerY, {
     align: "right",
