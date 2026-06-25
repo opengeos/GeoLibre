@@ -66,8 +66,8 @@ export interface GraticuleLabels {
 }
 
 export const DEFAULT_GRATICULE_LABELS: GraticuleLabels = {
-  title: "Graticule",
-  controlTitle: "Graticule settings",
+  title: "Gridlines",
+  controlTitle: "Gridlines settings",
   spacing: "Spacing",
   spacingAuto: "Auto (by zoom)",
   spacingFixed: "Fixed interval",
@@ -842,7 +842,7 @@ function isDefaultSettings(value: GraticuleSettings): boolean {
 
 export const maplibreGraticulePlugin: GeoLibrePlugin = {
   id: GRATICULE_PLUGIN_ID,
-  name: "Graticule",
+  name: "Gridlines",
   version: "0.1.0",
   activate: (app: GeoLibreAppAPI) => {
     const activeMap = app.getMap?.();

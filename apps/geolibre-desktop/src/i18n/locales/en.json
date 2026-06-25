@@ -1492,7 +1492,7 @@
       "atmosphereEffects": "Atmospheric Effects",
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
-      "graticule": "Graticule",
+      "graticule": "Gridlines",
       "spinGlobeBoundsTitle": "Bounds are locked",
       "spinGlobeBoundsDesc": "The globe can't spin while the map bounds are locked.",
       "spinGlobeBoundsHint": "Unlocking the bounds lets the globe spin freely. You can re-lock them anytime in Settings.",
@@ -1645,8 +1645,8 @@
     "reverseFailed": "Reverse geocoding failed."
   },
   "graticule": {
-    "title": "Graticule",
-    "controlTitle": "Graticule settings",
+    "title": "Gridlines",
+    "controlTitle": "Gridlines settings",
     "spacing": "Spacing",
     "spacingAuto": "Auto (by zoom)",
     "spacingFixed": "Fixed interval",
