@@ -164,8 +164,17 @@ export function serializeTourConfig(
     type: TOUR_CONFIG_TYPE,
     version: TOUR_CONFIG_VERSION,
     fps: clampNumber(Math.round(fps), MIN_FPS, MAX_FPS),
-    // Drop the id; everything else is the persisted camera + duration.
-    keyframes: keyframes.map(({ id: _id, ...rest }) => rest),
+    // Drop the id; clamp the duration on write too (mirroring parseKeyframe) so
+    // save/load is symmetric and a programmatic caller can't persist an
+    // out-of-range value.
+    keyframes: keyframes.map(({ id: _id, durationMs, ...rest }) => ({
+      ...rest,
+      durationMs: clampNumber(
+        Math.round(durationMs),
+        MIN_SEGMENT_SECONDS * 1000,
+        MAX_SEGMENT_SECONDS * 1000,
+      ),
+    })),
   };
   return `${JSON.stringify(config, null, 2)}\n`;
 }
@@ -235,11 +244,15 @@ export function parseTourConfig(text: string): ParsedTourConfig {
     throw new Error("File is not a GeoLibre tour configuration.");
   }
   // Reject a file written by a newer, incompatible format so its data isn't
-  // silently misread. A missing/older version is accepted (forward writers
-  // always stamp the current one; older or hand-written files default to v1).
-  if (typeof obj.version === "number" && obj.version > TOUR_CONFIG_VERSION) {
+  // silently misread. A missing version is accepted (hand-written/legacy files
+  // default to v1), but any present version that isn't a number we recognize
+  // (a newer number, or a malformed non-number like "2") is rejected.
+  if (
+    obj.version !== undefined &&
+    (typeof obj.version !== "number" || obj.version > TOUR_CONFIG_VERSION)
+  ) {
     throw new Error(
-      `Tour configuration version ${obj.version} is not supported (expected ${TOUR_CONFIG_VERSION}).`,
+      `Tour configuration version ${String(obj.version)} is not supported (expected ${TOUR_CONFIG_VERSION}).`,
     );
   }
   if (!Array.isArray(obj.keyframes) || obj.keyframes.length === 0) {

@@ -182,6 +182,28 @@ describe("serializeTourConfig / parseTourConfig", () => {
     );
   });
 
+  it("rejects a malformed non-numeric version", () => {
+    assert.throws(() =>
+      parseTourConfig(
+        JSON.stringify({
+          type: TOUR_CONFIG_TYPE,
+          version: "2",
+          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+        }),
+      ),
+    );
+  });
+
+  it("accepts a file with no version field (legacy / hand-written)", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+      }),
+    );
+    assert.equal(config.keyframes.length, 1);
+  });
+
   it("clamps a too-low fps on parse", () => {
     const config = parseTourConfig(
       JSON.stringify({
