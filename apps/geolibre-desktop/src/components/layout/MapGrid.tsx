@@ -181,6 +181,7 @@ function PaneLayerToggle({ viewId, index }: PaneLayerToggleProps) {
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}
+                indicator="box"
                 checked={visible}
                 onCheckedChange={(checked: boolean) =>
                   setSecondaryLayerVisibility(viewId, layer.id, checked)
