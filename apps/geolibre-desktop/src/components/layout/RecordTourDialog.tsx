@@ -3,10 +3,12 @@ import { Button, cn, Input, Label } from "@geolibre/ui";
 import {
   ArrowDown,
   ArrowUp,
+  Camera,
   Circle,
   GripHorizontal,
   MapPin,
   Plus,
+  Save,
   Trash2,
   Video,
   X,
@@ -28,8 +30,11 @@ interface RecordTourDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
 }
 
-type Status = "idle" | "recording" | "saving";
+// "ready" holds a finished recording in memory so saving is a deliberate second
+// step (name + Save) rather than an automatic download the moment recording ends.
+type Status = "idle" | "recording" | "ready" | "saving";
 
+const DEFAULT_FILE_NAME = "map-tour";
 const DEFAULT_FPS = 30;
 const MIN_FPS = 10;
 const MAX_FPS = 60;
@@ -87,6 +92,9 @@ export function RecordTourDialog({
   const [error, setError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
   const [saveCancelled, setSaveCancelled] = useState(false);
+  // The finished recording, held until the user names it and clicks Save.
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
+  const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const abortRef = useRef<AbortController | null>(null);
 
   // Drag-to-reposition. `pos` is null until first dragged, when the default
@@ -95,7 +103,20 @@ export function RecordTourDialog({
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const recording = status !== "idle";
+  // True while the camera is being captured or the file is being written; the
+  // map and the keyframe list are frozen during these phases. "ready" is not
+  // busy, so the user can keep editing (which discards the pending take).
+  const busy = status === "recording" || status === "saving";
+
+  // Clear transient result messages and drop any finished-but-unsaved take when
+  // the tour is edited, so a stale recording can't be saved for a changed tour.
+  const invalidateRecording = () => {
+    setSavedName(null);
+    setSaveCancelled(false);
+    setError(null);
+    setPendingBlob(null);
+    setStatus((current) => (current === "ready" ? "idle" : current));
+  };
 
   const onDragStart = (event: React.PointerEvent) => {
     // Starting a drag captures the pointer, which would redirect the ensuing
@@ -133,29 +154,54 @@ export function RecordTourDialog({
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  const addCurrentView = () => {
+  /** Read the live map camera, rounded for compact display. */
+  const captureView = () => {
     const view = mapControllerRef.current?.readView();
+    if (!view) return null;
+    return {
+      center: [round(view.center[0], 6), round(view.center[1], 6)] as [
+        number,
+        number,
+      ],
+      zoom: round(view.zoom, 3),
+      pitch: round(view.pitch, 1),
+      bearing: round(view.bearing, 1),
+    };
+  };
+
+  const addCurrentView = () => {
+    const view = captureView();
     if (!view) return;
-    setSavedName(null);
-    setSaveCancelled(false);
-    setError(null);
+    invalidateRecording();
     setKeyframes((current) => [
       ...current,
       {
         id: createId(),
-        center: [round(view.center[0], 6), round(view.center[1], 6)],
-        zoom: round(view.zoom, 3),
-        pitch: round(view.pitch, 1),
-        bearing: round(view.bearing, 1),
+        ...view,
         durationMs: DEFAULT_SEGMENT_SECONDS * 1000,
       },
     ]);
   };
 
-  const removeKeyframe = (id: string) =>
-    setKeyframes((current) => current.filter((kf) => kf.id !== id));
+  // Overwrite an existing keyframe's camera with the live map view, so a single
+  // stop can be re-framed in place instead of being deleted and re-added (which
+  // would lose its position in the sequence and its segment duration).
+  const recaptureKeyframe = (id: string) => {
+    const view = captureView();
+    if (!view) return;
+    invalidateRecording();
+    setKeyframes((current) =>
+      current.map((kf) => (kf.id === id ? { ...kf, ...view } : kf)),
+    );
+  };
 
-  const move = (index: number, delta: number) =>
+  const removeKeyframe = (id: string) => {
+    invalidateRecording();
+    setKeyframes((current) => current.filter((kf) => kf.id !== id));
+  };
+
+  const move = (index: number, delta: number) => {
+    invalidateRecording();
     setKeyframes((current) => {
       const next = [...current];
       const target = index + delta;
@@ -163,13 +209,16 @@ export function RecordTourDialog({
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  };
 
-  const setSegmentSeconds = (id: string, seconds: number) =>
+  const setSegmentSeconds = (id: string, seconds: number) => {
+    invalidateRecording();
     setKeyframes((current) =>
       current.map((kf) =>
         kf.id === id ? { ...kf, durationMs: Math.round(seconds * 1000) } : kf,
       ),
     );
+  };
 
   const previewKeyframe = (kf: TourKeyframe) =>
     mapControllerRef.current?.flyTo({
@@ -199,24 +248,17 @@ export function RecordTourDialog({
         onProgress: setProgress,
       });
       // An empty clip (a stop during the opening hold, or a degenerate
-      // zero-byte encode) is treated as a cancel rather than saving an unusable
-      // file; a non-empty partial tour (stopped midway) is still worth saving.
+      // zero-byte encode) is treated as a cancel rather than holding an unusable
+      // file; a non-empty partial tour (stopped midway) is still worth keeping.
+      // Recording and saving are deliberately decoupled: a finished take is held
+      // in "ready" so the user names it and saves it explicitly, instead of an
+      // automatic download firing the instant capture ends.
       if (blob.size === 0) {
         setSaveCancelled(true);
+        setStatus("idle");
       } else {
-        setStatus("saving");
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        const fileType = t("recordTour.videoFileType");
-        const name = await saveBinaryFileWithFallback(bytes, {
-          defaultName: "map-tour.webm",
-          filters: [{ name: fileType, extensions: ["webm"] }],
-          browserTypes: [
-            { description: fileType, accept: { "video/webm": [".webm"] } },
-          ],
-          mimeType: "video/webm",
-        });
-        if (name) setSavedName(name);
-        else setSaveCancelled(true);
+        setPendingBlob(blob);
+        setStatus("ready");
       }
     } catch (err) {
       // Show a translated message rather than leaking the helper's raw English
@@ -227,17 +269,65 @@ export function RecordTourDialog({
           ? t("recordTour.unsupported")
           : t("recordTour.recordError"),
       );
+      setStatus("idle");
     } finally {
       abortRef.current = null;
-      setStatus("idle");
       setProgress(0);
     }
   };
 
   const stopRecording = () => abortRef.current?.abort();
 
+  // Second step of the record→save flow: write the held recording to disk under
+  // the user-chosen name. On a browser without the File System Access picker
+  // this still controls the downloaded filename (the helper falls back to an
+  // anchor download using defaultName).
+  const handleSave = async () => {
+    if (!pendingBlob) return;
+    setStatus("saving");
+    // Clear any prior outcome so a fresh attempt can't leave both a "saved" and
+    // a "cancelled" message on screen at once.
+    setError(null);
+    setSavedName(null);
+    setSaveCancelled(false);
+    try {
+      const bytes = new Uint8Array(await pendingBlob.arrayBuffer());
+      const base = fileName.trim().replace(/\.webm$/i, "") || DEFAULT_FILE_NAME;
+      const fileType = t("recordTour.videoFileType");
+      const name = await saveBinaryFileWithFallback(bytes, {
+        defaultName: `${base}.webm`,
+        filters: [{ name: fileType, extensions: ["webm"] }],
+        browserTypes: [
+          { description: fileType, accept: { "video/webm": [".webm"] } },
+        ],
+        mimeType: "video/webm",
+      });
+      if (name) {
+        setSavedName(name);
+        setPendingBlob(null);
+        setStatus("idle");
+      } else {
+        // Cancelled the save dialog: keep the take so it can be saved again.
+        setSaveCancelled(true);
+        setStatus("ready");
+      }
+    } catch {
+      setError(t("recordTour.recordError"));
+      setStatus("ready");
+    }
+  };
+
+  const discardRecording = () => {
+    setPendingBlob(null);
+    setSavedName(null);
+    setSaveCancelled(false);
+    setError(null);
+    setStatus("idle");
+  };
+
   const totalSeconds = estimateTourDurationMs(keyframes) / 1000;
-  const canRecord = keyframes.length >= 2 && RECORDING_SUPPORTED && !recording;
+  const canRecord =
+    keyframes.length >= 2 && RECORDING_SUPPORTED && status === "idle";
 
   if (!open) return null;
 
@@ -269,7 +359,7 @@ export function RecordTourDialog({
           aria-label={t("common.close")}
           // Closing while recording would hide the only Stop/progress control,
           // so block it until the recording finishes.
-          disabled={recording}
+          disabled={busy}
           onClick={() => onOpenChange(false)}
           className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
         >
@@ -292,7 +382,7 @@ export function RecordTourDialog({
             type="button"
             variant="outline"
             size="sm"
-            disabled={recording}
+            disabled={busy}
             onClick={addCurrentView}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -316,8 +406,9 @@ export function RecordTourDialog({
                   keyframe={kf}
                   index={index}
                   isLast={index === keyframes.length - 1}
-                  recording={recording}
+                  disabled={busy}
                   onPreview={() => previewKeyframe(kf)}
+                  onRecapture={() => recaptureKeyframe(kf.id)}
                   onMove={(delta) => move(index, delta)}
                   onRemove={() => removeKeyframe(kf.id)}
                   onDurationSeconds={(seconds) =>
@@ -343,7 +434,7 @@ export function RecordTourDialog({
               min={MIN_FPS}
               max={MAX_FPS}
               step="1"
-              disabled={recording}
+              disabled={busy}
               value={fpsText}
               onChange={(event) => {
                 const text = event.target.value;
@@ -381,7 +472,7 @@ export function RecordTourDialog({
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
 
-        {recording ? (
+        {busy ? (
           <div
             role="status"
             aria-live="polite"
@@ -410,6 +501,50 @@ export function RecordTourDialog({
               </Button>
             )}
           </div>
+        ) : status === "ready" ? (
+          // Second step: the take is captured; let the user name it and save (or
+          // discard and re-record) instead of an automatic download.
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              {t("recordTour.recordingReady")}
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="record-tour-filename">
+                {t("recordTour.fileNameLabel")}
+              </Label>
+              <div className="flex items-center gap-1">
+                <Input
+                  id="record-tour-filename"
+                  className="h-8 flex-1"
+                  value={fileName}
+                  onChange={(event) => setFileName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") handleSave();
+                  }}
+                />
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  .webm
+                </span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={handleSave}
+              >
+                <Save className="mr-1.5 h-4 w-4" />
+                {t("recordTour.saveVideo")}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={discardRecording}
+              >
+                {t("recordTour.discard")}
+              </Button>
+            </div>
+          </div>
         ) : (
           <Button
             type="button"
@@ -430,26 +565,34 @@ interface KeyframeRowProps {
   keyframe: TourKeyframe;
   index: number;
   isLast: boolean;
-  recording: boolean;
+  disabled: boolean;
   onPreview: () => void;
+  onRecapture: () => void;
   onMove: (delta: number) => void;
   onRemove: () => void;
   onDurationSeconds: (seconds: number) => void;
 }
 
 /**
- * One keyframe in the tour list. The segment-duration field keeps local text
- * state so it can be cleared and retyped (a controlled number input would snap
- * an empty value straight to the minimum); the parsed value commits to the
- * store only while in range, and the text normalizes to the committed value on
- * blur.
+ * One keyframe in the tour list, laid out over two rows so the per-keyframe
+ * actions and the transition-duration control each get their own line and never
+ * clip in a narrow panel. The top row is the view (click to fly to it) plus the
+ * recapture / reorder / remove actions; the bottom row is the transition
+ * duration leading into this keyframe (omitted for the first, which the tour
+ * simply starts parked on).
+ *
+ * The duration field keeps local text state so it can be cleared and retyped (a
+ * controlled number input would snap an empty value straight to the minimum);
+ * the parsed value commits to the store only while in range, and the text
+ * normalizes to the committed value on blur.
  */
 function KeyframeRow({
   keyframe,
   index,
   isLast,
-  recording,
+  disabled,
   onPreview,
+  onRecapture,
   onMove,
   onRemove,
   onDurationSeconds,
@@ -457,40 +600,98 @@ function KeyframeRow({
   const { t } = useTranslation();
   const [text, setText] = useState(String(keyframe.durationMs / 1000));
   const isFirst = index === 0;
+  // Full camera, shown as a hover tooltip so the visible row stays uncluttered.
+  const coords = `${keyframe.center[1].toFixed(4)}, ${keyframe.center[0].toFixed(
+    4,
+  )} · z${keyframe.zoom.toFixed(1)}`;
 
   return (
-    <li className="flex items-center gap-2 rounded-md border border-input p-2 text-xs">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium tabular-nums">
-        {index + 1}
-      </span>
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground disabled:hover:text-current"
-        title={t("recordTour.flyToKeyframe")}
-        disabled={recording}
-        onClick={onPreview}
-      >
-        <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="truncate tabular-nums text-muted-foreground">
-          {keyframe.center[1].toFixed(4)}, {keyframe.center[0].toFixed(4)} · z
-          {keyframe.zoom.toFixed(1)}
+    <li className="flex flex-col gap-2 rounded-md border border-input p-2 text-xs">
+      {/* Top row: the view (click to preview) and the per-keyframe actions. */}
+      <div className="flex items-center gap-2">
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted font-medium tabular-nums">
+          {index + 1}
         </span>
-      </button>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground disabled:hover:text-current"
+          title={`${t("recordTour.flyToKeyframe")} · ${coords}`}
+          disabled={disabled}
+          onClick={onPreview}
+        >
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="truncate tabular-nums text-muted-foreground">
+            {coords}
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={t("recordTour.recapture")}
+            title={t("recordTour.recapture")}
+            disabled={disabled}
+            onClick={onRecapture}
+          >
+            <Camera className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={t("recordTour.moveUp")}
+            disabled={isFirst || disabled}
+            onClick={() => onMove(-1)}
+          >
+            <ArrowUp className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={t("recordTour.moveDown")}
+            disabled={isLast || disabled}
+            onClick={() => onMove(1)}
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive"
+            aria-label={t("recordTour.removeKeyframe")}
+            disabled={disabled}
+            onClick={onRemove}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Bottom row: transition into this keyframe (the first has none). */}
       {isFirst ? (
-        <span className="shrink-0 text-muted-foreground">
-          {t("recordTour.start")}
+        <span className="pl-8 text-muted-foreground">
+          {t("recordTour.startingView")}
         </span>
       ) : (
-        <label className="flex shrink-0 items-center gap-1">
+        <label className="flex items-center gap-2 pl-8">
+          <span className="text-muted-foreground">
+            {t("recordTour.transition")}
+          </span>
           <Input
             type="number"
             inputMode="decimal"
             aria-label={t("recordTour.segmentSeconds")}
-            className="h-7 w-14"
+            className="h-7 w-16"
             min={MIN_SEGMENT_SECONDS}
             max={MAX_SEGMENT_SECONDS}
             step="0.5"
-            disabled={recording}
+            disabled={disabled}
             value={text}
             onChange={(event) => {
               setText(event.target.value);
@@ -515,45 +716,10 @@ function KeyframeRow({
             }}
           />
           <span className="text-muted-foreground">
-            {t("recordTour.secondsUnit")}
+            {t("recordTour.secondsLong")}
           </span>
         </label>
       )}
-      <div className="flex shrink-0 items-center">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          aria-label={t("recordTour.moveUp")}
-          disabled={isFirst || recording}
-          onClick={() => onMove(-1)}
-        >
-          <ArrowUp className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          aria-label={t("recordTour.moveDown")}
-          disabled={isLast || recording}
-          onClick={() => onMove(1)}
-        >
-          <ArrowDown className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-destructive"
-          aria-label={t("recordTour.removeKeyframe")}
-          disabled={recording}
-          onClick={onRemove}
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
     </li>
   );
 }
