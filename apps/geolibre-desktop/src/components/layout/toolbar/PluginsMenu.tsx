@@ -136,7 +136,7 @@ export function PluginsMenu({
         <DropdownMenuLabel>{t("toolbar.item.activatePlugin")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {plugins.map((p) => {
-          // Atmospheric Effects, Directions, Reverse Geocode, and Graticule are
+          // Atmospheric Effects, Directions, Reverse Geocode, and Gridlines are
           // toggled from the Controls menu instead, so they are omitted here to
           // avoid a duplicate toggle. The deck.gl viz overlay is an internal
           // renderer driven by the Add Data → "Deck.gl Layer" dialog, not a
