@@ -163,10 +163,12 @@ export function SetViewDialog({
     setPasteStatus("idle");
   }, [open, mapControllerRef]);
 
-  // Any manual edit dismisses a stale Process confirmation/warning, since the
-  // shown values no longer necessarily came from the paste box.
+  // Editing the longitude/latitude by hand dismisses a stale Process
+  // confirmation/warning, since those shown values no longer came from the paste
+  // box. Zoom/pitch/bearing are independent of the pasted center, so editing
+  // them must not clear the confirmation.
   const update = (key: keyof ViewFields) => (value: string) => {
-    setPasteStatus("idle");
+    if (key === "longitude" || key === "latitude") setPasteStatus("idle");
     setFields((current) => ({ ...current, [key]: value }));
   };
 
