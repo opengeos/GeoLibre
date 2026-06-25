@@ -69,15 +69,30 @@ function jumpAndWaitIdle(
       resolve();
     };
     const timer = setTimeout(finish, IDLE_TIMEOUT_MS);
+    // Poll the abort flag so Stop takes effect mid-wait instead of after the
+    // full timeout.
     const poll = setInterval(() => {
       if (isAborted()) finish();
     }, 150);
+    const before = map.getCenter();
     map.jumpTo({
       center: location.center,
       zoom: location.zoom,
       pitch: location.pitch,
       bearing: location.bearing,
     });
+    // A no-op jump (an adjacent chapter sharing this exact location) changes
+    // nothing, so MapLibre fires no `idle` and the wait would hit the full
+    // timeout. The current frame is already rendered with tiles loaded, so
+    // resolve on the next frame instead.
+    const after = map.getCenter();
+    if (
+      before.lng === after.lng &&
+      before.lat === after.lat &&
+      map.areTilesLoaded()
+    ) {
+      requestAnimationFrame(finish);
+    }
     // Register after jumpTo so a pre-existing idle event isn't consumed before
     // the new camera has started rendering.
     map.on("idle", finish);
@@ -107,7 +122,10 @@ function loadChapterPhoto(url: string): Promise<LoadedPhoto | null> {
       resolve(value);
     };
     const timer = setTimeout(() => finish(null), IDLE_TIMEOUT_MS);
-    img.crossOrigin = "anonymous";
+    // Only request CORS for real remote URLs. A data: URI has no origin, and
+    // some browsers fire `onerror` for `crossOrigin` data images, which would
+    // wrongly drop an embedded photo.
+    if (!url.startsWith("data:")) img.crossOrigin = "anonymous";
     img.onload = () => {
       try {
         const canvas = document.createElement("canvas");
