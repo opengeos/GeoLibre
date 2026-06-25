@@ -145,8 +145,10 @@ describe("addArcGISLayer (feature layer)", () => {
   it("resolves a portal-item feature layer through the portal item URL", async () => {
     const serviceUrl =
       "https://example.com/arcgis/rest/services/Cities/FeatureServer/0";
+    const fetchUrls: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
+      fetchUrls.push(url);
       let body: unknown = LAYER_INFO;
       if (url.includes("/content/items/")) {
         body = { url: serviceUrl };
@@ -168,5 +170,15 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.equal(layer.type, "geojson");
     assert.equal(layer.geojson?.features.length, 1);
     assert.deepEqual(fitBoundsCalls, [[-160, 18, -154, 23]]);
+    // Assert the portal path was genuinely walked: the item metadata lookup and
+    // a query against the resolved service URL both happened.
+    assert.ok(
+      fetchUrls.some((url) => url.includes("/content/items/abc123def456")),
+      "expected portal item metadata to be fetched",
+    );
+    assert.ok(
+      fetchUrls.some((url) => url.startsWith(`${serviceUrl}/query`)),
+      "expected the resolved service URL to be queried",
+    );
   });
 });
