@@ -2515,6 +2515,11 @@ mod tests {
             "\\\\server\\share\\x.geojson"
         ));
         assert!(!is_allowed_local_vector_path("//server/share/x.geojson"));
+        // Empty string is not an absolute path.
+        assert!(!is_allowed_local_vector_path(""));
+        // No extension, and a trailing dot (empty extension).
+        assert!(!is_allowed_local_vector_path("/home/user/noextension"));
+        assert!(!is_allowed_local_vector_path("/home/user/file."));
     }
 
     fn zip_with_names(names: &[&str]) -> Vec<u8> {

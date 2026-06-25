@@ -311,6 +311,14 @@ async function readLocalFileBytes(
     return await readFile(path);
   } catch (error) {
     if (!isTauri()) throw error;
+    // Log the original fs-plugin error before retrying so a genuine read
+    // failure (a moved/deleted file, not a scope denial) is still diagnosable
+    // even though the command's "Could not read local file" error is what
+    // ultimately surfaces.
+    console.debug(
+      `[GeoLibre] fs read of "${path}" failed; retrying via read_local_file.`,
+      error,
+    );
     const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
     return new Uint8Array(buffer);
   }
@@ -330,6 +338,10 @@ async function readLocalFileText(path: string): Promise<string> {
     return await readTextFile(path);
   } catch (error) {
     if (!isTauri()) throw error;
+    console.debug(
+      `[GeoLibre] fs read of "${path}" failed; retrying via read_local_file.`,
+      error,
+    );
     const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
     return new TextDecoder().decode(buffer);
   }
