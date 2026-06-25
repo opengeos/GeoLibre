@@ -94,7 +94,11 @@ function decodeEntities(text: string): string {
         body[1] === "x" || body[1] === "X"
           ? parseInt(body.slice(2), 16)
           : parseInt(body.slice(1), 10);
-      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      // Guard the Unicode range: fromCodePoint throws (RangeError) on values
+      // above 0x10FFFF, which would otherwise abort the whole export.
+      return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : match;
     }
     const named = HTML_ENTITIES[body.toLowerCase()];
     return named ?? match;

@@ -49,6 +49,10 @@ describe("htmlToPlainText", () => {
     assert.equal(htmlToPlainText("&unknownentity;"), "&unknownentity;");
   });
 
+  it("leaves out-of-range numeric entities untouched without throwing", () => {
+    assert.equal(htmlToPlainText("&#99999999; ok"), "&#99999999; ok");
+  });
+
   it("drops <script>/<style> blocks with their contents", () => {
     assert.equal(
       htmlToPlainText("<style>body{color:red}</style>Hello<script>x=1</script>"),
