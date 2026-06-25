@@ -400,7 +400,11 @@ export function RecordTourDialog({
   // frame rate. Fresh ids are minted so reloaded rows never collide. A bad file
   // throws a parse error, surfaced as a translated message rather than a crash.
   const handleLoadConfig = async () => {
-    clearResultMessages();
+    // Loading replaces the whole tour, so confirm first when there is existing
+    // work a misclick would otherwise wipe.
+    if (keyframes.length > 0 && !window.confirm(t("recordTour.confirmLoad"))) {
+      return;
+    }
     try {
       const fileType = t("recordTour.configFileType");
       const result = await openLocalDataFileWithFallback({
@@ -408,7 +412,10 @@ export function RecordTourDialog({
         accept: ".json,application/json",
         readText: true,
       });
+      // Cancelling the picker is a no-op, so only clear a prior result banner
+      // once a file is actually chosen.
       if (!result?.text) return;
+      clearResultMessages();
       const config = parseTourConfig(result.text);
       setKeyframes(config.keyframes.map((kf) => ({ ...kf, id: createId() })));
       setFps(config.fps);
@@ -418,6 +425,7 @@ export function RecordTourDialog({
       );
     } catch (err) {
       console.warn("Tour configuration load failed", err);
+      clearResultMessages();
       setError(t("recordTour.configLoadError"));
     }
   };

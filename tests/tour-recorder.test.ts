@@ -115,7 +115,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
     assert.equal(config.keyframes[1].durationMs, MAX_SEGMENT_SECONDS * 1000);
   });
 
-  it("clamps an out-of-range camera into MapLibre's supported ranges", () => {
+  it("clamps zoom/pitch and wraps bearing into MapLibre's supported ranges", () => {
     const config = parseTourConfig(
       JSON.stringify({
         type: TOUR_CONFIG_TYPE,
@@ -128,7 +128,46 @@ describe("serializeTourConfig / parseTourConfig", () => {
     );
     assert.equal(config.keyframes[0].zoom, 24);
     assert.equal(config.keyframes[0].pitch, 85);
-    assert.equal(config.keyframes[0].bearing, 180);
+    // Bearing wraps, not clamps: 999 mod 360 = 279 -> 279 - 360 = -81.
+    assert.equal(config.keyframes[0].bearing, -81);
+  });
+
+  it("wraps a 270 bearing to -90 (west) rather than clamping to 180", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        version: 1,
+        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 270, durationMs: 2000 }],
+      }),
+    );
+    assert.equal(config.keyframes[0].bearing, -90);
+  });
+
+  it("rejects a keyframe with an out-of-range latitude", () => {
+    assert.throws(() =>
+      parseTourConfig(
+        JSON.stringify({
+          type: TOUR_CONFIG_TYPE,
+          version: 1,
+          keyframes: [{ center: [0, 999], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+        }),
+      ),
+    );
+  });
+
+  it("rejects a file with too many keyframes", () => {
+    const keyframes = Array.from({ length: 501 }, () => ({
+      center: [0, 0],
+      zoom: 1,
+      pitch: 0,
+      bearing: 0,
+      durationMs: 2000,
+    }));
+    assert.throws(() =>
+      parseTourConfig(
+        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 1, keyframes }),
+      ),
+    );
   });
 
   it("rejects a file from a newer, unsupported version", () => {

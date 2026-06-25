@@ -47,6 +47,12 @@ export const MAX_SEGMENT_SECONDS = 30;
 // configuration so a hand-edited file can't carry an out-of-range camera.
 const MAX_ZOOM = 24;
 const MAX_PITCH = 85;
+/**
+ * Upper bound on keyframes accepted from a file, far beyond any real tour, so a
+ * crafted or accidentally huge JSON can't make the parser allocate a giant
+ * array and the dialog mint an id per entry in a loop.
+ */
+const MAX_KEYFRAMES = 500;
 
 /** A short still hold at the start of the tour so the opening frame is steady. */
 export const START_HOLD_MS = 400;
@@ -130,6 +136,15 @@ function roundTo(value: number, digits: number): number {
 }
 
 /**
+ * Normalize a bearing onto `(-180, 180]` so a hand-edited value like 270 maps
+ * to -90 (west) rather than being clipped to 180 (south) by a plain clamp.
+ */
+function normalizeBearing(bearing: number): number {
+  const mod = ((bearing % 360) + 360) % 360; // [0, 360)
+  return mod > 180 ? mod - 360 : mod; // (-180, 180]
+}
+
+/**
  * Serialize a tour (its keyframes and frame rate) to a pretty-printed JSON
  * string suitable for saving to a `.json` file and reloading later. The
  * session-local keyframe ids are dropped; {@link parseTourConfig} regenerates
@@ -160,7 +175,11 @@ function parseKeyframe(raw: unknown): TourKeyframeData {
     !Array.isArray(center) ||
     center.length !== 2 ||
     !Number.isFinite(center[0]) ||
-    !Number.isFinite(center[1])
+    !Number.isFinite(center[1]) ||
+    // Longitude wrapping is left to MapLibre, but a latitude outside ±90 is not
+    // a real coordinate, so reject it with a meaningful error rather than
+    // letting MapLibre silently clip it.
+    Math.abs(center[1] as number) > 90
   ) {
     throw new Error("Tour configuration keyframe has an invalid center.");
   }
@@ -172,12 +191,13 @@ function parseKeyframe(raw: unknown): TourKeyframeData {
     MAX_SEGMENT_SECONDS * 1000,
   );
   // Clamp the camera to MapLibre's supported ranges so a hand-edited file can't
-  // push a keyframe outside what the map accepts (bearing wraps onto [-180,180]).
+  // push a keyframe outside what the map accepts; bearing is wrapped (not
+  // clamped) so a value past ±180 stays the same compass direction.
   return {
     center: [roundTo(center[0] as number, 6), roundTo(center[1] as number, 6)],
     zoom: roundTo(clampNumber(num(kf.zoom), 0, MAX_ZOOM), 3),
     pitch: roundTo(clampNumber(num(kf.pitch), 0, MAX_PITCH), 1),
-    bearing: roundTo(clampNumber(num(kf.bearing), -180, 180), 1),
+    bearing: roundTo(normalizeBearing(num(kf.bearing)), 1),
     durationMs,
   };
 }
@@ -213,6 +233,11 @@ export function parseTourConfig(text: string): ParsedTourConfig {
   }
   if (!Array.isArray(obj.keyframes) || obj.keyframes.length === 0) {
     throw new Error("Tour configuration has no keyframes.");
+  }
+  if (obj.keyframes.length > MAX_KEYFRAMES) {
+    throw new Error(
+      `Tour configuration has too many keyframes (${obj.keyframes.length}; max ${MAX_KEYFRAMES}).`,
+    );
   }
   const fps = clampNumber(
     Math.round(Number.isFinite(obj.fps) ? (obj.fps as number) : DEFAULT_FPS),

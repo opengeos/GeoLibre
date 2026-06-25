@@ -481,6 +481,7 @@
     "addView": "Add current view",
     "loadConfig": "Load setup",
     "saveConfig": "Save setup",
+    "confirmLoad": "Replace the current keyframes with the loaded setup?",
     "configFileType": "Tour Configuration",
     "configSaved": "Saved setup as {{name}}",
     "configLoaded_one": "Loaded setup with {{count}} keyframe.",
