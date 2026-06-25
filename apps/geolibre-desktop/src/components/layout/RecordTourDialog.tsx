@@ -98,11 +98,11 @@ export function RecordTourDialog({
   const recording = status !== "idle";
 
   const onDragStart = (event: React.PointerEvent) => {
-    // The close button lives inside this drag handle. Starting a drag here
-    // captures the pointer, which would redirect the ensuing click away from
-    // the button and swallow it, so never begin a drag from an interactive
-    // control.
-    if ((event.target as HTMLElement).closest("button")) return;
+    // Starting a drag captures the pointer, which would redirect the ensuing
+    // click away from the close button and swallow it, so never begin a drag
+    // from an interactive control. (event.target may be the SVG icon inside the
+    // button, so cast to the Element ancestor type rather than HTMLElement.)
+    if ((event.target as Element).closest("button, a, [role='button']")) return;
     const rect = panelRef.current?.getBoundingClientRect();
     if (!rect) return;
     dragOffset.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
