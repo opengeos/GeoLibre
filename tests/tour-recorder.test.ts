@@ -198,6 +198,10 @@ describe("serializeTourConfig / parseTourConfig", () => {
     assert.throws(() => parseTourConfig("not json"));
   });
 
+  it("rejects an oversized config file before parsing", () => {
+    assert.throws(() => parseTourConfig(" ".repeat(1_000_001)));
+  });
+
   it("rejects a file without the tour marker", () => {
     assert.throws(() =>
       parseTourConfig(JSON.stringify({ keyframes: [], fps: 30 })),

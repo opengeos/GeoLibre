@@ -53,6 +53,12 @@ const MAX_PITCH = 85;
  * array and the dialog mint an id per entry in a loop.
  */
 const MAX_KEYFRAMES = 500;
+/**
+ * Upper bound on the raw config text before parsing. A real tour (even the
+ * 500-keyframe maximum) is well under 100 KB, so 1 MB is generous while still
+ * rejecting a pathological file before `JSON.parse` allocates it.
+ */
+const MAX_CONFIG_TEXT_LENGTH = 1_000_000;
 
 /** A short still hold at the start of the tour so the opening frame is steady. */
 export const START_HOLD_MS = 400;
@@ -210,6 +216,11 @@ function parseKeyframe(raw: unknown): TourKeyframeData {
  * message on any structural problem; callers show a translated fallback.
  */
 export function parseTourConfig(text: string): ParsedTourConfig {
+  // Reject an oversized file before JSON.parse so a pathological input can't be
+  // fully allocated just to be rejected by the later keyframe-count check.
+  if (text.length > MAX_CONFIG_TEXT_LENGTH) {
+    throw new Error("Tour configuration file is too large.");
+  }
   let raw: unknown;
   try {
     raw = JSON.parse(text);
