@@ -58,7 +58,7 @@
     "mapillary-js": "^4.1.2",
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-3d-tiles": "^0.5.3",
-    "maplibre-gl-basemap-control": "^0.8.0",
+    "maplibre-gl-basemap-control": "^0.9.0",
     "maplibre-gl-components": "^0.25.1",
     "maplibre-gl-duckdb": "^0.2.3",
     "maplibre-gl-earth-engine": "^0.4.2",
