@@ -756,9 +756,14 @@ function KeyframeRow({
             }}
           />
           <span className="text-muted-foreground">
-            {/* Pluralize against the committed value so a 1s transition reads
-                "1 second", not "1 seconds". */}
-            {t("recordTour.secondsLong", { count: keyframe.durationMs / 1000 })}
+            {/* Pluralize against the value being typed (falling back to the
+                committed one) so the unit tracks the input: "1 second", not
+                "1 seconds", even mid-edit before blur commits. */}
+            {t("recordTour.secondsLong", {
+              count: Number.isFinite(Number(text))
+                ? Number(text)
+                : keyframe.durationMs / 1000,
+            })}
           </span>
         </label>
       )}
