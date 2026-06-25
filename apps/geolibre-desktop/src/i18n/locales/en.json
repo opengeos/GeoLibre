@@ -1106,7 +1106,7 @@
       "reverseEndpoint": "Reverse endpoint (optional)",
       "email": "Contact email (optional)",
       "emailPlaceholder": "you@example.org",
-      "emailHint": "Only used by Nominatim, which asks for it to identify your application per its usage policy — sent only when provided.",
+      "emailHint": "Only used by Nominatim, which recommends providing it to help identify your application — sent only when provided.",
       "secretsWarning": "Keys are stored in plain text in the project file and may be exposed when the project is shared. They are also sent as query parameters, so they appear in geocoding request URLs visible in browser DevTools and any proxy logs.",
       "corsNote": "Google does not officially allow browser requests to its Geocoding API, so requests may be blocked unless served through a same-origin proxy."
     },
