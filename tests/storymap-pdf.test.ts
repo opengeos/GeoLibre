@@ -48,6 +48,13 @@ describe("htmlToPlainText", () => {
   it("leaves unknown entities untouched", () => {
     assert.equal(htmlToPlainText("&unknownentity;"), "&unknownentity;");
   });
+
+  it("drops <script>/<style> blocks with their contents", () => {
+    assert.equal(
+      htmlToPlainText("<style>body{color:red}</style>Hello<script>x=1</script>"),
+      "Hello",
+    );
+  });
 });
 
 describe("buildStoryMapHandoutPdf", () => {

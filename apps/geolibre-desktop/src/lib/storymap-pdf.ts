@@ -115,6 +115,9 @@ function decodeEntities(text: string): string {
 export function htmlToPlainText(html: string): string {
   return decodeEntities(
     html
+      // Drop <script>/<style> blocks with their contents first; the generic tag
+      // strip below only removes delimiters and would leave their text behind.
+      .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
       .replace(/<\s*br\s*\/?\s*>/gi, "\n")
       .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
       .replace(/<[^>]+>/g, ""),

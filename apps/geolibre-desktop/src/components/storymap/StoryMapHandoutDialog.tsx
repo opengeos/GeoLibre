@@ -126,6 +126,10 @@ function loadChapterPhoto(url: string): Promise<LoadedPhoto | null> {
 function slugify(title: string): string {
   return (
     title
+      // Decompose accented Latin (é -> e) before the ASCII strip so titles like
+      // "São Paulo" keep their skeleton instead of losing characters silently.
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "") || "story-map"
@@ -227,9 +231,9 @@ export function StoryMapHandoutDialog({
           ...(photo ? { photo } : {}),
         });
       }
-      // Stopped before capturing anything: abandon the export rather than
-      // writing an empty PDF.
-      if (captures.length === 0) {
+      // Stopped: discard the export entirely rather than saving a partial PDF
+      // (the finally block still restores the map view).
+      if (abortRef.current || captures.length === 0) {
         return;
       }
       const bytes = buildStoryMapHandoutPdf(captures, {
