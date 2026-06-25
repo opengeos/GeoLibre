@@ -1118,6 +1118,9 @@ export async function openLocalDataFileWithFallback(
         reject(error);
       }
     };
+    // Resolve (rather than hang) when the dialog is dismissed without a pick;
+    // `change` never fires on cancel, so without this the Promise never settles.
+    input.addEventListener("cancel", () => resolve(null));
     input.click();
   });
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  DEFAULT_FPS,
   END_HOLD_MS,
   estimateTourDurationMs,
   MAX_FPS,
@@ -141,6 +142,8 @@ describe("serializeTourConfig / parseTourConfig", () => {
       }),
     );
     assert.equal(config.keyframes[0].bearing, -90);
+    // No fps key in the file, so it falls back to DEFAULT_FPS.
+    assert.equal(config.fps, DEFAULT_FPS);
   });
 
   it("rejects a keyframe with an out-of-range latitude", () => {
