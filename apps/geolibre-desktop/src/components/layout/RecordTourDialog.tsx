@@ -5,6 +5,8 @@ import {
   ArrowUp,
   Camera,
   Circle,
+  Download,
+  FolderOpen,
   GripHorizontal,
   MapPin,
   Plus,
@@ -15,11 +17,23 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import {
+  openLocalDataFileWithFallback,
+  saveBinaryFileWithFallback,
+  saveTextFileWithFallback,
+} from "../../lib/tauri-io";
+import {
+  DEFAULT_FPS,
+  DEFAULT_SEGMENT_SECONDS,
   estimateTourDurationMs,
   isTourRecordingSupported,
+  MAX_FPS,
+  MAX_SEGMENT_SECONDS,
+  MIN_FPS,
+  MIN_SEGMENT_SECONDS,
+  parseTourConfig,
   recordTour,
+  serializeTourConfig,
   type TourKeyframe,
   TourRecordingUnsupportedError,
 } from "../../lib/tour-recorder";
@@ -35,12 +49,9 @@ interface RecordTourDialogProps {
 type Status = "idle" | "recording" | "ready" | "saving";
 
 const DEFAULT_FILE_NAME = "map-tour";
-const DEFAULT_FPS = 30;
-const MIN_FPS = 10;
-const MAX_FPS = 60;
-const DEFAULT_SEGMENT_SECONDS = 4;
-const MIN_SEGMENT_SECONDS = 0.5;
-const MAX_SEGMENT_SECONDS = 30;
+// Default leaf name for the saved tour *configuration* (the editable JSON), kept
+// distinct from the recorded video's name so the two exports don't collide.
+const DEFAULT_CONFIG_FILE_NAME = "map-tour";
 
 function createId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -92,6 +103,9 @@ export function RecordTourDialog({
   const [error, setError] = useState<string | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
   const [saveCancelled, setSaveCancelled] = useState(false);
+  // Outcome banner for the configuration save/load actions (kept separate from
+  // the video save banner so the two messages never clobber each other).
+  const [configMessage, setConfigMessage] = useState<string | null>(null);
   // The finished recording, held until the user names it and clicks Save.
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
@@ -126,6 +140,7 @@ export function RecordTourDialog({
   const clearResultMessages = () => {
     setSavedName(null);
     setSaveCancelled(false);
+    setConfigMessage(null);
     setError(null);
   };
 
@@ -357,6 +372,55 @@ export function RecordTourDialog({
     setStatus("idle");
   };
 
+  // Export the editable tour setup (keyframes, durations, FPS) as a JSON file so
+  // it can be reloaded and refined later, independent of the recorded video.
+  const handleSaveConfig = async () => {
+    if (keyframes.length === 0) return;
+    clearResultMessages();
+    try {
+      const content = serializeTourConfig(keyframes, fps);
+      const fileType = t("recordTour.configFileType");
+      const name = await saveTextFileWithFallback(content, {
+        defaultName: `${DEFAULT_CONFIG_FILE_NAME}.json`,
+        filters: [{ name: fileType, extensions: ["json"] }],
+        browserTypes: [
+          { description: fileType, accept: { "application/json": [".json"] } },
+        ],
+        mimeType: "application/json",
+      });
+      if (name) setConfigMessage(t("recordTour.configSaved", { name }));
+    } catch (err) {
+      console.warn("Tour configuration save failed", err);
+      setError(t("recordTour.configSaveError"));
+    }
+  };
+
+  // Load a previously saved tour setup, replacing the current keyframe list and
+  // frame rate. Fresh ids are minted so reloaded rows never collide. A bad file
+  // throws a parse error, surfaced as a translated message rather than a crash.
+  const handleLoadConfig = async () => {
+    clearResultMessages();
+    try {
+      const fileType = t("recordTour.configFileType");
+      const result = await openLocalDataFileWithFallback({
+        filters: [{ name: fileType, extensions: ["json"] }],
+        accept: ".json,application/json",
+        readText: true,
+      });
+      if (!result?.text) return;
+      const config = parseTourConfig(result.text);
+      setKeyframes(config.keyframes.map((kf) => ({ ...kf, id: createId() })));
+      setFps(config.fps);
+      setFpsText(String(config.fps));
+      setConfigMessage(
+        t("recordTour.configLoaded", { count: config.keyframes.length }),
+      );
+    } catch (err) {
+      console.warn("Tour configuration load failed", err);
+      setError(t("recordTour.configLoadError"));
+    }
+  };
+
   const totalSeconds = estimateTourDurationMs(keyframes) / 1000;
   const canRecord =
     keyframes.length >= 2 && RECORDING_SUPPORTED && status === "idle";
@@ -410,6 +474,33 @@ export function RecordTourDialog({
             {t("recordTour.unsupported")}
           </p>
         )}
+
+        {/* Save / load the editable tour setup so work can be paused, resumed,
+            and reused across sessions (independent of the recorded video). */}
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            disabled={editingFrozen}
+            onClick={handleLoadConfig}
+          >
+            <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+            {t("recordTour.loadConfig")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            disabled={editingFrozen || keyframes.length === 0}
+            onClick={handleSaveConfig}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {t("recordTour.saveConfig")}
+          </Button>
+        </div>
 
         <div className="flex items-center justify-between gap-2">
           <Button
@@ -508,6 +599,11 @@ export function RecordTourDialog({
         {saveCancelled && (
           <p className="text-sm text-muted-foreground">
             {t("recordTour.saveCancelled")}
+          </p>
+        )}
+        {configMessage && (
+          <p className="text-sm text-emerald-600 dark:text-emerald-400">
+            {configMessage}
           </p>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}

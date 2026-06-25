@@ -27,6 +27,22 @@ export interface TourKeyframe {
   durationMs: number;
 }
 
+// Frame-rate and per-segment duration bounds, shared by the dialog UI and the
+// configuration parser so a hand-edited or stale file is clamped to the same
+// range the controls enforce.
+/** Default frames per second sampled from the canvas. */
+export const DEFAULT_FPS = 30;
+/** Lowest selectable frame rate. */
+export const MIN_FPS = 10;
+/** Highest selectable frame rate. */
+export const MAX_FPS = 60;
+/** Default seconds to animate into a newly added keyframe. */
+export const DEFAULT_SEGMENT_SECONDS = 4;
+/** Shortest allowed transition between two keyframes, in seconds. */
+export const MIN_SEGMENT_SECONDS = 0.5;
+/** Longest allowed transition between two keyframes, in seconds. */
+export const MAX_SEGMENT_SECONDS = 30;
+
 /** A short still hold at the start of the tour so the opening frame is steady. */
 export const START_HOLD_MS = 400;
 /** A short still hold at the end so the closing frame is not cut off abruptly. */
@@ -68,6 +84,127 @@ export function estimateTourDurationMs(
     .slice(1)
     .reduce((sum, kf) => sum + Math.max(0, kf.durationMs), 0);
   return START_HOLD_MS + segments + END_HOLD_MS;
+}
+
+// --- Tour configuration (save / load) ---------------------------------------
+
+/** `type` marker identifying a saved Record Map Tour configuration file. */
+export const TOUR_CONFIG_TYPE = "geolibre-tour";
+/** Schema version of the saved tour configuration file. */
+export const TOUR_CONFIG_VERSION = 1;
+
+/**
+ * A keyframe as stored in a tour configuration file: the camera and segment
+ * duration without the session-local `id`, which is regenerated on load so
+ * reloaded keyframes never collide with each other or with existing rows.
+ */
+export type TourKeyframeData = Omit<TourKeyframe, "id">;
+
+/** The on-disk shape of a saved tour configuration. */
+export interface TourConfig {
+  type: string;
+  version: number;
+  /** Frames per second to sample when recording. */
+  fps: number;
+  keyframes: TourKeyframeData[];
+}
+
+/** Parsed and validated contents of a tour configuration file. */
+export interface ParsedTourConfig {
+  fps: number;
+  keyframes: TourKeyframeData[];
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Round to a fixed number of decimals, matching the capture precision. */
+function roundTo(value: number, digits: number): number {
+  return Number(value.toFixed(digits));
+}
+
+/**
+ * Serialize a tour (its keyframes and frame rate) to a pretty-printed JSON
+ * string suitable for saving to a `.json` file and reloading later. The
+ * session-local keyframe ids are dropped; {@link parseTourConfig} regenerates
+ * them on load.
+ */
+export function serializeTourConfig(
+  keyframes: readonly TourKeyframe[],
+  fps: number,
+): string {
+  const config: TourConfig = {
+    type: TOUR_CONFIG_TYPE,
+    version: TOUR_CONFIG_VERSION,
+    fps: clampNumber(Math.round(fps), MIN_FPS, MAX_FPS),
+    // Drop the id; everything else is the persisted camera + duration.
+    keyframes: keyframes.map(({ id: _id, ...rest }) => rest),
+  };
+  return `${JSON.stringify(config, null, 2)}\n`;
+}
+
+/** Validate and normalize a single keyframe from a parsed config file. */
+function parseKeyframe(raw: unknown): TourKeyframeData {
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Tour configuration has an invalid keyframe.");
+  }
+  const kf = raw as Record<string, unknown>;
+  const center = kf.center;
+  if (
+    !Array.isArray(center) ||
+    center.length !== 2 ||
+    !Number.isFinite(center[0]) ||
+    !Number.isFinite(center[1])
+  ) {
+    throw new Error("Tour configuration keyframe has an invalid center.");
+  }
+  const num = (value: unknown, fallback = 0): number =>
+    Number.isFinite(value) ? (value as number) : fallback;
+  const durationMs = clampNumber(
+    Math.round(num(kf.durationMs, DEFAULT_SEGMENT_SECONDS * 1000)),
+    MIN_SEGMENT_SECONDS * 1000,
+    MAX_SEGMENT_SECONDS * 1000,
+  );
+  return {
+    center: [roundTo(center[0] as number, 6), roundTo(center[1] as number, 6)],
+    zoom: roundTo(num(kf.zoom), 3),
+    pitch: roundTo(num(kf.pitch), 1),
+    bearing: roundTo(num(kf.bearing), 1),
+    durationMs,
+  };
+}
+
+/**
+ * Parse a saved tour configuration file. Validates the marker, requires at
+ * least one keyframe, and clamps the frame rate and every segment duration into
+ * the supported range so a hand-edited or stale file can never push values
+ * outside what the controls allow. Throws an `Error` with a human-readable
+ * message on any structural problem; callers show a translated fallback.
+ */
+export function parseTourConfig(text: string): ParsedTourConfig {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    throw new Error("Tour configuration file is not valid JSON.");
+  }
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Tour configuration file is not a tour.");
+  }
+  const obj = raw as Record<string, unknown>;
+  if (obj.type !== TOUR_CONFIG_TYPE) {
+    throw new Error("File is not a GeoLibre tour configuration.");
+  }
+  if (!Array.isArray(obj.keyframes) || obj.keyframes.length === 0) {
+    throw new Error("Tour configuration has no keyframes.");
+  }
+  const fps = clampNumber(
+    Math.round(Number.isFinite(obj.fps) ? (obj.fps as number) : DEFAULT_FPS),
+    MIN_FPS,
+    MAX_FPS,
+  );
+  return { fps, keyframes: obj.keyframes.map(parseKeyframe) };
 }
 
 /** Raised when the browser cannot record the canvas (no MediaRecorder / codec). */
