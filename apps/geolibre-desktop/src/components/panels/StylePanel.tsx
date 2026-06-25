@@ -769,7 +769,6 @@ interface NumericStyleInputProps {
   max: number;
   step: number;
   onChange: (value: number) => void;
-  /** When set, an info icon with this hover/focus tooltip is shown by the label. */
   tooltip?: string;
 }
 
