@@ -881,6 +881,13 @@ export function DesktopShell({
     );
   }, [t, mapReadyGeneration]);
 
+  // Keep the Layer Swipe panel's grouped base-layer label translated. That
+  // panel lives outside React and reads labels from the controller bridge, so
+  // re-push on language change (t identity) and controller (re)init.
+  useEffect(() => {
+    mapControllerRef.current?.setBackgroundLabel(t("layers.background"));
+  }, [t, mapReadyGeneration]);
+
   const handleMapDiagnosticEvent = useCallback((event: MapDiagnosticEvent) => {
     appendDiagnostic({
       category: "map",

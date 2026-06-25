@@ -842,3 +842,40 @@ describe("MapController geolocate permission-denied recovery", () => {
       }
     }));
 });
+
+interface LayerLabelWindow {
+  __GEOLIBRE_LAYER_LABELS__?: Record<string, string>;
+  dispatchEvent: (event: unknown) => boolean;
+}
+
+// publishLayerDisplayNames is guarded on `window`, which `node --test` lacks,
+// so stub a minimal one for the duration of a test.
+function withStubbedLabelWindow(run: (win: LayerLabelWindow) => void): void {
+  const globals = globalThis as { window?: LayerLabelWindow };
+  const original = globals.window;
+  const stub: LayerLabelWindow = { dispatchEvent: () => true };
+  globals.window = stub;
+  try {
+    run(stub);
+  } finally {
+    if (original === undefined) delete globals.window;
+    else globals.window = original;
+  }
+}
+
+describe("MapController base-layer label", () => {
+  it("publishes the grouped basemap label so the swipe panel can localize it", () => {
+    withStubbedLabelWindow((win) => {
+      const controller = createMapController();
+
+      // Defaults to English before the app pushes a translated label.
+      controller.setBackgroundLabel("Background");
+      assert.equal(win.__GEOLIBRE_LAYER_LABELS__?.__basemap__, "Background");
+
+      // A language change re-publishes the translated label under the same key
+      // the Layer Swipe panel reads (__basemap__).
+      controller.setBackgroundLabel("Hintergrund");
+      assert.equal(win.__GEOLIBRE_LAYER_LABELS__?.__basemap__, "Hintergrund");
+    });
+  });
+});

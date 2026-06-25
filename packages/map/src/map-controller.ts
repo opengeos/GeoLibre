@@ -207,6 +207,7 @@ export class MapController {
   private fullscreenControl: maplibregl.FullscreenControl | null = null;
   private compassControl: ResetBearingControl | null = null;
   private compassLabel = "Reset pitch & bearing";
+  private backgroundLabel = "Background";
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: maplibregl.TerrainControl | null = null;
@@ -1577,11 +1578,14 @@ export class MapController {
     if (typeof window === "undefined") return;
 
     const labelWindow = window as GeoLibreLayerLabelWindow;
-    labelWindow.__GEOLIBRE_LAYER_LABELS__ = Object.fromEntries(
-      layers
+    labelWindow.__GEOLIBRE_LAYER_LABELS__ = Object.fromEntries([
+      // The Layer Swipe panel groups all basemap layers under "__basemap__";
+      // publish the translated base-layer label so it matches the sidebar.
+      ["__basemap__", this.backgroundLabel],
+      ...layers
         .flatMap((layer) => this.getNamedStyleLayers(layer))
-        .map(({ id, name }) => [id, name]),
-    );
+        .map(({ id, name }): [string, string] => [id, name]),
+    ]);
     window.dispatchEvent(new CustomEvent("geolibre-layer-labels-change"));
   }
 
@@ -1661,6 +1665,17 @@ export class MapController {
   setCompassLabel(label: string): void {
     this.compassLabel = label;
     this.compassControl?.setLabel(label);
+  }
+
+  /**
+   * Update the label used for the grouped base layer (e.g. after a UI language
+   * change). It is published through the layer-display-name bridge so the
+   * Layer Swipe panel, which lives outside React, shows the same translated
+   * base-layer label as the main layer manager.
+   */
+  setBackgroundLabel(label: string): void {
+    this.backgroundLabel = label;
+    this.publishLayerDisplayNames(this.syncedLayers);
   }
 
   private addGeolocateControl(): boolean {
