@@ -751,8 +751,11 @@ export async function readVectorFileWithSidecars(
     return null;
   }
   try {
+    // Use the scope-tolerant reader: a project-reopened path was never picked
+    // or dropped this session, so the `fs` plugin scope rejects it and a raw
+    // `readFile` would throw — silently dropping the vector-control layer.
     const file = new File(
-      [toArrayBuffer(await readFile(path))],
+      [toArrayBuffer(await readLocalFileBytes(path))],
       browserSafeFileName(path),
     );
     const companionFiles =
