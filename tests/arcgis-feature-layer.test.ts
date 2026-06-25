@@ -5,10 +5,12 @@ import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 import { addArcGISLayer } from "../packages/plugins/src/plugins/arcgis-layer";
 
 // Minimal ArcGIS FeatureServer layer metadata (the `?f=json` response) with a
-// geographic extent so the bounds resolve without Web Mercator reprojection.
+// geographic extent so the bounds resolve without Web Mercator reprojection,
+// and a copyrightText so the attribution propagation can be asserted.
 const LAYER_INFO = {
   name: "USA Major Cities",
   geometryType: "esriGeometryPoint",
+  copyrightText: "© Example City Data",
   extent: {
     xmin: -160,
     ymin: 18,
@@ -31,16 +33,23 @@ const QUERY_GEOJSON = {
   ],
 };
 
+// addArcGISLayer reads layer metadata via `response.json()` and query results via
+// `response.text()` (it guards against HTML before parsing), so a mock response
+// must answer both. `raw` overrides the text body (for the HTML-page case).
+function jsonResponse(body: unknown, raw?: string): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => body,
+    text: async () => raw ?? JSON.stringify(body),
+  } as Response;
+}
+
 /** Routes the two ArcGIS requests by URL: the query endpoint returns GeoJSON. */
 function makeArcGISFetch(): typeof fetch {
   return (async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
-    const body = url.includes("/query") ? QUERY_GEOJSON : LAYER_INFO;
-    return {
-      ok: true,
-      status: 200,
-      json: async () => body,
-    } as Response;
+    return jsonResponse(url.includes("/query") ? QUERY_GEOJSON : LAYER_INFO);
   }) as typeof fetch;
 }
 
@@ -88,17 +97,45 @@ describe("addArcGISLayer (feature layer)", () => {
       "NAME",
       "POPULATION",
     ]);
+    // The persisted source path is the GeoJSON query endpoint (so a refresh
+    // re-fetches features), not the service-description base URL.
+    assert.match(layer.sourcePath ?? "", /\/FeatureServer\/0\/query\?/);
+    // The service copyright is carried into MapLibre's attribution control.
+    assert.equal(layer.source.attribution, "© Example City Data");
     // The geographic extent is fitted directly (no Web Mercator conversion).
     assert.deepEqual(fitBoundsCalls, [[-160, 18, -154, 23]]);
+  });
+
+  it("never persists the access token in the refresh URL", async () => {
+    const fetchUrls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      fetchUrls.push(url);
+      return jsonResponse(url.includes("/query") ? QUERY_GEOJSON : LAYER_INFO);
+    }) as typeof fetch;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "url",
+      url: "https://example.com/arcgis/rest/services/Cities/FeatureServer/0",
+      token: "secret-token-123",
+    });
+
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    // The token reaches the live request but must not be saved to the project.
+    assert.ok(
+      fetchUrls.some((url) => url.includes("token=secret-token-123")),
+      "expected the query request to carry the token",
+    );
+    assert.doesNotMatch(layer?.sourcePath ?? "", /token=/);
   });
 
   it("rejects a non-GeoJSON query response instead of adding an empty layer", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      const body = url.includes("/query")
-        ? { error: { message: "Token Required" } }
-        : LAYER_INFO;
-      return { ok: true, status: 200, json: async () => body } as Response;
+      return url.includes("/query")
+        ? jsonResponse({ error: { message: "Token Required" } })
+        : jsonResponse(LAYER_INFO);
     }) as typeof fetch;
 
     await assert.rejects(
@@ -112,13 +149,31 @@ describe("addArcGISLayer (feature layer)", () => {
     assert.equal(useAppStore.getState().layers.length, 0);
   });
 
+  it("rejects an HTML login page returned with a 200 status", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      return url.includes("/query")
+        ? jsonResponse(null, "<!DOCTYPE html><html><body>Sign in</body></html>")
+        : jsonResponse(LAYER_INFO);
+    }) as typeof fetch;
+
+    await assert.rejects(
+      addArcGISLayer(app, {
+        layerType: "feature",
+        sourceType: "url",
+        url: "https://example.com/arcgis/rest/services/Cities/FeatureServer/0",
+      }),
+      /HTML instead of GeoJSON/,
+    );
+    assert.equal(useAppStore.getState().layers.length, 0);
+  });
+
   it("warns but still loads when the query exceeds the service record limit", async () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
-      const body = url.includes("/query")
-        ? { ...QUERY_GEOJSON, exceededTransferLimit: true }
-        : LAYER_INFO;
-      return { ok: true, status: 200, json: async () => body } as Response;
+      return url.includes("/query")
+        ? jsonResponse({ ...QUERY_GEOJSON, exceededTransferLimit: true })
+        : jsonResponse(LAYER_INFO);
     }) as typeof fetch;
 
     const warnings: string[] = [];
@@ -149,13 +204,10 @@ describe("addArcGISLayer (feature layer)", () => {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       fetchUrls.push(url);
-      let body: unknown = LAYER_INFO;
       if (url.includes("/content/items/")) {
-        body = { url: serviceUrl };
-      } else if (url.includes("/query")) {
-        body = QUERY_GEOJSON;
+        return jsonResponse({ url: serviceUrl });
       }
-      return { ok: true, status: 200, json: async () => body } as Response;
+      return jsonResponse(url.includes("/query") ? QUERY_GEOJSON : LAYER_INFO);
     }) as typeof fetch;
 
     const id = await addArcGISLayer(app, {

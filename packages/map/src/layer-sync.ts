@@ -1308,6 +1308,9 @@ function syncGeoJsonLayer(
   }
 
   if (!map.getSource(src)) {
+    // Carry a source attribution (e.g. an ArcGIS service's copyrightText) into
+    // MapLibre's attribution control when the layer declares one.
+    const attribution = stringSource(layer.source.attribution);
     map.addSource(
       src,
       wantCluster
@@ -1317,8 +1320,13 @@ function syncGeoJsonLayer(
             cluster: true,
             clusterRadius,
             clusterMaxZoom,
+            ...(attribution ? { attribution } : {}),
           }
-        : { type: "geojson", data: layer.geojson! },
+        : {
+            type: "geojson",
+            data: layer.geojson!,
+            ...(attribution ? { attribution } : {}),
+          },
     );
   } else {
     (map.getSource(src) as maplibregl.GeoJSONSource).setData(layer.geojson!);

@@ -245,22 +245,39 @@ async function addArcGISFeatureLayerAsGeoJson(
     );
   }
 
-  const queryUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
+  // The token is kept out of the persisted refresh URL so it is never written
+  // to a saved project; it is only appended to the one-off request below.
+  const refreshUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
     f: "geojson",
     outFields: "*",
     returnGeometry: "true",
-    token: options.token?.trim(),
     where: "1=1",
   });
-  const geojson = await fetchArcGISGeoJson(queryUrl);
+  const requestUrl = appendArcGISParams(refreshUrl, {
+    token: options.token?.trim(),
+  });
+  const geojson = await fetchArcGISGeoJson(requestUrl);
 
   const name =
     options.name?.trim() ||
     layerInfo.name ||
     layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
-  const id = useAppStore
-    .getState()
-    .addGeoJsonLayer(name, geojson, input, options.beforeLayerId ?? null);
+  const store = useAppStore.getState();
+  // Persist the GeoJSON query endpoint (not the service-description base URL) as
+  // the source path so the layer's GeoJSON refresh re-fetches valid features.
+  const id = store.addGeoJsonLayer(
+    name,
+    geojson,
+    refreshUrl,
+    options.beforeLayerId ?? null,
+  );
+
+  // Preserve the service's copyright watermark in MapLibre's attribution
+  // control, matching the prior URL-source behavior.
+  const attribution = layerInfo.copyrightText?.trim();
+  if (attribution) {
+    store.updateLayer(id, { source: { type: "geojson", attribution } });
+  }
 
   const bounds = arcgisExtentToBounds(layerInfo.extent);
   if (bounds) app.fitBounds?.(bounds);
@@ -284,10 +301,25 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
   if (!response.ok) {
     throw new Error(`ArcGIS feature query failed with ${response.status}.`);
   }
-  const json = (await response.json()) as FeatureCollection & {
+  // ArcGIS Enterprise (and services behind a WAF) can answer 200 with an HTML
+  // login/redirect page when a token is missing or expired. Read the body as
+  // text first so that surfaces as a clear message instead of a raw
+  // `SyntaxError: Unexpected token '<'` from JSON.parse.
+  const text = await response.text();
+  if (/^\s*</.test(text)) {
+    throw new Error(
+      "The ArcGIS service returned HTML instead of GeoJSON (the layer may require a token or sign-in).",
+    );
+  }
+  let json: FeatureCollection & {
     error?: { message?: string };
     exceededTransferLimit?: boolean;
   };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error("The ArcGIS feature layer did not return GeoJSON features.");
+  }
   if (json.error) {
     throw new Error(json.error.message || "ArcGIS feature query failed.");
   }
