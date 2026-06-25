@@ -120,6 +120,10 @@ interface SaveTextFileOptions {
 interface SaveBinaryFileOptions extends SaveTextFileOptions {}
 
 const SHAPEFILE_SIDECAR_EXTENSIONS = ["dbf", "shx", "prj", "cpg"];
+// SYNC: RESTORABLE_VECTOR_EXTENSIONS in src-tauri/src/lib.rs must list the same
+// extensions, or a format added here would be rejected by the Rust restore
+// guard on every project reopen (the bug this PR fixes). Grep "SYNC:" to find
+// the partner list.
 const VECTOR_FILE_DIALOG_EXTENSIONS = [
   "geojson",
   "json",
@@ -343,7 +347,10 @@ async function readLocalFileText(path: string): Promise<string> {
       error,
     );
     const buffer = await invoke<ArrayBuffer>("read_local_file", { path });
-    return new TextDecoder().decode(buffer);
+    // `fatal: true` matches `readTextFile`, which rejects on malformed UTF-8
+    // rather than silently substituting U+FFFD: a corrupt KML/GPX/GeoJSON
+    // should surface a clear read error, not parse as garbled-but-valid text.
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
   }
 }
 
@@ -1606,7 +1613,10 @@ export async function loadDroppedVectorPaths(
       try {
         layers.push(...parseGpxTextLayers(await readLocalFileText(path), path));
       } catch (error) {
-        const detail = error instanceof Error ? error.message : "Unknown error";
+        // `read_local_file` rejects with a plain string, not an `Error`, so
+        // fall back to `String(error)` to keep that detail instead of a generic
+        // "Unknown error" when the fs-plugin fallback fails.
+        const detail = error instanceof Error ? error.message : String(error);
         throw new Error(`Could not read this GPX file. ${detail}`);
       }
       continue;

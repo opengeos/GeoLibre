@@ -212,6 +212,8 @@ fn read_project_file(path: String) -> Result<String, String> {
 /// Local vector file extensions the restore path may re-read (lowercased, no
 /// dot). Mirrors `VECTOR_FILE_DIALOG_EXTENSIONS` in `tauri-io.ts`; keep the two
 /// in step.
+// SYNC: VECTOR_FILE_DIALOG_EXTENSIONS in src/lib/tauri-io.ts — grep "SYNC:" to
+// find the partner list and update both together.
 const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
     "geojson",
     "json",
