@@ -86,6 +86,7 @@ export {
   openHtmlPanel,
   openLegendPanel,
   openLidarLayerPanel,
+  restoreLidarLayers,
   openMeasurePanel,
   openMinimapPanel,
   openPMTilesLayerPanel,

@@ -18,6 +18,7 @@ import {
   restoreReverseGeocode,
   REVERSE_GEOCODE_PLUGIN_ID,
   restoreEffects,
+  restoreLidarLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -813,6 +814,11 @@ export function DesktopShell({
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
     restoreVectorLayers(appAPI);
+    // Re-stream saved LiDAR (COPC) point clouds. A `lidar-url` layer restores
+    // into the store as inert metadata; the point cloud is loaded by the LiDAR
+    // control, not the store, so without this the layer shows in the panel but
+    // renders nothing.
+    void restoreLidarLayers(appAPI);
     // Re-read drag-dropped / Add Data local-file GeoJSON layers from disk
     // (their data was saved as a path, not embedded).
     void restoreLocalFileLayers();
