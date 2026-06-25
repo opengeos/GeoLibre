@@ -116,12 +116,13 @@ export function RecordTourDialog({
   // accident from an edit whose warning may have scrolled out of view.
   const editingFrozen = busy || status === "ready";
 
-  // Clear the last save/record outcome banner. Used by the edits that change a
-  // keyframe's camera (adding a view, recapturing one), since the saved video
-  // no longer matches the tour; plain reorder/duration tweaks leave it alone so
-  // a "Saved …" note doesn't vanish on an unrelated change. A pending take is
-  // never dropped here: editing is frozen while one is held, so the only way to
-  // drop it is the explicit Discard button.
+  // Clear the last save/record outcome banner. Called by every edit that
+  // actually changes the tour (add, recapture, remove, an in-range reorder, a
+  // real duration change), since the saved video no longer matches it. No-op
+  // interactions leave it alone — an unchanged-value blur or an out-of-range
+  // reorder must not make a "Saved …" note vanish on a non-edit. A pending take
+  // is never dropped here: editing is frozen while one is held, so the only way
+  // to drop it is the explicit Discard button.
   const clearResultMessages = () => {
     setSavedName(null);
     setSaveCancelled(false);
@@ -208,24 +209,32 @@ export function RecordTourDialog({
   };
 
   const removeKeyframe = (id: string) => {
+    // Dropping a stop changes what the tour records, so invalidate the banner.
+    clearResultMessages();
     setKeyframes((current) => current.filter((kf) => kf.id !== id));
   };
 
   const move = (index: number, delta: number) => {
+    const target = index + delta;
+    // Guard the no-op (already at an end) so an inert reorder click can't clear
+    // the banner; the buttons are disabled there anyway, this is belt-and-braces.
+    if (target < 0 || target >= keyframes.length) return;
+    clearResultMessages();
     setKeyframes((current) => {
       const next = [...current];
-      const target = index + delta;
-      if (target < 0 || target >= next.length) return current;
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
   };
 
   const setSegmentSeconds = (id: string, seconds: number) => {
-    setKeyframes((current) =>
-      current.map((kf) =>
-        kf.id === id ? { ...kf, durationMs: Math.round(seconds * 1000) } : kf,
-      ),
+    const durationMs = Math.round(seconds * 1000);
+    // Clear the banner only on a real change, so merely focusing and blurring a
+    // duration field (which re-commits the same value) doesn't wipe it.
+    const current = keyframes.find((kf) => kf.id === id);
+    if (current && current.durationMs !== durationMs) clearResultMessages();
+    setKeyframes((prev) =>
+      prev.map((kf) => (kf.id === id ? { ...kf, durationMs } : kf)),
     );
   };
 
