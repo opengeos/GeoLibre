@@ -83,6 +83,11 @@ export function useAddDataSource(defaultLayerName: string) {
  * when no samples are supplied, and snaps back to the placeholder after a pick
  * so it reads as an action menu rather than a sticky selection.
  *
+ * Sits at the bottom of each source form as a secondary, low-frequency action,
+ * with a faint top divider so it reads as separate from the production fields
+ * above it (and is less likely to be triggered by accident — picking a sample
+ * overwrites the fields, including any access token typed for the prior entry).
+ *
  * @param samples - The named presets to offer.
  * @param onSelect - Applies the chosen preset's value to the source's fields.
  */
@@ -97,7 +102,7 @@ export function SampleDataSelect<T>({
   const selectId = useId();
   if (samples.length === 0) return null;
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 border-t border-border/60 pt-3">
       <Label htmlFor={selectId}>{t("addData.shared.sampleData")}</Label>
       <Select
         id={selectId}
