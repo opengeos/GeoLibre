@@ -239,10 +239,15 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 ///
 /// This is a Rust-side backstop mirroring the frontend guard
 /// (`isAbsoluteLocalPath` + `hasPathTraversal` + `isRestorableVectorPath` in
-/// `tauri-io.ts`), so a compromised webview or rogue plugin cannot use the
-/// command to read arbitrary user-readable files. The checks are byte-oriented
-/// rather than `std::path` based so they behave identically for the Windows-style
-/// paths a project may carry regardless of the host the binary runs on.
+/// `tauri-io.ts`). It narrows the attack surface of a compromised webview or
+/// rogue plugin: arbitrary system files (`/etc/passwd`, SSH keys, most shell and
+/// app configs) are blocked. It does not make the command harmless — the
+/// allowlist still includes broad extensions like `json`, so a script that knows
+/// the path of a JSON-shaped secret could still read it — but it bounds reads to
+/// the vector formats the restore path actually needs. The checks are
+/// byte-oriented rather than `std::path` based so they behave identically for the
+/// Windows-style paths a project may carry regardless of the host the binary
+/// runs on.
 fn is_allowed_local_vector_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
@@ -272,7 +277,8 @@ fn is_allowed_local_vector_path(path: &str) -> bool {
         return false;
     }
 
-    // Known vector extension, case-insensitive, matching `RESTORABLE_VECTOR_PATH`.
+    // Known vector extension, case-insensitive, matching the JS
+    // `RESTORABLE_VECTOR_PATH` regex (built from `VECTOR_FILE_DIALOG_EXTENSIONS`).
     // `rsplit_once` takes the text after the final dot without allocating.
     let lower = path.to_ascii_lowercase();
     lower
