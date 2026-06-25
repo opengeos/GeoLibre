@@ -1044,6 +1044,7 @@ export function StylePanel({
     }
   }, [autoCollapse, internalCollapsed, isControlled]);
   const [draftBeforeId, setDraftBeforeId] = useState("");
+  const [showBasemapStyleLayers, setShowBasemapStyleLayers] = useState(false);
   const [draftColorExpression, setDraftColorExpression] = useState("");
   const [draftHeightExpression, setDraftHeightExpression] = useState("");
   const [draftVectorStyleMode, setDraftVectorStyleMode] =
@@ -1181,6 +1182,13 @@ export function StylePanel({
     layer?.style.vectorStyleProperty,
     layer?.style.vectorStyleStops,
   ]);
+
+  // Reset the "show basemap layers" advanced toggle back to its clean default
+  // whenever a different layer is selected. Keyed on the layer id alone so it
+  // does not re-collapse while the user edits other style fields.
+  useEffect(() => {
+    setShowBasemapStyleLayers(false);
+  }, [layer?.id]);
 
   // Heatmap/cluster apply to point layers in two render paths: core GeoJSON
   // layers (drag-drop, processing results) and Add Vector Layer point layers in
@@ -1596,6 +1604,13 @@ export function StylePanel({
     !otherLayers.some((l) => l.id === draftBeforeId)
       ? draftBeforeId
       : null;
+  // The basemap style exposes dozens of internal layer ids that overwhelm the
+  // dropdown for standard users (issue #834). Keep them behind an opt-in
+  // "advanced" toggle so the default list only shows the user's own layers —
+  // but reveal them automatically if the current value is one of them.
+  const valueIsBasemapStyleLayer = basemapStyleLayerIds.includes(draftBeforeId);
+  const basemapStyleLayersVisible =
+    showBasemapStyleLayers || valueIsBasemapStyleLayer;
   const beforeIdControl = (
     <div className="space-y-2">
       <Label htmlFor="beforeId">Insert before</Label>
@@ -1619,7 +1634,7 @@ export function StylePanel({
             ))}
           </optgroup>
         )}
-        {basemapStyleLayerIds.length > 0 && (
+        {basemapStyleLayerIds.length > 0 && basemapStyleLayersVisible && (
           <optgroup label="Basemap layers">
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
@@ -1629,6 +1644,17 @@ export function StylePanel({
           </optgroup>
         )}
       </Select>
+      {basemapStyleLayerIds.length > 0 && !valueIsBasemapStyleLayer && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            aria-controls="beforeId"
+            checked={showBasemapStyleLayers}
+            onChange={(event) => setShowBasemapStyleLayers(event.target.checked)}
+          />
+          {t("addData.shared.showBasemapLayers")}
+        </label>
+      )}
     </div>
   );
   const minZoom = styleValue(style, "minZoom");
