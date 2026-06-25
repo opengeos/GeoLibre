@@ -2204,7 +2204,9 @@
     "newGroupFromLayer": "New group from layer",
     "moveToGroup": "Move to group",
     "removeFromGroup": "Remove from group",
-    "hiddenByGroup": "Hidden because its group is not visible"
+    "hiddenByGroup": "Hidden because its group is not visible",
+    "empty": "No data layers. Add data from the toolbar.",
+    "emptyBeginner": "No layers yet. Add basemaps via Plugins → Basemaps, or your own data via the Add Data menu."
   },
   "rasterSymbology": {
     "colorRampLabel": "Color ramp",

@@ -29,6 +29,8 @@ import type { MapController } from "@geolibre/map";
 import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
+import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import { activeInterfaceProfile } from "../../lib/ui-profile";
 import {
   Button,
   Dialog,
@@ -337,6 +339,12 @@ export function LayerPanel({
   hideOwnRail = false,
 }: LayerPanelProps) {
   const { t } = useTranslation();
+  // Beginners get a friendlier empty-state hint pointing at basemaps (the
+  // easiest first layer) as well as the Add Data menu; other profiles keep the
+  // concise message so the panel stays uncluttered on small screens (#881).
+  const isBeginnerProfile = useDesktopSettingsStore(
+    (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
+  );
   const layers = useAppStore((s) => s.layers);
   const layerGroups = useAppStore((s) => s.layerGroups);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
@@ -1426,7 +1434,9 @@ export function LayerPanel({
         <div className="space-y-1 p-2">
           {layers.length === 0 && (
             <p className="px-2 py-4 text-xs text-muted-foreground">
-              No data layers. Add data from the toolbar.
+              {isBeginnerProfile
+                ? t("layers.emptyBeginner")
+                : t("layers.empty")}
             </p>
           )}
           {emptyGroups.map((group) => (
