@@ -424,6 +424,10 @@ export function RecordTourDialog({
                   index={index}
                   isLast={index === keyframes.length - 1}
                   disabled={editingFrozen}
+                  // Preview only flies the map camera, so it stays available in
+                  // the "ready" state to verify the tour before saving; it is
+                  // blocked only while the map is mid-capture/save.
+                  previewDisabled={busy}
                   onPreview={() => previewKeyframe(kf)}
                   onRecapture={() => recaptureKeyframe(kf.id)}
                   onMove={(delta) => move(index, delta)}
@@ -451,7 +455,9 @@ export function RecordTourDialog({
               min={MIN_FPS}
               max={MAX_FPS}
               step="1"
-              disabled={busy}
+              // Frozen while a take is held too: a held recording's frame rate
+              // is already fixed, so editing FPS would only mislead.
+              disabled={editingFrozen}
               value={fpsText}
               onChange={(event) => {
                 const text = event.target.value;
@@ -586,7 +592,10 @@ interface KeyframeRowProps {
   keyframe: TourKeyframe;
   index: number;
   isLast: boolean;
+  /** Disables the editing actions (recapture, reorder, remove, duration). */
   disabled: boolean;
+  /** Disables only the fly-to preview (map is mid-capture/save). */
+  previewDisabled: boolean;
   onPreview: () => void;
   onRecapture: () => void;
   onMove: (delta: number) => void;
@@ -612,6 +621,7 @@ function KeyframeRow({
   index,
   isLast,
   disabled,
+  previewDisabled,
   onPreview,
   onRecapture,
   onMove,
@@ -637,7 +647,7 @@ function KeyframeRow({
           type="button"
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground disabled:hover:text-current"
           title={`${t("recordTour.flyToKeyframe")} · ${coords}`}
-          disabled={disabled}
+          disabled={previewDisabled}
           onClick={onPreview}
         >
           <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
