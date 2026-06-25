@@ -290,6 +290,11 @@ export function usePluginRegistry() {
       // user's split-view layout intact. Done synchronously before React flushes
       // effects so useSwipeSplitViewExclusivity sees the single-pane grid and
       // doesn't undo the activation it just allowed.
+      // Relies on maplibre-swipe activating synchronously (activate returns
+      // false/undefined, never a Promise). PluginManager.activate marks a plugin
+      // active optimistically and only rolls back async failures via
+      // watchAsyncActivation, so isActive() would read true here before an async
+      // mount confirms — revisit this guard if swipe ever gains a dynamic import.
       if (collapseGridForSwipe && manager.isActive(id)) {
         const { mapLayout, setMapGrid } = useAppStore.getState();
         if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
