@@ -913,10 +913,20 @@ export class MapController {
       .addTo(map);
 
     let disposed = false;
+    // The `drag` event fires once per pointer-move frame (60-120 Hz), and each
+    // call rewrites the store and re-syncs the source. Coalesce to one update
+    // per animation frame so a heavier `onMove` cannot stutter the drag.
+    let rafPending = false;
     const handleDrag = () => {
-      const next = marker.getLngLat();
-      popup.setLngLat(next);
-      options.onMove([next.lng, next.lat]);
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        rafPending = false;
+        if (disposed) return;
+        const next = marker.getLngLat();
+        popup.setLngLat(next);
+        options.onMove([next.lng, next.lat]);
+      });
     };
     const dispose = () => {
       if (disposed) return;

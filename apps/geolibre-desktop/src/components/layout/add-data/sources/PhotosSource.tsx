@@ -123,14 +123,31 @@ export function PhotosSource() {
     // Hand the user a draggable pin on the map to fine-tune the position. It
     // lives outside React, so closing the dialog (below) does not cancel it;
     // each drag rewrites the layer's coordinates in the store.
-    source.shell.mapControllerRef.current?.startManualPlacement(manualCenter, {
-      hint: t("addData.photos.manualHint"),
-      doneLabel: t("common.done"),
-      onMove: (lngLat) =>
-        updateLayer(layer.id, {
-          geojson: relocatePhotoFeatures(result.featureCollection, lngLat),
-        }),
-    });
+    let unsubscribe = () => {};
+    const dispose = source.shell.mapControllerRef.current?.startManualPlacement(
+      manualCenter,
+      {
+        hint: t("addData.photos.manualHint"),
+        doneLabel: t("common.done"),
+        onMove: (lngLat) =>
+          updateLayer(layer.id, {
+            geojson: relocatePhotoFeatures(result.featureCollection, lngLat),
+          }),
+        onDone: () => unsubscribe(),
+      },
+    );
+    // If the user deletes the layer before finishing placement, the pin and its
+    // popup would otherwise linger on the map. Watch the store and dispose them
+    // when the layer disappears. (This dialog closes right after, so the
+    // subscription, not a React effect, owns the cleanup.)
+    if (dispose) {
+      unsubscribe = useAppStore.subscribe((state) => {
+        if (!state.layers.some((l) => l.id === layer.id)) {
+          dispose();
+          unsubscribe();
+        }
+      });
+    }
     // Close the dialog so the map (and the drag pin) become interactive; the
     // modal overlay would otherwise block dragging.
     source.shell.closeDialog();

@@ -7,6 +7,7 @@ import {
   isPhotoDropFileName,
   isPhotoFileName,
   isValidLngLat,
+  loadPhotosAtLocation,
   PHOTO_IMAGE_EXTENSIONS,
   relocatePhotoFeatures,
 } from "../apps/geolibre-desktop/src/lib/geotagged-photos";
@@ -163,5 +164,27 @@ describe("relocatePhotoFeatures", () => {
     relocatePhotoFeatures(collection, [0, 0]);
     assert.deepEqual(collection.features[0].geometry.coordinates, [-100, 40]);
     assert.deepEqual(collection.features[1].geometry.coordinates, [-100, 40]);
+  });
+});
+
+describe("loadPhotosAtLocation", () => {
+  it("places every photo at the center and never skips one", async () => {
+    // A buffer with no EXIF: GPS is absent, so the GPS importer would skip it,
+    // but manual placement must still produce a feature at the center. The
+    // thumbnail is null here (no canvas decoder under node), which is fine.
+    const files = [
+      new File([new Uint8Array([0, 1, 2, 3])], "a.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([4, 5, 6, 7])], "b.jpg", { type: "image/jpeg" }),
+    ];
+    const result = await loadPhotosAtLocation(files, [-100, 40]);
+    assert.equal(result.total, 2);
+    assert.equal(result.located, 2);
+    assert.equal(result.skipped, 0);
+    assert.equal(result.featureCollection.features.length, 2);
+    for (const feature of result.featureCollection.features) {
+      assert.deepEqual(feature.geometry.coordinates, [-100, 40]);
+    }
+    assert.equal(result.featureCollection.features[0].properties?.name, "a.jpg");
+    assert.equal(result.featureCollection.features[1].properties?.name, "b.jpg");
   });
 });

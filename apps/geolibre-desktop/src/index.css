@@ -1872,6 +1872,16 @@ body,
   border-top-color: hsl(var(--popover));
 }
 
+.geolibre-placement-popup-root.maplibregl-popup-anchor-left
+  .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+
+.geolibre-placement-popup-root.maplibregl-popup-anchor-right
+  .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
+}
+
 .geolibre-placement-popup {
   display: flex;
   flex-direction: column;
