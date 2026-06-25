@@ -43,6 +43,11 @@ export const MIN_SEGMENT_SECONDS = 0.5;
 /** Longest allowed transition between two keyframes, in seconds. */
 export const MAX_SEGMENT_SECONDS = 30;
 
+// Camera bounds MapLibre supports, used to clamp values read from a saved
+// configuration so a hand-edited file can't carry an out-of-range camera.
+const MAX_ZOOM = 24;
+const MAX_PITCH = 85;
+
 /** A short still hold at the start of the tour so the opening frame is steady. */
 export const START_HOLD_MS = 400;
 /** A short still hold at the end so the closing frame is not cut off abruptly. */
@@ -166,11 +171,13 @@ function parseKeyframe(raw: unknown): TourKeyframeData {
     MIN_SEGMENT_SECONDS * 1000,
     MAX_SEGMENT_SECONDS * 1000,
   );
+  // Clamp the camera to MapLibre's supported ranges so a hand-edited file can't
+  // push a keyframe outside what the map accepts (bearing wraps onto [-180,180]).
   return {
     center: [roundTo(center[0] as number, 6), roundTo(center[1] as number, 6)],
-    zoom: roundTo(num(kf.zoom), 3),
-    pitch: roundTo(num(kf.pitch), 1),
-    bearing: roundTo(num(kf.bearing), 1),
+    zoom: roundTo(clampNumber(num(kf.zoom), 0, MAX_ZOOM), 3),
+    pitch: roundTo(clampNumber(num(kf.pitch), 0, MAX_PITCH), 1),
+    bearing: roundTo(clampNumber(num(kf.bearing), -180, 180), 1),
     durationMs,
   };
 }
@@ -195,6 +202,14 @@ export function parseTourConfig(text: string): ParsedTourConfig {
   const obj = raw as Record<string, unknown>;
   if (obj.type !== TOUR_CONFIG_TYPE) {
     throw new Error("File is not a GeoLibre tour configuration.");
+  }
+  // Reject a file written by a newer, incompatible format so its data isn't
+  // silently misread. A missing/older version is accepted (forward writers
+  // always stamp the current one; older or hand-written files default to v1).
+  if (typeof obj.version === "number" && obj.version > TOUR_CONFIG_VERSION) {
+    throw new Error(
+      `Tour configuration version ${obj.version} is not supported (expected ${TOUR_CONFIG_VERSION}).`,
+    );
   }
   if (!Array.isArray(obj.keyframes) || obj.keyframes.length === 0) {
     throw new Error("Tour configuration has no keyframes.");

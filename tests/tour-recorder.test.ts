@@ -115,6 +115,34 @@ describe("serializeTourConfig / parseTourConfig", () => {
     assert.equal(config.keyframes[1].durationMs, MAX_SEGMENT_SECONDS * 1000);
   });
 
+  it("clamps an out-of-range camera into MapLibre's supported ranges", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        version: 1,
+        fps: 30,
+        keyframes: [
+          { center: [0, 0], zoom: 200, pitch: 270, bearing: 999, durationMs: 2000 },
+        ],
+      }),
+    );
+    assert.equal(config.keyframes[0].zoom, 24);
+    assert.equal(config.keyframes[0].pitch, 85);
+    assert.equal(config.keyframes[0].bearing, 180);
+  });
+
+  it("rejects a file from a newer, unsupported version", () => {
+    assert.throws(() =>
+      parseTourConfig(
+        JSON.stringify({
+          type: TOUR_CONFIG_TYPE,
+          version: 999,
+          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+        }),
+      ),
+    );
+  });
+
   it("clamps a too-low fps on parse", () => {
     const config = parseTourConfig(
       JSON.stringify({

@@ -49,9 +49,10 @@ interface RecordTourDialogProps {
 type Status = "idle" | "recording" | "ready" | "saving";
 
 const DEFAULT_FILE_NAME = "map-tour";
-// Default leaf name for the saved tour *configuration* (the editable JSON), kept
-// distinct from the recorded video's name so the two exports don't collide.
-const DEFAULT_CONFIG_FILE_NAME = "map-tour";
+// Default leaf name for the saved tour *configuration* (the editable JSON),
+// distinct from the recorded video's name so the two exports are easy to tell
+// apart in a downloads folder.
+const DEFAULT_CONFIG_FILE_NAME = "map-tour-setup";
 
 function createId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {

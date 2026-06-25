@@ -482,7 +482,7 @@
     "loadConfig": "Load setup",
     "saveConfig": "Save setup",
     "configFileType": "Tour Configuration",
-    "configSaved": "Saved setup {{name}}",
+    "configSaved": "Saved setup as {{name}}",
     "configLoaded_one": "Loaded setup with {{count}} keyframe.",
     "configLoaded_other": "Loaded setup with {{count}} keyframes.",
     "configSaveError": "Could not save the tour setup. Please try again.",
