@@ -92,27 +92,6 @@ export function ArcGISSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            {
-              label: t("addData.arcgis.sampleFeatureLabel"),
-              value: {
-                layerType: "feature",
-                sourceType: "url",
-                url: DEFAULT_ARCGIS_URLS.feature,
-              },
-            },
-            {
-              label: t("addData.arcgis.sampleVectorTileLabel"),
-              value: {
-                layerType: "vector-tile",
-                sourceType: "url",
-                url: DEFAULT_ARCGIS_URLS["vector-tile"],
-              },
-            },
-          ]}
-          onSelect={applyFields}
-        />
         <ServiceLibrarySection
           kind="arcgis"
           layerName={source.layerName}
@@ -196,6 +175,27 @@ export function ArcGISSource() {
             onChange={(event) => setArcgisAccessToken(event.target.value)}
           />
         </div>
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.arcgis.sampleFeatureLabel"),
+              value: {
+                layerType: "feature",
+                sourceType: "url",
+                url: DEFAULT_ARCGIS_URLS.feature,
+              },
+            },
+            {
+              label: t("addData.arcgis.sampleVectorTileLabel"),
+              value: {
+                layerType: "vector-tile",
+                sourceType: "url",
+                url: DEFAULT_ARCGIS_URLS["vector-tile"],
+              },
+            },
+          ]}
+          onSelect={applyFields}
+        />
       </div>
     </AddDataSourceForm>
   );

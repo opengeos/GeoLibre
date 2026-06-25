@@ -229,7 +229,7 @@ export function AddDataFooter({
       <div className="flex justify-end gap-2">
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           onClick={closeDialog}
           disabled={isSubmitting}
         >

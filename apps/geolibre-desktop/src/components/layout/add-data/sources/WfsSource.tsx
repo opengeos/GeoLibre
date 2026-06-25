@@ -108,15 +108,6 @@ export function WfsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            {
-              label: t("addData.wfs.sampleLabel"),
-              value: { endpoint: DEFAULT_WFS_ENDPOINT, typeName: DEFAULT_WFS_TYPE_NAME },
-            },
-          ]}
-          onSelect={applyFields}
-        />
         <ServiceLibrarySection
           kind="wfs"
           layerName={source.layerName}
@@ -189,6 +180,15 @@ export function WfsSource() {
             />
           </div>
         </div>
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.wfs.sampleLabel"),
+              value: { endpoint: DEFAULT_WFS_ENDPOINT, typeName: DEFAULT_WFS_TYPE_NAME },
+            },
+          ]}
+          onSelect={applyFields}
+        />
       </div>
     </AddDataSourceForm>
   );

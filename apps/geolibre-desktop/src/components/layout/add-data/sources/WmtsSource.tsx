@@ -58,12 +58,6 @@ export function WmtsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            { label: t("addData.wmts.sampleLabel"), value: { url: DEFAULT_WMTS_URL } },
-          ]}
-          onSelect={applyFields}
-        />
         <ServiceLibrarySection
           kind="wmts"
           layerName={source.layerName}
@@ -93,6 +87,12 @@ export function WmtsSource() {
             />
           </div>
         </div>
+        <SampleDataSelect
+          samples={[
+            { label: t("addData.wmts.sampleLabel"), value: { url: DEFAULT_WMTS_URL } },
+          ]}
+          onSelect={applyFields}
+        />
       </div>
     </AddDataSourceForm>
   );

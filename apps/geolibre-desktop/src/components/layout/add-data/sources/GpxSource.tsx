@@ -207,14 +207,6 @@ export function GpxSource() {
       submitDisabled={source.isSubmitting || !hasSelectedGpxLayerKind}
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[{ label: t("addData.gpx.sampleLabel"), value: DEFAULT_GPX_URL }]}
-          onSelect={(url) => {
-            setGpxMode("url");
-            setSelectedGpx(null);
-            setGpxUrl(url);
-          }}
-        />
         <div className="space-y-1.5">
           <Label htmlFor="gpx-mode">{t("addData.common.sourceType")}</Label>
           <Select
@@ -288,6 +280,14 @@ export function GpxSource() {
             </label>
           </div>
         </div>
+        <SampleDataSelect
+          samples={[{ label: t("addData.gpx.sampleLabel"), value: DEFAULT_GPX_URL }]}
+          onSelect={(url) => {
+            setGpxMode("url");
+            setSelectedGpx(null);
+            setGpxUrl(url);
+          }}
+        />
       </div>
     </AddDataSourceForm>
   );

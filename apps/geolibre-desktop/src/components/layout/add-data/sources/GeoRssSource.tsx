@@ -129,16 +129,6 @@ export function GeoRssSource() {
       useServiceIcon
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            { label: t("addData.georss.sampleLabel"), value: DEFAULT_GEORSS_URL },
-          ]}
-          onSelect={(url) => {
-            setGeoRssMode("url");
-            setSelectedFile(null);
-            setGeoRssUrl(url);
-          }}
-        />
         <div className="space-y-1.5">
           <Label htmlFor="georss-mode">{t("addData.common.sourceType")}</Label>
           <Select
@@ -176,6 +166,16 @@ export function GeoRssSource() {
             />
           </div>
         )}
+        <SampleDataSelect
+          samples={[
+            { label: t("addData.georss.sampleLabel"), value: DEFAULT_GEORSS_URL },
+          ]}
+          onSelect={(url) => {
+            setGeoRssMode("url");
+            setSelectedFile(null);
+            setGeoRssUrl(url);
+          }}
+        />
       </div>
     </AddDataSourceForm>
   );

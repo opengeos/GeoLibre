@@ -104,29 +104,6 @@ export function VideoSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            {
-              label: t("addData.video.sampleLabel"),
-              value: {
-                mp4: DEFAULT_VIDEO_MP4_URL,
-                webm: DEFAULT_VIDEO_WEBM_URL,
-                topLeft: DEFAULT_VIDEO_TOP_LEFT,
-                topRight: DEFAULT_VIDEO_TOP_RIGHT,
-                bottomRight: DEFAULT_VIDEO_BOTTOM_RIGHT,
-                bottomLeft: DEFAULT_VIDEO_BOTTOM_LEFT,
-              },
-            },
-          ]}
-          onSelect={(sample) => {
-            setVideoMp4Url(sample.mp4);
-            setVideoWebmUrl(sample.webm);
-            setVideoTopLeft(sample.topLeft);
-            setVideoTopRight(sample.topRight);
-            setVideoBottomRight(sample.bottomRight);
-            setVideoBottomLeft(sample.bottomLeft);
-          }}
-        />
         <div className="space-y-1.5">
           <Label htmlFor="video-mp4-url">{t("addData.video.primaryUrl")}</Label>
           <Input
@@ -190,6 +167,29 @@ export function VideoSource() {
         <p className="text-xs text-muted-foreground">
           {t("addData.video.cornersNote")}
         </p>
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.video.sampleLabel"),
+              value: {
+                mp4: DEFAULT_VIDEO_MP4_URL,
+                webm: DEFAULT_VIDEO_WEBM_URL,
+                topLeft: DEFAULT_VIDEO_TOP_LEFT,
+                topRight: DEFAULT_VIDEO_TOP_RIGHT,
+                bottomRight: DEFAULT_VIDEO_BOTTOM_RIGHT,
+                bottomLeft: DEFAULT_VIDEO_BOTTOM_LEFT,
+              },
+            },
+          ]}
+          onSelect={(sample) => {
+            setVideoMp4Url(sample.mp4);
+            setVideoWebmUrl(sample.webm);
+            setVideoTopLeft(sample.topLeft);
+            setVideoTopRight(sample.topRight);
+            setVideoBottomRight(sample.bottomRight);
+            setVideoBottomLeft(sample.bottomLeft);
+          }}
+        />
       </div>
     </AddDataSourceForm>
   );

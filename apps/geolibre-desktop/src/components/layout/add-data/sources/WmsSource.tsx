@@ -85,15 +85,6 @@ export function WmsSource() {
       useServiceIcon
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            {
-              label: t("addData.wms.sampleLabel"),
-              value: { endpoint: DEFAULT_WMS_ENDPOINT, layers: DEFAULT_WMS_LAYERS },
-            },
-          ]}
-          onSelect={applyFields}
-        />
         <ServiceLibrarySection
           kind="wms"
           layerName={source.layerName}
@@ -159,6 +150,15 @@ export function WmsSource() {
           />
           {t("addData.wms.transparent")}
         </label>
+        <SampleDataSelect
+          samples={[
+            {
+              label: t("addData.wms.sampleLabel"),
+              value: { endpoint: DEFAULT_WMS_ENDPOINT, layers: DEFAULT_WMS_LAYERS },
+            },
+          ]}
+          onSelect={applyFields}
+        />
       </div>
     </AddDataSourceForm>
   );

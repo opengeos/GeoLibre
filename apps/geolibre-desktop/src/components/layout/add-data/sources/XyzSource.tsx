@@ -72,12 +72,6 @@ export function XyzSource() {
       submitDisabled={source.isSubmitting}
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            { label: t("addData.xyz.sampleLabel"), value: { url: DEFAULT_XYZ_URL } },
-          ]}
-          onSelect={applyFields}
-        />
         <ServiceLibrarySection
           kind="xyz"
           layerName={source.layerName}
@@ -119,6 +113,12 @@ export function XyzSource() {
           />
           {t("addData.xyz.shortUrl")}
         </label>
+        <SampleDataSelect
+          samples={[
+            { label: t("addData.xyz.sampleLabel"), value: { url: DEFAULT_XYZ_URL } },
+          ]}
+          onSelect={applyFields}
+        />
       </div>
     </AddDataSourceForm>
   );

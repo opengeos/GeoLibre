@@ -254,21 +254,6 @@ export function DelimitedTextSource() {
       }
     >
       <div className="space-y-3">
-        <SampleDataSelect
-          samples={[
-            { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },
-          ]}
-          onSelect={(url) => {
-            setDelimitedTextMode("url");
-            setSelectedDelimitedText(null);
-            resetDelimitedTextColumns();
-            // The sample is a comma-delimited CSV, so reset the delimiter too;
-            // otherwise a previously chosen delimiter would misparse it.
-            setDelimitedTextDelimiter("comma");
-            setDelimitedTextCustomDelimiter("");
-            setDelimitedTextUrl(url);
-          }}
-        />
         <div className="space-y-1.5">
           <Label htmlFor="delimited-text-mode">
             {t("addData.common.sourceType")}
@@ -430,6 +415,21 @@ export function DelimitedTextSource() {
             </Select>
           </div>
         </div>
+        <SampleDataSelect
+          samples={[
+            { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },
+          ]}
+          onSelect={(url) => {
+            setDelimitedTextMode("url");
+            setSelectedDelimitedText(null);
+            resetDelimitedTextColumns();
+            // The sample is a comma-delimited CSV, so reset the delimiter too;
+            // otherwise a previously chosen delimiter would misparse it.
+            setDelimitedTextDelimiter("comma");
+            setDelimitedTextCustomDelimiter("");
+            setDelimitedTextUrl(url);
+          }}
+        />
       </div>
     </AddDataSourceForm>
   );
