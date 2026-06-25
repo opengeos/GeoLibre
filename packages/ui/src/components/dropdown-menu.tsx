@@ -115,12 +115,7 @@ DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
 export const DropdownMenuCheckboxItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem> & {
-    /**
-     * How the checked state is drawn. `"check"` (default) shows a bare checkmark
-     * only when checked. `"box"` renders a real checkbox: an always-visible
-     * square that fills and shows a checkmark when checked, matching the
-     * checkbox look used elsewhere in the app.
-     */
+    /** `"check"` (default): bare checkmark when checked. `"box"`: always-visible bordered square that fills on check. */
     indicator?: "check" | "box";
   }
 >(({ className, children, checked, indicator = "check", ...props }, ref) => (
@@ -139,10 +134,16 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
           "absolute left-2 flex h-4 w-4 items-center justify-center rounded-[4px] border transition-colors",
           checked === true
             ? "border-primary bg-primary text-primary-foreground"
-            : "border-input",
+            : checked === "indeterminate"
+              ? "border-primary bg-primary/40 text-primary-foreground"
+              : "border-input",
         )}
       >
-        {checked === true ? <Check className="h-3 w-3" /> : null}
+        {checked === true ? (
+          <Check className="h-3 w-3" />
+        ) : checked === "indeterminate" ? (
+          <span className="h-0.5 w-2 rounded-full bg-current" />
+        ) : null}
       </span>
     ) : (
       <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
