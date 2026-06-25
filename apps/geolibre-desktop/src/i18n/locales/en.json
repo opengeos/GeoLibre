@@ -1963,7 +1963,8 @@
     "visibility": {
       "minZoom": "Min zoom",
       "maxZoom": "Max zoom",
-      "zoomTooltip": "Set the zoom range at which this layer remains visible on the map."
+      "minZoomTooltip": "Lowest zoom level at which this layer stays visible. Higher numbers are more zoomed in.",
+      "maxZoomTooltip": "Highest zoom level at which this layer stays visible. Higher numbers are more zoomed in."
     },
     "labels": {
       "heading": "Labels",

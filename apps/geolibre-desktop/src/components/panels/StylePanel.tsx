@@ -27,6 +27,10 @@ import {
   Select,
   Separator,
   Slider,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
@@ -796,14 +800,20 @@ function NumericStyleInput({
       <div className="flex items-center gap-1.5">
         <Label htmlFor={id}>{label}</Label>
         {tooltip ? (
-          <button
-            type="button"
-            aria-label={tooltip}
-            title={tooltip}
-            className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Info className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={tooltip}
+                  className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{tooltip}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : null}
       </div>
       <div className="relative">
@@ -1675,7 +1685,7 @@ export function StylePanel({
       <NumericStyleInput
         id={`${layer.id}-minZoom`}
         label={t("style.visibility.minZoom")}
-        tooltip={t("style.visibility.zoomTooltip")}
+        tooltip={t("style.visibility.minZoomTooltip")}
         min={MIN_LAYER_ZOOM}
         max={maxZoom}
         step={1}
@@ -1685,7 +1695,7 @@ export function StylePanel({
       <NumericStyleInput
         id={`${layer.id}-maxZoom`}
         label={t("style.visibility.maxZoom")}
-        tooltip={t("style.visibility.zoomTooltip")}
+        tooltip={t("style.visibility.maxZoomTooltip")}
         min={minZoom}
         max={MAX_LAYER_ZOOM}
         step={1}
