@@ -37,6 +37,17 @@ describe("htmlToPlainText", () => {
   it("collapses runs of whitespace", () => {
     assert.equal(htmlToPlainText("a   b\t c"), "a b c");
   });
+
+  it("decodes extended named and numeric entities", () => {
+    assert.equal(
+      htmlToPlainText("a&mdash;b &hellip; &ldquo;q&rdquo; &#163;5 &#x41;"),
+      "a—b … “q” £5 A",
+    );
+  });
+
+  it("leaves unknown entities untouched", () => {
+    assert.equal(htmlToPlainText("&unknownentity;"), "&unknownentity;");
+  });
 });
 
 describe("buildStoryMapHandoutPdf", () => {

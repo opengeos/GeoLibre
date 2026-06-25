@@ -1854,6 +1854,7 @@
       "footerText": "Footer text",
       "footerPlaceholder": "Footer shown at the bottom of each page",
       "generate": "Generate PDF",
+      "stop": "Stop",
       "progress": "Capturing view {{current}} of {{total}}…",
       "pdfFile": "PDF Document",
       "noMap": "The map is not ready yet. Try again in a moment.",

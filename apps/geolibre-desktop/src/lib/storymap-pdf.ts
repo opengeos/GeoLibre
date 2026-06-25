@@ -60,27 +60,65 @@ function lineHeightMm(fontSizePt: number): number {
 }
 
 /**
+ * Named HTML entities a WYSIWYG story editor commonly emits, mapped to their
+ * characters. Numeric entities (`&#160;`, `&#xA0;`) are handled separately.
+ * Runs in Node for tests too, so this cannot rely on the DOM to decode.
+ */
+const HTML_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  mdash: "—",
+  ndash: "–",
+  hellip: "…",
+  ldquo: "“",
+  rdquo: "”",
+  lsquo: "‘",
+  rsquo: "’",
+  laquo: "«",
+  raquo: "»",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  deg: "°",
+};
+
+/** Decode the named and numeric HTML entities in a string to their characters. */
+function decodeEntities(text: string): string {
+  return text.replace(/&(#x?[0-9a-f]+|[a-z][a-z0-9]*);/gi, (match, body) => {
+    if (body[0] === "#") {
+      const code =
+        body[1] === "x" || body[1] === "X"
+          ? parseInt(body.slice(2), 16)
+          : parseInt(body.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    const named = HTML_ENTITIES[body.toLowerCase()];
+    return named ?? match;
+  });
+}
+
+/**
  * Reduce an HTML (or plain) chapter description to single-spaced plain text.
  *
- * Block-level tags become line breaks, remaining tags are dropped, and the few
- * named entities the story editor can emit are decoded so the handout reads
- * cleanly. This is presentation-only (the text is drawn, never parsed as HTML),
- * so a permissive strip is sufficient.
+ * Block-level tags become line breaks, remaining tags are dropped, and named
+ * and numeric HTML entities are decoded so the handout reads cleanly. This is
+ * presentation-only (the text is drawn, never parsed as HTML), so a permissive
+ * strip is sufficient.
  *
  * @param html The chapter description, possibly containing HTML.
  * @returns Plain text with normalized whitespace.
  */
 export function htmlToPlainText(html: string): string {
-  return html
-    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-    .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
+  return decodeEntities(
+    html
+      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+      .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
+      .replace(/<[^>]+>/g, ""),
+  )
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]*\n[ \t]*/g, "\n")
@@ -88,8 +126,26 @@ export function htmlToPlainText(html: string): string {
 }
 
 /** Reduce HTML/multi-line text to a single line of plain text for headers. */
-function singleLine(value: string): string {
+export function singleLine(value: string): string {
   return htmlToPlainText(value).replace(/\s*\n\s*/g, " ").trim();
+}
+
+/**
+ * Append an ellipsis to a line, trimming trailing words until it (plus the
+ * ellipsis) fits within `maxWidth`, so a truncated description ends in "…".
+ */
+function truncateWithEllipsis(
+  pdf: jsPDF,
+  line: string,
+  maxWidth: number,
+): string {
+  const words = line.trimEnd().split(/\s+/);
+  while (words.length > 0) {
+    const candidate = words.join(" ") + "…";
+    if (pdf.getTextWidth(candidate) <= maxWidth) return candidate;
+    words.pop();
+  }
+  return "…";
 }
 
 /** Scale `(w, h)` to fit inside a `boxW x boxH` box, preserving aspect ratio. */
@@ -104,6 +160,18 @@ function fitInto(
   return { width: w * scale, height: h * scale };
 }
 
+/**
+ * Pick the jsPDF image format for the data. Canvases encode as PNG; a data URL
+ * keeps its real MIME type so a JPEG is not handed to the PNG parser (which
+ * would corrupt it).
+ */
+function imageFormat(data: HandoutImage["data"]): "PNG" | "JPEG" {
+  if (typeof data === "string" && /^data:image\/jpe?g[;,]/i.test(data)) {
+    return "JPEG";
+  }
+  return "PNG";
+}
+
 /** Draw an image centered within a box at `(x, y)` of size `boxW x boxH`. */
 function drawImageInBox(
   pdf: jsPDF,
@@ -116,7 +184,7 @@ function drawImageInBox(
   const fit = fitInto(image.width, image.height, boxW, boxH);
   pdf.addImage(
     image.data,
-    "PNG",
+    imageFormat(image.data),
     x + (boxW - fit.width) / 2,
     y + (boxH - fit.height) / 2,
     fit.width,
@@ -210,11 +278,18 @@ function drawChapterPage(
     pdf.setFontSize(size);
     pdf.setTextColor(60, 60, 60);
     const lines = pdf.splitTextToSize(description, contentWidth) as string[];
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
       // Stop before the footer band rather than letting long text overprint it.
       if (y + lineHeightMm(size) > bottomLimit) break;
       y += lineHeightMm(size);
-      pdf.text(line, MARGIN_MM, y);
+      // Mark the cut with an ellipsis when text remains below this last line, so
+      // a clipped description reads as truncated rather than as a clean ending.
+      const isLastDrawable = y + lineHeightMm(size) > bottomLimit;
+      const text =
+        isLastDrawable && i < lines.length - 1
+          ? truncateWithEllipsis(pdf, lines[i], contentWidth)
+          : lines[i];
+      pdf.text(text, MARGIN_MM, y);
     }
   }
 
@@ -222,8 +297,9 @@ function drawChapterPage(
   pdf.setFontSize(footerSize);
   pdf.setTextColor(130, 130, 130);
   if (footerText) {
-    // Clip an over-long footer to the content width so it never collides with
-    // the right-aligned page number.
+    // Only the first wrapped line is kept; anything that doesn't fit on one
+    // line at (contentWidth - 30) is dropped so the footer stays clear of the
+    // right-aligned page number.
     const [line] = pdf.splitTextToSize(footerText, contentWidth - 30) as string[];
     pdf.text(line ?? footerText, widthMm / 2, footerY, { align: "center" });
   }

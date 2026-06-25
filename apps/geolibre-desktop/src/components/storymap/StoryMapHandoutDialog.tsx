@@ -1,4 +1,11 @@
-import { type RefObject, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { StoryMap } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
@@ -24,6 +31,7 @@ import {
 } from "../../lib/print-layout";
 import {
   buildStoryMapHandoutPdf,
+  singleLine,
   type HandoutChapter,
 } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
@@ -73,11 +81,23 @@ function jumpAndWaitIdle(
  * CORS headers (so it would taint the canvas), letting the export proceed with
  * just the map rather than failing the whole handout.
  */
-function loadChapterPhoto(
-  url: string,
-): Promise<{ data: HTMLCanvasElement; width: number; height: number } | null> {
+type LoadedPhoto = { data: HTMLCanvasElement; width: number; height: number };
+
+function loadChapterPhoto(url: string): Promise<LoadedPhoto | null> {
   return new Promise((resolve) => {
     const img = new Image();
+    let settled = false;
+    // Resolve exactly once and tear down handlers/timer, so a slow or hung
+    // remote image can't stall the whole export (it falls back to map-only).
+    const finish = (value: LoadedPhoto | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      img.onload = null;
+      img.onerror = null;
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), IDLE_TIMEOUT_MS);
     img.crossOrigin = "anonymous";
     img.onload = () => {
       try {
@@ -86,19 +106,19 @@ function loadChapterPhoto(
         canvas.height = img.naturalHeight;
         const ctx = canvas.getContext("2d");
         if (!ctx || canvas.width === 0 || canvas.height === 0) {
-          resolve(null);
+          finish(null);
           return;
         }
         ctx.drawImage(img, 0, 0);
         // Throws if the canvas is tainted by a cross-origin image; treat that
         // as "no photo" rather than letting it break the PDF capture.
         ctx.getImageData(0, 0, 1, 1);
-        resolve({ data: canvas, width: canvas.width, height: canvas.height });
+        finish({ data: canvas, width: canvas.width, height: canvas.height });
       } catch {
-        resolve(null);
+        finish(null);
       }
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => finish(null);
     img.src = url;
   });
 }
@@ -140,6 +160,9 @@ export function StoryMapHandoutDialog({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  // Set by the Stop button to break out of the capture loop mid-export. A ref so
+  // the running loop sees the latest value without being re-created.
+  const abortRef = useRef(false);
 
   // Seed the selection (all chapters) and the title/footer from the story each
   // time the dialog opens, so it reflects the latest story without clobbering
@@ -148,7 +171,9 @@ export function StoryMapHandoutDialog({
     if (!open) return;
     setSelected(Object.fromEntries(chapters.map((c) => [c.id, true])));
     setTitle(story.title);
-    setFooter(story.footer);
+    // Strip any HTML the story footer carries (the sample footer has links) so
+    // the field shows readable text instead of raw markup.
+    setFooter(singleLine(story.footer));
     setError(null);
     setProgress(null);
     // Only re-seed on open; chapters/story are read at that moment.
@@ -181,10 +206,12 @@ export function StoryMapHandoutDialog({
     }
 
     const original = mapControllerRef.current?.readView();
+    abortRef.current = false;
     setGenerating(true);
     try {
       const captures: HandoutChapter[] = [];
       for (let i = 0; i < chosen.length; i++) {
+        if (abortRef.current) break;
         const chapter = chosen[i];
         setProgress({ current: i + 1, total: chosen.length });
         await jumpAndWaitIdle(map, chapter.location);
@@ -199,6 +226,11 @@ export function StoryMapHandoutDialog({
           map: { data: shot.image, width: shot.width, height: shot.height },
           ...(photo ? { photo } : {}),
         });
+      }
+      // Stopped before capturing anything: abandon the export rather than
+      // writing an empty PDF.
+      if (captures.length === 0) {
+        return;
       }
       const bytes = buildStoryMapHandoutPdf(captures, {
         paperSize,
@@ -313,8 +345,12 @@ export function StoryMapHandoutDialog({
             <Separator />
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label={t("storymap.handout.paperSize")}>
+              <Field
+                label={t("storymap.handout.paperSize")}
+                htmlFor="storymap-handout-paper-size"
+              >
                 <Select
+                  id="storymap-handout-paper-size"
                   value={paperSize}
                   onChange={(e) =>
                     setPaperSize(e.target.value as PaperSizeId)
@@ -327,8 +363,12 @@ export function StoryMapHandoutDialog({
                   ))}
                 </Select>
               </Field>
-              <Field label={t("storymap.handout.orientation")}>
+              <Field
+                label={t("storymap.handout.orientation")}
+                htmlFor="storymap-handout-orientation"
+              >
                 <Select
+                  id="storymap-handout-orientation"
                   value={orientation}
                   onChange={(e) =>
                     setOrientation(e.target.value as Orientation)
@@ -344,15 +384,23 @@ export function StoryMapHandoutDialog({
               </Field>
             </div>
 
-            <Field label={t("storymap.handout.documentTitle")}>
+            <Field
+              label={t("storymap.handout.documentTitle")}
+              htmlFor="storymap-handout-document-title"
+            >
               <Input
+                id="storymap-handout-document-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={t("storymap.handout.documentTitlePlaceholder")}
               />
             </Field>
-            <Field label={t("storymap.handout.footerText")}>
+            <Field
+              label={t("storymap.handout.footerText")}
+              htmlFor="storymap-handout-footer"
+            >
               <Input
+                id="storymap-handout-footer"
                 value={footer}
                 onChange={(e) => setFooter(e.target.value)}
                 placeholder={t("storymap.handout.footerPlaceholder")}
@@ -378,10 +426,13 @@ export function StoryMapHandoutDialog({
             <Button
               variant="outline"
               size="sm"
-              disabled={generating}
-              onClick={() => onOpenChange(false)}
+              onClick={() =>
+                generating ? (abortRef.current = true) : onOpenChange(false)
+              }
             >
-              {t("common.cancel")}
+              {generating
+                ? t("storymap.handout.stop")
+                : t("common.cancel")}
             </Button>
             <Button
               size="sm"
@@ -404,14 +455,18 @@ export function StoryMapHandoutDialog({
 
 function Field({
   label,
+  htmlFor,
   children,
 }: {
   label: string;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
+      <Label className="text-xs" htmlFor={htmlFor}>
+        {label}
+      </Label>
       {children}
     </div>
   );
