@@ -575,7 +575,7 @@ export class MapController {
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
-    this.publishLayerDisplayNames([]);
+    this.clearLayerDisplayNames();
   }
 
   setStyle(url: string): void {
@@ -1585,9 +1585,21 @@ export class MapController {
       // The Layer Swipe panel groups all basemap layers under "__basemap__";
       // publish the translated base-layer label last so this synthetic key
       // always wins over a layer that happens to share the id, matching the
-      // sidebar.
+      // sidebar. It is published even with no overlay layers, since the panel
+      // always lists the basemap entry.
       ["__basemap__", this.backgroundLabel],
     ]);
+    window.dispatchEvent(new CustomEvent("geolibre-layer-labels-change"));
+  }
+
+  /**
+   * Clear all published layer display names. Used on teardown so the bridge
+   * does not retain stale labels; kept separate from publishLayerDisplayNames,
+   * which always re-publishes the basemap entry.
+   */
+  private clearLayerDisplayNames(): void {
+    if (typeof window === "undefined") return;
+    (window as GeoLibreLayerLabelWindow).__GEOLIBRE_LAYER_LABELS__ = {};
     window.dispatchEvent(new CustomEvent("geolibre-layer-labels-change"));
   }
 
