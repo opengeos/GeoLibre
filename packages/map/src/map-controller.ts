@@ -1720,9 +1720,10 @@ export class MapController {
     permissions
       .query({ name: "geolocation" as PermissionName })
       .then((status) => {
-        // A real, persistent denial keeps MapLibre's disabled state; a pending
-        // "prompt" means the dialog was dismissed, so reset to allow a retry.
-        if (status.state !== "denied") recreate();
+        // Only a pending "prompt" means the dialog was dismissed, so reset to
+        // allow a retry. "denied" keeps MapLibre's disabled state, and
+        // "granted" (a contradictory code-1) is left alone rather than reset.
+        if (status.state === "prompt") recreate();
       })
       .catch(() => recreate());
   };
