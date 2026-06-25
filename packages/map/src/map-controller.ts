@@ -1694,8 +1694,17 @@ export class MapController {
     // unavailable) leave the button usable, so MapLibre's own handling is fine.
     if (!this.map || !this.geolocateControl || event?.code !== 1) return;
 
+    // Snapshot the control that errored. The reset always runs in a later
+    // microtask (the Permissions API query's `.then`, or `queueMicrotask`), so
+    // we never tear down the control mid error-dispatch. It also means the
+    // control could be torn down or replaced in between (e.g. the user toggles
+    // it off then on), so recreate() bails unless this exact instance is still
+    // mounted and never disturbs a healthy replacement.
+    const controlAtError = this.geolocateControl;
+
     const recreate = (): void => {
-      if (!this.controlVisibility.geolocate) return;
+      if (!this.map || !this.controlVisibility.geolocate) return;
+      if (this.geolocateControl !== controlAtError) return;
       // Re-create the control to clear MapLibre's permanently-disabled button.
       this.removeGeolocateControl();
       this.addGeolocateControl();
@@ -1705,7 +1714,6 @@ export class MapController {
       typeof navigator !== "undefined" ? navigator.permissions : undefined;
     if (!permissions?.query) {
       // No Permissions API: assume a dismissal so the user is never stuck.
-      // Defer so we don't tear down the control mid error-dispatch.
       queueMicrotask(recreate);
       return;
     }
