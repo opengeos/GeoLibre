@@ -49,6 +49,9 @@ export interface HandoutOptions {
 }
 
 const MARGIN_MM = 12;
+/** Width reserved at each edge for the right-aligned page number in the footer,
+ * so the centered footer text never collides with it. */
+const PAGE_NUM_SLOT_MM = 24;
 /** Points to millimetres (1 pt = 1/72 in). */
 const PT_TO_MM = 25.4 / 72;
 /** Line spacing multiplier applied to a font's point size. */
@@ -124,7 +127,10 @@ export function htmlToPlainText(html: string): string {
       .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1>/gi, "")
       .replace(/<\s*br\s*\/?\s*>/gi, "\n")
       .replace(/<\/\s*(p|div|li|h[1-6]|tr)\s*>/gi, "\n")
-      .replace(/<[^>]+>/g, ""),
+      // Strip remaining tags, honouring quoted attribute values so a `>` inside
+      // an attribute (e.g. title="a > b") doesn't end the match early and leak
+      // the rest of the tag as text.
+      .replace(/<[^>"']*(?:"[^"]*"[^>"']*|'[^']*'[^>"']*)*>/g, ""),
   )
     .replace(/[ \t]+/g, " ")
     .replace(/\n{3,}/g, "\n\n")
@@ -304,10 +310,11 @@ function drawChapterPage(
   pdf.setFontSize(footerSize);
   pdf.setTextColor(130, 130, 130);
   if (footerText) {
-    // Only the first wrapped line is kept; anything that doesn't fit on one
-    // line at (contentWidth - 30) is dropped so the footer stays clear of the
-    // right-aligned page number.
-    const [line] = pdf.splitTextToSize(footerText, contentWidth - 30) as string[];
+    // Keep the footer centered but bound its width symmetrically so it stays
+    // clear of the right-aligned page number on both sides, even on wide pages
+    // (e.g. Tabloid landscape). Only the first wrapped line is kept.
+    const footerMaxWidth = Math.max(20, widthMm - 2 * (MARGIN_MM + PAGE_NUM_SLOT_MM));
+    const [line] = pdf.splitTextToSize(footerText, footerMaxWidth) as string[];
     pdf.text(line ?? footerText, widthMm / 2, footerY, { align: "center" });
   }
   pdf.text(`${pageNumber} / ${pageCount}`, widthMm - MARGIN_MM, footerY, {

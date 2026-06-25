@@ -59,6 +59,10 @@ describe("htmlToPlainText", () => {
       "Hello",
     );
   });
+
+  it("strips tags with a '>' inside a quoted attribute value", () => {
+    assert.equal(htmlToPlainText('<span title="a > b">text</span>'), "text");
+  });
 });
 
 describe("buildStoryMapHandoutPdf", () => {

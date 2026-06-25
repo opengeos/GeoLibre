@@ -49,11 +49,14 @@ const IDLE_TIMEOUT_MS = 5000;
 /**
  * Jump the map to a chapter location and resolve once it has rendered all
  * tiles (the `idle` event), with a timeout so a chapter that never fully loads
- * (e.g. a throttled tab) cannot stall the whole export.
+ * (e.g. a throttled tab) cannot stall the whole export. Also resolves promptly
+ * when `isAborted()` becomes true so the Stop button takes effect mid-wait
+ * instead of after the full timeout.
  */
 function jumpAndWaitIdle(
   map: maplibregl.Map,
   location: StoryMap["chapters"][number]["location"],
+  isAborted: () => boolean,
 ): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
@@ -62,16 +65,22 @@ function jumpAndWaitIdle(
       settled = true;
       map.off("idle", finish);
       clearTimeout(timer);
+      clearInterval(poll);
       resolve();
     };
     const timer = setTimeout(finish, IDLE_TIMEOUT_MS);
-    map.on("idle", finish);
+    const poll = setInterval(() => {
+      if (isAborted()) finish();
+    }, 150);
     map.jumpTo({
       center: location.center,
       zoom: location.zoom,
       pitch: location.pitch,
       bearing: location.bearing,
     });
+    // Register after jumpTo so a pre-existing idle event isn't consumed before
+    // the new camera has started rendering.
+    map.on("idle", finish);
   });
 }
 
@@ -174,9 +183,9 @@ export function StoryMapHandoutDialog({
   useEffect(() => {
     if (!open) return;
     setSelected(Object.fromEntries(chapters.map((c) => [c.id, true])));
-    setTitle(story.title);
-    // Strip any HTML the story footer carries (the sample footer has links) so
-    // the field shows readable text instead of raw markup.
+    // Strip any HTML the story title/footer carry (the sample footer has links)
+    // so the fields show readable text instead of raw markup.
+    setTitle(singleLine(story.title));
     setFooter(singleLine(story.footer));
     setError(null);
     setProgress(null);
@@ -218,7 +227,8 @@ export function StoryMapHandoutDialog({
         if (abortRef.current) break;
         const chapter = chosen[i];
         setProgress({ current: i + 1, total: chosen.length });
-        await jumpAndWaitIdle(map, chapter.location);
+        await jumpAndWaitIdle(map, chapter.location, () => abortRef.current);
+        if (abortRef.current) break;
         const shot = captureMapImage(map);
         // Load the chapter's own photo (if any) so it appears beside the map.
         const photo = chapter.image
