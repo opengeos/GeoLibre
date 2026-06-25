@@ -33,8 +33,8 @@ import "./lib/lidar-style";
 // created. See https://github.com/hyperknot/openfreemap/issues/118.
 import "./lib/rtl-text";
 import "./lib/swipe-style";
-import { TooltipProvider } from "@geolibre/ui";
 import { registerSW } from "virtual:pwa-register";
+import { TooltipProvider } from "@geolibre/ui";
 import { I18nextProvider } from "react-i18next";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
 // param, stored settings, or the browser) before React renders, so the first

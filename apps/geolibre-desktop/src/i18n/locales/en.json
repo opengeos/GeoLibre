@@ -1963,8 +1963,8 @@
     "visibility": {
       "minZoom": "Min zoom",
       "maxZoom": "Max zoom",
-      "minZoomTooltip": "Lowest zoom level at which this layer is visible. Higher numbers are more zoomed in.",
-      "maxZoomTooltip": "Zoom level at which this layer becomes hidden. Higher numbers are more zoomed in."
+      "minZoomTooltip": "Zoom level at which this layer appears. Higher numbers are more zoomed in.",
+      "maxZoomTooltip": "Zoom level at which this layer disappears. Higher numbers are more zoomed in."
     },
     "labels": {
       "heading": "Labels",
