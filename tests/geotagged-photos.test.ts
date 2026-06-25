@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import type { FeatureCollection, Point } from "geojson";
 import {
   buildPhotoProperties,
   isPhotoDropFileName,
   isPhotoFileName,
   isValidLngLat,
   PHOTO_IMAGE_EXTENSIONS,
+  relocatePhotoFeatures,
 } from "../apps/geolibre-desktop/src/lib/geotagged-photos";
 import { PHOTO_PROPERTY } from "../apps/geolibre-desktop/src/lib/field-collection";
 
@@ -127,5 +129,39 @@ describe("buildPhotoProperties", () => {
       null,
     );
     assert.equal(props.camera, "Canon EOS R5");
+  });
+});
+
+describe("relocatePhotoFeatures", () => {
+  const collection: FeatureCollection<Point> = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [-100, 40] },
+        properties: { name: "a.jpg", [PHOTO_PROPERTY]: "data:image/jpeg;a" },
+      },
+      {
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [-100, 40] },
+        properties: { name: "b.jpg", camera: "Canon" },
+      },
+    ],
+  };
+
+  it("moves every feature to the new position and keeps properties", () => {
+    const moved = relocatePhotoFeatures(collection, [-122.4, 37.8]);
+    assert.equal(moved.features.length, 2);
+    for (const feature of moved.features) {
+      assert.deepEqual(feature.geometry.coordinates, [-122.4, 37.8]);
+    }
+    assert.equal(moved.features[0].properties?.[PHOTO_PROPERTY], "data:image/jpeg;a");
+    assert.equal(moved.features[1].properties?.camera, "Canon");
+  });
+
+  it("does not mutate the source collection", () => {
+    relocatePhotoFeatures(collection, [0, 0]);
+    assert.deepEqual(collection.features[0].geometry.coordinates, [-100, 40]);
+    assert.deepEqual(collection.features[1].geometry.coordinates, [-100, 40]);
   });
 });

@@ -1842,6 +1842,65 @@ body,
   border-left-color: hsl(var(--popover));
 }
 
+/* The draggable photo-placement pin's hint popup (manual placement of a
+   non-geotagged photo). Themed to match the app's popover surface. */
+.geolibre-placement-popup-root .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.18),
+    0 4px 6px -4px rgb(0 0 0 / 0.18);
+  color: hsl(var(--popover-foreground));
+  padding: 0.625rem 0.75rem;
+}
+
+.geolibre-placement-popup-root.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.geolibre-placement-popup-root.maplibregl-popup-anchor-top-left
+  .maplibregl-popup-tip,
+.geolibre-placement-popup-root.maplibregl-popup-anchor-top-right
+  .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}
+
+.geolibre-placement-popup-root.maplibregl-popup-anchor-bottom
+  .maplibregl-popup-tip,
+.geolibre-placement-popup-root.maplibregl-popup-anchor-bottom-left
+  .maplibregl-popup-tip,
+.geolibre-placement-popup-root.maplibregl-popup-anchor-bottom-right
+  .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+
+.geolibre-placement-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 13rem;
+}
+
+.geolibre-placement-popup-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: hsl(var(--popover-foreground));
+}
+
+.geolibre-placement-popup-done {
+  align-self: flex-end;
+  border-radius: 0.375rem;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.geolibre-placement-popup-done:hover {
+  background: hsl(var(--primary) / 0.9);
+}
+
 .swipe-control-panel .swipe-control-select {
   height: 28px;
   line-height: 28px;

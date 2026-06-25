@@ -325,7 +325,12 @@
       "skippedNote_one": "{{count}} photo was skipped (no GPS location).",
       "skippedNote_other": "{{count}} photos were skipped (no GPS location).",
       "noThumbnailNote_one": "{{count}} photo has no thumbnail (HEIC or unsupported format).",
-      "noThumbnailNote_other": "{{count}} photos have no thumbnail (HEIC or unsupported format)."
+      "noThumbnailNote_other": "{{count}} photos have no thumbnail (HEIC or unsupported format).",
+      "manualPromptTitle": "No GPS location was found in this photo.",
+      "manualPromptBody": "Place it at the current map center and drag it into position on the map.",
+      "manualPromptCenter": "Map center: {{lng}}, {{lat}}",
+      "manualPlace": "Place at map center",
+      "manualHint": "Drag this pin to position the photo, then click Done."
     },
     "mbtiles": {
       "defaultName": "MBTiles Layer",
