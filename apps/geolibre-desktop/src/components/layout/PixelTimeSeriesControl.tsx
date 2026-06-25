@@ -444,7 +444,15 @@ export function PixelTimeSeriesControl({
       setSelectedBand(bandOptions[0].index);
   }, [bandOptions, selectedBand]);
 
-  const truncatedResult = loadedResults.find((r) => r.truncated);
+  // Show the most-downsampled truncated result (fewest kept steps), so when
+  // points were queried against different timelines the notice reflects the
+  // most aggressive downsampling rather than whichever happened to be first.
+  const truncatedResult = loadedResults
+    .filter((r) => r.truncated)
+    .reduce<PixelTimeSeriesResult | null>(
+      (worst, r) => (worst == null || r.stepCount < worst.stepCount ? r : worst),
+      null,
+    );
   const truncated = truncatedResult != null;
   const truncatedKept = truncatedResult?.stepCount ?? 0;
   const truncatedTotal = truncatedResult?.originalStepCount ?? 0;
@@ -621,7 +629,9 @@ export function PixelTimeSeriesControl({
 
             {points.length > 0 ? (
               <ul className="flex flex-col gap-1" data-testid="pixel-time-series-points">
-                {points.map((point) => (
+                {points.map((point) => {
+                  const prog = progressById[point.id];
+                  return (
                   <li
                     key={point.id}
                     className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm"
@@ -644,11 +654,10 @@ export function PixelTimeSeriesControl({
                             className="h-3 w-3 animate-spin"
                             aria-hidden="true"
                           />
-                          {progressById[point.id] &&
-                          progressById[point.id].total > 0
+                          {prog && prog.total > 0
                             ? t("pixelTimeSeries.progress", {
-                                done: progressById[point.id].done,
-                                total: progressById[point.id].total,
+                                done: prog.done,
+                                total: prog.total,
                               })
                             : t("pixelTimeSeries.querying")}
                         </span>
@@ -669,7 +678,8 @@ export function PixelTimeSeriesControl({
                       <X className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : null}
           </div>
@@ -680,6 +690,7 @@ export function PixelTimeSeriesControl({
               size="sm"
               variant={picking ? "secondary" : "default"}
               onClick={() => setPicking((p) => !p)}
+              aria-pressed={picking}
             >
               <Crosshair className="h-3.5 w-3.5" aria-hidden="true" />
               {picking

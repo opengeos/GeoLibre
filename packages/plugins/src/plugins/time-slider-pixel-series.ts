@@ -355,9 +355,20 @@ export async function queryPixelTimeSeries(
   const total = sources.length * steps.length;
   let completed = 0;
 
-  // Per-source result slots, filled by index so order is preserved regardless of
-  // which task finishes first.
-  const points = sources.map(() => new Array<PixelSeriesPoint>(steps.length));
+  // Per-source result slots, pre-filled with empty points so order is preserved
+  // and there are no sparse holes: if the query is aborted, workers stop before
+  // pulling some tasks, so those slots keep their (gap) placeholder instead of
+  // staying `undefined` and breaking the band-union loop below.
+  const points = sources.map(() =>
+    steps.map(
+      (date): PixelSeriesPoint => ({
+        date: isoDate(date),
+        timestamp: date.getTime(),
+        url: "",
+        bands: [],
+      }),
+    ),
+  );
 
   // Flatten every (source, step) into one task list so READ_CONCURRENCY bounds
   // the reads across the whole query. Running runWithConcurrency per source
