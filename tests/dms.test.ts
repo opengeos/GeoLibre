@@ -166,8 +166,9 @@ describe("ddmAxisToDecimal", () => {
   it("round-trips with decimalToDdmAxis", () => {
     const original = 42.145937;
     const back = ddmAxisToDecimal(decimalToDdmAxis(original, "lat"), "lat");
-    // Four-decimal minutes limit precision to roughly 0.0001' ~= 2e-6 degrees.
-    assert.ok(Math.abs(back - original) < 1e-4);
+    // Four-decimal minutes limit precision to ~0.0001'/60 ≈ 1.7e-6 degrees; the
+    // bound sits a few times above that so it guards regressions without flaking.
+    assert.ok(Math.abs(back - original) < 5e-6);
   });
 
   it("defaults blank minutes to zero", () => {

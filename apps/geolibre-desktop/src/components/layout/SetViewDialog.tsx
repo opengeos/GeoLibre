@@ -433,9 +433,10 @@ export function SetViewDialog({
         <Label htmlFor={`set-view-ddm-${axis}-deg`}>{t(labelKey)}</Label>
         <div className="grid grid-cols-[repeat(2,minmax(0,1fr))_auto] gap-2">
           {/* Decimal minutes cap just under 60 to match the [0, 60) the
-              validator accepts, so the spinner can't reach a rejected value. */}
+              validator accepts, so the spinner can't reach a rejected value.
+              Same 59.999 ceiling as the DMS minutes/seconds fields. */}
           {part("deg", "toolbar.setView.degrees", degMax, "°")}
-          {part("min", "toolbar.setView.minutes", 59.9999, "′")}
+          {part("min", "toolbar.setView.minutes", 59.999, "′")}
           <Select
             id={`set-view-ddm-${axis}-dir`}
             className="w-16"
