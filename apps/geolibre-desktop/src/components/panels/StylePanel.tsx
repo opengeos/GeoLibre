@@ -29,7 +29,6 @@ import {
   Slider,
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
@@ -770,11 +769,7 @@ interface NumericStyleInputProps {
   max: number;
   step: number;
   onChange: (value: number) => void;
-  /**
-   * Optional explanatory text shown on hover/focus via an inline info icon next
-   * to the label. Helps novice users understand technical parameters such as
-   * the layer zoom-visibility range.
-   */
+  /** When set, an info icon with this hover/focus tooltip is shown by the label. */
   tooltip?: string;
 }
 
@@ -800,20 +795,18 @@ function NumericStyleInput({
       <div className="flex items-center gap-1.5">
         <Label htmlFor={id}>{label}</Label>
         {tooltip ? (
-          <TooltipProvider delayDuration={200}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={tooltip}
-                  className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>{tooltip}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={tooltip}
+                className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+          </Tooltip>
         ) : null}
       </div>
       <div className="relative">

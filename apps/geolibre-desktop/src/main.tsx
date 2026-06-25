@@ -33,6 +33,7 @@ import "./lib/lidar-style";
 // created. See https://github.com/hyperknot/openfreemap/issues/118.
 import "./lib/rtl-text";
 import "./lib/swipe-style";
+import { TooltipProvider } from "@geolibre/ui";
 import { registerSW } from "virtual:pwa-register";
 import { I18nextProvider } from "react-i18next";
 // Initializes i18next (resolves the UI language from the `?locale`/`?lang` query
@@ -92,7 +93,9 @@ void Promise.all([import("./App"), import("./components/common/error-boundaries"
       <React.StrictMode>
         <I18nextProvider i18n={i18n}>
           <AppErrorBoundary>
-            <App />
+            <TooltipProvider delayDuration={200}>
+              <App />
+            </TooltipProvider>
           </AppErrorBoundary>
         </I18nextProvider>
       </React.StrictMode>,
