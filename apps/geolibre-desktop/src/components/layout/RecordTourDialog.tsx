@@ -116,15 +116,15 @@ export function RecordTourDialog({
   // accident from an edit whose warning may have scrolled out of view.
   const editingFrozen = busy || status === "ready";
 
-  // Clear transient result messages and drop any finished-but-unsaved take when
-  // the tour is edited, so a stale recording can't be saved for a changed tour.
-  // (Edits are blocked while a take is held, so this only fires from "idle".)
-  const invalidateRecording = () => {
+  // Clear the last save/record outcome banner. Used when starting to build a
+  // new tour (adding the first/next view); plain keyframe edits leave it alone
+  // so a "Saved …" note doesn't vanish on an unrelated tweak. A pending take is
+  // never dropped here: editing is frozen while one is held, so the only way to
+  // drop it is the explicit Discard button.
+  const clearResultMessages = () => {
     setSavedName(null);
     setSaveCancelled(false);
     setError(null);
-    setPendingBlob(null);
-    setStatus((current) => (current === "ready" ? "idle" : current));
   };
 
   const onDragStart = (event: React.PointerEvent) => {
@@ -181,7 +181,7 @@ export function RecordTourDialog({
   const addCurrentView = () => {
     const view = captureView();
     if (!view) return;
-    invalidateRecording();
+    clearResultMessages();
     setKeyframes((current) => [
       ...current,
       {
@@ -198,19 +198,16 @@ export function RecordTourDialog({
   const recaptureKeyframe = (id: string) => {
     const view = captureView();
     if (!view) return;
-    invalidateRecording();
     setKeyframes((current) =>
       current.map((kf) => (kf.id === id ? { ...kf, ...view } : kf)),
     );
   };
 
   const removeKeyframe = (id: string) => {
-    invalidateRecording();
     setKeyframes((current) => current.filter((kf) => kf.id !== id));
   };
 
   const move = (index: number, delta: number) => {
-    invalidateRecording();
     setKeyframes((current) => {
       const next = [...current];
       const target = index + delta;
@@ -221,7 +218,6 @@ export function RecordTourDialog({
   };
 
   const setSegmentSeconds = (id: string, seconds: number) => {
-    invalidateRecording();
     setKeyframes((current) =>
       current.map((kf) =>
         kf.id === id ? { ...kf, durationMs: Math.round(seconds * 1000) } : kf,
@@ -281,6 +277,10 @@ export function RecordTourDialog({
       setStatus("idle");
     } finally {
       abortRef.current = null;
+      // Safety net: if neither the try nor the catch reached a terminal status
+      // (e.g. t() itself threw in the catch), fall back to "idle" so the dialog
+      // can't stay stuck on "recording" with a now-null abort controller.
+      setStatus((current) => (current === "recording" ? "idle" : current));
       setProgress(0);
     }
   };
@@ -323,9 +323,11 @@ export function RecordTourDialog({
         setSaveCancelled(true);
         setStatus("ready");
       }
-    } catch {
+    } catch (err) {
       // This block runs when writing the file fails, not when recording fails,
-      // so use the save-specific message rather than the record one.
+      // so use the save-specific message rather than the record one. Log the
+      // raw error too, since the user-facing string hides it.
+      console.warn("Tour video save failed", err);
       setError(t("recordTour.saveError"));
       setStatus("ready");
     } finally {

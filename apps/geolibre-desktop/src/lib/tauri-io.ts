@@ -1294,7 +1294,8 @@ export async function saveBinaryFileWithFallback(
   });
   if (!path) return null;
   // The Tauri write needs raw bytes, so convert a Blob only here (after the
-  // dialog is confirmed), not on every cancelled attempt.
+  // dialog is confirmed), not on every cancelled attempt. arrayBuffer() rejects
+  // on a detached Blob; that rejection propagates to the caller's catch.
   const bytes =
     content instanceof Blob
       ? new Uint8Array(await content.arrayBuffer())
