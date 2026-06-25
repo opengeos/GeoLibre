@@ -30,24 +30,30 @@ function getRuntimeEnvironment(): Record<string, string | undefined> {
 }
 
 /**
- * Provider credentials for the traffic overlays added in
- * maplibre-gl-basemap-control 0.6.0. The keys come from runtime environment
- * variables (set in Settings → Environment Variables), so users opt in with
- * their own API keys; Google Traffic reuses the same VITE_GOOGLE_MAPS_API_KEY
- * that the Street View plugin reads. Returns empty strings when unset, which the
- * control treats as "no key" (the overlay then surfaces a "Get a … API key"
- * error rather than loading tiles).
+ * Provider credentials read from runtime environment variables (set in
+ * Settings → Environment Variables), so users opt in with their own keys. This
+ * covers the traffic overlays added in maplibre-gl-basemap-control 0.6.0
+ * (Google/TomTom/HERE; Google Traffic reuses the same VITE_GOOGLE_MAPS_API_KEY
+ * that the Street View plugin reads) and the Amazon Location styles. Returns
+ * empty strings when unset, which the control treats as "no key" (the basemap
+ * then surfaces a "Get a … API key" error rather than loading tiles). The AWS
+ * region falls back to us-east-1 so Amazon styles work once only the key is set,
+ * matching the control's own default.
  */
 function getBasemapCredentials(): {
   googleMapsApiKey: string;
   tomtomApiKey: string;
   hereApiKey: string;
+  amazonApiKey: string;
+  awsRegion: string;
 } {
   const env = getRuntimeEnvironment();
   return {
     googleMapsApiKey: env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "",
     tomtomApiKey: env.VITE_TOMTOM_API_KEY?.trim() || "",
     hereApiKey: env.VITE_HERE_API_KEY?.trim() || "",
+    amazonApiKey: env.VITE_AMAZON_LOCATION_API_KEY?.trim() || "",
+    awsRegion: env.VITE_AWS_REGION?.trim() || "us-east-1",
   };
 }
 
@@ -155,9 +161,10 @@ function getBasemapControlOptions(
     collapsed: false,
     position: basemapControlPosition,
     title: "Basemaps",
-    // Traffic overlays (Google/TomTom/HERE) authenticate with the user's own
-    // API keys, read from runtime env. Unset keys are harmless: the overlay just
-    // reports a missing-key error instead of loading tiles.
+    // Provider basemaps that need a key (the Google/TomTom/HERE traffic overlays
+    // and the Amazon Location styles) authenticate with the user's own
+    // credentials, read from runtime env. Unset keys are harmless: the basemap
+    // just reports a missing-key error instead of loading tiles.
     ...getBasemapCredentials(),
     // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
     // discards every stacked raster basemap. In stack mode that silently wiped
@@ -187,11 +194,12 @@ function addRuntimeEnvListener(): void {
 
   const handleRuntimeEnvChange = () => {
     if (!basemapControl) return;
-    const { googleMapsApiKey, tomtomApiKey, hereApiKey } =
+    const { googleMapsApiKey, tomtomApiKey, hereApiKey, amazonApiKey, awsRegion } =
       getBasemapCredentials();
     basemapControl.setGoogleMapsApiKey(googleMapsApiKey);
     basemapControl.setTomTomApiKey(tomtomApiKey);
     basemapControl.setHereApiKey(hereApiKey);
+    basemapControl.setAmazonCredentials(amazonApiKey, awsRegion);
   };
 
   window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
