@@ -871,10 +871,7 @@ export function TopToolbar({
         "flex min-h-11 min-w-0 shrink-0 items-center gap-1 border-b bg-card py-1",
         compact
           ? "flex-nowrap overflow-x-auto px-1.5"
-          : // Below md the menus wrap to keep every item reachable; at md and
-            // above we switch to a single non-wrapping row and let it scroll
-            // horizontally so tablets/landscape phones can still reach the
-            // menus that overflow the viewport (e.g. Help, Settings) (#871).
+          : // Wrap below md; scroll a single row at md+ so tablets reach every menu (#871).
             "flex-wrap px-2 md:flex-nowrap md:overflow-x-auto",
       )}
     >
