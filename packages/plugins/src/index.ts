@@ -266,7 +266,7 @@ export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
-export { maplibreSwipePlugin } from "./plugins/maplibre-swipe";
+export { maplibreSwipePlugin, SWIPE_PLUGIN_ID } from "./plugins/maplibre-swipe";
 export {
   maplibreGraticulePlugin,
   GRATICULE_PLUGIN_ID,

@@ -23,6 +23,7 @@ import {
   maplibreReverseGeocodePlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
+  SWIPE_PLUGIN_ID,
   maplibreTimeSliderPlugin,
   maplibreUsgsLidarPlugin,
   PluginManager,
@@ -264,6 +265,15 @@ export function usePluginRegistry() {
     getProjectState: () => manager.getProjectState(),
     toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) => {
       const before = JSON.stringify(projectPluginStateSnapshot());
+      // Layer Swipe and split view are mutually exclusive comparison modes:
+      // stacking the swipe slider over a multi-pane grid fragments the
+      // workspace (#844). Activating swipe collapses the grid back to a single
+      // map first; the reverse direction (entering split view turns swipe off)
+      // is handled by useSwipeSplitViewExclusivity.
+      if (id === SWIPE_PLUGIN_ID && !manager.isActive(id)) {
+        const { mapLayout, setMapGrid } = useAppStore.getState();
+        if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
+      }
       // Plugin controls are imperative MapLibre code, so a throw here escapes
       // React's error boundaries. Contain it so one bad plugin can't break the
       // toggle handler — surface it in diagnostics instead. Return without
@@ -365,6 +375,39 @@ export function useExternalPluginsReady(
     () => externalPluginsLoaded,
     () => externalPluginsLoaded,
   );
+}
+
+/**
+ * Enforces mutual exclusivity between Layer Swipe and split view (#844). The two
+ * are competing comparison tools: overlaying the swipe slider on a multi-pane
+ * grid fragments the workspace, so whenever the grid becomes multi-pane the
+ * Layer Swipe control is deactivated. The reverse direction (activating swipe
+ * collapses the grid to a single map) lives in `usePluginRegistry().toggle`.
+ *
+ * Mounted once near the app root so it covers every way into split view — the
+ * View menu, loading a project, or a plugin — not just the toolbar item.
+ */
+export function useSwipeSplitViewExclusivity(
+  mapControllerRef: RefObject<MapController | null>,
+): void {
+  const paneCount = useAppStore(
+    (state) => state.mapLayout.rows * state.mapLayout.cols,
+  );
+
+  useEffect(() => {
+    if (paneCount <= 1 || !manager.isActive(SWIPE_PLUGIN_ID)) return;
+    // Deactivate via the manager and persist, mirroring usePluginRegistry's
+    // toggle so the project records swipe as off and a stray throw from the
+    // imperative control can't escape React.
+    const before = JSON.stringify(projectPluginStateSnapshot());
+    try {
+      manager.toggle(SWIPE_PLUGIN_ID, createAppAPI(mapControllerRef));
+    } catch (error) {
+      reportPluginError(SWIPE_PLUGIN_ID, "toggle", error);
+      return;
+    }
+    persistProjectPluginState(before);
+  }, [paneCount, mapControllerRef]);
 }
 
 // Manifest URLs for plugins baked into the build under public/plugins/<id>/.

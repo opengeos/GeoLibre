@@ -9,6 +9,12 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 
+/**
+ * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
+ * with split view (the two comparison modes are mutually exclusive — see #844).
+ */
+export const SWIPE_PLUGIN_ID = "maplibre-gl-swipe";
+
 let swipeControlPosition: GeoLibreMapControlPosition = "top-left";
 
 let swipeControl: SwipeControl | null = null;
@@ -16,7 +22,7 @@ let savedSwipeState: SwipeState | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
 
 export const maplibreSwipePlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-swipe",
+  id: SWIPE_PLUGIN_ID,
   name: "Layer Swipe",
   version: "0.9.1",
   activate: (app: GeoLibreAppAPI) => {

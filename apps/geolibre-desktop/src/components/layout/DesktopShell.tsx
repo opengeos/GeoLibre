@@ -69,6 +69,7 @@ import {
   createAppAPI,
   getPluginManager,
   useExternalPluginsReady,
+  useSwipeSplitViewExclusivity,
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
 import { hasReverseGeocodeConsent } from "../../lib/reverse-geocode-consent";
@@ -535,6 +536,9 @@ export function DesktopShell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
+  // Keep Layer Swipe and split view mutually exclusive (#844): entering a
+  // multi-pane grid turns the swipe slider off.
+  useSwipeSplitViewExclusivity(mapControllerRef);
   // Live-collaboration session. Owned here (rather than in TopToolbar) so both
   // the Collaborate dialog and the on-canvas status badge share one socket, and
   // so the dialog stays mounted in toolbar-hidden layouts.
