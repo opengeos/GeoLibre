@@ -837,7 +837,7 @@
     "close": "Close",
     "erroredExcluded": "Export excludes {{n}} failed read(s).",
     "querying": "Reading pixel values across the timeline...",
-    "progress": "Reading timestep {{done}} of {{total}}...",
+    "progress": "Reading {{done}} of {{total}}...",
     "noValues": "No values for the selected band at these locations (outside the raster or all timesteps are nodata).",
     "truncated": "Showing {{kept}} of {{total}} timeline steps (downsampled to limit reads).",
     "chartAria": "Line chart of pixel value over time",

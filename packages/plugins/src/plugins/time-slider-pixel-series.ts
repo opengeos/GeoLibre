@@ -427,7 +427,8 @@ export async function queryPixelTimeSeries(
     lngLat,
     series,
     bands,
-    defaultBandIndex: pickDefaultBandIndex(sources, bands, points[0] ?? []),
+    // sources is non-empty (guarded above), so points[0] always exists.
+    defaultBandIndex: pickDefaultBandIndex(sources, bands, points[0]),
     stepCount: steps.length,
     originalStepCount,
     truncated,

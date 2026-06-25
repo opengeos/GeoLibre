@@ -371,7 +371,13 @@ export function PixelTimeSeriesControl({
   const removePoint = useCallback((id: number) => {
     abortControllers.current.get(id)?.abort();
     abortControllers.current.delete(id);
-    setPoints((prev) => prev.filter((p) => p.id !== id));
+    setPoints((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      // Removing the last point empties the panel, so restart labels at 1 —
+      // matching "Clear all" and the idCounter "resets when emptied" contract.
+      if (next.length === 0) idCounter.current = 0;
+      return next;
+    });
     setProgressById((prev) => {
       if (!(id in prev)) return prev;
       const next = { ...prev };
