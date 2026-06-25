@@ -84,6 +84,7 @@ describe("bandOptionsFromResults", () => {
       bands,
       defaultBandIndex: bands[0]?.index ?? null,
       stepCount: 0,
+      originalStepCount: 0,
       truncated: false,
     }) as PixelTimeSeriesResult;
 
@@ -115,6 +116,7 @@ describe("seriesToFeatureCollection", () => {
     ],
     defaultBandIndex: 1,
     stepCount: 2,
+    originalStepCount: 2,
     truncated: false,
     series: [
       {

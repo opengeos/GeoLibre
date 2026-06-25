@@ -77,8 +77,11 @@ export interface PixelTimeSeriesResult {
    * when no bands were read at all.
    */
   defaultBandIndex: number | null;
-  /** Number of timeline steps queried per source. */
+  /** Number of timeline steps queried per source (after any downsampling). */
   stepCount: number;
+  /** Full timeline step count before downsampling (equals stepCount when not
+   * truncated). */
+  originalStepCount: number;
   /** True when the timeline had more steps than the cap and was downsampled. */
   truncated: boolean;
 }
@@ -162,15 +165,17 @@ export function downsampleSteps(
  * The timeline step dates for the active Time Slider, downsampled to the cap.
  *
  * @param maxSteps - Maximum steps before downsampling.
- * @returns The step dates and whether the timeline was downsampled. Empty when
- *   the dock is closed.
+ * @returns The (possibly downsampled) step dates, whether the timeline was
+ *   downsampled, and the full step count before downsampling. Empty when the
+ *   dock is closed.
  */
 function getTimeSliderSteps(maxSteps: number): {
   steps: Date[];
   truncated: boolean;
+  total: number;
 } {
   const control = getActiveTimeSliderControl();
-  if (!control) return { steps: [], truncated: false };
+  if (!control) return { steps: [], truncated: false, total: 0 };
   const state = control.getState();
   const steps = generateSteps(
     state.startDate,
@@ -178,7 +183,7 @@ function getTimeSliderSteps(maxSteps: number): {
     Math.max(1, state.interval),
     state.granularity,
   );
-  return downsampleSteps(steps, maxSteps);
+  return { ...downsampleSteps(steps, maxSteps), total: steps.length };
 }
 
 /**
@@ -317,7 +322,8 @@ export async function queryPixelTimeSeries(
   if (sources.length === 0) {
     throw new Error("The Time Slider has no COG sources to query.");
   }
-  const { steps, truncated } = getTimeSliderSteps(maxSteps);
+  const { steps, truncated, total: originalStepCount } =
+    getTimeSliderSteps(maxSteps);
   if (steps.length === 0) {
     throw new Error("The Time Slider timeline has no steps to query.");
   }
@@ -423,6 +429,7 @@ export async function queryPixelTimeSeries(
     bands,
     defaultBandIndex: pickDefaultBandIndex(sources, bands, points[0] ?? []),
     stepCount: steps.length,
+    originalStepCount,
     truncated,
   };
 }

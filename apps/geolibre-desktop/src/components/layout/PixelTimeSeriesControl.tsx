@@ -319,7 +319,9 @@ export function PixelTimeSeriesControl({
       runQueryForPoint(id, lngLat);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPicking(false);
+      // Skip if another overlay already handled this Escape (e.g. a dialog or
+      // autocomplete closing), so picking isn't cancelled out from under it.
+      if (event.key === "Escape" && !event.defaultPrevented) setPicking(false);
     };
     map.on("click", onClick);
     window.addEventListener("keydown", onKey);
@@ -424,8 +426,10 @@ export function PixelTimeSeriesControl({
       setSelectedBand(bandOptions[0].index);
   }, [bandOptions, selectedBand]);
 
-  const truncated = loadedResults.some((r) => r.truncated);
-  const truncatedSteps = loadedResults.find((r) => r.truncated)?.stepCount ?? 0;
+  const truncatedResult = loadedResults.find((r) => r.truncated);
+  const truncated = truncatedResult != null;
+  const truncatedKept = truncatedResult?.stepCount ?? 0;
+  const truncatedTotal = truncatedResult?.originalStepCount ?? 0;
 
   const handleExport = useCallback(
     async (format: "csv" | "geoparquet") => {
@@ -590,7 +594,10 @@ export function PixelTimeSeriesControl({
 
             {truncated ? (
               <p className="text-xs text-muted-foreground">
-                {t("pixelTimeSeries.truncated", { count: truncatedSteps })}
+                {t("pixelTimeSeries.truncated", {
+                  kept: truncatedKept,
+                  total: truncatedTotal,
+                })}
               </p>
             ) : null}
 
