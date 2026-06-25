@@ -835,6 +835,7 @@
     "clearAll": "Clear all",
     "removePoint": "Remove {{label}}",
     "close": "Close",
+    "resize": "Resize panel",
     "querying": "Reading pixel values across the timeline...",
     "progress": "Reading timestep {{done}} of {{total}}...",
     "noValues": "No values for the selected band at these locations (outside the raster or all timesteps are nodata).",

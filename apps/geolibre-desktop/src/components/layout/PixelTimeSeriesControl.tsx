@@ -10,12 +10,37 @@ import {
   valueAtBand,
 } from "@geolibre/plugins";
 import { Button, Select } from "@geolibre/ui";
-import { Crosshair, Download, LineChart, Loader2, Trash2, X } from "lucide-react";
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Crosshair, Download, GripVertical, LineChart, Loader2, Trash2, X } from "lucide-react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { MapController } from "@geolibre/map";
+import { clamp } from "../../lib/clamp";
 import { usePluginRegistry } from "../../hooks/usePlugins";
 import { exportVectorLayer } from "../../lib/vector-export";
+
+/** Default panel geometry (px). The panel opens top-right, clear of the
+ * Time Slider timeline at the bottom, then the user can drag/resize it. */
+const PANEL_DEFAULT_W = 448;
+const PANEL_MIN_W = 320;
+const PANEL_MIN_H = 240;
+const PANEL_MARGIN = 12;
+const PANEL_TOP = 64;
+
+/** A movable/resizable panel rect, in px relative to the map area. */
+interface PanelRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -87,6 +112,101 @@ export function PixelTimeSeriesControl({
   // stable id/label; it resets when the panel is emptied so labels restart at 1.
   const abortControllers = useRef<Map<number, AbortController>>(new Map());
   const idCounter = useRef(0);
+
+  // Panel geometry. Null means "use the default top-right placement (CSS)"; once
+  // the user drags or resizes, we switch to absolute px so the panel is fully
+  // movable and resizable within the map area.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [rect, setRect] = useState<PanelRect | null>(null);
+
+  // The current panel rect relative to its positioned ancestor (the map area),
+  // measured from the DOM so a drag/resize can begin from the CSS default.
+  const measureRect = useCallback((): PanelRect => {
+    const el = panelRef.current;
+    if (!el) return { x: PANEL_MARGIN, y: PANEL_TOP, w: PANEL_DEFAULT_W, h: 400 };
+    const parent = (el.offsetParent as HTMLElement | null) ?? el.parentElement;
+    const pb = parent?.getBoundingClientRect();
+    const eb = el.getBoundingClientRect();
+    return {
+      x: eb.left - (pb?.left ?? 0),
+      y: eb.top - (pb?.top ?? 0),
+      w: eb.width,
+      h: eb.height,
+    };
+  }, []);
+
+  // Shared pointer-capture drag loop: `onMove` receives the px delta from the
+  // gesture start and the rect captured when it began.
+  const startPointerGesture = useCallback(
+    (
+      event: ReactPointerEvent<HTMLElement>,
+      onMove: (dx: number, dy: number, start: PanelRect, bounds?: DOMRect) => void,
+    ) => {
+      event.preventDefault();
+      const start = rect ?? measureRect();
+      if (!rect) setRect(start);
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const parent =
+        (panelRef.current?.offsetParent as HTMLElement | null) ??
+        panelRef.current?.parentElement ??
+        null;
+      const move = (m: PointerEvent) => {
+        onMove(
+          m.clientX - startX,
+          m.clientY - startY,
+          start,
+          parent?.getBoundingClientRect(),
+        );
+      };
+      const end = () => {
+        if (handle.hasPointerCapture(event.pointerId))
+          handle.releasePointerCapture(event.pointerId);
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", end);
+        handle.removeEventListener("pointercancel", end);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", end);
+      handle.addEventListener("pointercancel", end);
+    },
+    [rect, measureRect],
+  );
+
+  const handleDragStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      // Let header buttons (close) work without starting a drag.
+      if ((event.target as HTMLElement).closest("button")) return;
+      startPointerGesture(event, (dx, dy, start, b) => {
+        const maxX = b ? b.width - start.w - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxY = b ? b.height - start.h - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        setRect({
+          ...start,
+          x: clamp(start.x + dx, 0, Math.max(0, maxX)),
+          y: clamp(start.y + dy, 0, Math.max(0, maxY)),
+        });
+      });
+    },
+    [startPointerGesture],
+  );
+
+  const handleResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+      startPointerGesture(event, (dx, dy, start, b) => {
+        const maxW = b ? b.width - start.x - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        const maxH = b ? b.height - start.y - PANEL_MARGIN : Number.POSITIVE_INFINITY;
+        setRect({
+          ...start,
+          w: clamp(start.w + dx, PANEL_MIN_W, Math.max(PANEL_MIN_W, maxW)),
+          h: clamp(start.h + dy, PANEL_MIN_H, Math.max(PANEL_MIN_H, maxH)),
+        });
+      });
+    },
+    [startPointerGesture],
+  );
 
   const abortAll = useCallback(() => {
     for (const ac of abortControllers.current.values()) ac.abort();
@@ -200,6 +320,7 @@ export function PixelTimeSeriesControl({
     setExportError(null);
     setPicking(false);
     setOpen(false);
+    setRect(null);
     idCounter.current = 0;
   }, [abortAll]);
 
@@ -353,13 +474,30 @@ export function PixelTimeSeriesControl({
 
       {open ? (
         <div
-          className="pointer-events-auto absolute bottom-8 right-3 z-20 flex max-h-[calc(100%-5rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          ref={panelRef}
+          className={
+            rect
+              ? "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+              : "pointer-events-auto absolute right-3 top-16 z-20 flex max-h-[calc(100%-8rem)] w-[min(28rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          }
+          style={
+            rect
+              ? { left: rect.x, top: rect.y, width: rect.w, height: rect.h }
+              : undefined
+          }
           role="region"
           aria-label={t("pixelTimeSeries.title")}
           data-testid="pixel-time-series-panel"
         >
-          <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+          <div
+            className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b px-3 py-2"
+            onPointerDown={handleDragStart}
+          >
             <div className="flex items-center gap-2 text-sm font-semibold">
+              <GripVertical
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
               <LineChart className="h-4 w-4 text-primary" aria-hidden="true" />
               {t("pixelTimeSeries.title")}
             </div>
@@ -522,6 +660,27 @@ export function PixelTimeSeriesControl({
                 {t("pixelTimeSeries.exportGeoParquet")}
               </Button>
             </div>
+          </div>
+
+          {/* Resize grip (bottom-right). The diagonal lines hint the affordance. */}
+          <div
+            className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
+            onPointerDown={handleResizeStart}
+            role="separator"
+            aria-label={t("pixelTimeSeries.resize")}
+          >
+            <svg
+              viewBox="0 0 10 10"
+              className="h-full w-full text-muted-foreground"
+              aria-hidden="true"
+            >
+              <path
+                d="M9 1 L1 9 M9 5 L5 9"
+                stroke="currentColor"
+                strokeWidth={1}
+                fill="none"
+              />
+            </svg>
           </div>
         </div>
       ) : null}
