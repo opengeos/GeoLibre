@@ -168,6 +168,9 @@ export function PixelTimeSeriesControl({
         panelRef.current?.parentElement ??
         null;
       const move = (m: PointerEvent) => {
+        // Bail if the panel unmounted mid-gesture (e.g. reset() on Time Slider
+        // deactivation) so we don't setState for a panel that is gone.
+        if (!panelRef.current) return;
         onMove(
           m.clientX - startX,
           m.clientY - startY,
@@ -702,12 +705,13 @@ export function PixelTimeSeriesControl({
             </div>
           </div>
 
-          {/* Resize grip (bottom-right). The diagonal lines hint the affordance. */}
+          {/* Resize grip (bottom-right). The diagonal lines hint the affordance.
+              Mouse/touch-only, so it is presentational — there is no keyboard
+              resize to expose to assistive tech. */}
           <div
             className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
             onPointerDown={handleResizeStart}
-            role="separator"
-            aria-label={t("pixelTimeSeries.resize")}
+            role="presentation"
           >
             <svg
               viewBox="0 0 10 10"

@@ -374,7 +374,13 @@ export async function queryPixelTimeSeries(
           const reading = await readAt(url);
           if (reading) point.bands = reading.bands;
         } catch {
-          // Leave bands empty: one missing/late COG should not fail the rest.
+          // Leave bands empty so one bad step charts as a gap instead of failing
+          // the whole query. A failed step read is the *expected* case here
+          // (a per-date COG may legitimately be missing/404/CORS for a sparse
+          // stack), so this intentionally swallows everything — including any
+          // programming error — rather than logging, which would be noisy across
+          // many steps. Helper purity keeps the surface small enough that a real
+          // bug surfaces in the typed call sites instead.
         } finally {
           // Write the slot before onProgress so a throwing progress callback
           // cannot leave a sparse hole that the chart would silently drop.

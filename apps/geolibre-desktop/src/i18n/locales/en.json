@@ -835,7 +835,6 @@
     "clearAll": "Clear all",
     "removePoint": "Remove {{label}}",
     "close": "Close",
-    "resize": "Resize panel",
     "erroredExcluded": "Export excludes {{n}} failed read(s).",
     "querying": "Reading pixel values across the timeline...",
     "progress": "Reading timestep {{done}} of {{total}}...",
