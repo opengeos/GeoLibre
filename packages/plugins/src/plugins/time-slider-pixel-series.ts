@@ -474,7 +474,10 @@ export function seriesToFeatureCollection(
     for (const series of result.series) {
       for (const point of series.points) {
         const base = {
-          point: label,
+          // Named "label", not "point": the latter is a PostgreSQL/PostGIS
+          // reserved type name that downstream SQL/GDAL tooling would need to
+          // quote everywhere.
+          label,
           lng,
           lat,
           date: point.date,
@@ -499,13 +502,14 @@ export function seriesToFeatureCollection(
           }
         } else {
           // A failed read still emits one placeholder row so the timestep is
-          // represented in the export.
+          // represented in the export. is_nodata is null (not false) to mark the
+          // nodata status as unknown — distinct from a successful non-nodata read.
           push(lng, lat, {
             ...base,
             band: null,
             band_name: null,
             value: null,
-            is_nodata: false,
+            is_nodata: null,
           });
         }
       }

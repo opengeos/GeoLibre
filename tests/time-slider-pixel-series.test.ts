@@ -102,6 +102,14 @@ describe("bandOptionsFromResults", () => {
     ]);
   });
 
+  it("keeps the first non-null name when both results supply one", () => {
+    const options = bandOptionsFromResults([
+      make([{ index: 1, name: "red" }]),
+      make([{ index: 1, name: "nir" }]),
+    ]);
+    assert.deepEqual(options, [{ index: 1, name: "red" }]);
+  });
+
   it("returns an empty list with no results", () => {
     assert.deepEqual(bandOptionsFromResults([]), []);
   });
@@ -160,7 +168,7 @@ describe("seriesToFeatureCollection", () => {
       { label: "Point 1", result },
     ]);
     assert.deepEqual(collection.features[0].properties, {
-      point: "Point 1",
+      label: "Point 1",
       lng: -122.5,
       lat: 45.5,
       date: "2000-01-01",
@@ -170,11 +178,13 @@ describe("seriesToFeatureCollection", () => {
       value: 10,
       is_nodata: false,
     });
-    // The empty (failed) step still emits a row with null band/value.
+    // The empty (failed) step still emits a row with null band/value and an
+    // unknown (null) nodata flag.
     const last = collection.features[2].properties;
     assert.equal(last?.date, "2001-01-01");
     assert.equal(last?.band, null);
     assert.equal(last?.value, null);
+    assert.equal(last?.is_nodata, null);
   });
 
   it("emits features for every labeled location", () => {
@@ -183,6 +193,6 @@ describe("seriesToFeatureCollection", () => {
       { label: "Point 2", result },
     ]);
     assert.equal(collection.features.length, 6);
-    assert.equal(collection.features[3].properties?.point, "Point 2");
+    assert.equal(collection.features[3].properties?.label, "Point 2");
   });
 });

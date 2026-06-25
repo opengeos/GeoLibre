@@ -52,6 +52,16 @@ const SERIES_COLORS = [
   "hsl(43 74% 49%)",
 ];
 
+// Dash pattern per source index within a point: source 0 is solid, extra
+// sources (rare multi-COG stacks) get distinct dashes so they stay readable
+// while sharing the point's color. The last entry covers any further sources.
+const SOURCE_DASHES: (string | undefined)[] = [
+  undefined,
+  "4 3",
+  "2 2",
+  "8 3",
+];
+
 interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapController | null>;
 }
@@ -409,7 +419,9 @@ export function PixelTimeSeriesControl({
                 ? `${point.label} · ${series.sourceName}`
                 : point.label,
               color: SERIES_COLORS[point.colorIndex],
-              dash: si > 0 ? "4 3" : undefined,
+              // Distinct dash per extra source so 3+ sources of one point stay
+              // distinguishable (they share the point's color).
+              dash: SOURCE_DASHES[Math.min(si, SOURCE_DASHES.length - 1)],
               points: series.points.map((pt) => ({
                 date: pt.date,
                 value: valueAtBand(pt, selectedBand),
