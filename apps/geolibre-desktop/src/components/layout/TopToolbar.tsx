@@ -93,12 +93,14 @@ import { AddNetcdfDialog } from "./AddNetcdfDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { ManagePluginsDialog } from "./ManagePluginsDialog";
+import { ProjectGalleryDialog } from "./ProjectGalleryDialog";
 import { ShareProjectDialog } from "./ShareProjectDialog";
 import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { SetViewDialog } from "./SetViewDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
+import { RecordTourDialog } from "./RecordTourDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { OfflineManagerDialog } from "./OfflineManagerDialog";
@@ -313,11 +315,13 @@ export function TopToolbar({
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [managePluginsOpen, setManagePluginsOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
   const [offlineManagerOpen, setOfflineManagerOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
+  const [recordTourOpen, setRecordTourOpen] = useState(false);
   const [georeferencerOpen, setGeoreferencerOpen] = useState(false);
   const [setViewOpen, setSetViewOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -883,10 +887,12 @@ export function TopToolbar({
           onNewProject={() => setNewProjectDialogOpen(true)}
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
+          onOpenGallery={() => setGalleryDialogOpen(true)}
           onOpenRecent={(path) => void projectFiles.handleOpenRecent(path)}
           onSave={() => void projectFiles.handleSave()}
           onSaveAs={() => void projectFiles.handleSaveAs()}
           onShare={() => setShareDialogOpen(true)}
+          onExportHtml={() => void projectFiles.handleExportHtml()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => setPrintLayoutOpen(true)}
           onDownloadOffline={() => setOfflineRegionOpen(true)}
@@ -965,6 +971,7 @@ export function TopToolbar({
           onToggleReverseGeocode={consent.handleToggleReverseGeocode}
           onToggleGraticule={() => toggle(GRATICULE_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
+          onOpenRecordTour={() => setRecordTourOpen(true)}
         />
       )}
       {isMenuVisible(uiProfile, "plugins") && (
@@ -1018,6 +1025,11 @@ export function TopToolbar({
         onOpenChange={setFieldCollectionOpen}
         mapControllerRef={mapControllerRef}
       />
+      <RecordTourDialog
+        open={recordTourOpen}
+        onOpenChange={setRecordTourOpen}
+        mapControllerRef={mapControllerRef}
+      />
       <GeoreferencerDialog
         open={georeferencerOpen}
         onOpenChange={setGeoreferencerOpen}
@@ -1048,6 +1060,13 @@ export function TopToolbar({
           );
           return { content, filename: `${safeName}.geolibre.json` };
         }}
+      />
+      <ProjectGalleryDialog
+        open={galleryDialogOpen}
+        onOpenChange={setGalleryDialogOpen}
+        onOpenProject={(url, authToken) =>
+          projectFiles.openProjectFromShareUrl(url, { authToken })
+        }
       />
       {isMenuVisible(uiProfile, "help") && (
         <HelpMenu

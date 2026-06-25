@@ -27,6 +27,9 @@ import {
   Select,
   Separator,
   Slider,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
@@ -36,6 +39,7 @@ import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
   ChevronDown,
   ChevronUp,
+  Info,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -52,6 +56,7 @@ import {
   useState,
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { clamp } from "../../lib/clamp";
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -740,10 +745,6 @@ function removeTrailingJsonCommas(value: string): string {
   return result;
 }
 
-function clampNumber(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 // Shared shell classes for every expanded StylePanel return branch. On phones
 // (max-md) it overlays the map as a bottom sheet instead of squeezing it.
 const STYLE_PANEL_ASIDE_CLASS =
@@ -765,6 +766,7 @@ interface NumericStyleInputProps {
   max: number;
   step: number;
   onChange: (value: number) => void;
+  tooltip?: string;
 }
 
 function NumericStyleInput({
@@ -775,9 +777,10 @@ function NumericStyleInput({
   max,
   step,
   onChange,
+  tooltip,
 }: NumericStyleInputProps) {
   const normalize = (next: number) =>
-    Number(clampNumber(next, min, max).toFixed(stepPrecision(step)));
+    Number(clamp(next, min, max).toFixed(stepPrecision(step)));
 
   const stepValue = (direction: 1 | -1) => {
     onChange(normalize(value + direction * step));
@@ -785,7 +788,23 @@ function NumericStyleInput({
 
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        {tooltip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={tooltip}
+                className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{tooltip}</TooltipContent>
+          </Tooltip>
+        ) : null}
+      </div>
       <div className="relative">
         <Input
           id={id}
@@ -906,13 +925,79 @@ function RasterStyleSlider({
   onChange,
   format = (next) => next.toFixed(2),
 }: RasterStyleSliderProps) {
+  // Double-clicking the value label (or the slider track) swaps the read-only
+  // value for an inline numeric input, so users can type an exact value instead
+  // of dragging to it (#832). Enter/blur commits the clamped value, Escape cancels.
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const precision = stepPrecision(step);
+  // Guard so each edit session commits (or cancels) at most once: Enter and
+  // Escape both tear down the input, and React still fires onBlur on the
+  // unmounting element. Without this, blur would re-commit after Enter or
+  // commit a cancelled draft after Escape.
+  const handledRef = useRef(false);
+
+  const commit = (raw: string) => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+    const parsed = Number(raw);
+    // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
+    // (Number("") === 0 would otherwise silently reset the slider to its min).
+    if (raw.trim() !== "" && Number.isFinite(parsed)) {
+      onChange(Number(clamp(parsed, min, max).toFixed(precision)));
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    handledRef.current = true;
+    setEditing(false);
+  };
+
+  const startEditing = () => {
+    handledRef.current = false;
+    setDraft(String(value));
+    setEditing(true);
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <Label className="text-xs">{label}</Label>
-        <span className="shrink-0 font-mono text-xs text-muted-foreground">
-          {format(value)}
-        </span>
+        {editing ? (
+          <Input
+            type="number"
+            min={min}
+            max={max}
+            step={step}
+            autoFocus
+            aria-label={`${label} value`}
+            className="h-6 w-20 px-1.5 py-0 text-right font-mono text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={(event) => commit(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commit((event.target as HTMLInputElement).value);
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancel();
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="shrink-0 cursor-text font-mono text-xs text-muted-foreground hover:text-foreground"
+            title={t("style.raster.exactValueHint")}
+            aria-label={`Edit ${label} value`}
+            onDoubleClick={startEditing}
+          >
+            {format(value)}
+          </button>
+        )}
       </div>
       <Slider
         aria-label={label}
@@ -923,6 +1008,7 @@ function RasterStyleSlider({
         onValueChange={([next]: number[]) => {
           if (typeof next === "number") onChange(next);
         }}
+        onDoubleClick={startEditing}
       />
     </div>
   );
@@ -980,6 +1066,7 @@ export function StylePanel({
     }
   }, [autoCollapse, internalCollapsed, isControlled]);
   const [draftBeforeId, setDraftBeforeId] = useState("");
+  const [showBasemapStyleLayers, setShowBasemapStyleLayers] = useState(false);
   const [draftColorExpression, setDraftColorExpression] = useState("");
   const [draftHeightExpression, setDraftHeightExpression] = useState("");
   const [draftVectorStyleMode, setDraftVectorStyleMode] =
@@ -1117,6 +1204,13 @@ export function StylePanel({
     layer?.style.vectorStyleProperty,
     layer?.style.vectorStyleStops,
   ]);
+
+  // Reset the "show basemap layers" advanced toggle back to its clean default
+  // whenever a different layer is selected. Keyed on the layer id alone so it
+  // does not re-collapse while the user edits other style fields.
+  useEffect(() => {
+    setShowBasemapStyleLayers(false);
+  }, [layer?.id]);
 
   // Heatmap/cluster apply to point layers in two render paths: core GeoJSON
   // layers (drag-drop, processing results) and Add Vector Layer point layers in
@@ -1532,6 +1626,13 @@ export function StylePanel({
     !otherLayers.some((l) => l.id === draftBeforeId)
       ? draftBeforeId
       : null;
+  // The basemap style exposes dozens of internal layer ids that overwhelm the
+  // dropdown for standard users (issue #834). Keep them behind an opt-in
+  // "advanced" toggle so the default list only shows the user's own layers —
+  // but reveal them automatically if the current value is one of them.
+  const valueIsBasemapStyleLayer = basemapStyleLayerIds.includes(draftBeforeId);
+  const basemapStyleLayersVisible =
+    showBasemapStyleLayers || valueIsBasemapStyleLayer;
   const beforeIdControl = (
     <div className="space-y-2">
       <Label htmlFor="beforeId">Insert before</Label>
@@ -1555,7 +1656,7 @@ export function StylePanel({
             ))}
           </optgroup>
         )}
-        {basemapStyleLayerIds.length > 0 && (
+        {basemapStyleLayerIds.length > 0 && basemapStyleLayersVisible && (
           <optgroup label="Basemap layers">
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
@@ -1565,19 +1666,30 @@ export function StylePanel({
           </optgroup>
         )}
       </Select>
+      {basemapStyleLayerIds.length > 0 && !valueIsBasemapStyleLayer && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            aria-controls="beforeId"
+            checked={showBasemapStyleLayers}
+            onChange={(event) => setShowBasemapStyleLayers(event.target.checked)}
+          />
+          {t("addData.shared.showBasemapLayers")}
+        </label>
+      )}
     </div>
   );
   const minZoom = styleValue(style, "minZoom");
   const maxZoom = styleValue(style, "maxZoom");
   const setMinZoom = (value: number) => {
-    const next = clampNumber(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
+    const next = clamp(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
     setLayerStyle(layer.id, {
       minZoom: next,
       maxZoom: Math.max(next, maxZoom),
     });
   };
   const setMaxZoom = (value: number) => {
-    const next = clampNumber(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
+    const next = clamp(value, MIN_LAYER_ZOOM, MAX_LAYER_ZOOM);
     setLayerStyle(layer.id, {
       minZoom: Math.min(next, minZoom),
       maxZoom: next,
@@ -1587,7 +1699,8 @@ export function StylePanel({
     <div className="grid grid-cols-2 gap-3">
       <NumericStyleInput
         id={`${layer.id}-minZoom`}
-        label="Min zoom"
+        label={t("style.visibility.minZoom")}
+        tooltip={t("style.visibility.minZoomTooltip")}
         min={MIN_LAYER_ZOOM}
         max={maxZoom}
         step={1}
@@ -1596,7 +1709,8 @@ export function StylePanel({
       />
       <NumericStyleInput
         id={`${layer.id}-maxZoom`}
-        label="Max zoom"
+        label={t("style.visibility.maxZoom")}
+        tooltip={t("style.visibility.maxZoomTooltip")}
         min={minZoom}
         max={MAX_LAYER_ZOOM}
         step={1}
@@ -2926,6 +3040,28 @@ export function StylePanel({
                     setLayerStyle(layer.id, { rasterSaturation: value })
                   }
                 />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={
+                    styleValue(style, "rasterSaturation") <= -1
+                      ? "default"
+                      : "outline"
+                  }
+                  className="w-full"
+                  aria-pressed={styleValue(style, "rasterSaturation") <= -1}
+                  title={t("style.raster.greyscaleHint")}
+                  onClick={() =>
+                    setLayerStyle(layer.id, {
+                      rasterSaturation:
+                        styleValue(style, "rasterSaturation") <= -1
+                          ? DEFAULT_LAYER_STYLE.rasterSaturation
+                          : -1,
+                    })
+                  }
+                >
+                  {t("style.raster.greyscale")}
+                </Button>
                 <RasterStyleSlider
                   label="Contrast"
                   value={styleValue(style, "rasterContrast")}
@@ -2952,6 +3088,30 @@ export function StylePanel({
             {layer.metadata.sourceKind === RASTER_SOURCE_KIND && (
               <RasterSymbologySection layer={layer} />
             )}
+            <Separator />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="w-full"
+              title={t("style.raster.resetHint")}
+              onClick={() => {
+                setLayerOpacity(layer.id, 1);
+                if (!isDeckRasterLayer) {
+                  setLayerStyle(layer.id, {
+                    rasterBrightnessMin:
+                      DEFAULT_LAYER_STYLE.rasterBrightnessMin,
+                    rasterBrightnessMax:
+                      DEFAULT_LAYER_STYLE.rasterBrightnessMax,
+                    rasterSaturation: DEFAULT_LAYER_STYLE.rasterSaturation,
+                    rasterContrast: DEFAULT_LAYER_STYLE.rasterContrast,
+                    rasterHueRotate: DEFAULT_LAYER_STYLE.rasterHueRotate,
+                  });
+                }
+              }}
+            >
+              {t("style.raster.reset")}
+            </Button>
           </div>
         </ScrollArea>
         <Separator />

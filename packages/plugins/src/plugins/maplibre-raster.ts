@@ -100,10 +100,6 @@ let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
 let restorePanelExpandTimeout: number | null = null;
 let rasterControlInterleaved = true;
-// Blob URLs minted for File-backed rasters (see addRasterToMap), keyed by
-// raster layer id. Tracked here so they can be revoked when the raster is
-// removed; otherwise each would leak until the page unloads.
-const localBytesUrls = new Map<string, string>();
 
 /**
  * Details of a local raster that the panel could not render because it is a
@@ -213,33 +209,14 @@ export async function addRasterToMap(
   if (!control) {
     throw new Error("The raster control could not be initialized.");
   }
-  const id = await control.addRaster(source, {
+  // For File-backed rasters the control retains the original bytes behind a
+  // blob URL (source.objectUrl), which the store sync surfaces as
+  // metadata.localBytesUrl so in-browser tools (the WASM Whitebox runner) can
+  // read the data back. No extra bookkeeping is needed here.
+  await control.addRaster(source, {
     name: options.name,
     zoomTo: true,
   });
-  // Retain the source bytes for File-backed rasters. The store layer only
-  // records the file name (no fetchable URL), so in-browser tools (the WASM
-  // Whitebox runner) could not read it back. Stamp a blob URL onto the layer
-  // so the data stays runnable for the lifetime of the session. The raster
-  // store sync preserves this key across its metadata rebuilds.
-  if (typeof source !== "string") {
-    const store = useAppStore.getState();
-    const layer = store.layers.find((current) => current.id === id);
-    if (layer) {
-      // Defensive: if this id ever reused an existing entry, revoke the old
-      // blob URL before replacing it so it cannot leak.
-      const previous = localBytesUrls.get(id);
-      if (previous) URL.revokeObjectURL(previous);
-      const blobUrl = URL.createObjectURL(source);
-      localBytesUrls.set(id, blobUrl);
-      store.updateLayer(id, {
-        metadata: {
-          ...layer.metadata,
-          localBytesUrl: blobUrl,
-        },
-      });
-    }
-  }
 }
 
 /**
@@ -510,16 +487,12 @@ function createRasterControl(
   for (const event of ["rasteradd", "rasterchange", "rasterremove"] as const) {
     control.on(event, () => syncRasterLayersToStoreForRuntime(control));
   }
-  // Free the per-layer classification GPU texture, and revoke any retained
-  // local-bytes blob URL, when its raster is dropped.
+  // Free the per-layer classification GPU texture when its raster is dropped.
+  // The control owns the File-backed bytes blob (source.objectUrl) and revokes
+  // it on removeRaster, so there is nothing to clean up here for that.
   control.on("rasterremove", (event) => {
     if (!event.layerId) return;
     disposeRasterClassification(event.layerId);
-    const blobUrl = localBytesUrls.get(event.layerId);
-    if (blobUrl) {
-      URL.revokeObjectURL(blobUrl);
-      localBytesUrls.delete(event.layerId);
-    }
   });
   // A striped (non-tiled) GeoTIFF cannot be streamed as tiles, so the upstream
   // fails the layer with a "not tiled" error. Offer the registered host handler

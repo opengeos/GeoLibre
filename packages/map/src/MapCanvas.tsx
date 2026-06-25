@@ -104,7 +104,23 @@ function createIdentifyPopupElement(
 
     const valueCell = document.createElement("div");
     valueCell.className = "break-words text-foreground";
-    valueCell.textContent = stringifyIdentifyValue(value);
+    // Render inline image data URLs (e.g. a geotagged-photo or field-collection
+    // thumbnail) as an actual thumbnail rather than a multi-kilobyte string.
+    // Match base64 raster images only, excluding SVG (which can carry scripts)
+    // so an untrusted GeoJSON value can't smuggle one in.
+    if (
+      typeof value === "string" &&
+      /^data:image\/(?!svg)[\w.+-]+;base64,/i.test(value)
+    ) {
+      const image = document.createElement("img");
+      image.src = value;
+      image.alt = key;
+      image.loading = "lazy";
+      image.className = "max-h-40 max-w-full rounded";
+      valueCell.appendChild(image);
+    } else {
+      valueCell.textContent = stringifyIdentifyValue(value);
+    }
 
     row.append(keyCell, valueCell);
     rows.appendChild(row);

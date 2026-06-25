@@ -21,8 +21,13 @@ import {
   RecentProjectGoneError,
   saveProjectFile,
   saveProjectFileToPath,
+  saveTextFileWithFallback,
 } from "../lib/tauri-io";
+import { buildProjectHtml } from "../lib/html-export";
 import { mergeStringLists } from "../lib/string-lists";
+import { fetchProjectFromUrl } from "../lib/project-url";
+import { resolveShareBaseUrl } from "../lib/share-geolibre";
+import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
 import { resolveProjectXyzLayers } from "../lib/xyz-url";
 import type { MapControllerRef } from "../components/layout/toolbar/constants";
@@ -129,6 +134,9 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const [saveNameInput, setSaveNameInput] = useState("");
   const projectUrlAbortRef = useRef<AbortController | null>(null);
   const recentAbortRef = useRef<AbortController | null>(null);
+  // Separate from projectUrlAbortRef so a gallery open and an Open-from-URL
+  // submit can't abort each other's in-flight fetch.
+  const shareUrlAbortRef = useRef<AbortController | null>(null);
   // Guards against overlapping saves: a second save started while a prompt
   // dialog is open would overwrite the pending prompt and strand the first
   // call's unresolved promise.
@@ -195,6 +203,67 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         projectUrlAbortRef.current = null;
       }
       setProjectUrlLoading(false);
+    }
+  };
+
+  // Load a project directly from a known URL (e.g. a Project Gallery card's raw
+  // JSON URL), bypassing the URL-input dialog. Mirrors handleOpenFromUrl's
+  // fetch → resolve → loadProject flow but takes the URL as an argument and
+  // rethrows on failure so the caller (the gallery dialog) can show the error
+  // inline next to the card it came from.
+  //
+  // When `authToken` is set (the user has a share.geolibre.app API token), the
+  // request to the share host carries it as a Bearer token so the owner's
+  // unlisted and private projects load too. The token is attached only for the
+  // share host (see shareAuthorizedFetch), never to third-party hosts a project
+  // might reference. Token-authenticated opens are not remembered as recent
+  // (path = null), since reopening a private URL on restart would 403 without
+  // the header.
+  const openProjectFromShareUrl = async (
+    url: string,
+    options: { authToken?: string } = {},
+  ): Promise<void> => {
+    const normalizedUrl = normalizeProjectUrl(url);
+    if (!normalizedUrl) {
+      throw new Error(t("toolbar.error.invalidProjectUrl"));
+    }
+
+    shareUrlAbortRef.current?.abort();
+    const controller = new AbortController();
+    shareUrlAbortRef.current = controller;
+
+    try {
+      if (options.authToken) {
+        const fetched = await fetchProjectFromUrl(normalizedUrl, {
+          signal: controller.signal,
+          fetchImpl: shareAuthorizedFetch(
+            options.authToken,
+            resolveShareBaseUrl(),
+          ),
+        });
+        const project = await resolveProjectXyzLayers(
+          fetched,
+          controller.signal,
+        );
+        if (controller.signal.aborted) return;
+        loadProject(project, null);
+        return;
+      }
+
+      const result = await openRecentProjectFile(
+        normalizedUrl,
+        controller.signal,
+      );
+      const project = await resolveProjectXyzLayers(
+        result.project,
+        controller.signal,
+      );
+      if (controller.signal.aborted) return;
+      loadProject(project, result.path);
+    } finally {
+      if (shareUrlAbortRef.current === controller) {
+        shareUrlAbortRef.current = null;
+      }
     }
   };
 
@@ -559,6 +628,54 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
   const handleSave = () => saveProject();
   const handleSaveAs = () => saveProject({ saveAs: true });
 
+  // Export the current project as a standalone interactive HTML page (#821).
+  // Shares saveProject's guard so a double-click can't open two save dialogs.
+  const handleExportHtml = async (): Promise<boolean> => {
+    if (isSavingRef.current) return false;
+    isSavingRef.current = true;
+    try {
+      // Embed local vector data (self-contained, like Share), then strip env
+      // vars: secrets that serve no purpose in a static, shareable viewer.
+      const { project, defaultProjectName } = await buildEmbeddedProject();
+      const safeProject = {
+        ...project,
+        preferences: { ...project.preferences, environmentVariables: [] },
+      };
+      const html = buildProjectHtml({
+        project: safeProject,
+        title: defaultProjectName,
+      });
+      const slug =
+        defaultProjectName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "geolibre-map";
+      // Returns null when the user cancels the save dialog; report that as a
+      // no-op rather than a successful export.
+      const savedPath = await saveTextFileWithFallback(html, {
+        defaultName: `${slug}.html`,
+        filters: [{ name: t("toolbar.item.htmlFile"), extensions: ["html"] }],
+        browserTypes: [
+          {
+            description: t("toolbar.item.htmlFile"),
+            accept: { "text/html": [".html"] },
+          },
+        ],
+        mimeType: "text/html",
+      });
+      return savedPath !== null;
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : t("toolbar.error.couldNotExportHtml"),
+      );
+      return false;
+    } finally {
+      isSavingRef.current = false;
+    }
+  };
+
   // Open-change handler for the Open-from-URL dialog; aborts an in-flight fetch
   // and resets the form when the dialog closes.
   const handleProjectUrlDialogOpenChange = (open: boolean) => {
@@ -594,10 +711,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     cancelSaveNamePrompt,
     handleOpenFromFile,
     handleOpenFromUrl,
+    openProjectFromShareUrl,
     handleOpenRecent,
     buildCurrentProject,
     buildEmbeddedProject,
     handleSave,
     handleSaveAs,
+    handleExportHtml,
   };
 }

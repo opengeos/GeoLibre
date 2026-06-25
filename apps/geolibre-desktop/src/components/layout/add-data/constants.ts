@@ -22,6 +22,7 @@ export type KindI18nKey =
   | "gpx"
   | "georss"
   | "delimitedText"
+  | "photos"
   | "mbtiles"
   | "arcgis"
   | "postgres"
@@ -41,6 +42,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   gpx: "gpx",
   georss: "georss",
   "delimited-text": "delimitedText",
+  photos: "photos",
   mbtiles: "mbtiles",
   arcgis: "arcgis",
   postgres: "postgres",

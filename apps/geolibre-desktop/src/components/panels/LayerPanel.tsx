@@ -80,6 +80,7 @@ import {
   Trash2,
   ZoomIn,
 } from "lucide-react";
+import { clamp } from "../../lib/clamp";
 import {
   getLayerRefreshConfig,
   isRefreshableLayer,
@@ -176,6 +177,123 @@ function layerTypeLabel(
   return layer.type;
 }
 
+interface LayerOpacitySliderProps {
+  label: string;
+  ariaLabel: string;
+  value: number;
+  onChange: (value: number) => void;
+}
+
+// Opacity control for the layer panel cards: a compact slider paired with a
+// value readout that, on double-click, swaps to an inline numeric input so the
+// user can type an exact value instead of dragging to it. This mirrors the
+// Style panel's RasterStyleSlider (#832) to keep interaction parity between the
+// two panels (#838). Enter/blur commits the clamped value, Escape cancels.
+function LayerOpacitySlider({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+}: LayerOpacitySliderProps) {
+  const { t } = useTranslation();
+  const min = 0;
+  const max = 1;
+  const step = 0.05;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Guard so each edit session commits (or cancels) at most once: Enter and
+  // Escape both tear down the input, and React still fires onBlur on the
+  // unmounting element. Without this, blur would re-commit after Enter or
+  // commit a cancelled draft after Escape.
+  const handledRef = useRef(false);
+
+  const commit = (raw: string) => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+    const parsed = Number(raw);
+    // Treat an empty/whitespace entry like Escape: cancel rather than commit 0
+    // (Number("") === 0 would otherwise silently reset the slider to its min).
+    if (raw.trim() !== "" && Number.isFinite(parsed)) {
+      onChange(Number(clamp(parsed, min, max).toFixed(2)));
+    }
+    setEditing(false);
+  };
+
+  const cancel = () => {
+    handledRef.current = true;
+    setEditing(false);
+  };
+
+  const startEditing = () => {
+    // The slider stays mounted while editing, so a second double-click on its
+    // track must not re-enter and clobber the in-progress draft (the value
+    // button is unmounted while editing, so it cannot re-trigger this).
+    if (editing) return;
+    handledRef.current = false;
+    setDraft(value.toFixed(2));
+    setEditing(true);
+  };
+
+  return (
+    <div className="mt-2 flex items-center gap-1">
+      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <Slider
+        aria-label={ariaLabel}
+        className="flex-1"
+        min={min}
+        max={max}
+        step={step}
+        value={[value]}
+        onValueChange={([v]: number[]) => onChange(v ?? value)}
+        onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+        onDoubleClick={(e: ReactMouseEvent) => {
+          e.stopPropagation();
+          startEditing();
+        }}
+      />
+      {editing ? (
+        <Input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          autoFocus
+          aria-label={t("layers.opacityValueInputAria", { label: ariaLabel })}
+          className="h-6 w-12 px-1 py-0 text-right font-mono text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+          onBlur={(e) => commit(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit((e.target as HTMLInputElement).value);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancel();
+            }
+          }}
+        />
+      ) : (
+        <button
+          type="button"
+          className="w-9 shrink-0 cursor-text text-right font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
+          title={t("layers.opacityExactHint")}
+          aria-label={t("layers.opacityValueEditAria", { label: ariaLabel })}
+          onClick={(e: ReactMouseEvent) => e.stopPropagation()}
+          onDoubleClick={(e: ReactMouseEvent) => {
+            e.stopPropagation();
+            startEditing();
+          }}
+        >
+          {value.toFixed(2)}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function refreshIntervalOptionValue(intervalMs: number): string {
   if (
     REFRESH_INTERVAL_OPTIONS.some((option) => option.intervalMs === intervalMs)
@@ -249,6 +367,12 @@ export function LayerPanel({
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
+  // Transient note shown when the user double-clicks the Background name (the
+  // rename gesture on every other layer). The background name is fixed, so
+  // instead of staying silent we surface a short-lived message explaining why
+  // (#838). The timer ref clears it after the standard status duration.
+  const [backgroundNameNotice, setBackgroundNameNotice] = useState(false);
+  const backgroundNoticeTimerRef = useRef<number | null>(null);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
     null,
   );
@@ -476,6 +600,26 @@ export function LayerPanel({
     setEditingLayerId(null);
     setEditingName("");
   };
+
+  const showBackgroundNameNotice = useCallback(() => {
+    if (backgroundNoticeTimerRef.current !== null) {
+      window.clearTimeout(backgroundNoticeTimerRef.current);
+    }
+    setBackgroundNameNotice(true);
+    backgroundNoticeTimerRef.current = window.setTimeout(() => {
+      backgroundNoticeTimerRef.current = null;
+      setBackgroundNameNotice(false);
+    }, REFRESH_STATUS_DURATION_MS);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (backgroundNoticeTimerRef.current !== null) {
+        window.clearTimeout(backgroundNoticeTimerRef.current);
+      }
+    },
+    [],
+  );
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
     const timer = refreshStatusTimersRef.current.get(layerId);
@@ -1184,23 +1328,12 @@ export function LayerPanel({
           </DropdownMenu>
         </div>
         {!group.collapsed && (
-          <div className="mt-2 flex items-center gap-1">
-            <span className="text-[10px] text-muted-foreground">
-              {t("layers.groupOpacity")}
-            </span>
-            <Slider
-              aria-label={t("layers.groupOpacityAria", { name: group.name })}
-              className="flex-1"
-              min={0}
-              max={1}
-              step={0.05}
-              value={[group.opacity]}
-              onValueChange={([v]: number[]) =>
-                setLayerGroupOpacity(group.id, v ?? group.opacity)
-              }
-              onClick={(e: ReactMouseEvent) => e.stopPropagation()}
-            />
-          </div>
+          <LayerOpacitySlider
+            label={t("layers.groupOpacity")}
+            ariaLabel={t("layers.groupOpacityAria", { name: group.name })}
+            value={group.opacity}
+            onChange={(v) => setLayerGroupOpacity(group.id, v)}
+          />
         )}
       </div>
     );
@@ -1534,23 +1667,12 @@ export function LayerPanel({
                     </Button>
                   </div>
                 )}
-                <div className="mt-2 flex items-center gap-1">
-                  <span className="text-[10px] text-muted-foreground">
-                    Opacity
-                  </span>
-                  <Slider
-                    aria-label={`Opacity for ${layer.name}`}
-                    className="flex-1"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={[layer.opacity]}
-                    onValueChange={([v]: number[]) =>
-                      setLayerOpacity(layer.id, v ?? layer.opacity)
-                    }
-                    onClick={(e: ReactMouseEvent) => e.stopPropagation()}
-                  />
-                </div>
+                <LayerOpacitySlider
+                  label={t("layers.opacity")}
+                  ariaLabel={t("layers.opacityFor", { name: layer.name })}
+                  value={layer.opacity}
+                  onChange={(v) => setLayerOpacity(layer.id, v)}
+                />
                 <div className="mt-2 flex gap-1">
                   <Button
                     variant="ghost"
@@ -1939,28 +2061,34 @@ export function LayerPanel({
                 )}
               </button>
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="flex-1 truncate text-sm font-medium">
+              <span
+                className="flex-1 truncate text-sm font-medium"
+                title={t("layers.backgroundNameFixed")}
+                onDoubleClick={(e: ReactMouseEvent) => {
+                  // The card's own onDoubleClick opens the basemap picker; on
+                  // the name we instead explain that the name is fixed, since
+                  // that is where users attempt the rename gesture (#838).
+                  e.stopPropagation();
+                  showBackgroundNameNotice();
+                }}
+              >
                 {t("layers.background")}
               </span>
               <span className="text-[10px] uppercase text-muted-foreground">
                 {t("layers.typeBasemap")}
               </span>
             </div>
-            <div className="mt-2 flex items-center gap-1">
-              <span className="text-[10px] text-muted-foreground">
-                {t("layers.opacity")}
-              </span>
-              <Slider
-                aria-label={t("layers.basemapOpacity")}
-                className="flex-1"
-                min={0}
-                max={1}
-                step={0.05}
-                value={[basemapOpacity]}
-                onValueChange={([v]: number[]) => setBasemapOpacity(v ?? basemapOpacity)}
-                onClick={(e: ReactMouseEvent) => e.stopPropagation()}
-              />
-            </div>
+            {backgroundNameNotice && (
+              <p className="mt-1 text-[10px] text-amber-600">
+                {t("layers.backgroundNameFixed")}
+              </p>
+            )}
+            <LayerOpacitySlider
+              label={t("layers.opacity")}
+              ariaLabel={t("layers.basemapOpacity")}
+              value={basemapOpacity}
+              onChange={setBasemapOpacity}
+            />
           </div>
         </div>
       </ScrollArea>

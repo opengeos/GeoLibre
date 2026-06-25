@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  addCogRasterLayer,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
   maplibreComponentsPlugin,
@@ -22,6 +23,7 @@ import {
   maplibreReverseGeocodePlugin,
   maplibreStreetViewPlugin,
   maplibreSwipePlugin,
+  SWIPE_PLUGIN_ID,
   maplibreTimeSliderPlugin,
   maplibreUsgsLidarPlugin,
   PluginManager,
@@ -43,10 +45,13 @@ import {
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type {
+  GeoLibreCogLayerOptions,
   GeoLibreDeckGL,
   GeoLibreExternalNativeLayerRegistration,
   GeoLibreFileDialogOptions,
   GeoLibreMapControlPosition,
+  GeoLibreTileLayerOptions,
+  GeoLibreWmsLayerOptions,
 } from "@geolibre/plugins";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -66,6 +71,7 @@ import {
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import { createWmsTileUrl } from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
 import {
@@ -94,6 +100,19 @@ function ensureFileExtension(name: string, extensions: string[]): string {
 }
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
+
+/**
+ * Translate the public {@link GeoLibreTileLayerOptions} into the option bag
+ * passed straight to `store.addTileLayer(name, opts, ...)`, dropping
+ * `beforeLayerId` (which the store takes as a separate positional argument).
+ * The remaining keys mix source-level fields (tileSize, bounds, ...) and
+ * layer-level ones (visible, opacity); the store reads each by name.
+ */
+function tileLayerStoreOptions(options?: GeoLibreTileLayerOptions) {
+  if (!options) return {};
+  const { beforeLayerId: _beforeLayerId, ...rest } = options;
+  return rest;
+}
 
 /** Records a plugin failure in the diagnostics panel without crashing the app. */
 function reportPluginError(
@@ -246,6 +265,12 @@ export function usePluginRegistry() {
     getProjectState: () => manager.getProjectState(),
     toggle: (id: string, appApi: ReturnType<typeof createAppAPI>) => {
       const before = JSON.stringify(projectPluginStateSnapshot());
+      // Layer Swipe and split view are mutually exclusive comparison modes:
+      // stacking the swipe slider over a multi-pane grid fragments the
+      // workspace (#844). The reverse direction (entering split view turns
+      // swipe off) is handled by useSwipeSplitViewExclusivity.
+      const collapseGridForSwipe =
+        id === SWIPE_PLUGIN_ID && !manager.isActive(id);
       // Plugin controls are imperative MapLibre code, so a throw here escapes
       // React's error boundaries. Contain it so one bad plugin can't break the
       // toggle handler — surface it in diagnostics instead. Return without
@@ -259,6 +284,20 @@ export function usePluginRegistry() {
         // early return below; in-memory state is not rolled back.
         reportPluginError(id, "toggle", error);
         return;
+      }
+      // Collapse the grid only once swipe actually activated, so a failed
+      // activation (a throw above, or addMapControl returning false) leaves the
+      // user's split-view layout intact. Done synchronously before React flushes
+      // effects so useSwipeSplitViewExclusivity sees the single-pane grid and
+      // doesn't undo the activation it just allowed.
+      // Relies on maplibre-swipe activating synchronously (activate returns
+      // false/undefined, never a Promise). PluginManager.activate marks a plugin
+      // active optimistically and only rolls back async failures via
+      // watchAsyncActivation, so isActive() would read true here before an async
+      // mount confirms — revisit this guard if swipe ever gains a dynamic import.
+      if (collapseGridForSwipe && manager.isActive(id)) {
+        const { mapLayout, setMapGrid } = useAppStore.getState();
+        if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
       }
       persistProjectPluginState(before);
     },
@@ -347,6 +386,39 @@ export function useExternalPluginsReady(
     () => externalPluginsLoaded,
     () => externalPluginsLoaded,
   );
+}
+
+/**
+ * Enforces mutual exclusivity between Layer Swipe and split view (#844). The two
+ * are competing comparison tools: overlaying the swipe slider on a multi-pane
+ * grid fragments the workspace, so whenever the grid becomes multi-pane the
+ * Layer Swipe control is deactivated. The reverse direction (activating swipe
+ * collapses the grid to a single map) lives in `usePluginRegistry().toggle`.
+ *
+ * Mounted once near the app root so it covers every way into split view — the
+ * View menu, loading a project, or a plugin — not just the toolbar item.
+ */
+export function useSwipeSplitViewExclusivity(
+  mapControllerRef: RefObject<MapController | null>,
+): void {
+  const paneCount = useAppStore(
+    (state) => state.mapLayout.rows * state.mapLayout.cols,
+  );
+
+  useEffect(() => {
+    if (paneCount <= 1 || !manager.isActive(SWIPE_PLUGIN_ID)) return;
+    // Deactivate via the manager and persist, mirroring usePluginRegistry's
+    // toggle so the project records swipe as off and a stray throw from the
+    // imperative control can't escape React.
+    const before = JSON.stringify(projectPluginStateSnapshot());
+    try {
+      manager.toggle(SWIPE_PLUGIN_ID, createAppAPI(mapControllerRef));
+    } catch (error) {
+      reportPluginError(SWIPE_PLUGIN_ID, "toggle", error);
+      return;
+    }
+    persistProjectPluginState(before);
+  }, [paneCount, mapControllerRef]);
 }
 
 // Manifest URLs for plugins baked into the build under public/plugins/<id>/.
@@ -464,7 +536,10 @@ export function createAppAPI(
   mapControllerRef?: RefObject<MapController | null>,
 ) {
   const store = useAppStore.getState();
-  return {
+  // Captured so methods that delegate to plugin helpers taking the AppAPI
+  // itself (e.g. addCogLayer -> addCogRasterLayer) can pass `api`. Only read
+  // when those methods are called, which is always after assignment.
+  const api = {
     setBasemap: (url: string) => store.setBasemapStyleUrl(url),
     addGeoJsonLayer: (
       name: string,
@@ -474,6 +549,118 @@ export function createAppAPI(
       const id = store.addGeoJsonLayer(name, data, sourcePath);
       return id;
     },
+    addTileLayer: (
+      name: string,
+      url: string,
+      options?: GeoLibreTileLayerOptions,
+    ) =>
+      store.addTileLayer(
+        name,
+        { type: "xyz", tiles: [url], url, ...tileLayerStoreOptions(options) },
+        options?.beforeLayerId ?? null,
+      ),
+    // Intentionally identical to addTileLayer except for the layer `type`.
+    // XYZ and WMTS tile templates render through the same syncRasterTileLayer
+    // path; the distinct type only changes how the layer is labelled/stored,
+    // so the two helpers share an implementation by design (not a copy-paste).
+    addWmtsLayer: (
+      name: string,
+      url: string,
+      options?: GeoLibreTileLayerOptions,
+    ) =>
+      store.addTileLayer(
+        name,
+        { type: "wmts", tiles: [url], url, ...tileLayerStoreOptions(options) },
+        options?.beforeLayerId ?? null,
+      ),
+    addWmsLayer: (name: string, options: GeoLibreWmsLayerOptions) => {
+      const {
+        beforeLayerId,
+        url,
+        layers,
+        styles,
+        format,
+        transparent,
+        ...tileOptions
+      } = options;
+      // TypeScript enforces these, but an untyped JS plugin can pass "" — an
+      // empty endpoint yields a relative GetMap URL that resolves against the
+      // app origin and passes the store's empty-tile guard, persisting a layer
+      // that only 404s. Reject at the API boundary instead.
+      if (!url) {
+        throw new Error("addWmsLayer: options.url must be a non-empty string.");
+      }
+      if (!layers) {
+        throw new Error(
+          "addWmsLayer: options.layers must be a non-empty string.",
+        );
+      }
+      const tileSize = tileOptions.tileSize ?? 256;
+      const resolvedStyles = styles ?? "";
+      const resolvedFormat = format ?? "image/png";
+      const resolvedTransparent = transparent ?? true;
+      const tileUrl = createWmsTileUrl({
+        endpoint: url,
+        layers,
+        styles: resolvedStyles,
+        format: resolvedFormat,
+        transparent: resolvedTransparent,
+        tileSize,
+      });
+      return store.addTileLayer(
+        name,
+        {
+          type: "wms",
+          tiles: [tileUrl],
+          url,
+          // Persist the WMS request parameters so the layer round-trips through
+          // a saved project, mirroring the Add Data dialog's WMS source.
+          source: {
+            layers,
+            styles: resolvedStyles,
+            format: resolvedFormat,
+            transparent: resolvedTransparent,
+          },
+          ...tileOptions,
+        },
+        beforeLayerId ?? null,
+      );
+    },
+    // Unlike the tile helpers above, a COG is read client-side by the maplibre
+    // raster control (band/rescale/colormap/nodata), so it delegates to the
+    // components plugin's addCogRasterLayer rather than building a store layer
+    // here. It takes the AppAPI itself (to mount the control on demand), so we
+    // hand it the captured `api`.
+    addCogLayer: (
+      name: string,
+      url: string,
+      options?: GeoLibreCogLayerOptions,
+    ) =>
+      addCogRasterLayer(api, {
+        url,
+        name,
+        ...(options?.bands !== undefined ? { bands: options.bands } : {}),
+        // The public option is a loose `string` (so JS plugins need not import
+        // the renderer's colormap union); the renderer validates the name and
+        // falls back to its default for anything it doesn't recognize.
+        ...(options?.colormap !== undefined
+          ? {
+              colormap:
+                options.colormap as Parameters<
+                  typeof addCogRasterLayer
+                >[1]["colormap"],
+            }
+          : {}),
+        ...(options?.rescaleMin !== undefined
+          ? { rescaleMin: options.rescaleMin }
+          : {}),
+        ...(options?.rescaleMax !== undefined
+          ? { rescaleMax: options.rescaleMax }
+          : {}),
+        ...(options?.nodata !== undefined ? { nodata: options.nodata } : {}),
+        ...(options?.opacity !== undefined ? { opacity: options.opacity } : {}),
+        beforeLayerId: options?.beforeLayerId ?? null,
+      }),
     getActiveBasemap: () => useAppStore.getState().basemapStyleUrl,
     onBasemapChange: (callback: (styleUrl: string) => void) =>
       useAppStore.subscribe((state, prev) => {
@@ -622,6 +809,7 @@ export function createAppAPI(
     closeFloatingPanel,
     getOpenFloatingPanels,
   };
+  return api;
 }
 
 async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {

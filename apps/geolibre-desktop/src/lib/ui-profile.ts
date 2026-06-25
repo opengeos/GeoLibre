@@ -86,6 +86,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "vector", section: "files", labelKey: "toolbar.item.vectorLayer", tier: "basic" },
   { id: "raster", section: "files", labelKey: "toolbar.item.rasterLayer", tier: "basic" },
   { id: "delimited-text", section: "files", labelKey: "toolbar.layerType.delimitedText", tier: "basic" },
+  { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
   { id: "mbtiles", section: "files", labelKey: "toolbar.layerType.mbtiles", tier: "basic" },
   { id: "osm-pbf", section: "files", labelKey: "toolbar.item.osmPbfLayer", tier: "advanced" },
@@ -200,6 +201,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "project.save", menuId: "project", labelKey: "common.save", tier: "basic" },
   { id: "project.saveAs", menuId: "project", labelKey: "toolbar.item.saveAsEllipsis", tier: "basic" },
   { id: "project.share", menuId: "project", labelKey: "toolbar.item.shareEllipsis", tier: "intermediate" },
+  { id: "project.exportHtml", menuId: "project", labelKey: "toolbar.item.exportHtmlEllipsis", tier: "intermediate" },
   { id: "project.collaborate", menuId: "project", labelKey: "toolbar.item.collaborateEllipsis", tier: "advanced" },
   { id: "project.print", menuId: "project", labelKey: "toolbar.item.printEllipsis", tier: "intermediate" },
   // Print Layout is the primary way any user turns a map into a shareable PDF/PNG
@@ -274,6 +276,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.minimap", menuId: "controls", labelKey: "toolbar.item.minimap", tier: "intermediate" },
   { id: "controls.viewState", menuId: "controls", labelKey: "toolbar.item.viewState", tier: "advanced" },
   { id: "controls.fieldCollection", menuId: "controls", labelKey: "toolbar.item.fieldCollection", tier: "advanced" },
+  { id: "controls.recordTour", menuId: "controls", labelKey: "toolbar.item.recordTour", tier: "advanced" },
   // Settings (the Settings menu and its Language/Layout/Interface entries always show)
   { id: "settings.mapPreferences", menuId: "settings", labelKey: "settings.menu.mapPreferences", tier: "intermediate" },
   { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },

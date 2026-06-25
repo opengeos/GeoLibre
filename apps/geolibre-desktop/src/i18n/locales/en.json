@@ -92,6 +92,7 @@
     "remove": "Remove",
     "add": "Add",
     "ok": "OK",
+    "done": "Done",
     "openWebApp": "Open the GeoLibre web app"
   },
   "addData": {
@@ -124,6 +125,10 @@
       "delimitedText": {
         "label": "Add Delimited Text Layer",
         "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields."
+      },
+      "photos": {
+        "label": "Add Geotagged Photos",
+        "description": "Import JPEG/HEIC photos as a point layer, placing each one from its EXIF GPS location."
       },
       "mbtiles": {
         "label": "Add MBTiles Layer",
@@ -304,6 +309,24 @@
       "longitudeField": "Longitude field",
       "latitudeField": "Latitude field"
     },
+    "photos": {
+      "defaultName": "Photos",
+      "chooseLabel": "Photos",
+      "choosePhotos": "Choose photos",
+      "hint": "Select JPEG, PNG, TIFF, or HEIC photos. Each one is placed from its EXIF GPS location. HEIC photos are located but shown without a thumbnail.",
+      "readError": "Could not read the selected photos.",
+      "errorChooseFiles": "Choose one or more photos.",
+      "selectedCount_one": "{{count}} photo selected",
+      "selectedCount_other": "{{count}} photos selected",
+      "errorNoGps_one": "No GPS location was found in the selected photo.",
+      "errorNoGps_other": "No GPS location was found in the {{count}} selected photos.",
+      "addedSummary_one": "Added {{count}} geotagged photo.",
+      "addedSummary_other": "Added {{count}} geotagged photos.",
+      "skippedNote_one": "{{count}} photo was skipped (no GPS location).",
+      "skippedNote_other": "{{count}} photos were skipped (no GPS location).",
+      "noThumbnailNote_one": "{{count}} photo has no thumbnail (HEIC or unsupported format).",
+      "noThumbnailNote_other": "{{count}} photos have no thumbnail (HEIC or unsupported format)."
+    },
     "mbtiles": {
       "defaultName": "MBTiles Layer",
       "readError": "Could not read MBTiles file.",
@@ -450,6 +473,32 @@
     "totalFootprint_one": "{{size}} across {{count}} area",
     "totalFootprint_other": "{{size}} across {{count}} areas",
     "deviceUsage": "{{usage}} of {{quota}} used"
+  },
+  "recordTour": {
+    "title": "Record Map Tour",
+    "hint": "Pan and zoom the map, then capture each view. The map stays interactive while this panel is open.",
+    "unsupported": "This browser cannot record the map canvas. Try a recent version of Chrome, Edge, or Firefox.",
+    "addView": "Add current view",
+    "keyframeCount_one": "{{count}} keyframe",
+    "keyframeCount_other": "{{count}} keyframes",
+    "empty": "Pan and zoom the map to a starting view, then add it as the first keyframe. Add at least two keyframes to record a tour.",
+    "flyToKeyframe": "Fly to this view",
+    "start": "Start",
+    "segmentSeconds": "Seconds to move here",
+    "secondsUnit": "s",
+    "moveUp": "Move keyframe up",
+    "moveDown": "Move keyframe down",
+    "removeKeyframe": "Remove keyframe",
+    "fps": "Frames per second",
+    "estimatedLength": "About {{seconds}}s",
+    "record": "Record",
+    "videoFileType": "WebM Video",
+    "recordingStatus": "Recording… {{percent}}%",
+    "savingStatus": "Saving video…",
+    "stop": "Stop",
+    "saved": "Saved {{name}}",
+    "saveCancelled": "Save cancelled.",
+    "recordError": "Could not record the tour. Please try again."
   },
   "fieldCollection": {
     "title": "Field Collection",
@@ -654,6 +703,42 @@
     "usernameRequired": "Set a username on your share.geolibre.app account before sharing. Open your account settings to choose one, then try again.",
     "openAccountSettings": "Open account settings"
   },
+  "gallery": {
+    "title": "Project gallery",
+    "description": "Browse public projects shared on share.geolibre.app and open one in GeoLibre.",
+    "searchPlaceholder": "Filter loaded projects by title, author, or tag",
+    "loading": "Loading projects…",
+    "loadingMore": "Loading more…",
+    "loadMore": "Load more",
+    "empty": "No public projects to show yet.",
+    "noMatches": "No loaded projects match your filter.",
+    "errorFallback": "Could not load the project gallery.",
+    "errorTimeout": "The project gallery timed out. Please try again.",
+    "errorNetwork": "Could not reach share.geolibre.app. Check your internet connection.",
+    "errorHttp": "Could not load the gallery (HTTP {{status}}).",
+    "errorInvalidResponse": "Could not load the gallery (invalid server response).",
+    "errorUnauthorized": "Your share.geolibre.app API token is invalid or expired. Update it in Settings.",
+    "errorUsernameRequired": "Set a username on your share.geolibre.app account before loading your projects.",
+    "retry": "Retry",
+    "open": "Open",
+    "opening": "Opening…",
+    "openOnWeb": "View on the web",
+    "openError": "Could not open this project.",
+    "byAuthor": "by {{author}}",
+    "views_one": "{{count}} view",
+    "views_other": "{{count}} views",
+    "untitled": "Untitled Project",
+    "noThumbnail": "No preview",
+    "resizeDialog": "Resize gallery",
+    "scopeFeatured": "Featured",
+    "scopeAll": "All projects",
+    "scopeMine": "My projects",
+    "signedOutHint": "Add a share.geolibre.app API token in Settings to see your own unlisted and private projects.",
+    "emptyFeatured": "No featured projects yet.",
+    "emptyMine": "You have not shared any projects yet.",
+    "visibilityUnlisted": "Unlisted",
+    "visibilityPrivate": "Private"
+  },
   "language": {
     "label": "Language",
     "description": "Choose the language used for the interface."
@@ -851,6 +936,13 @@
     "labelPlaceholder": "Label",
     "labelLabel": "Label for map {{number}}",
     "removePane": "Remove map {{number}}"
+  },
+  "mapContextMenu": {
+    "copyCoordinatesHint": "Copy coordinates to clipboard",
+    "quickActions": "Quick actions",
+    "copyGeoJson": "Copy as GeoJSON",
+    "centerHere": "Center map here",
+    "zoomInHere": "Zoom in here"
   },
   "onboarding": {
     "title": "Welcome to GeoLibre",
@@ -1178,6 +1270,7 @@
     },
     "layerType": {
       "delimitedText": "Delimited Text Layer",
+      "photos": "Geotagged Photos",
       "gpx": "GPX Layer",
       "mbtiles": "MBTiles Layer",
       "xyz": "XYZ Layer",
@@ -1306,12 +1399,15 @@
       "openFrom": "Open From",
       "fileEllipsis": "File...",
       "urlEllipsis": "URL...",
+      "galleryEllipsis": "Gallery...",
       "openRecent": "Open Recent",
       "noRecentProjects": "No recent projects",
       "removeFromRecent": "Remove {{name}} from recent projects",
       "clearRecentProjects": "Clear Recent Projects",
       "saveAsEllipsis": "Save As...",
       "shareEllipsis": "Share...",
+      "exportHtmlEllipsis": "Export as Interactive HTML...",
+      "htmlFile": "HTML",
       "collaborateEllipsis": "Collaborate...",
       "printEllipsis": "Print...",
       "printLayoutEllipsis": "Print Layout...",
@@ -1383,6 +1479,7 @@
       "subGroupAnalysis": "Analysis",
       "mapControls": "Map controls",
       "fieldCollection": "Field Collection...",
+      "recordTour": "Record Map Tour...",
       "atmosphereEffects": "Atmospheric Effects",
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
@@ -1477,6 +1574,7 @@
       "couldNotOpenRecentProject": "Could not open the recent project.",
       "couldNotLoadRecentProject": "Could not load the recent project.",
       "couldNotSaveProject": "Could not save the project.",
+      "couldNotExportHtml": "Could not export the project to HTML.",
       "osmPbfNoFeatures": "No point, line, or polygon features were found in this OSM PBF file.",
       "couldNotLoadOsmPbf": "Could not load the OSM PBF file.",
       "osmPbfLoadFailedWithHint": "{{message}} If this is a Mapbox Vector Tile (.pbf), it cannot be loaded as an OSM extract.",
@@ -1888,6 +1986,19 @@
     "collapse": "Collapse {{title}}"
   },
   "style": {
+    "raster": {
+      "greyscale": "Greyscale",
+      "greyscaleHint": "Toggle a greyscale basemap (drives saturation to its minimum)",
+      "reset": "Reset",
+      "resetHint": "Reset adjustments to their default values",
+      "exactValueHint": "Double-click to enter an exact value"
+    },
+    "visibility": {
+      "minZoom": "Min zoom",
+      "maxZoom": "Max zoom",
+      "minZoomTooltip": "Zoom level at which this layer appears. Higher numbers are more zoomed in.",
+      "maxZoomTooltip": "Zoom level at which this layer disappears. Higher numbers are more zoomed in."
+    },
     "labels": {
       "heading": "Labels",
       "show": "Show labels",
@@ -2028,7 +2139,12 @@
     "hideBackground": "Hide background",
     "showBackground": "Show background",
     "opacity": "Opacity",
+    "opacityExactHint": "Double-click to enter an exact value",
+    "opacityFor": "Opacity for {{name}}",
+    "opacityValueInputAria": "{{label}} value",
+    "opacityValueEditAria": "Edit {{label}} value",
     "basemapOpacity": "Basemap opacity",
+    "backgroundNameFixed": "The name of the background basemap is fixed and cannot be changed.",
     "newGroup": "New group",
     "collapseGroup": "Collapse group",
     "expandGroup": "Expand group",
