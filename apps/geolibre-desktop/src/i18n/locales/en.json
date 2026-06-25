@@ -836,6 +836,7 @@
     "removePoint": "Remove {{label}}",
     "close": "Close",
     "resize": "Resize panel",
+    "erroredExcluded": "Export excludes {{n}} failed read(s).",
     "querying": "Reading pixel values across the timeline...",
     "progress": "Reading timestep {{done}} of {{total}}...",
     "noValues": "No values for the selected band at these locations (outside the raster or all timesteps are nodata).",

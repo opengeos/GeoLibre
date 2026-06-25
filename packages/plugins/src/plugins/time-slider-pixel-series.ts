@@ -250,13 +250,12 @@ async function runWithConcurrency<T>(
       const index = next++;
       try {
         results[index] = await tasks[index]();
-      } catch (err) {
+      } catch {
         // A rejecting task must not kill its worker (which would leave later
-        // tasks unprocessed and the results array half-filled). Tasks are
-        // expected to record their own failure state, so swallow Error
-        // rejections only; re-throw non-Error throws so unusual misuse still
-        // surfaces rather than vanishing silently.
-        if (!(err instanceof Error)) throw err;
+        // tasks unprocessed and the results array half-filled). Tasks own their
+        // failure state via their own try/catch, so swallow everything here —
+        // including non-Error throws such as a DOMException/AbortError, which
+        // do not extend Error in browsers and would otherwise kill the worker.
       }
     }
   }

@@ -42,6 +42,16 @@ interface PanelRect {
   h: number;
 }
 
+// Theme primary first, then a small fixed palette for additional points. Kept
+// above the component so its use inside the component does not rely on hoisting.
+const SERIES_COLORS = [
+  "hsl(var(--primary))",
+  "hsl(12 76% 61%)",
+  "hsl(173 58% 39%)",
+  "hsl(262 52% 56%)",
+  "hsl(43 74% 49%)",
+];
+
 interface PixelTimeSeriesControlProps {
   mapControllerRef: RefObject<MapController | null>;
 }
@@ -62,8 +72,6 @@ interface ClickedPoint {
   error: string | null;
   /** Whether the query is still running. */
   loading: boolean;
-  /** In-flight read progress. */
-  progress: { done: number; total: number } | null;
 }
 
 /**
@@ -101,6 +109,12 @@ export function PixelTimeSeriesControl({
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState(false);
   const [points, setPoints] = useState<ClickedPoint[]>([]);
+  // Per-point read progress, kept out of `points` so the many sub-second
+  // onProgress ticks during a query don't change the `points` reference and
+  // invalidate chartSeries/loadedResults/bandOptions memos.
+  const [progressById, setProgressById] = useState<
+    Record<number, { done: number; total: number }>
+  >({});
   const [selectedBand, setSelectedBand] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
   // Export failures are kept separate from query errors so a failed export
@@ -222,26 +236,28 @@ export function PixelTimeSeriesControl({
       abortControllers.current.get(id)?.abort();
       const ac = new AbortController();
       abortControllers.current.set(id, ac);
+      const clearProgress = () =>
+        setProgressById((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
       queryPixelTimeSeries(lngLat, {
         signal: ac.signal,
         onProgress: (done, total) => {
           if (ac.signal.aborted) return;
-          setPoints((prev) =>
-            prev.map((p) =>
-              p.id === id ? { ...p, progress: { done, total } } : p,
-            ),
-          );
+          setProgressById((prev) => ({ ...prev, [id]: { done, total } }));
         },
       })
         .then((res) => {
           if (ac.signal.aborted) return;
           setPoints((prev) =>
             prev.map((p) =>
-              p.id === id
-                ? { ...p, result: res, loading: false, progress: null }
-                : p,
+              p.id === id ? { ...p, result: res, loading: false } : p,
             ),
           );
+          clearProgress();
           // First loaded point seeds the charted band; later points keep it.
           setSelectedBand((prev) => (prev == null ? res.defaultBandIndex : prev));
         })
@@ -254,11 +270,11 @@ export function PixelTimeSeriesControl({
                     ...p,
                     error: err instanceof Error ? err.message : String(err),
                     loading: false,
-                    progress: null,
                   }
                 : p,
             ),
           );
+          clearProgress();
         })
         .finally(() => {
           if (abortControllers.current.get(id) === ac)
@@ -294,9 +310,9 @@ export function PixelTimeSeriesControl({
           result: null,
           error: null,
           loading: true,
-          progress: { done: 0, total: 0 },
         },
       ]);
+      setProgressById((prev) => ({ ...prev, [id]: { done: 0, total: 0 } }));
       runQueryForPoint(id, lngLat);
     };
     const onKey = (event: KeyboardEvent) => {
@@ -316,6 +332,7 @@ export function PixelTimeSeriesControl({
   const reset = useCallback(() => {
     abortAll();
     setPoints([]);
+    setProgressById({});
     setSelectedBand(null);
     setExportError(null);
     setPicking(false);
@@ -328,15 +345,30 @@ export function PixelTimeSeriesControl({
     if (!timeSliderActive || !hasRasterStack) reset();
   }, [timeSliderActive, hasRasterStack, reset]);
 
+  // The header X only hides the panel (and stops picking); the collected points
+  // and their results survive so reopening restores them. "Clear all" is the
+  // explicit wipe.
+  const hidePanel = useCallback(() => {
+    setPicking(false);
+    setOpen(false);
+  }, []);
+
   const removePoint = useCallback((id: number) => {
     abortControllers.current.get(id)?.abort();
     abortControllers.current.delete(id);
     setPoints((prev) => prev.filter((p) => p.id !== id));
+    setProgressById((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   }, []);
 
   const clearAll = useCallback(() => {
     abortAll();
     setPoints([]);
+    setProgressById({});
     setSelectedBand(null);
     setExportError(null);
     idCounter.current = 0;
@@ -424,9 +456,12 @@ export function PixelTimeSeriesControl({
   if (!timeSliderActive || !hasRasterStack) return null;
 
   const hasLoaded = loadedResults.length > 0;
-  // Block export while any point is still querying, since handleExport only
-  // includes points that already resolved and would silently omit the rest.
+  // Block export while any point is still querying: handleExport only includes
+  // points that already resolved, so exporting mid-load would silently omit
+  // them. Errored points (no result) are also excluded, so surface their count
+  // below rather than dropping them without notice.
   const hasLoading = points.some((p) => p.loading);
+  const erroredCount = points.filter((p) => p.error).length;
   return (
     <>
       <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -504,7 +539,7 @@ export function PixelTimeSeriesControl({
             <button
               type="button"
               className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-              onClick={reset}
+              onClick={hidePanel}
               aria-label={t("pixelTimeSeries.close")}
             >
               <X className="h-4 w-4" />
@@ -581,10 +616,11 @@ export function PixelTimeSeriesControl({
                             className="h-3 w-3 animate-spin"
                             aria-hidden="true"
                           />
-                          {point.progress && point.progress.total > 0
+                          {progressById[point.id] &&
+                          progressById[point.id].total > 0
                             ? t("pixelTimeSeries.progress", {
-                                done: point.progress.done,
-                                total: point.progress.total,
+                                done: progressById[point.id].done,
+                                total: progressById[point.id].total,
                               })
                             : t("pixelTimeSeries.querying")}
                         </span>
@@ -636,6 +672,10 @@ export function PixelTimeSeriesControl({
             {exportError ? (
               <p className="w-full text-xs text-destructive" role="alert">
                 {exportError}
+              </p>
+            ) : erroredCount > 0 ? (
+              <p className="w-full text-xs text-muted-foreground">
+                {t("pixelTimeSeries.erroredExcluded", { n: erroredCount })}
               </p>
             ) : null}
             <div className="ml-auto flex items-center gap-2">
@@ -696,14 +736,6 @@ const INNER_W = CHART_W - MARGIN.left - MARGIN.right;
 const INNER_H = CHART_H - MARGIN.top - MARGIN.bottom;
 const AXIS = "hsl(var(--border))";
 const TICK = "hsl(var(--muted-foreground))";
-// Theme primary first, then a small fixed palette for additional points.
-const SERIES_COLORS = [
-  "hsl(var(--primary))",
-  "hsl(12 76% 61%)",
-  "hsl(173 58% 39%)",
-  "hsl(262 52% 56%)",
-  "hsl(43 74% 49%)",
-];
 
 /** A single chartable line: a point's value-over-time for the selected band. */
 interface ChartSeries {
@@ -764,15 +796,23 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
     max += 1;
   }
 
-  // All lines share the timeline, so the longest one drives the x-axis labels.
-  const reference = series.reduce(
-    (longest, line) =>
-      line.points.length > longest.points.length ? line : longest,
-    series[0],
-  );
-  const refPoints = reference.points;
-  const length = refPoints.length;
-  const annual = refPoints.every((point) => point.date.endsWith("-01-01"));
+  // Align every line on a shared, sorted union of dates so points queried
+  // against different timelines (e.g. the user changed the step range between
+  // clicks) line up by calendar date rather than by raw index.
+  const allDates = [
+    ...new Set(series.flatMap((line) => line.points.map((p) => p.date))),
+  ].sort();
+  const length = allDates.length;
+  const annual = allDates.every((date) => date.endsWith("-01-01"));
+
+  // Each line's value at every shared date (null where it has no reading).
+  const alignedSeries = series.map((line) => {
+    const byDate = new Map(line.points.map((p) => [p.date, p.value]));
+    return {
+      ...line,
+      values: allDates.map((date) => byDate.get(date) ?? null),
+    };
+  });
 
   const scaleX = (index: number) =>
     MARGIN.left + (length > 1 ? index / (length - 1) : 0.5) * INNER_W;
@@ -840,20 +880,20 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
             fontSize={10}
             fill={TICK}
           >
-            {axisDateLabel(refPoints[index]?.date ?? "", annual)}
+            {axisDateLabel(allDates[index] ?? "", annual)}
           </text>
         ))}
         {/* One polyline per point, breaking on missing values. */}
-        {series.map((line) => {
+        {alignedSeries.map((line) => {
           let path = "";
           let penDown = false;
-          line.points.forEach((point, index) => {
-            if (point.value == null) {
+          line.values.forEach((value, index) => {
+            if (value == null) {
               penDown = false;
               return;
             }
             const command = penDown ? "L" : "M";
-            path += `${command}${scaleX(index)} ${scaleY(point.value)} `;
+            path += `${command}${scaleX(index)} ${scaleY(value)} `;
             penDown = true;
           });
           return (
@@ -866,16 +906,16 @@ function PixelTimeSeriesChart({ series }: { series: ChartSeries[] }) {
                 strokeDasharray={line.dash}
               />
               {length <= 60
-                ? line.points.map((point, index) =>
-                    point.value == null ? null : (
+                ? line.values.map((value, index) =>
+                    value == null ? null : (
                       <circle
                         key={index}
                         cx={scaleX(index)}
-                        cy={scaleY(point.value)}
+                        cy={scaleY(value)}
                         r={2.5}
                         fill={line.color}
                       >
-                        <title>{`${point.date}: ${formatValue(point.value)}`}</title>
+                        <title>{`${allDates[index]}: ${formatValue(value)}`}</title>
                       </circle>
                     ),
                   )
