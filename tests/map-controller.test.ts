@@ -664,13 +664,20 @@ class FakeGeolocateControl {
   }
 }
 
-/** Replace the global `navigator` for a test; returns a restore function. */
-function stubNavigator(permissionState: string | null): () => void {
+/**
+ * Replace the global `navigator` for a test; returns a restore function.
+ * Pass `permissionState` of `null` to omit the Permissions API entirely, or a
+ * `queryOverride` to control how `permissions.query()` resolves/throws.
+ */
+function stubNavigator(
+  permissionState: string | null,
+  queryOverride?: () => Promise<unknown>,
+): () => void {
   const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  const value =
-    permissionState === null
-      ? {}
-      : { permissions: { query: async () => ({ state: permissionState }) } };
+  let value: unknown;
+  if (queryOverride) value = { permissions: { query: queryOverride } };
+  else if (permissionState === null) value = {};
+  else value = { permissions: { query: async () => ({ state: permissionState }) } };
   Object.defineProperty(globalThis, "navigator", { value, configurable: true });
   return () => {
     if (original) Object.defineProperty(globalThis, "navigator", original);
@@ -751,6 +758,36 @@ describe("MapController geolocate permission-denied recovery", () => {
   it("re-creates when the Permissions API is unavailable", () =>
     withStubbedControl(async () => {
       const restore = stubNavigator(null);
+      try {
+        const { internal, firstControl } = controllerWithGeolocate();
+        firstControl.handlers.error({ code: 1 });
+        await flush();
+        assert.notEqual(internal.geolocateControl, firstControl);
+      } finally {
+        restore();
+      }
+    }));
+
+  it("re-creates when the permission query rejects", () =>
+    withStubbedControl(async () => {
+      const restore = stubNavigator(null, () =>
+        Promise.reject(new Error("not supported")),
+      );
+      try {
+        const { internal, firstControl } = controllerWithGeolocate();
+        firstControl.handlers.error({ code: 1 });
+        await flush();
+        assert.notEqual(internal.geolocateControl, firstControl);
+      } finally {
+        restore();
+      }
+    }));
+
+  it("re-creates when the permission query throws synchronously", () =>
+    withStubbedControl(async () => {
+      const restore = stubNavigator(null, () => {
+        throw new Error("permissions blocked");
+      });
       try {
         const { internal, firstControl } = controllerWithGeolocate();
         firstControl.handlers.error({ code: 1 });

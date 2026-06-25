@@ -1717,15 +1717,22 @@ export class MapController {
       queueMicrotask(recreate);
       return;
     }
-    permissions
-      .query({ name: "geolocation" as PermissionName })
-      .then((status) => {
-        // Only a pending "prompt" means the dialog was dismissed, so reset to
-        // allow a retry. "denied" keeps MapLibre's disabled state, and
-        // "granted" (a contradictory code-1) is left alone rather than reset.
-        if (status.state === "prompt") recreate();
-      })
-      .catch(() => recreate());
+    try {
+      permissions
+        .query({ name: "geolocation" as PermissionName })
+        .then((status) => {
+          // Only a pending "prompt" means the dialog was dismissed, so reset to
+          // allow a retry. "denied" keeps MapLibre's disabled state, and
+          // "granted" (a contradictory code-1) is left alone rather than reset.
+          if (status.state === "prompt") recreate();
+        })
+        .catch(() => recreate());
+    } catch {
+      // Some Permissions API implementations throw synchronously (partial
+      // support, CSP, private browsing). Fall back to a deferred reset so the
+      // user is never stuck.
+      queueMicrotask(recreate);
+    }
   };
 
   private removeGeolocateControl(): void {
