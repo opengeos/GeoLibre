@@ -305,6 +305,7 @@ export function RecordTourDialog({
       if (name) {
         setSavedName(name);
         setPendingBlob(null);
+        setFileName(DEFAULT_FILE_NAME);
         setStatus("idle");
       } else {
         // Cancelled the save dialog: keep the take so it can be saved again.
@@ -312,7 +313,9 @@ export function RecordTourDialog({
         setStatus("ready");
       }
     } catch {
-      setError(t("recordTour.recordError"));
+      // This block runs when writing the file fails, not when recording fails,
+      // so use the save-specific message rather than the record one.
+      setError(t("recordTour.saveError"));
       setStatus("ready");
     }
   };
@@ -322,6 +325,7 @@ export function RecordTourDialog({
     setSavedName(null);
     setSaveCancelled(false);
     setError(null);
+    setFileName(DEFAULT_FILE_NAME);
     setStatus("idle");
   };
 
@@ -516,6 +520,10 @@ export function RecordTourDialog({
                 <Input
                   id="record-tour-filename"
                   className="h-8 flex-1"
+                  // Focus the name field the moment the panel switches to the
+                  // save step, so keyboard users can type and press Enter to
+                  // save without an extra tab.
+                  autoFocus
                   value={fileName}
                   onChange={(event) => setFileName(event.target.value)}
                   onKeyDown={(event) => {
