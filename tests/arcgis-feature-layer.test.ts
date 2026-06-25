@@ -111,4 +111,62 @@ describe("addArcGISLayer (feature layer)", () => {
     );
     assert.equal(useAppStore.getState().layers.length, 0);
   });
+
+  it("warns but still loads when the query exceeds the service record limit", async () => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const body = url.includes("/query")
+        ? { ...QUERY_GEOJSON, exceededTransferLimit: true }
+        : LAYER_INFO;
+      return { ok: true, status: 200, json: async () => body } as Response;
+    }) as typeof fetch;
+
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+    try {
+      const id = await addArcGISLayer(app, {
+        layerType: "feature",
+        sourceType: "url",
+        url: "https://example.com/arcgis/rest/services/Cities/FeatureServer/0",
+      });
+      // The partial dataset still loads — truncation must not block the layer.
+      const layer = useAppStore.getState().layers.find((l) => l.id === id);
+      assert.equal(layer?.geojson?.features.length, 1);
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0] ?? "", /truncated/i);
+  });
+
+  it("resolves a portal-item feature layer through the portal item URL", async () => {
+    const serviceUrl =
+      "https://example.com/arcgis/rest/services/Cities/FeatureServer/0";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      let body: unknown = LAYER_INFO;
+      if (url.includes("/content/items/")) {
+        body = { url: serviceUrl };
+      } else if (url.includes("/query")) {
+        body = QUERY_GEOJSON;
+      }
+      return { ok: true, status: 200, json: async () => body } as Response;
+    }) as typeof fetch;
+
+    const id = await addArcGISLayer(app, {
+      layerType: "feature",
+      sourceType: "portal-item",
+      itemId: "abc123def456",
+      name: "Cities",
+    });
+
+    const layer = useAppStore.getState().layers.find((l) => l.id === id);
+    assert.ok(layer, "expected the portal-item feature layer to be added");
+    assert.equal(layer.type, "geojson");
+    assert.equal(layer.geojson?.features.length, 1);
+    assert.deepEqual(fitBoundsCalls, [[-160, 18, -154, 23]]);
+  });
 });

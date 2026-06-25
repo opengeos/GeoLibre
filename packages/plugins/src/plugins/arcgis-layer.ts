@@ -271,7 +271,10 @@ async function addArcGISFeatureLayerAsGeoJson(
  * Fetch and validate a GeoJSON FeatureCollection from an ArcGIS query URL.
  *
  * ArcGIS can answer a `f=geojson` request with a JSON error envelope rather than
- * GeoJSON, so both the transport status and the payload shape are checked.
+ * GeoJSON, so both the transport status and the payload shape are checked. A
+ * result truncated at the service's `maxRecordCount` is loaded as-is but warned
+ * about, so a partial attribute table or export is not mistaken for the full
+ * dataset.
  *
  * @param url - The fully-built `/query?f=geojson` request URL.
  * @returns The parsed FeatureCollection.
@@ -283,6 +286,7 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
   }
   const json = (await response.json()) as FeatureCollection & {
     error?: { message?: string };
+    exceededTransferLimit?: boolean;
   };
   if (json.error) {
     throw new Error(json.error.message || "ArcGIS feature query failed.");
@@ -290,6 +294,16 @@ async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
   if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
     throw new Error(
       "The ArcGIS feature layer did not return GeoJSON features.",
+    );
+  }
+  // ArcGIS caps a single query at the service's maxRecordCount and flags the
+  // shortfall with `exceededTransferLimit`. The partial data still loads (it is
+  // the same subset the previous URL-source path rendered), but the truncation
+  // is surfaced so the caller knows the layer is not the complete dataset.
+  if (json.exceededTransferLimit) {
+    console.warn(
+      `[GeoLibre] ArcGIS feature query was truncated at the service record ` +
+        `limit; loaded ${json.features.length} features (partial dataset).`,
     );
   }
   return json;
