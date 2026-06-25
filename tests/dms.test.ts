@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  decimalToDmsAxis,
-  dmsAxisToDecimal,
+  type DdmAxis,
   type DmsAxis,
+  decimalToDdmAxis,
+  decimalToDmsAxis,
+  ddmAxisToDecimal,
+  dmsAxisToDecimal,
 } from "../apps/geolibre-desktop/src/lib/dms";
 
 describe("decimalToDmsAxis", () => {
@@ -100,5 +103,90 @@ describe("dmsAxisToDecimal", () => {
 
   it("rejects non-numeric parts", () => {
     assert.ok(Number.isNaN(dmsAxisToDecimal(parts({ deg: "abc" }), "lon")));
+  });
+});
+
+describe("decimalToDdmAxis", () => {
+  it("splits a positive longitude into degrees and decimal minutes (E)", () => {
+    // 12.582° = 12° 34.92'
+    assert.deepEqual(decimalToDdmAxis(12.582, "lon"), {
+      deg: "12",
+      min: "34.92",
+      dir: "E",
+    });
+  });
+
+  it("uses the negative hemisphere and unsigned parts for a negative value", () => {
+    const ddm = decimalToDdmAxis(-98.468972, "lon");
+    assert.equal(ddm.dir, "W");
+    assert.equal(ddm.deg, "98");
+    assert.ok(Number(ddm.min) >= 0);
+  });
+
+  it("picks N/S for the latitude axis", () => {
+    assert.equal(decimalToDdmAxis(42.1, "lat").dir, "N");
+    assert.equal(decimalToDdmAxis(-42.1, "lat").dir, "S");
+  });
+
+  it("carries rounded minutes into degrees", () => {
+    // 12.99999999° computes to 12° 59.9999994', whose minutes round to 60.0000
+    // and must carry up to 13° 0', not render as 12° 60'.
+    const ddm = decimalToDdmAxis(12.99999999, "lat");
+    assert.equal(ddm.deg, "13");
+    assert.equal(ddm.min, "0");
+  });
+
+  it("returns blank parts for a non-finite value", () => {
+    assert.deepEqual(decimalToDdmAxis(Number.NaN, "lon"), {
+      deg: "",
+      min: "",
+      dir: "E",
+    });
+  });
+});
+
+describe("ddmAxisToDecimal", () => {
+  const parts = (over: Partial<DdmAxis>): DdmAxis => ({
+    deg: "0",
+    min: "",
+    dir: "E",
+    ...over,
+  });
+
+  it("recombines degrees and decimal minutes into a decimal degree", () => {
+    const decimal = ddmAxisToDecimal({ deg: "12", min: "34.92", dir: "E" }, "lon");
+    assert.ok(Math.abs(decimal - 12.582) < 1e-9);
+  });
+
+  it("applies a negative sign for the negative hemisphere", () => {
+    const decimal = ddmAxisToDecimal({ deg: "98", min: "28.14", dir: "W" }, "lon");
+    assert.ok(decimal < 0);
+  });
+
+  it("round-trips with decimalToDdmAxis", () => {
+    const original = 42.145937;
+    const back = ddmAxisToDecimal(decimalToDdmAxis(original, "lat"), "lat");
+    // Four-decimal minutes limit precision to roughly 0.0001' ~= 2e-6 degrees.
+    assert.ok(Math.abs(back - original) < 1e-4);
+  });
+
+  it("defaults blank minutes to zero", () => {
+    assert.equal(ddmAxisToDecimal(parts({ deg: "45" }), "lat"), 45);
+  });
+
+  it("returns NaN when degrees are blank", () => {
+    assert.ok(Number.isNaN(ddmAxisToDecimal(parts({ deg: "" }), "lon")));
+  });
+
+  it("rejects out-of-range minutes", () => {
+    assert.ok(Number.isNaN(ddmAxisToDecimal(parts({ deg: "1", min: "60" }), "lat")));
+  });
+
+  it("rejects negative degrees (the sign belongs to the hemisphere)", () => {
+    assert.ok(Number.isNaN(ddmAxisToDecimal(parts({ deg: "-5" }), "lon")));
+  });
+
+  it("rejects non-numeric parts", () => {
+    assert.ok(Number.isNaN(ddmAxisToDecimal(parts({ deg: "abc" }), "lon")));
   });
 });
