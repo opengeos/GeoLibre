@@ -498,7 +498,7 @@
     "recordingStatus": "Recording… {{percent}}%",
     "savingStatus": "Saving video…",
     "stop": "Stop",
-    "recordingReady": "Recording ready. Name it and save, or discard. Editing the tour discards this recording.",
+    "recordingReady": "Recording ready. Name it and save, or discard to re-record.",
     "fileNameLabel": "File name",
     "saveVideo": "Save video…",
     "discard": "Discard",

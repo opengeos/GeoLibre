@@ -96,6 +96,10 @@ export function RecordTourDialog({
   const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [fileName, setFileName] = useState(DEFAULT_FILE_NAME);
   const abortRef = useRef<AbortController | null>(null);
+  // Guards against a second handleSave landing before the "saving" state has
+  // re-rendered (fast double-click / keyboard repeat on Enter), which would
+  // otherwise fire two save dialogs or two downloads.
+  const savingRef = useRef(false);
 
   // Drag-to-reposition. `pos` is null until first dragged, when the default
   // corner placement (CSS class) applies; afterwards it pins to explicit coords.
@@ -104,12 +108,17 @@ export function RecordTourDialog({
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   // True while the camera is being captured or the file is being written; the
-  // map and the keyframe list are frozen during these phases. "ready" is not
-  // busy, so the user can keep editing (which discards the pending take).
+  // close button is blocked during these phases.
   const busy = status === "recording" || status === "saving";
+  // Also true in "ready": a finished take is held in memory, so the keyframe
+  // editing controls are frozen until it is saved or explicitly discarded. That
+  // makes dropping the take a deliberate Discard click rather than a one-click
+  // accident from an edit whose warning may have scrolled out of view.
+  const editingFrozen = busy || status === "ready";
 
   // Clear transient result messages and drop any finished-but-unsaved take when
   // the tour is edited, so a stale recording can't be saved for a changed tour.
+  // (Edits are blocked while a take is held, so this only fires from "idle".)
   const invalidateRecording = () => {
     setSavedName(null);
     setSaveCancelled(false);
@@ -283,7 +292,8 @@ export function RecordTourDialog({
   // this still controls the downloaded filename (the helper falls back to an
   // anchor download using defaultName).
   const handleSave = async () => {
-    if (!pendingBlob) return;
+    if (!pendingBlob || savingRef.current) return;
+    savingRef.current = true;
     setStatus("saving");
     // Clear any prior outcome so a fresh attempt can't leave both a "saved" and
     // a "cancelled" message on screen at once.
@@ -317,6 +327,8 @@ export function RecordTourDialog({
       // so use the save-specific message rather than the record one.
       setError(t("recordTour.saveError"));
       setStatus("ready");
+    } finally {
+      savingRef.current = false;
     }
   };
 
@@ -386,7 +398,7 @@ export function RecordTourDialog({
             type="button"
             variant="outline"
             size="sm"
-            disabled={busy}
+            disabled={editingFrozen}
             onClick={addCurrentView}
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -410,7 +422,7 @@ export function RecordTourDialog({
                   keyframe={kf}
                   index={index}
                   isLast={index === keyframes.length - 1}
-                  disabled={busy}
+                  disabled={editingFrozen}
                   onPreview={() => previewKeyframe(kf)}
                   onRecapture={() => recaptureKeyframe(kf.id)}
                   onMove={(delta) => move(index, delta)}
