@@ -961,12 +961,17 @@ async function saveTextFileBrowser(
 }
 
 async function saveBinaryFileBrowser(
-  content: Uint8Array,
+  content: Uint8Array | Blob,
   options: SaveBinaryFileOptions,
 ): Promise<string | null> {
   const fileName = browserSafeFileName(options.defaultName);
   const pickerWindow = window as BrowserFilePickerWindow;
-  const blob = new Blob([toArrayBuffer(content)], { type: options.mimeType });
+  // A Blob (e.g. a recorded video) is written straight through; only raw bytes
+  // need wrapping, so large callers can avoid an extra full-size copy.
+  const blob =
+    content instanceof Blob
+      ? content
+      : new Blob([toArrayBuffer(content)], { type: options.mimeType });
 
   if (pickerWindow.showSaveFilePicker) {
     try {
@@ -1274,7 +1279,7 @@ export async function saveTextFileWithFallback(
 }
 
 export async function saveBinaryFileWithFallback(
-  content: Uint8Array,
+  content: Uint8Array | Blob,
   options: SaveBinaryFileOptions,
 ): Promise<string | null> {
   if (!isTauri()) {
@@ -1286,7 +1291,13 @@ export async function saveBinaryFileWithFallback(
     defaultPath: options.defaultName,
   });
   if (!path) return null;
-  await writeFile(path, content);
+  // The Tauri write needs raw bytes, so convert a Blob only here (after the
+  // dialog is confirmed), not on every cancelled attempt.
+  const bytes =
+    content instanceof Blob
+      ? new Uint8Array(await content.arrayBuffer())
+      : content;
+  await writeFile(path, bytes);
   return path;
 }
 

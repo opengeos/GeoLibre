@@ -301,10 +301,11 @@ export function RecordTourDialog({
     setSavedName(null);
     setSaveCancelled(false);
     try {
-      const bytes = new Uint8Array(await pendingBlob.arrayBuffer());
       const base = fileName.trim().replace(/\.webm$/i, "") || DEFAULT_FILE_NAME;
       const fileType = t("recordTour.videoFileType");
-      const name = await saveBinaryFileWithFallback(bytes, {
+      // Pass the Blob straight through; the helper only materializes bytes on
+      // the Tauri write path, so a cancel-and-retry never re-copies the video.
+      const name = await saveBinaryFileWithFallback(pendingBlob, {
         defaultName: `${base}.webm`,
         filters: [{ name: fileType, extensions: ["webm"] }],
         browserTypes: [
