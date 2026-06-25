@@ -259,8 +259,7 @@ const enhanceSwipeSelects = () => {
 
 let swipeEnhanceFrame: number | null = null;
 
-// Mirror the main layer manager, which labels the base layer "Background"
-// rather than "Basemap" (see issue #842).
+// Matches the label used by the main layer manager for the grouped base layer.
 const SWIPE_BASEMAP_LABEL = "Background";
 
 const getSwipeLayerLabel = (layerId: string): string => {
