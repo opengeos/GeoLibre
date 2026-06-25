@@ -339,9 +339,8 @@ export function LayerPanel({
   hideOwnRail = false,
 }: LayerPanelProps) {
   const { t } = useTranslation();
-  // Beginners get a friendlier empty-state hint pointing at basemaps (the
-  // easiest first layer) as well as the Add Data menu; other profiles keep the
-  // concise message so the panel stays uncluttered on small screens (#881).
+  // Beginners get an empty-state hint that also points at basemaps (the easiest
+  // first layer); other profiles keep the concise one-liner (#881).
   const isBeginnerProfile = useDesktopSettingsStore(
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
