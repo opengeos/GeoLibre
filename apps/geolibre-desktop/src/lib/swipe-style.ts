@@ -259,8 +259,11 @@ const enhanceSwipeSelects = () => {
 
 let swipeEnhanceFrame: number | null = null;
 
+// Matches the label used by the main layer manager for the grouped base layer.
+const SWIPE_BASEMAP_LABEL = "Background";
+
 const getSwipeLayerLabel = (layerId: string): string => {
-  if (layerId === "__basemap__") return "Basemap";
+  if (layerId === "__basemap__") return SWIPE_BASEMAP_LABEL;
   return (
     (window as GeoLibreLayerLabelWindow).__GEOLIBRE_LAYER_LABELS__?.[layerId] ??
     layerId
@@ -283,7 +286,9 @@ const syncSwipeLayerLabels = () => {
 
       const displayName = getSwipeLayerLabel(layerId);
       const title =
-        layerId === "__basemap__" ? "Basemap" : `${displayName} (${layerId})`;
+        layerId === "__basemap__"
+          ? SWIPE_BASEMAP_LABEL
+          : `${displayName} (${layerId})`;
       if (label.textContent !== displayName) {
         label.textContent = displayName;
       }
