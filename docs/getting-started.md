@@ -151,10 +151,10 @@ The **Amazon Location** entries in the Basemaps control are *style basemaps* (th
 
 ```env
 VITE_AMAZON_LOCATION_API_KEY=your_amazon_location_api_key   # Amazon Location styles
-VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional, defaults to us-east-1
+VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional; the control defaults to us-east-1 when omitted
 ```
 
-A newly entered key takes effect immediately, without reopening the project. You can also enter the key (and region) directly in the panel's **API keys** view, opened from the key button in the panel header, without setting an environment variable.
+A newly entered key takes effect immediately, without reopening the project; removing the key from the environment takes effect after a page reload. You can also enter the key (and region) directly in the panel's **API keys** view, opened from the key button in the panel header, without setting an environment variable.
 
 ## Optional Python sidecar
 
