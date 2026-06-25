@@ -172,9 +172,11 @@ test("accepts a center entered in degrees and decimal minutes", async ({
 });
 
 /**
- * Issue #828: the smart-paste box fills the precise fields only on an explicit
- * "Process input" (it does not mutate them on every keystroke). After processing
- * a valid string the longitude/latitude fields reflect it and the camera submits.
+ * Issue #828: the smart-paste box is hidden by default and revealed from the
+ * paste icon next to the heading (hover or click), and it fills the precise
+ * fields only on an explicit "Process input" (it does not mutate them on every
+ * keystroke). After processing a valid string the longitude/latitude fields
+ * reflect it and the camera submits.
  */
 test("fills the fields from a pasted string only after Process input", async ({
   page,
@@ -190,8 +192,14 @@ test("fills the fields from a pasted string only after Process input", async ({
   const longitude = dialog.locator("#set-view-longitude");
   const before = await longitude.inputValue();
 
+  // The paste field is hidden until the paste icon next to the heading is used.
+  const pasteInput = dialog.locator("#set-view-paste");
+  await expect(pasteInput).toBeHidden();
+  await dialog.getByRole("button", { name: "Paste coordinates" }).click();
+  await expect(pasteInput).toBeVisible();
+
   // Typing alone must not change the manual fields — processing is on demand.
-  await dialog.locator("#set-view-paste").fill("35.4, -97.5");
+  await pasteInput.fill("35.4, -97.5");
   expect(await longitude.inputValue()).toBe(before);
 
   // Running Process input parses the string and fills the fields (the parser

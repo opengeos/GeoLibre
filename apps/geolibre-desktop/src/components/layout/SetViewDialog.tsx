@@ -15,7 +15,7 @@ import {
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
-import { Info } from "lucide-react";
+import { ClipboardPaste, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { parseLatLon } from "../../lib/coordinates";
@@ -114,6 +114,12 @@ export function SetViewDialog({
   const [pasteStatus, setPasteStatus] = useState<"idle" | "ok" | "error">(
     "idle",
   );
+  // The smart-paste field is hidden until the user reveals it from the paste
+  // icon next to the heading (hover, click, or keyboard focus), so the dialog
+  // leads with the precise fields and the paste shortcut adds no clutter by
+  // default (#828). Once open it stays open so it never covers or shifts the
+  // controls below mid-interaction; it resets closed each time the dialog opens.
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   // Fill all three center representations from one decimal lon/lat, so the value
   // is in place whichever format the user switches to or submits in.
@@ -161,6 +167,7 @@ export function SetViewDialog({
     setError(null);
     setPaste("");
     setPasteStatus("idle");
+    setPasteOpen(false);
   }, [open, mapControllerRef]);
 
   // Editing the longitude/latitude by hand dismisses a stale Process
@@ -470,65 +477,95 @@ export function SetViewDialog({
         <form className="space-y-5" noValidate onSubmit={handleSubmit}>
           {/* Segment A: coordinates, with a DD/DMS/DDM manual-entry toggle. */}
           <section className="space-y-3">
-            <SectionHeading>
-              {t("toolbar.setView.sectionCoordinates")}
-            </SectionHeading>
-            {/* Smart paste: drop a full coordinate string in any common notation
-                and the precise fields below fill in, so there is no need to
-                strip symbols or split the value by hand (#719). */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5">
-                <Label htmlFor="set-view-paste">
-                  {t("toolbar.setView.smartPaste")}
-                </Label>
-                <InfoTooltip
-                  title={t("toolbar.setView.smartPasteInfoLabel")}
-                  label={t("toolbar.setView.smartPasteInfo")}
-                />
-              </div>
-              <Input
-                id="set-view-paste"
-                value={paste}
-                placeholder={t("toolbar.setView.smartPastePlaceholder")}
-                aria-invalid={pasteFailed || undefined}
-                onChange={(event) => handlePaste(event.target.value)}
-                onKeyDown={(event) => {
-                  // Enter in the paste box processes the string instead of
-                  // submitting the form, so the user can verify before going.
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleProcess();
-                  }
-                }}
-              />
-              <div className="flex items-center justify-between gap-2">
-                {/* The hint stays neutral/empty until the user acts: it confirms
-                    a successful Process, or flags text that failed to parse. */}
-                <p
-                  className={cn(
-                    "text-xs",
-                    pasteFailed ? "text-destructive" : "text-muted-foreground",
-                  )}
-                  aria-live="polite"
-                >
-                  {pasteFailed
-                    ? t("toolbar.setView.smartPasteInvalid")
-                    : pasteStatus === "ok"
-                      ? t("toolbar.setView.processed")
-                      : ""}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  disabled={paste.trim() === ""}
-                  onClick={handleProcess}
-                >
-                  {t("toolbar.setView.processInput")}
-                </Button>
-              </div>
+            {/* Smart paste is tucked behind the paste icon next to the heading:
+                the field stays hidden so the dialog leads with the precise
+                fields. Hovering, clicking, or keyboard-focusing the icon reveals
+                it inline on demand (#828). Revealing inline (rather than as a
+                floating overlay) means the panel never covers or intercepts the
+                controls below it. */}
+            <div className="flex items-center gap-1.5">
+              <SectionHeading>
+                {t("toolbar.setView.sectionCoordinates")}
+              </SectionHeading>
+              <button
+                type="button"
+                aria-label={t("toolbar.setView.smartPaste")}
+                aria-expanded={pasteOpen}
+                aria-controls="set-view-paste-panel"
+                // Hover, click, and keyboard activation all simply reveal the
+                // panel; it then stays open (until the dialog reopens) rather
+                // than toggling, so a hover-then-click never closes it.
+                onClick={() => setPasteOpen(true)}
+                onMouseEnter={() => setPasteOpen(true)}
+                className={cn(
+                  "inline-flex cursor-pointer rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  pasteOpen ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                <ClipboardPaste className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
             </div>
+            {pasteOpen && (
+              <div
+                id="set-view-paste-panel"
+                className="space-y-1.5 rounded-md border bg-muted/30 p-3"
+              >
+                <div className="flex items-center gap-1.5">
+                  <Label htmlFor="set-view-paste">
+                    {t("toolbar.setView.smartPaste")}
+                  </Label>
+                  <InfoTooltip
+                    title={t("toolbar.setView.smartPasteInfoLabel")}
+                    label={t("toolbar.setView.smartPasteInfo")}
+                  />
+                </div>
+                <Input
+                  id="set-view-paste"
+                  value={paste}
+                  placeholder={t("toolbar.setView.smartPastePlaceholder")}
+                  aria-invalid={pasteFailed || undefined}
+                  onChange={(event) => handlePaste(event.target.value)}
+                  onKeyDown={(event) => {
+                    // Enter in the paste box processes the string instead of
+                    // submitting the form, so the user can verify before going.
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      handleProcess();
+                    }
+                  }}
+                />
+                <div className="flex items-center justify-between gap-2">
+                  {/* The hint stays neutral/empty until the user acts: it
+                      confirms a successful Process, or flags text that failed to
+                      parse. */}
+                  <p
+                    className={cn(
+                      "text-xs",
+                      pasteFailed
+                        ? "text-destructive"
+                        : "text-muted-foreground",
+                    )}
+                    aria-live="polite"
+                  >
+                    {pasteFailed
+                      ? t("toolbar.setView.smartPasteInvalid")
+                      : pasteStatus === "ok"
+                        ? t("toolbar.setView.processed")
+                        : ""}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={paste.trim() === ""}
+                    onClick={handleProcess}
+                  >
+                    {t("toolbar.setView.processInput")}
+                  </Button>
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-1.5">
               <span
                 id="set-view-format-label"
