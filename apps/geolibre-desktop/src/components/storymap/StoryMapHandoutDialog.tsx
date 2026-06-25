@@ -67,6 +67,42 @@ function jumpAndWaitIdle(
   });
 }
 
+/**
+ * Load a chapter image URL (or data URI) into a canvas for embedding in the
+ * PDF. Resolves to null when the image fails to load or is cross-origin without
+ * CORS headers (so it would taint the canvas), letting the export proceed with
+ * just the map rather than failing the whole handout.
+ */
+function loadChapterPhoto(
+  url: string,
+): Promise<{ data: HTMLCanvasElement; width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx || canvas.width === 0 || canvas.height === 0) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        // Throws if the canvas is tainted by a cross-origin image; treat that
+        // as "no photo" rather than letting it break the PDF capture.
+        ctx.getImageData(0, 0, 1, 1);
+        resolve({ data: canvas, width: canvas.width, height: canvas.height });
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 function slugify(title: string): string {
   return (
     title
@@ -153,12 +189,15 @@ export function StoryMapHandoutDialog({
         setProgress({ current: i + 1, total: chosen.length });
         await jumpAndWaitIdle(map, chapter.location);
         const shot = captureMapImage(map);
+        // Load the chapter's own photo (if any) so it appears beside the map.
+        const photo = chapter.image
+          ? await loadChapterPhoto(chapter.image)
+          : null;
         captures.push({
           title: chapter.title,
           description: chapter.description,
-          image: shot.image,
-          imageWidth: shot.width,
-          imageHeight: shot.height,
+          map: { data: shot.image, width: shot.width, height: shot.height },
+          ...(photo ? { photo } : {}),
         });
       }
       const bytes = buildStoryMapHandoutPdf(captures, {

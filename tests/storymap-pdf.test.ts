@@ -14,9 +14,7 @@ function chapter(overrides: Partial<HandoutChapter> = {}): HandoutChapter {
   return {
     title: "Chapter",
     description: "Some text",
-    image: PNG_2X2,
-    imageWidth: 800,
-    imageHeight: 600,
+    map: { data: PNG_2X2, width: 800, height: 600 },
     ...overrides,
   };
 }
@@ -98,5 +96,20 @@ describe("buildStoryMapHandoutPdf", () => {
       footer: "",
     });
     assert.ok(bytes.length > 0);
+  });
+
+  it("embeds a chapter photo alongside the map when present", () => {
+    const withPhoto = buildStoryMapHandoutPdf(
+      [chapter({ photo: { data: PNG_2X2, width: 400, height: 300 } })],
+      { paperSize: "a4", orientation: "landscape", title: "T", footer: "F" },
+    );
+    const withoutPhoto = buildStoryMapHandoutPdf([chapter()], {
+      paperSize: "a4",
+      orientation: "landscape",
+      title: "T",
+      footer: "F",
+    });
+    // The photo page embeds a second image, so its byte stream is larger.
+    assert.ok(withPhoto.length > withoutPhoto.length);
   });
 });

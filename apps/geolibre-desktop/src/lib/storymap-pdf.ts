@@ -2,11 +2,13 @@
  * Build a multi-page PDF handout from selected story-map chapters (GH #830).
  *
  * Each chapter renders on its own page as: the document title (running header),
- * the chapter title, a captured map image, the chapter description, and a
- * running footer with the user's footer text and a page number. The map images
- * are captured by the caller (see {@link ./print-layout-export.captureMapImage})
- * and handed in as canvases or data URLs so this builder stays free of MapLibre
- * and the DOM, and can be unit tested with plain data-URL images.
+ * the chapter title, the captured map view (with the chapter's own photo beside
+ * it when the chapter has one), the chapter description, and a running footer
+ * with the user's footer text and a page number. The images are supplied by the
+ * caller (the map via {@link ./print-layout-export.captureMapImage}, the photo
+ * loaded from the chapter image URL) as canvases or data URLs, so this builder
+ * stays free of MapLibre and the DOM and can be unit tested with data-URL
+ * images.
  */
 import jsPDF from "jspdf";
 import {
@@ -16,18 +18,24 @@ import {
   type PaperSizeId,
 } from "./print-layout";
 
+/** An image to embed: a canvas (app) or a PNG/JPEG data URL (tests), plus its
+ * natural pixel dimensions so the aspect ratio can be preserved. */
+export interface HandoutImage {
+  data: HTMLCanvasElement | string;
+  width: number;
+  height: number;
+}
+
 /** A single captured chapter to place on one handout page. */
 export interface HandoutChapter {
-  /** Chapter title, drawn above the map image. */
+  /** Chapter title, drawn above the images. */
   title: string;
   /** Optional chapter description; HTML is reduced to plain text. */
   description?: string;
-  /** Captured map image: a canvas (app) or a PNG/JPEG data URL (tests). */
-  image: HTMLCanvasElement | string;
-  /** Natural pixel width of the image, used to preserve the aspect ratio. */
-  imageWidth: number;
-  /** Natural pixel height of the image, used to preserve the aspect ratio. */
-  imageHeight: number;
+  /** The captured map view for this chapter. */
+  map: HandoutImage;
+  /** The chapter's own photo, when it has one and it loaded successfully. */
+  photo?: HandoutImage;
 }
 
 /** Page setup and running text for the handout. */
@@ -84,9 +92,43 @@ function singleLine(value: string): string {
   return htmlToPlainText(value).replace(/\s*\n\s*/g, " ").trim();
 }
 
+/** Scale `(w, h)` to fit inside a `boxW x boxH` box, preserving aspect ratio. */
+function fitInto(
+  w: number,
+  h: number,
+  boxW: number,
+  boxH: number,
+): { width: number; height: number } {
+  if (w <= 0 || h <= 0) return { width: boxW, height: boxH };
+  const scale = Math.min(boxW / w, boxH / h);
+  return { width: w * scale, height: h * scale };
+}
+
+/** Draw an image centered within a box at `(x, y)` of size `boxW x boxH`. */
+function drawImageInBox(
+  pdf: jsPDF,
+  image: HandoutImage,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number,
+): void {
+  const fit = fitInto(image.width, image.height, boxW, boxH);
+  pdf.addImage(
+    image.data,
+    "PNG",
+    x + (boxW - fit.width) / 2,
+    y + (boxH - fit.height) / 2,
+    fit.width,
+    fit.height,
+    undefined,
+    "FAST",
+  );
+}
+
 /**
  * Render one chapter onto the current PDF page: document title, chapter title,
- * map image (fit to the content box while preserving aspect ratio), description,
+ * the map view (with the chapter photo beside it when present), the description,
  * and the running footer with a page number.
  */
 function drawChapterPage(
@@ -101,7 +143,7 @@ function drawChapterPage(
   const contentWidth = widthMm - MARGIN_MM * 2;
   const footerSize = 9;
   const footerY = heightMm - MARGIN_MM + lineHeightMm(footerSize);
-  // The image must not overrun the footer band; reserve room for it plus a gap.
+  // The images must not overrun the footer band; reserve room for it plus a gap.
   const bottomLimit = heightMm - MARGIN_MM - lineHeightMm(footerSize) - 4;
   let y = MARGIN_MM;
 
@@ -135,32 +177,29 @@ function drawChapterPage(
     y += 3;
   }
 
-  // Fit the captured image into the content width, then clamp the height so the
-  // description and footer still fit; a clamped height shrinks the width to keep
-  // the aspect ratio, and the image is centered horizontally.
-  const ratio =
-    chapter.imageWidth > 0 && chapter.imageHeight > 0
-      ? chapter.imageHeight / chapter.imageWidth
-      : 0.75;
-  let drawWidth = contentWidth;
-  let drawHeight = drawWidth * ratio;
-  const maxImageHeight = Math.max(20, bottomLimit - y - 20);
-  if (drawHeight > maxImageHeight) {
-    drawHeight = maxImageHeight;
-    drawWidth = ratio > 0 ? drawHeight / ratio : contentWidth;
+  // Reserve a few lines of vertical space for the description so the image band
+  // never crowds it off the page, then give the rest to the image(s).
+  const reservedForText = chapter.description ? 24 : 4;
+  const imageBandHeight = Math.max(20, bottomLimit - y - reservedForText);
+  const gap = 5;
+  if (chapter.photo) {
+    // Map on the left, the chapter photo on the right, each fit into its own
+    // half-width column and vertically centered within the band.
+    const colWidth = (contentWidth - gap) / 2;
+    drawImageInBox(pdf, chapter.map, MARGIN_MM, y, colWidth, imageBandHeight);
+    drawImageInBox(
+      pdf,
+      chapter.photo,
+      MARGIN_MM + colWidth + gap,
+      y,
+      colWidth,
+      imageBandHeight,
+    );
+  } else {
+    // No photo: the map view spans the full content width.
+    drawImageInBox(pdf, chapter.map, MARGIN_MM, y, contentWidth, imageBandHeight);
   }
-  const imageX = MARGIN_MM + (contentWidth - drawWidth) / 2;
-  pdf.addImage(
-    chapter.image,
-    "PNG",
-    imageX,
-    y,
-    drawWidth,
-    drawHeight,
-    undefined,
-    "FAST",
-  );
-  y += drawHeight + 5;
+  y += imageBandHeight + 5;
 
   const description = chapter.description
     ? htmlToPlainText(chapter.description)
