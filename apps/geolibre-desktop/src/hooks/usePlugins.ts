@@ -267,13 +267,10 @@ export function usePluginRegistry() {
       const before = JSON.stringify(projectPluginStateSnapshot());
       // Layer Swipe and split view are mutually exclusive comparison modes:
       // stacking the swipe slider over a multi-pane grid fragments the
-      // workspace (#844). Activating swipe collapses the grid back to a single
-      // map first; the reverse direction (entering split view turns swipe off)
-      // is handled by useSwipeSplitViewExclusivity.
-      if (id === SWIPE_PLUGIN_ID && !manager.isActive(id)) {
-        const { mapLayout, setMapGrid } = useAppStore.getState();
-        if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
-      }
+      // workspace (#844). The reverse direction (entering split view turns
+      // swipe off) is handled by useSwipeSplitViewExclusivity.
+      const collapseGridForSwipe =
+        id === SWIPE_PLUGIN_ID && !manager.isActive(id);
       // Plugin controls are imperative MapLibre code, so a throw here escapes
       // React's error boundaries. Contain it so one bad plugin can't break the
       // toggle handler — surface it in diagnostics instead. Return without
@@ -287,6 +284,15 @@ export function usePluginRegistry() {
         // early return below; in-memory state is not rolled back.
         reportPluginError(id, "toggle", error);
         return;
+      }
+      // Collapse the grid only once swipe actually activated, so a failed
+      // activation (a throw above, or addMapControl returning false) leaves the
+      // user's split-view layout intact. Done synchronously before React flushes
+      // effects so useSwipeSplitViewExclusivity sees the single-pane grid and
+      // doesn't undo the activation it just allowed.
+      if (collapseGridForSwipe && manager.isActive(id)) {
+        const { mapLayout, setMapGrid } = useAppStore.getState();
+        if (mapLayout.rows * mapLayout.cols > 1) setMapGrid(1, 1);
       }
       persistProjectPluginState(before);
     },
