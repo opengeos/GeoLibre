@@ -968,6 +968,8 @@ async function saveBinaryFileBrowser(
   const pickerWindow = window as BrowserFilePickerWindow;
   // A Blob (e.g. a recorded video) is written straight through; only raw bytes
   // need wrapping, so large callers can avoid an extra full-size copy.
+  // Note: a Blob's own .type is used as-is; options.mimeType applies only when
+  // wrapping a Uint8Array, so pass a Blob that already carries the right type.
   const blob =
     content instanceof Blob
       ? content

@@ -374,9 +374,11 @@ export function RecordTourDialog({
         <button
           type="button"
           aria-label={t("common.close")}
-          // Closing while recording would hide the only Stop/progress control,
-          // so block it until the recording finishes.
-          disabled={busy}
+          // Blocked while busy (closing would hide the only Stop/progress
+          // control) and while a finished take is held in the "ready" state, so
+          // closing can't silently strand a recording in memory or drop the
+          // user back into the save step on reopen. Save or discard first.
+          disabled={editingFrozen}
           onClick={() => onOpenChange(false)}
           className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-30"
         >
