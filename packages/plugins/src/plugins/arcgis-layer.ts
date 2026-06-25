@@ -9,6 +9,7 @@ import type {
   HostedLayer,
   VectorTileLayer,
 } from "@esri/maplibre-arcgis";
+import type { FeatureCollection } from "geojson";
 import type maplibregl from "maplibre-gl";
 import type { GeoLibreAppAPI } from "../types";
 
@@ -79,12 +80,22 @@ export async function addArcGISLayer(
   app: GeoLibreAppAPI,
   options: ArcGISLayerOptions,
 ): Promise<string> {
+  const input = getArcGISInput(options);
+
+  // A feature layer is just attributed vector data, so load it as a regular
+  // GeoJSON layer rather than an opaque external-native layer. That unlocks the
+  // host's full vector styling surface for it — labels (with uppercase/offset/
+  // rotation formatting), the attribute table, identify, symbology, and export —
+  // instead of only the fill/stroke paint an external-native layer exposes.
+  if (options.layerType === "feature") {
+    return addArcGISFeatureLayerAsGeoJson(app, options, input);
+  }
+
   const map = app.getMap?.();
   if (!map) {
     throw new Error("The map is not ready.");
   }
 
-  const input = getArcGISInput(options);
   const arcgis = await import("@esri/maplibre-arcgis");
   const hostedLayer = await createArcGISHostedLayer(arcgis, options, input);
   const id = createArcGISLayerId();
@@ -132,10 +143,6 @@ async function createArcGISHostedLayer(
     portalUrl: options.portalUrl?.trim() || undefined,
     token: options.token?.trim() || undefined,
   };
-
-  if (options.layerType === "feature") {
-    return createFallbackFeatureLayer(input, options);
-  }
 
   return options.sourceType === "url"
     ? (arcgis.VectorTileLayer as typeof VectorTileLayer).fromUrl(
@@ -204,29 +211,40 @@ function addArcGISRuntimeLayerToMap(
   }
 }
 
-async function createFallbackFeatureLayer(
-  input: string,
+/**
+ * Load an ArcGIS FeatureServer layer as a host-managed GeoJSON layer.
+ *
+ * The features are fetched up front (`/query?f=geojson`) and handed to the
+ * store's GeoJSON layer path, so the layer is a first-class vector layer with
+ * its attributes available — enabling labels and their formatting, the
+ * attribute table, identify, symbology, and export. Vector tile layers keep the
+ * external-native runtime path; only feature layers come through here.
+ *
+ * @param app - The host app API (used to fit the view to the layer extent).
+ * @param options - The ArcGIS layer options (source type, URL/item, token).
+ * @param input - The resolved service URL or portal item id from the options.
+ * @returns The new GeoLibre layer's id.
+ */
+async function addArcGISFeatureLayerAsGeoJson(
+  app: GeoLibreAppAPI,
   options: ArcGISLayerOptions,
-  cause: unknown = undefined,
-): Promise<ArcGISRuntimeLayer> {
+  input: string,
+): Promise<string> {
   const layerUrl =
     options.sourceType === "url"
-      ? await resolveFeatureLayerUrl(input, options, cause)
-      : await resolvePortalFeatureLayerUrl(input, options, cause);
+      ? await resolveFeatureLayerUrl(input, options, undefined)
+      : await resolvePortalFeatureLayerUrl(input, options, undefined);
   const layerInfo = await fetchArcGISJson<ArcGISFeatureLayerInfo>(
     layerUrl,
     options,
-    cause,
+    undefined,
   );
   if (!layerInfo.geometryType) {
-    throw new Error("The ArcGIS feature layer metadata is missing geometry type.", {
-      cause,
-    });
+    throw new Error(
+      "The ArcGIS feature layer metadata is missing geometry type.",
+    );
   }
 
-  const sourceId = layerInfo.name || layerNameFromArcGISInput(layerUrl, "arcgis");
-  const styleLayerType = arcgisGeometryLayerType(layerInfo.geometryType);
-  const styleLayerId = `${sourceId}-layer`;
   const queryUrl = appendArcGISParams(`${trimTrailingSlash(layerUrl)}/query`, {
     f: "geojson",
     outFields: "*",
@@ -234,25 +252,47 @@ async function createFallbackFeatureLayer(
     token: options.token?.trim(),
     where: "1=1",
   });
+  const geojson = await fetchArcGISGeoJson(queryUrl);
 
-  return createStaticArcGISRuntimeLayer({
-    bounds: arcgisExtentToBounds(layerInfo.extent),
-    layers: [
-      {
-        id: styleLayerId,
-        source: sourceId,
-        type: styleLayerType,
-        paint: arcgisFallbackPaint(styleLayerType),
-      } as maplibregl.LayerSpecification,
-    ],
-    sources: {
-      [sourceId]: {
-        type: "geojson",
-        data: queryUrl,
-        attribution: layerInfo.copyrightText || "ArcGIS Feature Service",
-      },
-    },
-  });
+  const name =
+    options.name?.trim() ||
+    layerInfo.name ||
+    layerNameFromArcGISInput(layerUrl, "ArcGIS Layer");
+  const id = useAppStore
+    .getState()
+    .addGeoJsonLayer(name, geojson, input, options.beforeLayerId ?? null);
+
+  const bounds = arcgisExtentToBounds(layerInfo.extent);
+  if (bounds) app.fitBounds?.(bounds);
+  return id;
+}
+
+/**
+ * Fetch and validate a GeoJSON FeatureCollection from an ArcGIS query URL.
+ *
+ * ArcGIS can answer a `f=geojson` request with a JSON error envelope rather than
+ * GeoJSON, so both the transport status and the payload shape are checked.
+ *
+ * @param url - The fully-built `/query?f=geojson` request URL.
+ * @returns The parsed FeatureCollection.
+ */
+async function fetchArcGISGeoJson(url: string): Promise<FeatureCollection> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`ArcGIS feature query failed with ${response.status}.`);
+  }
+  const json = (await response.json()) as FeatureCollection & {
+    error?: { message?: string };
+  };
+  if (json.error) {
+    throw new Error(json.error.message || "ArcGIS feature query failed.");
+  }
+  if (json.type !== "FeatureCollection" || !Array.isArray(json.features)) {
+    throw new Error(
+      "The ArcGIS feature layer did not return GeoJSON features.",
+    );
+  }
+  return json;
 }
 
 async function resolveFeatureLayerUrl(
@@ -338,42 +378,6 @@ async function fetchArcGISJson<T>(
     });
   }
   return json;
-}
-
-function createStaticArcGISRuntimeLayer(args: {
-  bounds?: [number, number, number, number];
-  layers: maplibregl.LayerSpecification[];
-  sources: Record<string, maplibregl.SourceSpecification>;
-}): ArcGISRuntimeLayer {
-  return {
-    get bounds() {
-      return args.bounds;
-    },
-    get layers() {
-      return args.layers;
-    },
-    get sources() {
-      return args.sources;
-    },
-    setSourceId(oldId: string, newId: string) {
-      args.sources[newId] = args.sources[oldId];
-      delete args.sources[oldId];
-      for (const layer of args.layers) {
-        if ("source" in layer && layer.source === oldId) {
-          layer.source = newId;
-        }
-      }
-    },
-    addSourcesAndLayersTo(map: maplibregl.Map) {
-      for (const [sourceId, source] of Object.entries(args.sources)) {
-        map.addSource(sourceId, source);
-      }
-      for (const layer of args.layers) {
-        map.addLayer(layer);
-      }
-      return this;
-    },
-  };
 }
 
 async function resolveArcGISLayerBounds(
@@ -483,39 +487,6 @@ function isGeoBounds(value: unknown): value is [number, number, number, number] 
     value[0] < value[2] &&
     value[1] < value[3]
   );
-}
-
-function arcgisGeometryLayerType(
-  geometryType: string,
-): "circle" | "fill" | "line" {
-  if (geometryType === "esriGeometryPoint") return "circle";
-  if (geometryType === "esriGeometryMultipoint") return "circle";
-  if (geometryType === "esriGeometryPolyline") return "line";
-  return "fill";
-}
-
-function arcgisFallbackPaint(
-  layerType: "circle" | "fill" | "line",
-): maplibregl.LayerSpecification["paint"] {
-  if (layerType === "circle") {
-    return {
-      "circle-color": DEFAULT_LAYER_STYLE.fillColor,
-      "circle-radius": DEFAULT_LAYER_STYLE.circleRadius,
-      "circle-stroke-color": DEFAULT_LAYER_STYLE.strokeColor,
-      "circle-stroke-width": DEFAULT_LAYER_STYLE.strokeWidth,
-    };
-  }
-  if (layerType === "line") {
-    return {
-      "line-color": DEFAULT_LAYER_STYLE.strokeColor,
-      "line-width": DEFAULT_LAYER_STYLE.strokeWidth,
-    };
-  }
-  return {
-    "fill-color": DEFAULT_LAYER_STYLE.fillColor,
-    "fill-opacity": DEFAULT_LAYER_STYLE.fillOpacity,
-    "fill-outline-color": DEFAULT_LAYER_STYLE.strokeColor,
-  };
 }
 
 function appendArcGISParams(
