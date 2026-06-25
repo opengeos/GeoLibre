@@ -1671,18 +1671,57 @@ export class MapController {
     ) {
       return false;
     }
-    this.geolocateControl = new maplibregl.GeolocateControl({
+    const control = new maplibregl.GeolocateControl({
       positionOptions: {
         enableHighAccuracy: true,
       },
       trackUserLocation: true,
     });
-    this.map.addControl(this.geolocateControl, this.controlPositions.geolocate);
+    // MapLibre permanently disables the GeolocateControl button on a
+    // PERMISSION_DENIED error (code 1). Browsers report code 1 both for a real
+    // denial and when the user simply dismisses the permission prompt without
+    // choosing, which leaves the button stuck in a blocked state with no way to
+    // retry (issue #839). Re-create the control whenever the permission was not
+    // actually denied so the button returns to a neutral, clickable state.
+    control.on("error", this.handleGeolocateError);
+    this.geolocateControl = control;
+    this.map.addControl(control, this.controlPositions.geolocate);
     return true;
   }
 
+  private handleGeolocateError = (event: { code?: number }): void => {
+    // Only react to PERMISSION_DENIED; other errors (timeout, position
+    // unavailable) leave the button usable, so MapLibre's own handling is fine.
+    if (!this.map || !this.geolocateControl || event?.code !== 1) return;
+
+    const recreate = (): void => {
+      if (!this.controlVisibility.geolocate) return;
+      // Re-create the control to clear MapLibre's permanently-disabled button.
+      this.removeGeolocateControl();
+      this.addGeolocateControl();
+    };
+
+    const permissions =
+      typeof navigator !== "undefined" ? navigator.permissions : undefined;
+    if (!permissions?.query) {
+      // No Permissions API: assume a dismissal so the user is never stuck.
+      // Defer so we don't tear down the control mid error-dispatch.
+      queueMicrotask(recreate);
+      return;
+    }
+    permissions
+      .query({ name: "geolocation" as PermissionName })
+      .then((status) => {
+        // A real, persistent denial keeps MapLibre's disabled state; a pending
+        // "prompt" means the dialog was dismissed, so reset to allow a retry.
+        if (status.state !== "denied") recreate();
+      })
+      .catch(() => recreate());
+  };
+
   private removeGeolocateControl(): void {
     if (!this.geolocateControl) return;
+    this.geolocateControl.off("error", this.handleGeolocateError);
     this.removeControl(this.geolocateControl);
     this.geolocateControl = null;
   }
