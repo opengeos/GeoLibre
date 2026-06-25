@@ -377,7 +377,6 @@ export function RecordTourDialog({
   // it can be reloaded and refined later, independent of the recorded video.
   const handleSaveConfig = async () => {
     if (keyframes.length === 0) return;
-    clearResultMessages();
     try {
       const content = serializeTourConfig(keyframes, fps);
       const fileType = t("recordTour.configFileType");
@@ -389,9 +388,15 @@ export function RecordTourDialog({
         ],
         mimeType: "application/json",
       });
-      if (name) setConfigMessage(t("recordTour.configSaved", { name }));
+      // Cancelling the dialog returns null and is a no-op, so only clear a prior
+      // result banner once the file is actually written.
+      if (name) {
+        clearResultMessages();
+        setConfigMessage(t("recordTour.configSaved", { name }));
+      }
     } catch (err) {
       console.warn("Tour configuration save failed", err);
+      clearResultMessages();
       setError(t("recordTour.configSaveError"));
     }
   };
@@ -412,11 +417,12 @@ export function RecordTourDialog({
         accept: ".json,application/json",
         readText: true,
       });
-      // Cancelling the picker is a no-op, so only clear a prior result banner
-      // once a file is actually chosen.
-      if (!result?.text) return;
+      // Only a null result means the picker was cancelled (a no-op). An empty
+      // file still flows through so parseTourConfig surfaces a real error rather
+      // than silently doing nothing after the user explicitly chose a file.
+      if (result == null) return;
       clearResultMessages();
-      const config = parseTourConfig(result.text);
+      const config = parseTourConfig(result.text ?? "");
       setKeyframes(config.keyframes.map((kf) => ({ ...kf, id: createId() })));
       setFps(config.fps);
       setFpsText(String(config.fps));
