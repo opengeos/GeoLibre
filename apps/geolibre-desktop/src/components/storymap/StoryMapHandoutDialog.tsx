@@ -196,6 +196,8 @@ export function StoryMapHandoutDialog({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  // Neutral status line (e.g. "Export cancelled"), distinct from an error.
+  const [notice, setNotice] = useState<string | null>(null);
   // Set by the Stop button to break out of the capture loop mid-export. A ref so
   // the running loop sees the latest value without being re-created.
   const abortRef = useRef(false);
@@ -211,6 +213,7 @@ export function StoryMapHandoutDialog({
     setTitle(singleLine(story.title));
     setFooter(singleLine(story.footer));
     setError(null);
+    setNotice(null);
     setProgress(null);
     // Only re-seed on open; chapters/story are read at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -230,6 +233,7 @@ export function StoryMapHandoutDialog({
 
   const handleGenerate = useCallback(async () => {
     setError(null);
+    setNotice(null);
     const map = mapControllerRef.current?.getMap();
     if (!map) {
       setError(t("storymap.handout.noMap"));
@@ -265,8 +269,10 @@ export function StoryMapHandoutDialog({
         });
       }
       // Stopped: discard the export entirely rather than saving a partial PDF
-      // (the finally block still restores the map view).
+      // (the finally block still restores the map view), and tell the user it
+      // was cancelled rather than silently returning to idle.
       if (abortRef.current || captures.length === 0) {
+        if (abortRef.current) setNotice(t("storymap.handout.cancelled"));
         return;
       }
       const bytes = buildStoryMapHandoutPdf(captures, {
@@ -457,6 +463,8 @@ export function StoryMapHandoutDialog({
                   total: progress.total,
                 })}
               </span>
+            ) : notice ? (
+              <span className="text-muted-foreground">{notice}</span>
             ) : null}
           </div>
           <div className="flex items-center gap-2">
