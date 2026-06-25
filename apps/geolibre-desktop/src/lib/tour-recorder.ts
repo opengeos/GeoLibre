@@ -245,11 +245,15 @@ export function parseTourConfig(text: string): ParsedTourConfig {
   }
   // Reject a file written by a newer, incompatible format so its data isn't
   // silently misread. A missing version is accepted (hand-written/legacy files
-  // default to v1), but any present version that isn't a number we recognize
-  // (a newer number, or a malformed non-number like "2") is rejected.
+  // default to v1), but any present version we don't recognize is rejected: it
+  // must be an integer in [1, TOUR_CONFIG_VERSION], so a newer number, a value
+  // below 1 (0/-1), or a malformed non-number like "2" all fail.
   if (
     obj.version !== undefined &&
-    (typeof obj.version !== "number" || obj.version > TOUR_CONFIG_VERSION)
+    (typeof obj.version !== "number" ||
+      !Number.isInteger(obj.version) ||
+      obj.version < 1 ||
+      obj.version > TOUR_CONFIG_VERSION)
   ) {
     throw new Error(
       `Tour configuration version ${String(obj.version)} is not supported (expected ${TOUR_CONFIG_VERSION}).`,

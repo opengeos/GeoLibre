@@ -197,6 +197,18 @@ describe("serializeTourConfig / parseTourConfig", () => {
     );
   });
 
+  it("rejects an unrecognized version below 1", () => {
+    assert.throws(() =>
+      parseTourConfig(
+        JSON.stringify({
+          type: TOUR_CONFIG_TYPE,
+          version: 0,
+          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+        }),
+      ),
+    );
+  });
+
   it("accepts a file with no version field (legacy / hand-written)", () => {
     const config = parseTourConfig(
       JSON.stringify({
