@@ -1,0 +1,379 @@
+import { type RefObject, useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { StoryMap } from "@geolibre/core";
+import type { MapController } from "@geolibre/map";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+  ScrollArea,
+  Select,
+  Separator,
+} from "@geolibre/ui";
+import { FileDown, Loader2 } from "lucide-react";
+import { captureMapImage } from "../../lib/print-layout-export";
+import {
+  PAPER_SIZES,
+  type Orientation,
+  type PaperSizeId,
+} from "../../lib/print-layout";
+import {
+  buildStoryMapHandoutPdf,
+  type HandoutChapter,
+} from "../../lib/storymap-pdf";
+import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
+
+interface StoryMapHandoutDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  story: StoryMap;
+  mapControllerRef: RefObject<MapController | null>;
+}
+
+/** Maximum time to wait for the map to settle (tiles loaded) per chapter. */
+const IDLE_TIMEOUT_MS = 5000;
+
+/**
+ * Jump the map to a chapter location and resolve once it has rendered all
+ * tiles (the `idle` event), with a timeout so a chapter that never fully loads
+ * (e.g. a throttled tab) cannot stall the whole export.
+ */
+function jumpAndWaitIdle(
+  map: maplibregl.Map,
+  location: StoryMap["chapters"][number]["location"],
+): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      map.off("idle", finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, IDLE_TIMEOUT_MS);
+    map.on("idle", finish);
+    map.jumpTo({
+      center: location.center,
+      zoom: location.zoom,
+      pitch: location.pitch,
+      bearing: location.bearing,
+    });
+  });
+}
+
+function slugify(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "story-map"
+  );
+}
+
+/**
+ * Export selected story-map chapters as a multi-page PDF handout (GH #830).
+ *
+ * The user picks which chapter views to include, the paper size and
+ * orientation, and a document title and footer. Generating flies the live map
+ * to each selected chapter, captures the rendered view, and assembles a clean
+ * PDF (one chapter per page) that is saved to disk. The map is returned to its
+ * original view when the export finishes.
+ */
+export function StoryMapHandoutDialog({
+  open,
+  onOpenChange,
+  story,
+  mapControllerRef,
+}: StoryMapHandoutDialogProps) {
+  const { t } = useTranslation();
+  const chapters = story.chapters;
+
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [paperSize, setPaperSize] = useState<PaperSizeId>("a4");
+  const [orientation, setOrientation] = useState<Orientation>("landscape");
+  const [title, setTitle] = useState("");
+  const [footer, setFooter] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  // Seed the selection (all chapters) and the title/footer from the story each
+  // time the dialog opens, so it reflects the latest story without clobbering
+  // edits made while it is open.
+  useEffect(() => {
+    if (!open) return;
+    setSelected(Object.fromEntries(chapters.map((c) => [c.id, true])));
+    setTitle(story.title);
+    setFooter(story.footer);
+    setError(null);
+    setProgress(null);
+    // Only re-seed on open; chapters/story are read at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const selectedCount = useMemo(
+    () => chapters.filter((c) => selected[c.id]).length,
+    [chapters, selected],
+  );
+
+  const allSelected = selectedCount === chapters.length && chapters.length > 0;
+
+  const toggleAll = useCallback(() => {
+    const next = !allSelected;
+    setSelected(Object.fromEntries(chapters.map((c) => [c.id, next])));
+  }, [allSelected, chapters]);
+
+  const handleGenerate = useCallback(async () => {
+    setError(null);
+    const map = mapControllerRef.current?.getMap();
+    if (!map) {
+      setError(t("storymap.handout.noMap"));
+      return;
+    }
+    const chosen = chapters.filter((c) => selected[c.id]);
+    if (chosen.length === 0) {
+      setError(t("storymap.handout.noneSelected"));
+      return;
+    }
+
+    const original = mapControllerRef.current?.readView();
+    setGenerating(true);
+    try {
+      const captures: HandoutChapter[] = [];
+      for (let i = 0; i < chosen.length; i++) {
+        const chapter = chosen[i];
+        setProgress({ current: i + 1, total: chosen.length });
+        await jumpAndWaitIdle(map, chapter.location);
+        const shot = captureMapImage(map);
+        captures.push({
+          title: chapter.title,
+          description: chapter.description,
+          image: shot.image,
+          imageWidth: shot.width,
+          imageHeight: shot.height,
+        });
+      }
+      const bytes = buildStoryMapHandoutPdf(captures, {
+        paperSize,
+        orientation,
+        title,
+        footer,
+      });
+      const saved = await saveBinaryFileWithFallback(bytes, {
+        defaultName: `${slugify(title || story.title)}-handout.pdf`,
+        filters: [{ name: t("storymap.handout.pdfFile"), extensions: ["pdf"] }],
+        browserTypes: [
+          {
+            description: t("storymap.handout.pdfFile"),
+            accept: { "application/pdf": [".pdf"] },
+          },
+        ],
+        mimeType: "application/pdf",
+      });
+      if (saved !== null) onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      // Always return the map to where the user left it, even on failure.
+      if (original) {
+        map.jumpTo({
+          center: original.center,
+          zoom: original.zoom,
+          bearing: original.bearing,
+          pitch: original.pitch,
+        });
+      }
+      setGenerating(false);
+      setProgress(null);
+    }
+  }, [
+    chapters,
+    selected,
+    paperSize,
+    orientation,
+    title,
+    footer,
+    story.title,
+    mapControllerRef,
+    onOpenChange,
+    t,
+  ]);
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next: boolean) => !generating && onOpenChange(next)}
+    >
+      <DialogContent className="flex max-h-[88vh] w-[min(92vw,34rem)] flex-col gap-0 p-0">
+        <DialogHeader className="border-b px-5 py-4">
+          <DialogTitle className="flex items-center gap-2">
+            <FileDown className="h-4 w-4" />
+            {t("storymap.handout.title")}
+          </DialogTitle>
+          <DialogDescription>
+            {t("storymap.handout.description")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-4 px-5 py-4">
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold">
+                  {t("storymap.handout.screens", {
+                    count: selectedCount,
+                    total: chapters.length,
+                  })}
+                </h3>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={toggleAll}
+                >
+                  {allSelected
+                    ? t("storymap.handout.selectNone")
+                    : t("storymap.handout.selectAll")}
+                </Button>
+              </div>
+              <div className="space-y-1 rounded-md border p-2">
+                {chapters.map((chapter, index) => (
+                  <label
+                    key={chapter.id}
+                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected[chapter.id] ?? false}
+                      onChange={(e) =>
+                        setSelected((prev) => ({
+                          ...prev,
+                          [chapter.id]: e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-xs">
+                      {index + 1}
+                    </span>
+                    <span className="truncate">
+                      {chapter.title || t("storymap.untitledChapter")}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={t("storymap.handout.paperSize")}>
+                <Select
+                  value={paperSize}
+                  onChange={(e) =>
+                    setPaperSize(e.target.value as PaperSizeId)
+                  }
+                >
+                  {PAPER_SIZES.filter((p) => p.group === "paper").map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label={t("storymap.handout.orientation")}>
+                <Select
+                  value={orientation}
+                  onChange={(e) =>
+                    setOrientation(e.target.value as Orientation)
+                  }
+                >
+                  <option value="portrait">
+                    {t("storymap.handout.portrait")}
+                  </option>
+                  <option value="landscape">
+                    {t("storymap.handout.landscape")}
+                  </option>
+                </Select>
+              </Field>
+            </div>
+
+            <Field label={t("storymap.handout.documentTitle")}>
+              <Input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t("storymap.handout.documentTitlePlaceholder")}
+              />
+            </Field>
+            <Field label={t("storymap.handout.footerText")}>
+              <Input
+                value={footer}
+                onChange={(e) => setFooter(e.target.value)}
+                placeholder={t("storymap.handout.footerPlaceholder")}
+              />
+            </Field>
+          </div>
+        </ScrollArea>
+
+        <div className="flex items-center justify-between gap-2 border-t px-5 py-3">
+          <div className="min-h-[1.25rem] text-xs">
+            {error ? (
+              <span className="text-destructive">{error}</span>
+            ) : progress ? (
+              <span className="text-muted-foreground">
+                {t("storymap.handout.progress", {
+                  current: progress.current,
+                  total: progress.total,
+                })}
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={generating}
+              onClick={() => onOpenChange(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              size="sm"
+              disabled={generating || selectedCount === 0}
+              onClick={() => void handleGenerate()}
+            >
+              {generating ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <FileDown className="mr-1 h-4 w-4" />
+              )}
+              {t("storymap.handout.generate")}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      {children}
+    </div>
+  );
+}

@@ -50,6 +50,7 @@ import {
   ChevronUp,
   Crosshair,
   Download,
+  FileDown,
   Frame,
   MapPin,
   Play,
@@ -61,6 +62,7 @@ import {
 } from "lucide-react";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { buildStoryMapHtml } from "../../lib/storymap-export";
+import { StoryMapHandoutDialog } from "./StoryMapHandoutDialog";
 
 interface StoryMapPanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -99,6 +101,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [handoutOpen, setHandoutOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFormatRef = useRef<"json" | "csv">("json");
 
@@ -370,6 +373,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   );
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         ref={dialogRef}
@@ -544,6 +548,15 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               {t("storymap.exportHtml")}
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              disabled={chapters.length === 0}
+              onClick={() => setHandoutOpen(true)}
+            >
+              <FileDown className="mr-1 h-4 w-4" />
+              {t("storymap.handout.button")}
+            </Button>
+            <Button
               size="sm"
               disabled={chapters.length === 0}
               onClick={handlePresent}
@@ -555,6 +568,13 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         </div>
       </DialogContent>
     </Dialog>
+    <StoryMapHandoutDialog
+      open={handoutOpen}
+      onOpenChange={setHandoutOpen}
+      story={story}
+      mapControllerRef={mapControllerRef}
+    />
+    </>
   );
 }
 
