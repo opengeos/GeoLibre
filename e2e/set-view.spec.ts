@@ -50,7 +50,7 @@ test("submits a fractional zoom the native validator would reject", async ({
     await pitch.evaluate((p: HTMLInputElement) => p.validity.stepMismatch),
   ).toBe(true);
 
-  await dialog.getByRole("button", { name: "Go" }).click();
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
 
   // The fix lets submission through, so the dialog closes. Before the fix the
   // native tooltip blocked submit and the dialog stayed open.
@@ -80,7 +80,7 @@ test("rejects out-of-range input via the dialog's own validation", async ({
   await dialog.locator("#set-view-latitude").fill("35.4");
   await dialog.locator("#set-view-zoom").fill("5");
 
-  await dialog.getByRole("button", { name: "Go" }).click();
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
 
   // The dialog stays open and surfaces its own error rather than flying.
   await expect(dialog).toBeVisible();
@@ -101,7 +101,7 @@ test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => 
   const dialog = page.getByRole("dialog", { name: "Set View" });
   await expect(dialog).toBeVisible();
 
-  await dialog.getByRole("radio", { name: "DMS" }).click();
+  await dialog.getByRole("radio", { name: "DMS", exact: true }).click();
 
   // 98°28'8.3"W, 42°8'45"N — the issue's own worked example (≈ -98.468972,
   // 42.145833).
@@ -116,8 +116,9 @@ test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => 
   await dialog.locator("#set-view-zoom").fill("5");
 
   // Toggling to DD converts the DMS entry synchronously, so we can assert the
-  // decimal without waiting on the map.
-  await dialog.getByRole("radio", { name: "DD" }).click();
+  // decimal without waiting on the map. Exact match so "DD" does not also pick
+  // up the "DDM" radio.
+  await dialog.getByRole("radio", { name: "DD", exact: true }).click();
   expect(
     Number(await dialog.locator("#set-view-longitude").inputValue()),
   ).toBeCloseTo(-98.468972, 4);
@@ -126,6 +127,82 @@ test("accepts a center entered in degrees/minutes/seconds", async ({ page }) => 
   ).toBeCloseTo(42.145833, 4);
 
   // The converted coordinate submits like any other DD value.
-  await dialog.getByRole("button", { name: "Go" }).click();
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
+  await expect(dialog).toBeHidden();
+});
+
+/**
+ * Issue #828: the center can also be entered in degrees and decimal minutes
+ * (DDM). Like the DMS toggle, switching DDM -> DD converts the entry in place,
+ * and the converted value submits like any other DD coordinate.
+ */
+test("accepts a center entered in degrees and decimal minutes", async ({
+  page,
+}) => {
+  await waitForMap(page);
+
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await expect(dialog).toBeVisible();
+
+  await dialog.getByRole("radio", { name: "DDM", exact: true }).click();
+
+  // 98°28.14'W, 42°8.75'N ≈ -98.469, 42.145833.
+  await dialog.locator("#set-view-ddm-lon-deg").fill("98");
+  await dialog.locator("#set-view-ddm-lon-min").fill("28.14");
+  await dialog.locator("#set-view-ddm-lon-dir").selectOption("W");
+  await dialog.locator("#set-view-ddm-lat-deg").fill("42");
+  await dialog.locator("#set-view-ddm-lat-min").fill("8.75");
+  await dialog.locator("#set-view-ddm-lat-dir").selectOption("N");
+  await dialog.locator("#set-view-zoom").fill("5");
+
+  // Toggling to DD converts the DDM entry synchronously.
+  await dialog.getByRole("radio", { name: "DD", exact: true }).click();
+  expect(
+    Number(await dialog.locator("#set-view-longitude").inputValue()),
+  ).toBeCloseTo(-98.469, 3);
+  expect(
+    Number(await dialog.locator("#set-view-latitude").inputValue()),
+  ).toBeCloseTo(42.145833, 4);
+
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
+  await expect(dialog).toBeHidden();
+});
+
+/**
+ * Issue #828: the smart-paste box fills the precise fields only on an explicit
+ * "Process input" (it does not mutate them on every keystroke). After processing
+ * a valid string the longitude/latitude fields reflect it and the camera submits.
+ */
+test("fills the fields from a pasted string only after Process input", async ({
+  page,
+}) => {
+  await waitForMap(page);
+
+  await page.getByRole("button", { name: "View", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Set View/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Set View" });
+  await expect(dialog).toBeVisible();
+
+  const longitude = dialog.locator("#set-view-longitude");
+  const before = await longitude.inputValue();
+
+  // Typing alone must not change the manual fields — processing is on demand.
+  await dialog.locator("#set-view-paste").fill("35.4, -97.5");
+  expect(await longitude.inputValue()).toBe(before);
+
+  // Running Process input parses the string and fills the fields (the parser
+  // reads a bare pair as lat, lon, so this resolves to lon -97.5, lat 35.4).
+  await dialog.getByRole("button", { name: "Process input" }).click();
+  expect(Number(await longitude.inputValue())).toBeCloseTo(-97.5, 4);
+  expect(
+    Number(await dialog.locator("#set-view-latitude").inputValue()),
+  ).toBeCloseTo(35.4, 4);
+
+  await dialog.locator("#set-view-zoom").fill("5");
+  await dialog.getByRole("button", { name: "Go", exact: true }).click();
   await expect(dialog).toBeHidden();
 });

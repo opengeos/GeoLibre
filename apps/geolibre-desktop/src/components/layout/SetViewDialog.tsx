@@ -18,7 +18,7 @@ import type { ParseKeys } from "i18next";
 import { Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { type LatLon, parseLatLon } from "../../lib/coordinates";
+import { parseLatLon } from "../../lib/coordinates";
 import {
   type DdmAxis,
   type DmsAxis,
@@ -103,15 +103,17 @@ export function SetViewDialog({
   const [ddm, setDdm] = useState<DdmFields>(EMPTY_DDM);
   const [format, setFormat] = useState<CoordFormat>("dd");
   const [error, setError] = useState<string | null>(null);
-  // The smart-paste box: a full coordinate string in DD/DMS/DDM that, when it
-  // parses, fills the precise fields below so users need not split it by hand.
-  // The parse result is held alongside it so the failed-hint check and the fill
-  // share one parse rather than re-running it on every render.
+  // The smart-paste box: a full coordinate string in DD/DMS/DDM that fills the
+  // precise fields below only when the user runs it with "Process input" (or
+  // Enter), so the parse is an explicit, verifiable step rather than something
+  // that mutates the fields on every keystroke (#828).
   const [paste, setPaste] = useState("");
-  const [parsedCoord, setParsedCoord] = useState<LatLon | null>(null);
-  // Set true after the "Process input" button parses a string, so a novice gets
-  // an explicit confirmation that the fields below were filled (#828).
-  const [processed, setProcessed] = useState(false);
+  // Outcome of the most recent Process: "idle" (untouched), "ok" (fields
+  // filled), or "error" (string could not be parsed). Reset to "idle" on any
+  // edit so a stale confirmation/warning never lingers.
+  const [pasteStatus, setPasteStatus] = useState<"idle" | "ok" | "error">(
+    "idle",
+  );
 
   // Fill all three center representations from one decimal lon/lat, so the value
   // is in place whichever format the user switches to or submits in.
@@ -158,26 +160,33 @@ export function SetViewDialog({
     setFormat("dd");
     setError(null);
     setPaste("");
-    setParsedCoord(null);
-    setProcessed(false);
+    setPasteStatus("idle");
   }, [open, mapControllerRef]);
 
-  const update = (key: keyof ViewFields) => (value: string) =>
+  // Any manual edit dismisses a stale Process confirmation/warning, since the
+  // shown values no longer necessarily came from the paste box.
+  const update = (key: keyof ViewFields) => (value: string) => {
+    setPasteStatus("idle");
     setFields((current) => ({ ...current, [key]: value }));
+  };
 
   const updateDms =
-    (axis: keyof DmsFields, part: keyof DmsAxis) => (value: string) =>
+    (axis: keyof DmsFields, part: keyof DmsAxis) => (value: string) => {
+      setPasteStatus("idle");
       setDms((current) => ({
         ...current,
         [axis]: { ...current[axis], [part]: value },
       }));
+    };
 
   const updateDdm =
-    (axis: keyof DdmFields, part: keyof DdmAxis) => (value: string) =>
+    (axis: keyof DdmFields, part: keyof DdmAxis) => (value: string) => {
+      setPasteStatus("idle");
       setDdm((current) => ({
         ...current,
         [axis]: { ...current[axis], [part]: value },
       }));
+    };
 
   // The center as decimal lon/lat read from whichever format is active. A blank
   // field becomes NaN (not 0, since Number("") is 0), and the DMS/DDM helpers
@@ -227,36 +236,32 @@ export function SetViewDialog({
     setFormat(next);
   };
 
-  // Parse a pasted/typed coordinate string and, when it decodes, fill the DD,
-  // DMS, and DDM fields so the change shows in whichever format is active.
-  // Unrecognized text is left in the box and flagged inline below.
+  // Typing only updates the box and clears any prior outcome; the parse waits
+  // for an explicit Process so the manual fields are never mutated mid-keystroke.
   const handlePaste = (value: string) => {
     setPaste(value);
-    setProcessed(false);
-    const parsed = parseLatLon(value);
-    setParsedCoord(parsed);
-    if (!parsed) return;
-    fillFromDecimal(parsed.lon, parsed.lat);
-    setError(null);
+    setPasteStatus("idle");
   };
 
-  // The "Process input" button: re-run the parse on demand and confirm the fill
-  // without closing the dialog, so a novice can verify the result before going.
+  // The "Process input" action (button or Enter in the box): parse on demand and
+  // fill the DD, DMS, and DDM fields so the result shows in whichever format is
+  // active, confirming inline without closing the dialog so a novice can verify
+  // it before going. Unrecognized text is left in place and flagged below.
   const handleProcess = () => {
+    if (paste.trim() === "") return;
     const parsed = parseLatLon(paste);
-    setParsedCoord(parsed);
     if (!parsed) {
-      setProcessed(false);
+      setPasteStatus("error");
       return;
     }
     fillFromDecimal(parsed.lon, parsed.lat);
     setError(null);
-    setProcessed(true);
+    setPasteStatus("ok");
   };
 
-  // True only when there is text that failed to parse, so the hint can switch
-  // from a success confirmation to an error without flagging an empty box.
-  const pasteFailed = paste.trim() !== "" && parsedCoord === null;
+  // True only when a Process attempt failed to parse, so the hint flags a bad
+  // string without flagging an empty box or text the user is still typing.
+  const pasteFailed = pasteStatus === "error";
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -474,7 +479,10 @@ export function SetViewDialog({
                 <Label htmlFor="set-view-paste">
                   {t("toolbar.setView.smartPaste")}
                 </Label>
-                <InfoTooltip label={t("toolbar.setView.smartPasteInfo")} />
+                <InfoTooltip
+                  title={t("toolbar.setView.smartPasteInfoLabel")}
+                  label={t("toolbar.setView.smartPasteInfo")}
+                />
               </div>
               <Input
                 id="set-view-paste"
@@ -482,6 +490,14 @@ export function SetViewDialog({
                 placeholder={t("toolbar.setView.smartPastePlaceholder")}
                 aria-invalid={pasteFailed || undefined}
                 onChange={(event) => handlePaste(event.target.value)}
+                onKeyDown={(event) => {
+                  // Enter in the paste box processes the string instead of
+                  // submitting the form, so the user can verify before going.
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleProcess();
+                  }
+                }}
               />
               <div className="flex items-center justify-between gap-2">
                 {/* The hint stays neutral/empty until the user acts: it confirms
@@ -495,7 +511,7 @@ export function SetViewDialog({
                 >
                   {pasteFailed
                     ? t("toolbar.setView.smartPasteInvalid")
-                    : processed
+                    : pasteStatus === "ok"
                       ? t("toolbar.setView.processed")
                       : ""}
                 </p>
@@ -518,7 +534,10 @@ export function SetViewDialog({
               >
                 {t("toolbar.setView.format")}
               </span>
-              <InfoTooltip label={t("toolbar.setView.formatInfo")} />
+              <InfoTooltip
+                title={t("toolbar.setView.formatInfoLabel")}
+                label={t("toolbar.setView.formatInfo")}
+              />
             </div>
             {/* Native radios (not buttons) so the browser gives the group its
                 roving tabindex and arrow-key navigation for free; each input is
@@ -632,17 +651,18 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * A small info "ⓘ" button that reveals help text on hover/focus. The `label`
- * doubles as the tooltip content and the button's accessible name, and renders
- * with preserved line breaks so multi-line format references read as a list.
+ * A small info "ⓘ" button that reveals help text on hover/focus. `title` is the
+ * short accessible name announced on focus, while `label` is the longer tooltip
+ * content shown to sighted users, rendered with preserved line breaks so a
+ * multi-line format reference reads as a list.
  */
-function InfoTooltip({ label }: { label: string }) {
+function InfoTooltip({ title, label }: { title: string; label: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          aria-label={label}
+          aria-label={title}
           className="inline-flex cursor-help rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Info className="h-3.5 w-3.5" aria-hidden="true" />

@@ -1148,7 +1148,8 @@
       "sectionCoordinates": "Coordinates",
       "smartPaste": "Paste coordinates",
       "smartPastePlaceholder": "e.g. 51.5074, -0.1278 or 51°30'26\"N, 0°07'39\"W",
-      "smartPasteInfo": "Type or paste a full coordinate string in DD, DMS, or DDM. GeoLibre detects the format and fills the longitude and latitude fields below. Adjust zoom, pitch, and bearing separately before going.",
+      "smartPasteInfo": "Type or paste a full coordinate string in DD, DMS, or DDM, then run Process input. GeoLibre detects the format and fills the longitude and latitude fields below. Adjust zoom, pitch, and bearing separately before going.",
+      "smartPasteInfoLabel": "About pasting coordinates",
       "smartPasteInvalid": "Could not read those coordinates. Enter a full longitude and latitude in DD, DMS, or DDM, for example 51.5074, -0.1278. A partial or incomplete string cannot be parsed.",
       "processInput": "Process input",
       "processed": "Filled the longitude and latitude fields below.",
@@ -1157,6 +1158,7 @@
       "orientationHint": "Pitch and bearing default to 0 if left blank.",
       "format": "Manual entry format",
       "formatInfo": "These buttons only choose how you type the center by hand. The paste box above already accepts any format.\nDD: 51.5074, -0.1278\nDMS: 51°30'26\"N, 0°07'39\"W\nDDM: 51°30.44'N, 0°07.65'W",
+      "formatInfoLabel": "About coordinate formats",
       "formatDd": "Decimal degrees (DD)",
       "formatDms": "Degrees, minutes, seconds (DMS)",
       "formatDdm": "Degrees and decimal minutes (DDM)",
@@ -1175,7 +1177,7 @@
       "go": "Go",
       "invalid": "Enter a valid longitude (−180 to 180), latitude (−90 to 90), and zoom.",
       "invalidDms": "Enter valid degrees, minutes (0 to 59), seconds (0 to 59), and zoom.",
-      "invalidDdm": "Enter valid degrees, minutes (0 to 59), and zoom."
+      "invalidDdm": "Enter valid degrees, decimal minutes (0 to < 60), and zoom."
     },
     "commandGroup": {
       "project": "Project",
