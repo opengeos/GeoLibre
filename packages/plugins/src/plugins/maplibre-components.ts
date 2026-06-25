@@ -1432,7 +1432,7 @@ function normalizeComponentsProjectState(
   };
 }
 
-function normalizeColorbarState(
+export function normalizeColorbarState(
   state: unknown
 ): ComponentColorbarGuiState | undefined {
   if (!state || typeof state !== "object") return undefined;
