@@ -1579,12 +1579,14 @@ export class MapController {
 
     const labelWindow = window as GeoLibreLayerLabelWindow;
     labelWindow.__GEOLIBRE_LAYER_LABELS__ = Object.fromEntries([
-      // The Layer Swipe panel groups all basemap layers under "__basemap__";
-      // publish the translated base-layer label so it matches the sidebar.
-      ["__basemap__", this.backgroundLabel],
       ...layers
         .flatMap((layer) => this.getNamedStyleLayers(layer))
         .map(({ id, name }): [string, string] => [id, name]),
+      // The Layer Swipe panel groups all basemap layers under "__basemap__";
+      // publish the translated base-layer label last so this synthetic key
+      // always wins over a layer that happens to share the id, matching the
+      // sidebar.
+      ["__basemap__", this.backgroundLabel],
     ]);
     window.dispatchEvent(new CustomEvent("geolibre-layer-labels-change"));
   }

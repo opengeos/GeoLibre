@@ -868,7 +868,8 @@ describe("MapController base-layer label", () => {
     withStubbedLabelWindow((win) => {
       const controller = createMapController();
 
-      // Defaults to English before the app pushes a translated label.
+      // An explicit English push publishes under the "__basemap__" key the
+      // swipe panel reads.
       controller.setBackgroundLabel("Background");
       assert.equal(win.__GEOLIBRE_LAYER_LABELS__?.__basemap__, "Background");
 
