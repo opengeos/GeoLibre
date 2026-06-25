@@ -145,14 +145,16 @@ VITE_HERE_API_KEY=your_here_api_key                 # HERE Traffic Flow
 
 Google Traffic reuses the same `VITE_GOOGLE_MAPS_API_KEY` as Street View; enable the **Map Tiles API** for that key in Google Cloud. A newly entered key takes effect immediately, without reopening the project. Until a provider's key is set, its overlay reports a missing-key error instead of loading tiles.
 
-The **Amazon Location** styles in the Basemaps control are keyed the same way:
+## Optional Amazon Location styles
+
+The **Amazon Location** entries in the Basemaps control are *style basemaps* (they replace the whole map style, unlike the traffic overlays above). They authenticate with your own Amazon Location API key, set in **Settings → Environment Variables** (or baked into `apps/geolibre-desktop/.env.local`):
 
 ```env
 VITE_AMAZON_LOCATION_API_KEY=your_amazon_location_api_key   # Amazon Location styles
-VITE_AWS_REGION=us-east-1                                   # optional, defaults to us-east-1
+VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional, defaults to us-east-1
 ```
 
-You can also enter these directly in the panel's **API keys** view (the key button in the panel header) without setting an environment variable.
+A newly entered key takes effect immediately, without reopening the project. You can also enter the key (and region) directly in the panel's **API keys** view, opened from the key button in the panel header, without setting an environment variable.
 
 ## Optional Python sidecar
 

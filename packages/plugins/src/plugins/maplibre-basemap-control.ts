@@ -53,7 +53,7 @@ function getBasemapCredentials(): {
     tomtomApiKey: env.VITE_TOMTOM_API_KEY?.trim() || "",
     hereApiKey: env.VITE_HERE_API_KEY?.trim() || "",
     amazonApiKey: env.VITE_AMAZON_LOCATION_API_KEY?.trim() || "",
-    awsRegion: env.VITE_AWS_REGION?.trim() || "us-east-1",
+    awsRegion: env.VITE_AMAZON_LOCATION_AWS_REGION?.trim() || "us-east-1",
   };
 }
 
