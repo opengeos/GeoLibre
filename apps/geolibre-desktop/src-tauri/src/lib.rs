@@ -244,14 +244,24 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// rather than `std::path` based so they behave identically for the Windows-style
 /// paths a project may carry regardless of the host the binary runs on.
 fn is_allowed_local_vector_path(path: &str) -> bool {
-    // Absolute local path only. UNC paths ("\\server\share") are rejected:
-    // reading one can make Windows auto-authenticate against a remote host.
     let bytes = path.as_bytes();
-    let is_posix_absolute = path.starts_with('/');
+    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
+
+    // Reject UNC paths first. Both the Windows form ("\\server\share") and the
+    // forward-slash form ("//server/share") start with two separators and can
+    // make Windows auto-authenticate against a remote host, so neither may slip
+    // through the POSIX-absolute check below.
+    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
+        return false;
+    }
+
+    // Absolute local path only: POSIX "/..." or a Windows drive-letter "C:\..."
+    // / "C:/...".
+    let is_posix_absolute = bytes.first() == Some(&b'/');
     let is_windows_drive = bytes.len() >= 3
         && bytes[0].is_ascii_alphabetic()
         && bytes[1] == b':'
-        && (bytes[2] == b'\\' || bytes[2] == b'/');
+        && is_separator(bytes[2]);
     if !is_posix_absolute && !is_windows_drive {
         return false;
     }
@@ -263,10 +273,11 @@ fn is_allowed_local_vector_path(path: &str) -> bool {
     }
 
     // Known vector extension, case-insensitive, matching `RESTORABLE_VECTOR_PATH`.
+    // `rsplit_once` takes the text after the final dot without allocating.
     let lower = path.to_ascii_lowercase();
-    RESTORABLE_VECTOR_EXTENSIONS
-        .iter()
-        .any(|extension| lower.ends_with(&format!(".{extension}")))
+    lower
+        .rsplit_once('.')
+        .is_some_and(|(_, extension)| RESTORABLE_VECTOR_EXTENSIONS.contains(&extension))
 }
 
 /// Read a local file's raw bytes so a project's file-referenced vector layers
@@ -2493,10 +2504,11 @@ mod tests {
         assert!(!is_allowed_local_vector_path(
             "C:\\data\\..\\secret.geojson"
         ));
-        // UNC network path.
+        // UNC network paths, both the backslash and forward-slash forms.
         assert!(!is_allowed_local_vector_path(
             "\\\\server\\share\\x.geojson"
         ));
+        assert!(!is_allowed_local_vector_path("//server/share/x.geojson"));
     }
 
     fn zip_with_names(names: &[&str]) -> Vec<u8> {
