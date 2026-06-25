@@ -288,9 +288,18 @@ async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
  * When a project is reopened, its file-referenced layer paths come from the
  * saved `.geolibre.json` rather than from a picker or drag-drop, so they sit
  * outside the `fs` plugin's runtime scope and `readFile` rejects them. The
- * command reads the file directly (the caller has already guarded the path), so
- * a referenced layer reloads after a fresh launch instead of failing with a
- * misleading "Could not convert this vector file with DuckDB-WASM" error.
+ * command reads the file directly, so a referenced layer reloads after a fresh
+ * launch instead of failing with a misleading "Could not convert this vector
+ * file with DuckDB-WASM" error.
+ *
+ * The fall-through is deliberately broad: it covers every `readFile` rejection,
+ * not just scope denials. The fs plugin does not expose a stable discriminant
+ * for an out-of-scope path (only a message we would have to substring-match, and
+ * a wrong guess would silently re-break the reload this fixes), so narrowing is
+ * not worth the fragility. The cost is one extra IPC round-trip on a genuine
+ * read failure (e.g. a moved file), where `read_local_file` fails too and its
+ * error surfaces instead of the plugin's. The command validates the path on the
+ * Rust side, so routing the read through it cannot widen what is readable.
  *
  * @param path - Absolute local path to read.
  * @returns The file's raw bytes.
@@ -310,7 +319,8 @@ async function readLocalFileBytes(
 /**
  * Text counterpart to {@link readLocalFileBytes}: read a local file as UTF-8,
  * falling back to the `read_local_file` Tauri command when the `fs` plugin
- * denies the path (e.g. a project-referenced layer after a fresh launch).
+ * denies the path (e.g. a project-referenced layer after a fresh launch). See
+ * {@link readLocalFileBytes} for why the fall-through catches every rejection.
  *
  * @param path - Absolute local path to read.
  * @returns The file's decoded UTF-8 text.
