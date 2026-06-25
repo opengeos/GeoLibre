@@ -151,10 +151,10 @@ The **Amazon Location** entries in the Basemaps control are *style basemaps* (th
 
 ```env
 VITE_AMAZON_LOCATION_API_KEY=your_amazon_location_api_key   # Amazon Location styles
-VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional; the control defaults to us-east-1 when omitted
+VITE_AMAZON_LOCATION_AWS_REGION=us-east-1                   # optional; omit to use the control's built-in default region
 ```
 
-A newly entered key takes effect immediately, without reopening the project; removing the key from the environment takes effect after a page reload. You can also enter the key (and region) directly in the panel's **API keys** view, opened from the key button in the panel header, without setting an environment variable.
+Keys set via **Settings → Environment Variables**, or typed directly into the panel's **API keys** view (the key button in the panel header), apply at runtime without reopening the project. A key baked into `apps/geolibre-desktop/.env.local` is read at build time and needs a dev server restart. When `VITE_AMAZON_LOCATION_API_KEY` is set in the environment it takes precedence over a key typed in the panel; removing it from the environment clears it on the next page reload.
 
 ## Optional Python sidecar
 

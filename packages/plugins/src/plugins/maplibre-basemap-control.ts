@@ -37,7 +37,7 @@ function getRuntimeEnvironment(): Record<string, string | undefined> {
  * strings when unset, which the control treats as "no key" (the overlay then
  * surfaces a "Get a … API key" error rather than loading tiles).
  */
-function getBasemapCredentials(): {
+function getTrafficOverlayCredentials(): {
   googleMapsApiKey: string;
   tomtomApiKey: string;
   hereApiKey: string;
@@ -176,7 +176,7 @@ function getBasemapControlOptions(
     // just reports a missing-key error instead of loading tiles. Amazon is
     // spread only when its key is set, so an unset key leaves the control's own
     // region default in place.
-    ...getBasemapCredentials(),
+    ...getTrafficOverlayCredentials(),
     ...(getAmazonCredentials() ?? {}),
     // A style basemap (e.g. OpenFreeMap 3D) swaps the whole map style and so
     // discards every stacked raster basemap. In stack mode that silently wiped
@@ -206,7 +206,7 @@ function addRuntimeEnvListener(): void {
 
   const handleRuntimeEnvChange = () => {
     if (!basemapControl) return;
-    const { googleMapsApiKey, tomtomApiKey, hereApiKey } = getBasemapCredentials();
+    const { googleMapsApiKey, tomtomApiKey, hereApiKey } = getTrafficOverlayCredentials();
     basemapControl.setGoogleMapsApiKey(googleMapsApiKey);
     basemapControl.setTomTomApiKey(tomtomApiKey);
     basemapControl.setHereApiKey(hereApiKey);
