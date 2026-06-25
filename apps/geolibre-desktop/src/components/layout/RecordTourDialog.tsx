@@ -548,7 +548,8 @@ export function RecordTourDialog({
                   value={fileName}
                   onChange={(event) => setFileName(event.target.value)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") handleSave();
+                    // Ignore key-repeat so holding Enter doesn't re-fire save.
+                    if (event.key === "Enter" && !event.repeat) handleSave();
                   }}
                 />
                 <span className="shrink-0 text-sm text-muted-foreground">
@@ -749,7 +750,9 @@ function KeyframeRow({
             }}
           />
           <span className="text-muted-foreground">
-            {t("recordTour.secondsLong")}
+            {/* Pluralize against the committed value so a 1s transition reads
+                "1 second", not "1 seconds". */}
+            {t("recordTour.secondsLong", { count: keyframe.durationMs / 1000 })}
           </span>
         </label>
       )}
