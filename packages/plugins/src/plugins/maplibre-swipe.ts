@@ -119,9 +119,7 @@ function getSwipeControlOptions(
     selectVisibleByDefault: previousState === undefined,
     basemapStyle: app.getActiveBasemap(),
     excludeLayers: ["gl-draw-*", "measure-*", "geolibre-highlight-*"],
-    // Only list layers that are currently visible in the main Layers panel
-    // (plus any already selected), and keep the lists in sync as visibility
-    // changes, so the swipe panel mirrors the active working set (#843).
+    // List only currently visible layers (plus any already selected), kept in sync live (#843).
     visibleLayersOnly: true,
   };
 }
