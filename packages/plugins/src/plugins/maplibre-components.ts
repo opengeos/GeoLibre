@@ -746,19 +746,21 @@ let splattingStoreUnsubscribe: (() => void) | null = null;
 // `lidar-url` layer's metadata; the point cloud itself is loaded by the LiDAR
 // control, not the store, so a reopened project shows the layer in the panel
 // but renders nothing until we ask the control to stream it again (see
-// restoreLidarLayers). Because loadPointCloud assigns a fresh id, this map
-// carries the saved layer's desired state, keyed by source URL, so the load
-// handler can reattach the loaded cloud to the saved layer instead of adding a
-// duplicate.
+// restoreLidarLayers). Because loadPointCloud assigns a fresh id, each entry
+// carries the saved layer's desired state so the load handler can reattach the
+// loaded cloud to the saved layer instead of adding a duplicate. The map is
+// keyed by source URL and holds a FIFO queue per URL, so two saved layers that
+// point at the same COPC file both restore (one entry consumed per load event).
 interface PendingLidarRestore {
   layerId: string;
   name: string;
   visible: boolean;
   opacity: number;
   style: GeoLibreLayer["style"];
+  groupId: string | undefined;
   beforeLayerId: string | null;
 }
-const pendingLidarRestores = new Map<string, PendingLidarRestore>();
+const pendingLidarRestores = new Map<string, PendingLidarRestore[]>();
 let lidarRestoreInFlight = false;
 
 let pluginActive = false;
@@ -2506,12 +2508,10 @@ function lidarLayerUrl(layer: GeoLibreLayer): string | null {
   return typeof url === "string" && url ? url : null;
 }
 
-/** Whether a restore is already queued or in flight for this layer. */
+/** Whether a restore is already queued or in flight for this specific layer. */
 function isLidarRestorePending(layer: GeoLibreLayer): boolean {
-  const url = lidarLayerUrl(layer);
-  if (url && pendingLidarRestores.has(url)) return true;
-  for (const pending of pendingLidarRestores.values()) {
-    if (pending.layerId === layer.id) return true;
+  for (const queue of pendingLidarRestores.values()) {
+    if (queue.some((pending) => pending.layerId === layer.id)) return true;
   }
   return false;
 }
@@ -2556,16 +2556,27 @@ export async function restoreLidarLayers(app: GeoLibreAppAPI): Promise<void> {
       if (index === -1) continue;
       if (hasLidarPointCloud(layer.id) || isLidarRestorePending(layer)) continue;
 
-      pendingLidarRestores.set(url, {
+      const entry: PendingLidarRestore = {
         layerId: layer.id,
         name: layer.name,
         visible: layer.visible,
         opacity: layer.opacity,
         style: layer.style,
+        groupId: layer.groupId,
         beforeLayerId: current[index + 1]?.id ?? null,
-      });
+      };
+      const queue = pendingLidarRestores.get(url);
+      if (queue) queue.push(entry);
+      else pendingLidarRestores.set(url, [entry]);
       lidarControl.loadPointCloud(url).catch((error: unknown) => {
-        pendingLidarRestores.delete(url);
+        // Drop only this layer's entry so a sibling restore for the same URL is
+        // not lost; clean up the map key once its queue empties.
+        const remaining = pendingLidarRestores.get(url);
+        if (remaining) {
+          const at = remaining.indexOf(entry);
+          if (at !== -1) remaining.splice(at, 1);
+          if (remaining.length === 0) pendingLidarRestores.delete(url);
+        }
         console.warn("[lidar] failed to restore point cloud", url, error);
       });
     }
@@ -3408,7 +3419,10 @@ function setHtmlPanelVisible(visible: boolean): void {
 
 function teardownLidarControl(app: GeoLibreAppAPI): void {
   stopLidarThemeSync();
+  // Clear restore bookkeeping so a teardown mid-restore (project reload, map
+  // re-init) cannot strand the in-flight guard and block later restores.
   pendingLidarRestores.clear();
+  lidarRestoreInFlight = false;
   lidarStoreUnsubscribe?.();
   lidarStoreUnsubscribe = null;
   lidarLayerAdapter?.destroy();
@@ -3447,15 +3461,21 @@ function createLidarLoadHandler(): LidarControlEventHandler {
       typeof event.pointCloud.source === "string"
         ? event.pointCloud.source
         : null;
-    const restore = restoreKey ? pendingLidarRestores.get(restoreKey) : null;
-    if (restore) {
-      pendingLidarRestores.delete(restoreKey as string);
+    const restoreQueue = restoreKey
+      ? pendingLidarRestores.get(restoreKey)
+      : undefined;
+    const restore = restoreQueue?.shift();
+    if (restore && restoreKey) {
+      if (restoreQueue && restoreQueue.length === 0) {
+        pendingLidarRestores.delete(restoreKey);
+      }
       const restored: GeoLibreLayer = {
         ...layer,
         name: restore.name || layer.name,
         visible: restore.visible,
         opacity: restore.opacity,
         style: restore.style,
+        ...(restore.groupId ? { groupId: restore.groupId } : {}),
       };
       if (
         restore.layerId !== restored.id &&
