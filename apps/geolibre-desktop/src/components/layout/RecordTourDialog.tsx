@@ -116,9 +116,10 @@ export function RecordTourDialog({
   // accident from an edit whose warning may have scrolled out of view.
   const editingFrozen = busy || status === "ready";
 
-  // Clear the last save/record outcome banner. Used when starting to build a
-  // new tour (adding the first/next view); plain keyframe edits leave it alone
-  // so a "Saved …" note doesn't vanish on an unrelated tweak. A pending take is
+  // Clear the last save/record outcome banner. Used by the edits that change a
+  // keyframe's camera (adding a view, recapturing one), since the saved video
+  // no longer matches the tour; plain reorder/duration tweaks leave it alone so
+  // a "Saved …" note doesn't vanish on an unrelated change. A pending take is
   // never dropped here: editing is frozen while one is held, so the only way to
   // drop it is the explicit Discard button.
   const clearResultMessages = () => {
@@ -198,6 +199,9 @@ export function RecordTourDialog({
   const recaptureKeyframe = (id: string) => {
     const view = captureView();
     if (!view) return;
+    // Recapturing changes what the tour records, like adding a view, so a stale
+    // "Saved …" banner shouldn't keep implying the modified tour was saved.
+    clearResultMessages();
     setKeyframes((current) =>
       current.map((kf) => (kf.id === id ? { ...kf, ...view } : kf)),
     );
