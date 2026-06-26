@@ -767,20 +767,44 @@ export function DesktopShell({
   // and hands us the bytes; the conversion and the prompt live here because this
   // layer has i18n and the client-side converter. See opengeos/GeoLibre#789.
   useEffect(() => {
-    setNonTiledRasterHandler(async ({ name, readBytes, dismiss }) => {
+    setNonTiledRasterHandler(async ({ name, bytesAreRemote, readBytes, dismiss }) => {
       try {
+        // For a remote source readBytes() streams the whole file over the
+        // network, so confirm up front before that download starts. A local
+        // file resolves instantly, so it keeps the single post-read prompt
+        // below (which can also surface the large-raster warning). See #916.
+        if (
+          bytesAreRemote &&
+          !window.confirm(t("raster.cogConvertConfirm", { name }))
+        ) {
+          return;
+        }
         const bytes = await readBytes();
         const info = await readGeoTiffInfo(bytes);
         const samples = info.width * info.height * Math.max(info.bands, 1);
-        const message =
-          samples > LARGE_RASTER_SAMPLE_LIMIT
-            ? t("raster.cogConvertLargeConfirm", {
+        if (samples > LARGE_RASTER_SAMPLE_LIMIT) {
+          // Big enough that conversion may be slow or memory-heavy; warn now
+          // that the dimensions are known, even if a remote source already
+          // confirmed the download above.
+          if (
+            !window.confirm(
+              t("raster.cogConvertLargeConfirm", {
                 name,
                 width: info.width,
                 height: info.height,
-              })
-            : t("raster.cogConvertConfirm", { name });
-        if (!window.confirm(message)) return;
+              }),
+            )
+          ) {
+            return;
+          }
+        } else if (
+          !bytesAreRemote &&
+          !window.confirm(t("raster.cogConvertConfirm", { name }))
+        ) {
+          // Local file, not large: the original single convert prompt. A remote
+          // source already confirmed before the download, so do not prompt twice.
+          return;
+        }
         const cog = await convertGeoTiffToCog(bytes);
         // The cast is required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
         // which is not directly assignable to BlobPart's ArrayBufferView.

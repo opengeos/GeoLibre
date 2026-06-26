@@ -114,6 +114,11 @@ export interface NonTiledRasterRequest {
   layerId: string;
   /** The failed layer's display name (used for the converted layer too). */
   name: string;
+  /** Whether {@link readBytes} streams a full file over the network (a remote
+   * URL source) rather than resolving instantly from a local blob URL. The host
+   * uses this to confirm with the user *before* a potentially large download
+   * starts, instead of after. */
+  bytesAreRemote: boolean;
   /** Reads the original bytes (a local file from its blob URL, or a remote URL
    * fetched whole). Must be awaited before {@link dismiss}, which revokes a
    * local file's blob URL. */
@@ -528,6 +533,9 @@ function createRasterControl(
           ? info.source.url
           : undefined;
     if (!bytesUrl) return;
+    // A remote URL streams the whole file over the network when read; a local
+    // file's blob URL resolves instantly. The host confirms before the download.
+    const bytesAreRemote = info.source.kind === "url";
     const handler = nonTiledRasterHandler;
     nonTiledInFlight.add(layerId);
     // Invoke inside the promise chain so even a synchronous throw from the
@@ -539,6 +547,7 @@ function createRasterControl(
         handler({
           layerId,
           name: info.name,
+          bytesAreRemote,
           readBytes: async () => {
             const response = await fetch(bytesUrl, {
               signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS),
