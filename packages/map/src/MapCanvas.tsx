@@ -1215,8 +1215,11 @@ export const MapCanvas = memo(function MapCanvas({
     // Close the photo popup when the Identify tool is turned on (which may
     // happen via a toolbar button, with no map click to dismiss it), so the
     // photo and identify popups never coexist.
-    const unsubscribeIdentify = useAppStore.subscribe((state) => {
-      if (state.identifyLayerId) {
+    const unsubscribeIdentify = useAppStore.subscribe((state, prev) => {
+      // Only on the off->on transition: the listener runs on every store change
+      // (e.g. setPointerCoords on each mousemove), so guarding on the current
+      // value alone would keep clobbering the Identify crosshair cursor.
+      if (state.identifyLayerId && !prev.identifyLayerId) {
         removePhotoPopup();
         // If Identify is enabled while the cursor already sits on a photo point,
         // mouseleave never fires, so clear the hover cursor here too.
