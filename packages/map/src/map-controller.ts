@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import type {
   GeoLibreLayer,
+  LayerStyle,
   MapPreferences,
   MapProjection,
   MapViewState,
@@ -91,6 +92,60 @@ const EMPTY_HIGHLIGHT: FeatureCollection = {
 
 function isCustomControllableLayer(layer: GeoLibreLayer): boolean {
   return typeof layer.metadata.customLayerType === "string";
+}
+
+/**
+ * Translate a MapLibre paint property edited in the layer control's per-layer
+ * style editor into a partial {@link LayerStyle} update for the store, so the
+ * floating editor and the right-hand Style sidebar stay in sync (issue #912).
+ *
+ * Layer-level opacity is handled separately (it lives on the layer record, not
+ * its style); see {@link MapController.applyLayerControlStyleChange}. Properties
+ * GeoLibre's style model does not track return `null` and are ignored — the
+ * control still applies them to the map, they just are not mirrored to the
+ * store.
+ */
+export function layerControlPaintToStyle(
+  property: string,
+  value: unknown,
+): Partial<LayerStyle> | null {
+  const num = typeof value === "number" ? value : null;
+  const hex = typeof value === "string" ? value : null;
+
+  switch (property) {
+    // Raster color adjustments (the primary #912 case: basemap/raster sliders).
+    case "raster-brightness-min":
+      return num === null ? null : { rasterBrightnessMin: num };
+    case "raster-brightness-max":
+      return num === null ? null : { rasterBrightnessMax: num };
+    case "raster-saturation":
+      return num === null ? null : { rasterSaturation: num };
+    case "raster-contrast":
+      return num === null ? null : { rasterContrast: num };
+    case "raster-hue-rotate":
+      return num === null ? null : { rasterHueRotate: num };
+    // Common vector paint props, best-effort mapped to the flat single-symbol
+    // style fields. Layers using a data-driven vectorStyleMode override these,
+    // matching how the sidebar already behaves.
+    case "fill-color":
+    case "circle-color":
+      return hex === null ? null : { fillColor: hex };
+    case "fill-opacity":
+      return num === null ? null : { fillOpacity: num };
+    case "line-color":
+    case "fill-outline-color":
+    case "circle-stroke-color":
+      return hex === null ? null : { strokeColor: hex };
+    case "line-width":
+    case "circle-stroke-width":
+      return num === null ? null : { strokeWidth: num };
+    case "circle-radius":
+      return num === null ? null : { circleRadius: num };
+    case "text-color":
+      return hex === null ? null : { textColor: hex };
+    default:
+      return null;
+  }
 }
 
 function nativeLayerSuffix(layerId: string): string | undefined {
@@ -1278,6 +1333,12 @@ export class MapController {
       onBackgroundOpacityChange: (opacity) => {
         useAppStore.getState().setBasemapOpacity(opacity);
       },
+      // The per-layer style editor edits MapLibre paint directly; mirror those
+      // edits into the store (the source of truth) so the right-hand Style
+      // sidebar stays in sync and the change survives the next layer sync.
+      onLayerStyleChange: (layerId, property, value) => {
+        this.applyLayerControlStyleChange(layerId, property, value);
+      },
     });
     this.map.addControl(
       this.layerControl,
@@ -1314,6 +1375,31 @@ export class MapController {
   private syncLayerControlState(): void {
     this.syncLayerControlBackgroundState();
     this.syncLayerControlLayerStates(this.syncedLayers);
+    // Push the latest paint (already applied to the map by syncLayer) into the
+    // layer control's open style editor so edits made elsewhere — e.g. the
+    // right-hand Style sidebar — are reflected there too (issue #912). No-op
+    // when no editor is open; skips the input the user is actively dragging.
+    this.layerControl?.refreshStyleEditor();
+  }
+
+  /**
+   * Mirror a paint property edited via the layer control's per-layer style
+   * editor into the store. {@code raster-opacity} maps to the layer-level
+   * opacity; everything else maps to {@link LayerStyle} via
+   * {@link layerControlPaintToStyle}. Unmapped properties are ignored.
+   */
+  private applyLayerControlStyleChange(
+    layerId: string,
+    property: string,
+    value: unknown,
+  ): void {
+    const store = useAppStore.getState();
+    if (property === "raster-opacity") {
+      if (typeof value === "number") store.setLayerOpacity(layerId, value);
+      return;
+    }
+    const styleUpdate = layerControlPaintToStyle(property, value);
+    if (styleUpdate) store.setLayerStyle(layerId, styleUpdate);
   }
 
   private createLayerControlConfig(
