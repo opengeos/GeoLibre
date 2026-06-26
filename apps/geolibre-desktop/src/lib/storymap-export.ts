@@ -535,7 +535,11 @@ function renderTemplate(
         map.on('load', function () {
             // Match the in-app projection (globe by default) so the exported
             // story does not silently fall back to 2D Mercator (#917).
-            try { map.setProjection({ type: config.projection || 'globe' }); } catch (e) { console.error('[GeoLibre] projection failed', e); }
+            try {
+                map.setProjection({ type: config.projection || 'globe' });
+            } catch (e) {
+                console.error('[GeoLibre] projection failed', e);
+            }
 ${inlineLayerScript}
 
             scroller.setup({ step: '.step', offset: 0.5 })

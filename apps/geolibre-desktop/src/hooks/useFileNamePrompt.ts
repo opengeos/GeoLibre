@@ -82,8 +82,10 @@ export function ensureFileExtension(
   if (extensions.some((e) => lower.endsWith(`.${e.toLowerCase()}`))) {
     return name;
   }
-  // Strip any trailing dots first so "my-story." doesn't become a double dot.
-  return `${name.replace(/\.+$/, "")}.${ext}`;
+  // Strip any trailing dots first so "my-story." doesn't become a double dot;
+  // fall back to "download" when the name was only dots (e.g. "." / "..") so we
+  // never produce a hidden, extension-only file like ".html".
+  return `${name.replace(/\.+$/, "") || "download"}.${ext}`;
 }
 
 /**
