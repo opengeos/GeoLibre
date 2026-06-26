@@ -45,6 +45,12 @@ The [`geolibre`](python.md) Python package embeds the full GeoLibre app in a Jup
 pip install geolibre
 ```
 
+Or install it from conda-forge:
+
+```bash
+conda install -c conda-forge geolibre
+```
+
 See the [Python Package](python.md) reference to get started.
 
 ### On Android
