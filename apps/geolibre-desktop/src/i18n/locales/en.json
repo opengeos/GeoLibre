@@ -1664,10 +1664,15 @@
       "addAsLayer": "Add as layer",
       "exportCsv": "Export CSV",
       "exportGeoParquet": "Export GeoParquet",
-      "addedAsLayer": "Added {{count}} features to the map as \"{{name}}\".",
+      "addedAsLayer_one": "Added {{count}} feature to the map as \"{{name}}\".",
+      "addedAsLayer_other": "Added {{count}} features to the map as \"{{name}}\".",
       "savedAs": "Saved {{label}} as {{name}}.",
       "noRows": "Statement executed. No rows returned.",
-      "showingRows": "Showing first {{shown}} of {{total}} rows. Export to see them all."
+      "showingRows": "Showing first {{shown}} of {{total}} rows. Export to see them all.",
+      "rowsCount_one": "{{count}} row",
+      "rowsCount_other": "{{count}} rows",
+      "columnsCount_one": "{{count}} column",
+      "columnsCount_other": "{{count}} columns"
     }
   },
   "geocode": {

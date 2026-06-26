@@ -308,9 +308,11 @@ export function SqlWorkspacePanel() {
   // Same race for exports: the disabled buttons lag a render, so a fast double
   // click could open two save dialogs. The ref guards synchronously.
   const exportingRef = useRef(false);
-  // handleAddAsLayer is synchronous, so a rapid double-click could add the same
-  // result as two layers before React re-renders. The ref guards synchronously.
-  const addingLayerRef = useRef(false);
+  // handleAddAsLayer is synchronous, so a boolean "in progress" ref cannot guard
+  // a rapid double-click (it is reset within the same frame). Instead remember
+  // the exact result already added: a second click on the same result is a
+  // no-op, while a new query produces a fresh geojson object that can be added.
+  const addedGeojsonRef = useRef<SqlQueryResult["geojson"]>(null);
 
   // Focus the editor when the panel first opens so the user can type at once.
   useEffect(() => {
@@ -342,6 +344,9 @@ export function SqlWorkspacePanel() {
     setRunning(true);
     setError(null);
     setNotice(null);
+    // Clear the previous result so a long-running query does not leave stale
+    // rows on screen while the spinner runs.
+    setResult(null);
     try {
       const queryResult =
         engine === "postgis"
@@ -370,8 +375,8 @@ export function SqlWorkspacePanel() {
   };
 
   const handleAddAsLayer = () => {
-    if (!result?.geojson || addingLayerRef.current) return;
-    addingLayerRef.current = true;
+    if (!result?.geojson || addedGeojsonRef.current === result.geojson) return;
+    addedGeojsonRef.current = result.geojson;
     setError(null);
     const featureCount = result.geojson.features.length;
     const name =
@@ -380,7 +385,6 @@ export function SqlWorkspacePanel() {
     setNotice(
       t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }),
     );
-    addingLayerRef.current = false;
   };
 
   const saveBinary = async (
@@ -721,7 +725,7 @@ export function SqlWorkspacePanel() {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              onClick={runQuery}
+              onClick={() => void runQuery()}
               disabled={running || !sql.trim()}
               title={t("toolbar.sqlWorkspace.runHint")}
             >
@@ -743,9 +747,11 @@ export function SqlWorkspacePanel() {
             </Button>
             {result ? (
               <span className="text-xs text-muted-foreground">
-                {result.rowCount} row{result.rowCount === 1 ? "" : "s"} ·{" "}
-                {result.columns.length} column
-                {result.columns.length === 1 ? "" : "s"}
+                {t("toolbar.sqlWorkspace.rowsCount", { count: result.rowCount })}{" "}
+                ·{" "}
+                {t("toolbar.sqlWorkspace.columnsCount", {
+                  count: result.columns.length,
+                })}
               </span>
             ) : null}
           </div>

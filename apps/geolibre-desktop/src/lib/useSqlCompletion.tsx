@@ -125,7 +125,13 @@ export function useSqlCompletion({
         setCompletion((c) => ({ ...c, index: (c.index - 1 + n) % n }));
         return true;
       }
-      if (event.key === "Enter" || event.key === "Tab") {
+      // Plain Enter or Tab accepts the highlighted candidate. Ctrl/Cmd+Enter is
+      // left to the host so it always runs the query, even with the dropdown
+      // open (the dropdown closes when the query starts).
+      if (
+        (event.key === "Enter" && !event.ctrlKey && !event.metaKey) ||
+        event.key === "Tab"
+      ) {
         event.preventDefault();
         const ta = textareaRef.current;
         const cursor = ta?.selectionStart ?? completion.start;
