@@ -246,7 +246,7 @@
 - [x] Windows Package Manager (winget) packaging as `OpenGeos.GeoLibre`, so the app can be installed and updated through winget
 - [x] [Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x) listing, so Windows users can install the signed, auto-updating build directly from the Store (see [Downloads](downloads.md))
 
-## v1.7: Plugin UI host API, color ramp previews, and category-browsed Whitebox tools (current)
+## v1.7: Plugin UI host API, color ramp previews, and category-browsed Whitebox tools
 
 - [x] Plugin UI host API that lets plugins register first-class right-sidebar panels, toolbar menus, and floating panels that dock beside the built-in Style panel instead of emulating an overlay, with external plugin toolbar menus now placed after the Help menu (see [Plugin API](plugin-api.md))
 - [x] Color ramp gradient swatches in both the vector Style panel and the raster Color ramp picker, so you can see each colormap's gradient inline (on the trigger and beside every option) while choosing rather than picking from a plain list of names
@@ -254,6 +254,30 @@
 - [x] Whitebox toolbox is now browsable by category directly in the Processing menu, with nested subcategory submenus, GeoLibre's own WASM tools grouped under their own subheading, an offline-bundled tool catalog for restricted environments, and tools that open the dialog preselected and scrolled into view
 - [x] On-canvas collaboration session-status badge and roster (a pulsing live dot, connected-participant count, and an expandable client list that announces joins and leaves), plus a clear "Go to map and collaborate" button so the host has a non-destructive way back to the map
 - [x] Welcome wizard is suppressed for embeds: project deep links (`?url=`) skip onboarding automatically, and a new `?welcome=0` parameter lets any embed opt out
+
+## v1.8: Camera tours, live story maps, standalone HTML export, and map annotations (current)
+
+- [x] Record an animated camera tour to video straight from the Controls menu, with a clearer keyframe layout, per-keyframe recapture, a two-step save, and the ability to save and reload the entire tour setup as a JSON file
+- [x] Story Map plugin can now compose its chapters directly on the live map instead of a separate editor, and generates a printable PDF handout of the finished story
+- [x] Export a project to a single standalone interactive HTML file that runs offline with no server, plus a project gallery for browsing and opening shared projects with one click
+- [x] Map annotation layer for drawing text, arrows, and highlights directly on the map, persisted with the project
+- [x] Gridlines overlay (renamed from Graticule) draws a coordinate grid with edge labels across the map
+- [x] Import geotagged photos as a point layer from their EXIF GPS, with manual placement and drag-to-position for photos that have no embedded coordinates
+- [x] GeoRSS feed support in Add Data, loaded from a URL or a local file
+- [x] EOX Sentinel-2 cloudless satellite imagery and Openbasiskaart added to the basemap library (Openbasiskaart via basemap-control 0.7.0)
+- [x] Right-click context menu on the map for reading coordinates and reaching quick actions without leaving the canvas
+- [x] Per-participant permissions and an in-app chat panel for real-time collaboration sessions
+- [x] Organize bookmarks into folders for tidier, grouped saved views
+- [x] Dedicated AI Providers section in Settings with per-feature provider dropdowns for choosing and configuring AI backends
+- [x] Plugin API can now register native raster and tile layers, and offers a shared-rail (replace-style) right-panel dock mode for plugin panels (see [Plugin API](plugin-api.md))
+- [x] Time Slider draws a pixel time-series chart for raster stacks, plotting a sampled pixel's value across the timeline
+- [x] Colorbar panel gains a stacking direction control, a resizable panel, and a stack-order fix for multiple colorbars
+- [x] Persistent mode banner for the Directions and Reverse Geocode tools so the active interaction mode stays visible
+- [x] Copy to Clipboard added to the Print Layout composer for pasting the rendered map straight into other apps
+- [x] Clearer Set view coordinate input workflow with support for degrees-decimal-minutes (DDM) entry
+- [x] Raster paint controls gain a greyscale toggle, a reset action, and numeric inputs, plus info icons explaining layer zoom-visibility controls
+- [x] Inline numeric opacity input in the layer control, with a fixed-name notice on the Background layer
+- [x] Windows portable zip build, so the desktop app can run without installation
 
 ## Plugin marketplace and registry (design)
 
