@@ -503,7 +503,9 @@ export function ProcessingMenu({
             {t("toolbar.command.segmentation")}
           </DropdownMenuItem>
         )}
-        {!mobile && show("processing.objectDetection") && (
+        {/* Detection runs client-side (onnxruntime-web), not via the sidecar,
+            so it stays available on mobile/web clients (no `!mobile` gate). */}
+        {show("processing.objectDetection") && (
           <DropdownMenuItem onSelect={() => setObjectDetectionOpen(true)}>
             {t("toolbar.command.objectDetection")}
           </DropdownMenuItem>

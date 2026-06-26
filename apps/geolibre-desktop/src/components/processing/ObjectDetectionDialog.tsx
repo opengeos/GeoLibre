@@ -414,7 +414,9 @@ export function ObjectDetectionDialog({
                 onChange={(e) => {
                   const parsed = Number(e.target.value);
                   if (!Number.isFinite(parsed) || parsed < 32) return;
-                  setInputSize(Math.round(parsed));
+                  // Clamp to the upper bound too: the HTML `max` is advisory, but
+                  // an oversized input would allocate a huge inference tensor.
+                  setInputSize(Math.min(4096, Math.round(parsed)));
                 }}
               />
             </div>

@@ -43,6 +43,11 @@ export interface DetectionOptions {
 }
 
 const DEFAULT_INPUT_SIZE = 640;
+// Upper bound on the model input edge. A 4096 input allocates
+// 3 × 4096² × 4 ≈ 200 MB of Float32, which is the most we let a single
+// detection tensor consume; larger values are rejected before allocation so a
+// stray/huge `inputSize` cannot OOM the tab.
+const MAX_INPUT_SIZE = 4096;
 const DEFAULT_CONFIDENCE = 0.25;
 const DEFAULT_IOU = 0.45;
 /** Letterbox padding colour (YOLO uses 114/255 grey). */
@@ -76,44 +81,59 @@ async function loadOrt(): Promise<typeof import("onnxruntime-web")> {
 }
 
 /**
- * Pull three normalised colour channels (0-1) out of a {@link RasterData}.
+ * Pull three colour channels and a normalisation divisor out of a
+ * {@link RasterData}.
  *
  * Uses the first three bands as R/G/B; a single-band raster is replicated to
- * greyscale. Eight-bit imagery stored as floats (0-255) is scaled to 0-1; data
- * already in 0-1 is left untouched, decided from the observed maximum.
+ * greyscale. The divisor maps raw band values to roughly 0-1 for the model:
+ * data already in 0-1 is left as-is, 8-bit imagery is scaled by 255, and
+ * higher-bit-depth data (e.g. 16-bit) is scaled by its own observed maximum so
+ * it still lands in 0-1 rather than feeding the model values far above 1.
+ * NoData and non-finite samples are excluded from that maximum so a sea of
+ * NoData (or a few sentinel pixels) cannot skew the scale.
  *
  * @param raster The decoded source raster.
- * @returns The per-channel band arrays and the divisor used to normalise them.
+ * @returns The per-channel band arrays, the divisor, and the source NoData.
  */
 function rgbBands(raster: RasterData): {
   r: Float32Array;
   g: Float32Array;
   b: Float32Array;
   divisor: number;
+  nodata: number | null;
 } {
-  const { bands } = raster;
+  const { bands, nodata } = raster;
   const r = bands[0];
   const g = bands.length > 1 ? bands[1] : bands[0];
   const b = bands.length > 2 ? bands[2] : bands[0];
-  // Sample the red band to decide the value range. Aerial/RGB imagery is almost
-  // always 8-bit (0-255); reflectance products may already be 0-1.
+  // Sample the red band to decide the value range, ignoring NoData/non-finite
+  // pixels. Aerial/RGB imagery is almost always 8-bit (0-255); reflectance
+  // products may already be 0-1; higher-bit-depth data exceeds 255.
   let max = 0;
   const step = Math.max(1, Math.floor(r.length / 4096));
   for (let i = 0; i < r.length; i += step) {
     const v = r[i];
-    if (Number.isFinite(v) && v > max) max = v;
+    if (!Number.isFinite(v) || v === nodata) continue;
+    if (v > max) max = v;
   }
-  const divisor = max > 1.5 ? 255 : 1;
-  return { r, g, b, divisor };
+  const divisor = max <= 1.5 ? 1 : max <= 255 ? 255 : max;
+  return { r, g, b, divisor, nodata };
 }
 
-/** Bilinear sample of a band at fractional source pixel `(x, y)`. */
+/**
+ * Bilinear sample of a band at fractional source pixel `(x, y)`.
+ *
+ * Returns `NaN` when any of the four contributing pixels is NoData or
+ * non-finite, so the caller can substitute the padding value instead of
+ * blending an invalid pixel into the model input.
+ */
 function sampleBilinear(
   band: Float32Array,
   width: number,
   height: number,
   x: number,
   y: number,
+  nodata: number | null,
 ): number {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
@@ -127,6 +147,9 @@ function sampleBilinear(
   const v10 = band[cy0 * width + x1];
   const v01 = band[y1 * width + cx0];
   const v11 = band[y1 * width + x1];
+  for (const v of [v00, v10, v01, v11]) {
+    if (!Number.isFinite(v) || v === nodata) return NaN;
+  }
   const top = v00 + (v10 - v00) * dx;
   const bottom = v01 + (v11 - v01) * dx;
   return top + (bottom - top) * dy;
@@ -151,7 +174,7 @@ function preprocess(
   inputSize: number,
 ): { data: Float32Array; letterbox: Letterbox } {
   const { width, height } = raster;
-  const { r, g, b, divisor } = rgbBands(raster);
+  const { r, g, b, divisor, nodata } = rgbBands(raster);
   const scale = Math.min(inputSize / width, inputSize / height);
   const newW = Math.round(width * scale);
   const newH = Math.round(height * scale);
@@ -173,7 +196,12 @@ function preprocess(
       if (sx < -0.5 || sx > width - 0.5) continue;
       const dst = dy * inputSize + dx;
       for (const [band, offset] of channels) {
-        data[offset + dst] = sampleBilinear(band, width, height, sx, sy) / divisor;
+        const sampled = sampleBilinear(band, width, height, sx, sy, nodata);
+        // NoData/invalid pixels keep the prefilled padding value; valid pixels
+        // are normalised and clamped so non-8-bit overshoot never exceeds 0-1.
+        if (Number.isFinite(sampled)) {
+          data[offset + dst] = Math.min(1, Math.max(0, sampled / divisor));
+        }
       }
     }
   }
@@ -249,8 +277,11 @@ function decodeYolo(
   const d1 = dims[1];
   const d2 = dims[2];
   // v8/v11: channels (4 + nc) are fewer than the anchor count, so the smaller
-  // trailing dim is the channel axis and there is no objectness term.
-  const v8 = d1 < d2;
+  // trailing dim is the channel axis and there is no objectness term. On a tie
+  // (d1 === d2, e.g. a degenerate `[1, 84, 84]`) prefer the v8 layout: a real
+  // v5 head has far more anchors than channels (d1 >> d2), so equality is never
+  // genuine v5.
+  const v8 = d1 <= d2;
   const numAnchors = v8 ? d2 : d1;
   const numChannels = v8 ? d1 : d2;
   const hasObjectness = !v8;
@@ -314,6 +345,24 @@ export async function detectObjects(
   const confidenceThreshold = options.confidenceThreshold ?? DEFAULT_CONFIDENCE;
   const iouThreshold = options.iouThreshold ?? DEFAULT_IOU;
 
+  // Validate the knobs before allocating anything: `inputSize` drives a
+  // `3 * inputSize²` Float32 allocation, and out-of-range thresholds silently
+  // break filtering/NMS. Fail fast with a clear message instead of OOMing or
+  // returning nonsense.
+  if (
+    !Number.isInteger(inputSize) ||
+    inputSize < 32 ||
+    inputSize > MAX_INPUT_SIZE
+  ) {
+    throw new Error(`inputSize must be an integer between 32 and ${MAX_INPUT_SIZE}.`);
+  }
+  if (!Number.isFinite(confidenceThreshold) || confidenceThreshold < 0 || confidenceThreshold > 1) {
+    throw new Error("confidenceThreshold must be between 0 and 1.");
+  }
+  if (!Number.isFinite(iouThreshold) || iouThreshold < 0 || iouThreshold > 1) {
+    throw new Error("iouThreshold must be between 0 and 1.");
+  }
+
   const ort = await loadOrt();
   let session: import("onnxruntime-web").InferenceSession;
   try {
@@ -326,30 +375,43 @@ export async function detectObjects(
     );
   }
 
-  const { data, letterbox } = preprocess(raster, inputSize);
-  const inputName = session.inputNames[0];
-  const tensor = new ort.Tensor("float32", data, [1, 3, inputSize, inputSize]);
-  const outputs = await session.run({ [inputName]: tensor });
-  const outputName = session.outputNames[0];
-  const output = outputs[outputName];
-  const outData = output.data as Float32Array;
+  // Always release the session's WASM heap (model weights/graph), even on
+  // error: onnxruntime-web does not free it deterministically on GC, so
+  // repeated detection runs would otherwise leak unbounded native memory.
+  try {
+    const { data, letterbox } = preprocess(raster, inputSize);
+    const inputName = session.inputNames[0];
+    const tensor = new ort.Tensor("float32", data, [1, 3, inputSize, inputSize]);
+    const outputs = await session.run({ [inputName]: tensor });
+    const outputName = session.outputNames[0];
+    const output = outputs[outputName];
+    if (!output) {
+      throw new Error(
+        `Model produced no usable output. Available outputs: ${session.outputNames.join(", ")}. ` +
+          "Export a detection model with a single [1, C, N] head (no baked-in NMS).",
+      );
+    }
+    const outData = output.data as Float32Array;
 
-  const candidates = decodeYolo(outData, output.dims, confidenceThreshold);
-  const kept = nonMaxSuppression(candidates, iouThreshold);
+    const candidates = decodeYolo(outData, output.dims, confidenceThreshold);
+    const kept = nonMaxSuppression(candidates, iouThreshold);
 
-  // Undo the letterbox (input pixels -> source pixels) and clamp to the raster.
-  const { scale, padX, padY } = letterbox;
-  const { width, height } = raster;
-  const toSrcX = (x: number) => Math.min(width, Math.max(0, (x - padX) / scale));
-  const toSrcY = (y: number) => Math.min(height, Math.max(0, (y - padY) / scale));
-  return kept.map((cand) => ({
-    bbox: [
-      toSrcX(cand.box[0]),
-      toSrcY(cand.box[1]),
-      toSrcX(cand.box[2]),
-      toSrcY(cand.box[3]),
-    ] as [number, number, number, number],
-    classIndex: cand.classIndex,
-    score: cand.score,
-  }));
+    // Undo the letterbox (input pixels -> source pixels) and clamp to the raster.
+    const { scale, padX, padY } = letterbox;
+    const { width, height } = raster;
+    const toSrcX = (x: number) => Math.min(width, Math.max(0, (x - padX) / scale));
+    const toSrcY = (y: number) => Math.min(height, Math.max(0, (y - padY) / scale));
+    return kept.map((cand) => ({
+      bbox: [
+        toSrcX(cand.box[0]),
+        toSrcY(cand.box[1]),
+        toSrcX(cand.box[2]),
+        toSrcY(cand.box[3]),
+      ] as [number, number, number, number],
+      classIndex: cand.classIndex,
+      score: cand.score,
+    }));
+  } finally {
+    await session.release();
+  }
 }
