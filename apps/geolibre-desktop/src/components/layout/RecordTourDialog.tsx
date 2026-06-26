@@ -131,6 +131,23 @@ export function RecordTourDialog({
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
+  // Resize-from-the-bottom-corners. `size` is null until first resized, when the
+  // default width / max-height classes apply; afterwards it pins to explicit
+  // pixels. The bottom-left handle keeps the right edge fixed (so it adjusts
+  // `pos.x` too); the bottom-right handle keeps the left edge fixed.
+  const [size, setSize] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+  const resizeRef = useRef<{
+    corner: "sw" | "se";
+    startX: number;
+    startY: number;
+    startWidth: number;
+    startHeight: number;
+    startLeft: number;
+    startTop: number;
+  } | null>(null);
+
   // True while the camera is being captured or the file is being written; the
   // close button is blocked during these phases.
   const busy = status === "recording" || status === "saving";
@@ -187,6 +204,69 @@ export function RecordTourDialog({
   // drag) so a stale offset can't snap the panel on the next move.
   const onDragEnd = (event: React.PointerEvent) => {
     dragOffset.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  // Smallest the panel may be resized to, so its controls never clip away.
+  const MIN_PANEL_WIDTH = 320;
+  const MIN_PANEL_HEIGHT = 280;
+
+  const onResizeStart =
+    (corner: "sw" | "se") => (event: React.PointerEvent) => {
+      // Don't let the press also start a drag or bubble to the map underneath.
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = panelRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      resizeRef.current = {
+        corner,
+        startX: event.clientX,
+        startY: event.clientY,
+        startWidth: rect.width,
+        startHeight: rect.height,
+        startLeft: rect.left,
+        startTop: rect.top,
+      };
+      // Pin both position and size from the live measurement so a from-the-left
+      // resize has a fixed right edge to work against even before the first drag.
+      setPos({ x: rect.left, y: rect.top });
+      setSize({ width: rect.width, height: rect.height });
+      event.currentTarget.setPointerCapture(event.pointerId);
+    };
+
+  const onResizeMove = (event: React.PointerEvent) => {
+    const start = resizeRef.current;
+    if (!start) return;
+    const dx = event.clientX - start.startX;
+    const dy = event.clientY - start.startY;
+    // Height grows downward from a fixed top for both corners.
+    const maxHeight = window.innerHeight - start.startTop;
+    const height = Math.max(
+      MIN_PANEL_HEIGHT,
+      Math.min(start.startHeight + dy, maxHeight),
+    );
+    if (start.corner === "se") {
+      // Left edge fixed; the right edge follows the pointer.
+      const maxWidth = window.innerWidth - start.startLeft;
+      const width = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(start.startWidth + dx, maxWidth),
+      );
+      setSize({ width, height });
+    } else {
+      // Right edge fixed; the left edge follows the pointer (so `pos.x` moves).
+      const right = start.startLeft + start.startWidth;
+      const width = Math.max(MIN_PANEL_WIDTH, Math.min(start.startWidth - dx, right));
+      setPos((current) => ({
+        x: right - width,
+        y: current?.y ?? start.startTop,
+      }));
+      setSize({ width, height });
+    }
+  };
+
+  const onResizeEnd = (event: React.PointerEvent) => {
+    resizeRef.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
@@ -496,10 +576,16 @@ export function RecordTourDialog({
       ref={panelRef}
       role="dialog"
       aria-label={t("recordTour.title")}
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      style={{
+        ...(pos ? { left: pos.x, top: pos.y } : null),
+        ...(size ? { width: size.width, height: size.height } : null),
+      }}
       className={cn(
-        "fixed z-40 flex max-h-[calc(100dvh-6rem)] w-96 max-w-[95vw] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
+        "fixed z-40 flex flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
         pos ? "" : "left-4 top-16",
+        // Default width / height cap only until the panel is explicitly resized,
+        // after which the inline pixel size takes over.
+        size ? "" : "max-h-[calc(100dvh-6rem)] w-96 max-w-[95vw]",
       )}
     >
       {/* Drag handle / title bar. */}
@@ -763,6 +849,28 @@ export function RecordTourDialog({
           </Button>
         )}
       </div>
+
+      {/* Resize handles in the two bottom corners. The bottom-left one drags the
+          left edge (keeping the right edge fixed); the bottom-right one drags
+          the right edge. Both also drag the bottom edge. */}
+      <div
+        role="separator"
+        aria-label={t("recordTour.resizeLeft")}
+        onPointerDown={onResizeStart("sw")}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-bl-lg border-b-2 border-l-2 border-transparent hover:border-muted-foreground/50"
+      />
+      <div
+        role="separator"
+        aria-label={t("recordTour.resizeRight")}
+        onPointerDown={onResizeStart("se")}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-br-lg border-b-2 border-r-2 border-transparent hover:border-muted-foreground/50"
+      />
     </div>
   );
 }
@@ -820,13 +928,13 @@ function SecondsField({
   const [text, setText] = useState(String(valueSeconds));
 
   return (
-    <label className="flex items-center gap-1.5">
+    <label className="flex items-center gap-1">
       <span className="text-muted-foreground">{label}</span>
       <Input
         type="number"
         inputMode="decimal"
         aria-label={ariaLabel}
-        className="h-7 w-16"
+        className="h-7 w-14"
         min={min}
         max={max}
         step="0.5"
@@ -846,12 +954,7 @@ function SecondsField({
         }}
       />
       <span className="text-muted-foreground">
-        {/* Pluralize against the value being typed (falling back to the
-            committed one) so the unit tracks the input: "1 second", not
-            "1 seconds", even mid-edit before blur commits. */}
-        {t("recordTour.secondsLong", {
-          count: Number.isFinite(Number(text)) ? Number(text) : valueSeconds,
-        })}
+        {t("recordTour.secondsShort")}
       </span>
     </label>
   );
@@ -957,8 +1060,9 @@ function KeyframeRow({
       </div>
 
       {/* Bottom row: how long to hold on this view, then how long to move to the
-          next one (greyed out on the last keyframe, which has no next view). */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
+          next one (greyed out on the last keyframe, which has no next view).
+          Both sit on one line; the unit is abbreviated to "sec" to fit. */}
+      <div className="flex items-center gap-3 pl-8">
         <SecondsField
           label={t("recordTour.hold")}
           ariaLabel={t("recordTour.holdSeconds")}
