@@ -1,0 +1,76 @@
+name: Bug report
+description: Report unexpected behavior or a possible flaw in GeoLibre.
+title: "[Bug]: "
+labels: ["unconfirmed possible issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. Please fill out the sections below so we can reproduce and confirm the issue.
+
+        Reports start as **unconfirmed possible issue**. Once a maintainer reproduces the problem, it is promoted to **bug**.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched the [existing issues](https://github.com/opengeos/GeoLibre/issues) and did not find a duplicate.
+          required: true
+        - label: This is a bug report, not a usage question (questions belong in [Discussions](https://github.com/opengeos/GeoLibre/discussions)).
+          required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the unexpected behavior.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Tell us how to reproduce the behavior, step by step.
+      placeholder: |
+        1. Open '...'
+        2. Add data '...'
+        3. Click on '...'
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: How are you running GeoLibre?
+      description: Web app, desktop app, or Jupyter, plus the version if you know it.
+      placeholder: Desktop app v0.x.y / Web (https://geolibre.app) / Jupyter
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and browser
+      description: e.g. Windows 11 + Chrome 126, macOS 14 + Safari, Ubuntu 24.04.
+    validations:
+      required: false
+  - type: textarea
+    id: data
+    attributes:
+      label: Sample data
+      description: If the bug is tied to a specific dataset, share a small sample or a link so we can reproduce it.
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or logs
+      description: Add screenshots, screen recordings, or console output if they help explain the problem.
+    validations:
+      required: false

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/opengeos/GeoLibre/discussions/new?category=q-a
+    about: Have a "how do I do X?" question? Please ask in Discussions (Q&A) to keep the issue tracker focused on bugs and feature requests.
+  - name: Ideas and general discussion
+    url: https://github.com/opengeos/GeoLibre/discussions
+    about: Share early-stage ideas, show your work, or chat with the community in Discussions.
+  - name: Documentation
+    url: https://geolibre.app
+    about: Browse the docs and guides before opening an issue.

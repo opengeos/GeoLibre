@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest a new feature, enhancement, or UX improvement for GeoLibre.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make GeoLibre better. Please describe what you would like and why it matters.
+
+        The scope you pick below helps maintainers triage. It maps to the **enhancement (small)**, **enhancement (medium)**, and **wishlist** labels.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you start
+      options:
+        - label: I searched the [existing issues](https://github.com/opengeos/GeoLibre/issues) and did not find a duplicate request.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the workflow, pain point, or limitation that motivates this request.
+      placeholder: When working with ..., it is hard to ... because ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you would like to see. Mockups or examples are welcome.
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Estimated scope
+      description: Your best guess at the size. A maintainer will confirm and apply the matching label.
+      options:
+        - "Small: a minor tweak, small UI change, or text adjustment"
+        - "Medium: a broader feature that is feasible in a reasonable timeframe"
+        - "Wishlist: a larger or longer-term idea"
+        - "Not sure"
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds you currently use, or other approaches you thought about.
+    validations:
+      required: false
