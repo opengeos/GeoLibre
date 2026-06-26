@@ -3,7 +3,7 @@
 GeoLibre desktop installers are published from GitHub Releases.
 
 [View releases](https://github.com/opengeos/GeoLibre/releases){ .md-button .md-button--primary }
-[Open live demo](https://viewer.geolibre.app/){ .md-button }
+[Launch GeoLibre Web](https://viewer.geolibre.app/){ .md-button }
 
 ## Release assets
 

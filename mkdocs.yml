@@ -41,7 +41,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Downloads: downloads.md
-  - Live Demo: /demo/
+  - Launch GeoLibre Web: /demo/
   - User Guide:
       - Interface Overview: user-guide/interface.md
       - Projects: user-guide/projects.md

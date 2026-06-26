@@ -15,7 +15,7 @@ hide:
       work, project files, styling, plugins, and modern geospatial workflows.
     </p>
     <div class="hero__actions">
-      <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Open live demo</a>
+      <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Launch GeoLibre Web</a>
       <a class="md-button" href="getting-started/">Get started</a>
       <a class="md-button" href="user-guide/interface/">User guide</a>
       <a class="md-button" href="downloads/">Download app</a>
@@ -118,12 +118,12 @@ New to GeoLibre? Start with the [User Guide](user-guide/interface.md) for a feat
 [Read the User Guide](user-guide/interface.md){ .md-button .md-button--primary }
 [Browse the Tutorials](tutorials/index.md){ .md-button }
 
-## Try it in the browser
+## GeoLibre on the web
 
-The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
+GeoLibre Web is the full browser version of the GeoLibre app, ready to use with nothing to install. It is great for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
 
 !!! note "Hosted on GitHub Pages, private by design"
-    The live demo is a static site deployed on GitHub Pages and runs entirely in your browser. It has no analytics and no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
+    GeoLibre Web is a static site deployed on GitHub Pages and runs entirely in your browser. It has no analytics and no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
 
 Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
 
@@ -153,7 +153,7 @@ https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geol
 
 Other parameters control the toolbar, panels, and theme. See [Embedding & Sharing](user-guide/embedding.md) for the full parameter reference and `<iframe>` examples.
 
-[Open the live demo](https://viewer.geolibre.app/){ .md-button .md-button--primary }
+[Launch GeoLibre Web](https://viewer.geolibre.app/){ .md-button .md-button--primary }
 [Embedding & Sharing](user-guide/embedding.md){ .md-button }
 
 ## Project status

@@ -15,20 +15,58 @@
 [![image](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20785400.svg)](https://doi.org/10.5281/zenodo.20785400)
 
-GeoLibre is a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do, in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private. It is an npm workspaces monorepo: the main app lives in `apps/geolibre-desktop` and is built with Tauri, React, TypeScript, and MapLibre GL JS.
+GeoLibre is a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do, in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private.
+
+This page helps you start using GeoLibre. If you want to contribute to GeoLibre or run it from source, jump to [Run from source](#run-from-source) below or read the [Contributing](contributing.md) guide.
+
+## Use GeoLibre
+
+Pick whichever fits how you work. The same app ships in every form, so projects and `.geolibre.json` files move between them.
+
+### On the web
+
+GeoLibre Web is the full app running in your browser, with nothing to install. It keeps your data local and private, processing everything client-side in your browser session.
+
+[Launch GeoLibre Web](https://viewer.geolibre.app/){ .md-button .md-button--primary }
+
+You can load browser-selected vector data supported by DuckDB-WASM Spatial, drag GeoTIFF/COG rasters onto the map, add URL-based services and datasets (XYZ, WMS, GeoJSON, vector tiles, COG, ArcGIS, FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats), style layers, and test plugins. Desktop-only file dialogs, local MBTiles, local raster file reads, and project save/open need the desktop app.
+
+### On the desktop
+
+The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, Homebrew, winget, the AUR, COPR, and Flatpak.
+
+[Download the desktop app](downloads.md){ .md-button .md-button--primary }
+
+### In Jupyter
+
+The [`geolibre`](python.md) Python package embeds the full GeoLibre app in a Jupyter notebook and drives the map through an expanded leafmap-style API that syncs both ways, so UI edits read back from Python.
+
+```bash
+pip install geolibre
+```
+
+See the [Python Package](python.md) reference to get started.
+
+### On Android
+
+GeoLibre ships as a native Android app built from the same codebase, with a responsive touch layout for phones. See [Android](android.md) for install details.
 
 ## Video tutorials
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
 
-## Prerequisites
+## Run from source
+
+This section is for contributors and developers who want to clone GeoLibre and run it locally. Most users do not need it. For the full development workflow, project layout, and quality gate, see the [Contributing](contributing.md) guide. GeoLibre is an npm workspaces monorepo: the main app lives in `apps/geolibre-desktop` and is built with Tauri, React, TypeScript, and MapLibre GL JS.
+
+### Prerequisites
 
 - Node.js 22 or newer
 - Rust toolchain for desktop builds
 - Linux desktop build dependencies from the Tauri v2 prerequisites
 
-## Install
+### Install
 
 ```bash
 git clone https://github.com/opengeos/GeoLibre.git
@@ -38,7 +76,7 @@ npm install
 
 Bun users can run `bun install`. The root `trustedDependencies` list allows the known install scripts for `core-js`, `@google/genai`, and `protobufjs`.
 
-## Update
+### Update
 
 To update an existing source checkout to the latest version, pull the changes, reinstall dependencies (in case `package.json` changed), and rebuild:
 
@@ -50,7 +88,7 @@ npm install            # or: bun install
 
 If you run a production build, rebuild afterwards with `npm run build` (web) or `npm run tauri:build` (desktop). If you work from the dev servers (`npm run dev` or `npm run tauri:dev`), the `git pull` and `npm install` above are enough — just restart the dev server to pick up the changes.
 
-## Run the browser UI
+### Run the browser UI
 
 ```bash
 npm run dev
@@ -60,7 +98,7 @@ Open `http://localhost:5173`. The map and browser vector import support local ve
 
 Desktop filesystem dialogs, local MBTiles, local raster file reads, project save/open, and other filesystem operations require Tauri.
 
-## Run with Docker
+### Run with Docker
 
 The repository includes a Dockerfile for the browser version of GeoLibre. It builds the Vite app and serves the production files with nginx:
 
@@ -86,13 +124,13 @@ docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
 
 The container always serves the app from its root path. The build argument only sets the URL prefix that the app expects, so subpath deployments also require a reverse proxy in front of the container that strips the prefix before forwarding requests (for example, nginx `proxy_pass http://geolibre/;` with a trailing slash).
 
-## Run the desktop app
+### Run the desktop app
 
 ```bash
 npm run tauri:dev
 ```
 
-## Build
+### Build
 
 ```bash
 npm run build
