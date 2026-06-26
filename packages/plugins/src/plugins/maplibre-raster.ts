@@ -139,6 +139,9 @@ const nonTiledInFlight = new Set<string>();
 // server surfaces a clear conversion failure instead of hanging the handler
 // until the browser's (often minutes-long) global network timeout. A local
 // file's blob URL resolves instantly, so the bound only ever bites remote URLs.
+// Tuning knob: generous for the small striped GeoTIFFs this targets, but a very
+// large file on a slow link could hit it (the host then shows a download error);
+// raise it if that becomes common.
 const NON_TILED_FETCH_TIMEOUT_MS = 60_000;
 
 /**

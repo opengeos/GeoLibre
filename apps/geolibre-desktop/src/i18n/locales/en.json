@@ -2291,10 +2291,10 @@
   },
   "raster": {
     "cogConvertConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Convert it to a Cloud-Optimized GeoTIFF now and load that?",
-    "cogConvertRemoteConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Displaying it means downloading the full file and converting it to a Cloud-Optimized GeoTIFF in the browser. Proceed?",
+    "cogConvertRemoteConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Displaying it means downloading the full file and converting it to a Cloud-Optimized GeoTIFF in the browser, which can be slow and memory-intensive for large files. Proceed?",
     "cogConvertLargeConfirm": "\"{{name}}\" is a large {{width}}×{{height}} GeoTIFF that is not a Cloud-Optimized GeoTIFF. Converting it in the browser may be slow and memory-intensive. Convert and load it anyway?",
     "cogConvertFailed": "Could not convert \"{{name}}\" to a Cloud-Optimized GeoTIFF. Try converting it with gdal_translate or rio cogeo, then load the result.",
-    "rasterDownloadFailed": "Could not download \"{{name}}\". The server may be slow, unreachable, or blocking cross-origin requests. Check the URL and try again.",
+    "rasterDownloadFailed": "Could not download \"{{name}}\". The server may be slow, unreachable, or blocking cross-origin requests, or the file may be too large to hold in memory. Check the URL and try again.",
     "rasterNotGeotiff": "\"{{name}}\" did not return a GeoTIFF. The server may have sent an error or login page instead. Check the URL and try again."
   }
 }

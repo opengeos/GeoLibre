@@ -781,10 +781,12 @@ export function DesktopShell({
         ) {
           return;
         }
-        // Read the source bytes in their own try so a network/timeout failure
-        // (only reachable for a remote URL) reports a download problem rather
-        // than the misleading "could not convert" message below, which assumes a
-        // conversion was attempted.
+        // Read the source bytes in their own try so a failure to obtain them
+        // (only reachable for a remote URL: a network/timeout error, or a
+        // RangeError when the downloaded file is too large to allocate as an
+        // ArrayBuffer) reports a download problem rather than the misleading
+        // "could not convert" message below, which assumes a conversion was
+        // attempted. The rasterDownloadFailed string names both causes.
         let bytes: Uint8Array;
         try {
           bytes = await readBytes();
