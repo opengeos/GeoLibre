@@ -46,11 +46,16 @@ describe("pickSupportedMimeType", () => {
 });
 
 describe("estimateTourDurationMs", () => {
-  it("is zero for fewer than two keyframes", () => {
+  it("is zero with no keyframes", () => {
     assert.equal(estimateTourDurationMs([]), 0);
+  });
+
+  it("counts only the hold for a single keyframe (no transition yet)", () => {
+    // One keyframe has no successor to transition to, so its transition is
+    // ignored, but its hold is still meaningful.
     assert.equal(
       estimateTourDurationMs([{ holdMs: 1000, transitionMs: 4000 }]),
-      0,
+      1000,
     );
   });
 

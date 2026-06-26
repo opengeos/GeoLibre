@@ -415,10 +415,13 @@ export function RecordTourDialog({
         });
         // Cancelling the name prompt aborts the save entirely.
         if (chosen === null) return;
-        // Trim before stripping the extension so a name like "tour.json " (with
-        // a trailing space) becomes "tour", not "tour.json.json".
+        // Normalize before re-appending ".json": trim, then drop trailing dots
+        // so "tour.json." doesn't keep its ".json", then strip the extension and
+        // any remaining trailing dots. This avoids a doubled "tour.json.json"
+        // for inputs like "tour.json " or "tour.json.".
         const base = chosen
           .trim()
+          .replace(/\.+$/, "")
           .replace(/\.json$/i, "")
           .replace(/\.+$/, "")
           .trim();

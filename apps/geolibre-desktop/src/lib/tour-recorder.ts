@@ -110,13 +110,15 @@ export function pickSupportedMimeType(
 /**
  * Total wall-clock duration of a tour in milliseconds: every keyframe's hold
  * plus the transition leading out of every keyframe except the last (which has
- * no successor to move toward).
+ * no successor to move toward). A lone keyframe still has a meaningful hold, so
+ * it contributes its hold (only the cross-keyframe transitions need two or more).
  */
 export function estimateTourDurationMs(
   keyframes: readonly Pick<TourKeyframe, "holdMs" | "transitionMs">[],
 ): number {
-  if (keyframes.length < 2) return 0;
+  if (keyframes.length === 0) return 0;
   const holds = keyframes.reduce((sum, kf) => sum + Math.max(0, kf.holdMs), 0);
+  if (keyframes.length < 2) return holds;
   const transitions = keyframes
     .slice(0, -1)
     .reduce((sum, kf) => sum + Math.max(0, kf.transitionMs), 0);
@@ -302,7 +304,7 @@ function migrateLegacyKeyframes(rawKeyframes: unknown[]): TourKeyframeData[] {
     const next = parsed[index + 1]?.kf;
     const transitionMs = next
       ? clampTransitionMs(num(next.durationMs, DEFAULT_SEGMENT_SECONDS * 1000))
-      : DEFAULT_SEGMENT_SECONDS * 1000;
+      : clampTransitionMs(DEFAULT_SEGMENT_SECONDS * 1000);
     const isFirst = index === 0;
     const isLast = index === parsed.length - 1;
     // A lone keyframe is both the first and the last, so it inherits both of v1's
