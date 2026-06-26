@@ -551,9 +551,14 @@ function createRasterControl(
           name: info.name,
           bytesAreRemote,
           readBytes: async () => {
-            const response = await fetch(bytesUrl, {
-              signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS),
-            });
+            // Only bound the remote download; a local blob URL resolves from
+            // memory in microseconds, so a timeout timer there is pure overhead.
+            const response = await fetch(
+              bytesUrl,
+              bytesAreRemote
+                ? { signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS) }
+                : undefined,
+            );
             if (!response.ok) {
               throw new Error(
                 `Failed to read raster bytes: ${response.status}`,

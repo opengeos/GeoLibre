@@ -769,12 +769,12 @@ export function DesktopShell({
   useEffect(() => {
     setNonTiledRasterHandler(async ({ name, bytesAreRemote, readBytes, dismiss }) => {
       try {
-        // For a remote source readBytes() streams the whole file over the
-        // network, so confirm up front before that download starts -- with a
-        // message that names the download, since that cost is the part unique to
-        // the remote path. A local file resolves instantly, so it keeps the
-        // single post-read prompt below (which can also surface the large-raster
-        // warning). See #916.
+        // A remote source gets a single up-front prompt that names the download:
+        // its size is unknown until it has been fetched, so prompting again after
+        // the download (with dimensions) would just risk discarding a large file
+        // the user already agreed to download. A local file resolves instantly,
+        // so it defers to the post-read prompt below, which can pick the
+        // large-raster warning now that the dimensions are cheap to read. See #916.
         if (
           bytesAreRemote &&
           !window.confirm(t("raster.cogConvertRemoteConfirm", { name }))
@@ -793,30 +793,20 @@ export function DesktopShell({
           window.alert(t("raster.rasterDownloadFailed", { name }));
           return;
         }
-        const info = await readGeoTiffInfo(bytes);
-        const samples = info.width * info.height * Math.max(info.bands, 1);
-        if (samples > LARGE_RASTER_SAMPLE_LIMIT) {
-          // Big enough that conversion may be slow or memory-heavy; warn now
-          // that the dimensions are known, even if a remote source already
-          // confirmed the download above.
-          if (
-            !window.confirm(
-              t("raster.cogConvertLargeConfirm", {
-                name,
-                width: info.width,
-                height: info.height,
-              }),
-            )
-          ) {
-            return;
-          }
-        } else if (
-          !bytesAreRemote &&
-          !window.confirm(t("raster.cogConvertConfirm", { name }))
-        ) {
-          // Local file, not large: the original single convert prompt. A remote
-          // source already confirmed before the download, so do not prompt twice.
-          return;
+        if (!bytesAreRemote) {
+          // Local file: pick the prompt by size now that the header is cheap to
+          // read, then confirm once. (A remote source already confirmed above.)
+          const info = await readGeoTiffInfo(bytes);
+          const samples = info.width * info.height * Math.max(info.bands, 1);
+          const message =
+            samples > LARGE_RASTER_SAMPLE_LIMIT
+              ? t("raster.cogConvertLargeConfirm", {
+                  name,
+                  width: info.width,
+                  height: info.height,
+                })
+              : t("raster.cogConvertConfirm", { name });
+          if (!window.confirm(message)) return;
         }
         const cog = await convertGeoTiffToCog(bytes);
         // The cast is required: TS types Uint8Array as Uint8Array<ArrayBufferLike>,
