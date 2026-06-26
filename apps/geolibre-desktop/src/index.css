@@ -1911,6 +1911,100 @@ body,
   background: hsl(var(--primary) / 0.9);
 }
 
+/* Geotagged-photo popup: a resizable box whose photo scales to fill it, so the
+   user can drag the corner to see more detail. */
+.geolibre-photo-popup-root .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  box-shadow:
+    0 10px 15px -3px rgb(0 0 0 / 0.18),
+    0 4px 6px -4px rgb(0 0 0 / 0.18);
+  color: hsl(var(--popover-foreground));
+  padding: 0.5rem;
+}
+
+.geolibre-photo-popup-root .maplibregl-popup-close-button {
+  color: hsl(var(--muted-foreground));
+  padding-right: 0.25rem;
+}
+
+.geolibre-photo-popup-root .maplibregl-popup-close-button:hover {
+  background: transparent;
+  color: hsl(var(--popover-foreground));
+}
+
+.geolibre-photo-popup-root.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.geolibre-photo-popup-root.maplibregl-popup-anchor-top-left
+  .maplibregl-popup-tip,
+.geolibre-photo-popup-root.maplibregl-popup-anchor-top-right
+  .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}
+
+.geolibre-photo-popup-root.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.geolibre-photo-popup-root.maplibregl-popup-anchor-bottom-left
+  .maplibregl-popup-tip,
+.geolibre-photo-popup-root.maplibregl-popup-anchor-bottom-right
+  .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+
+.geolibre-photo-popup-root.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+
+.geolibre-photo-popup-root.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
+}
+
+.geolibre-photo-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  /* The initial box; the user can drag it larger (or smaller) from here. */
+  width: 260px;
+  height: 220px;
+  min-width: 160px;
+  min-height: 140px;
+  max-width: min(85vw, 900px);
+  max-height: 85vh;
+  resize: both;
+  overflow: hidden;
+}
+
+.geolibre-photo-popup-img {
+  flex: 1 1 auto;
+  /* Without min-height: 0 a flex child refuses to shrink below its image's
+     intrinsic height, which would break vertical resizing. */
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+  border-radius: 0.375rem;
+  background: hsl(var(--muted));
+}
+
+.geolibre-photo-popup-placeholder {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8125rem;
+}
+
+.geolibre-photo-popup-caption {
+  flex: 0 0 auto;
+  overflow: hidden;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: hsl(var(--popover-foreground));
+}
+
 .swipe-control-panel .swipe-control-select {
   height: 28px;
   line-height: 28px;

@@ -11,6 +11,7 @@ import {
   fillExtrusionLayerId,
   fillLayerId,
   lineLayerId,
+  markerLayerId,
 } from "./geojson-loader";
 import {
   externalExtrusionLayerId,
@@ -146,6 +147,66 @@ function createIdentifyMessagePopupElement(
   message: string,
 ): HTMLElement {
   return createIdentifyPopupElement(layerName, { status: message });
+}
+
+/** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
+const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
+
+/**
+ * Find the first feature property holding an inline raster image (a geotagged
+ * photo or field-collection thumbnail), returning its data URL or null.
+ */
+function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
+  for (const value of Object.values(properties)) {
+    if (typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+/**
+ * Build the geotagged-photo popup: a resizable box showing the photo scaled to
+ * fill it, captioned with the photo's name and timestamp. The box uses CSS
+ * `resize` so the user can drag its corner to enlarge the photo. Photos with no
+ * thumbnail (e.g. HEIC) fall back to a "No preview available" note.
+ *
+ * @param properties - The clicked feature's properties.
+ * @returns The popup's DOM content element.
+ */
+function createPhotoPopupElement(
+  properties: Record<string, unknown>,
+): HTMLElement {
+  const root = document.createElement("div");
+  root.className = "geolibre-photo-popup";
+
+  const photo = findPhotoDataUrl(properties);
+  if (photo) {
+    const image = document.createElement("img");
+    image.src = photo;
+    image.alt = typeof properties.name === "string" ? properties.name : "Photo";
+    image.className = "geolibre-photo-popup-img";
+    root.appendChild(image);
+  } else {
+    const placeholder = document.createElement("div");
+    placeholder.className = "geolibre-photo-popup-placeholder";
+    placeholder.textContent = "No preview available";
+    root.appendChild(placeholder);
+  }
+
+  const caption = [properties.name, properties.timestamp]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .join(" · ");
+  if (caption) {
+    const captionEl = document.createElement("div");
+    captionEl.className = "geolibre-photo-popup-caption";
+    captionEl.textContent = caption;
+    captionEl.title = caption;
+    root.appendChild(captionEl);
+  }
+
+  return root;
 }
 
 function nativeIdentifyLayerIds(layer: GeoLibreLayer): string[] {
@@ -619,6 +680,7 @@ export const MapCanvas = memo(function MapCanvas({
   const previousSelectedFeatureKey = useRef<string | null>(null);
   const previousDuckDBSelectionLayerId = useRef<string | null>(null);
   const identifyPopup = useRef<maplibregl.Popup | null>(null);
+  const photoPopup = useRef<maplibregl.Popup | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || controller.current) return;
@@ -787,6 +849,18 @@ export const MapCanvas = memo(function MapCanvas({
   useEffect(() => {
     controller.current?.waitAndSyncLayers(renderLayers);
   }, [renderLayers]);
+
+  // Stable key over just the geotagged-photo layer ids, so the photo-click
+  // effect re-binds only when such a layer is added/removed, not on every
+  // unrelated layer edit (e.g. a coordinate update while dragging a pin).
+  const photoLayerKey = useMemo(
+    () =>
+      layers
+        .filter((layer) => layer.metadata.sourceKind === "geotagged-photos")
+        .map((layer) => layer.id)
+        .join(","),
+    [layers],
+  );
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
@@ -984,6 +1058,82 @@ export const MapCanvas = memo(function MapCanvas({
       map.getCanvas().style.cursor = "";
     };
   }, [identifyLayerId, layers, selectFeature]);
+
+  // Geotagged photos: clicking a photo point opens a resizable popup with the
+  // photo, without needing the Identify tool. The popup is photo-specific, and
+  // its box uses CSS `resize` so the thumbnail enlarges as it is dragged bigger.
+  useEffect(() => {
+    const map = controller.current?.getMap();
+    if (!map) return;
+    const photoLayerIds = photoLayerKey ? photoLayerKey.split(",") : [];
+    if (photoLayerIds.length === 0) return;
+
+    const removePhotoPopup = () => {
+      photoPopup.current?.remove();
+      photoPopup.current = null;
+    };
+
+    const handleClick = (event: maplibregl.MapLayerMouseEvent) => {
+      // The Identify tool already renders the photo in its own popup; skip ours
+      // so one click never opens two popups.
+      if (useAppStore.getState().identifyLayerId) return;
+      const feature = event.features?.[0];
+      if (!feature) return;
+      removePhotoPopup();
+      photoPopup.current = new maplibregl.Popup({
+        className: "geolibre-photo-popup-root",
+        closeButton: true,
+        closeOnClick: true,
+        maxWidth: "none",
+      })
+        .setLngLat(event.lngLat)
+        .setDOMContent(createPhotoPopupElement(feature.properties ?? {}))
+        .addTo(map);
+    };
+    const handleEnter = () => {
+      if (useAppStore.getState().identifyLayerId) return;
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const handleLeave = () => {
+      if (useAppStore.getState().identifyLayerId) return;
+      map.getCanvas().style.cursor = "";
+    };
+
+    // Photo points render as a circle by default, or a marker symbol when the
+    // user enables markers; bind to whichever style layers actually exist.
+    let boundIds: string[] = [];
+    const unbind = () => {
+      for (const id of boundIds) {
+        map.off("click", id, handleClick);
+        map.off("mouseenter", id, handleEnter);
+        map.off("mouseleave", id, handleLeave);
+      }
+      boundIds = [];
+    };
+    const bind = () => {
+      unbind();
+      boundIds = photoLayerIds
+        .flatMap((id) => [circleLayerId(id), markerLayerId(id)])
+        .filter((id) => map.getLayer(id));
+      for (const id of boundIds) {
+        map.on("click", id, handleClick);
+        map.on("mouseenter", id, handleEnter);
+        map.on("mouseleave", id, handleLeave);
+      }
+    };
+
+    bind();
+    // syncLayers creates the circle/marker style layers and then dispatches this
+    // event, so re-bind on it to catch layers that did not exist yet when this
+    // effect first ran (e.g. before the style finished loading).
+    window.addEventListener("geolibre-layer-labels-change", bind);
+
+    return () => {
+      window.removeEventListener("geolibre-layer-labels-change", bind);
+      unbind();
+      removePhotoPopup();
+    };
+  }, [photoLayerKey]);
 
   useEffect(() => {
     controller.current?.applyView(mapView);
