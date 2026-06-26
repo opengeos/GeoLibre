@@ -1726,22 +1726,24 @@ export function SettingsDialog({
                           type="text"
                           spellCheck={false}
                           autoComplete="off"
-                          // `#rrggbb` is the longest value this accepts; the
-                          // extra slot lets a paste with one stray leading/
-                          // trailing space survive intact for normalizeHexColor
-                          // to trim, while still capping a runaway paste.
-                          maxLength={8}
                           className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
                           value={
                             customColorDraft ??
                             desktopSettings.theme.customColor
                           }
-                          // The field already holds a full `#rrggbb` at the
-                          // maxLength cap, so select all on focus to let the user
-                          // type a replacement instead of silently dropping keys.
+                          // The field already holds a full `#rrggbb`, so select
+                          // all on focus to let the user type a replacement.
                           onFocus={(event) => event.target.select()}
+                          // Drop whitespace and cap to the longest valid form
+                          // (`#rrggbb`) as the draft is stored, so a padded or
+                          // oversized paste is sanitized in place instead of
+                          // sitting clobbered; this also bounds a runaway paste
+                          // without a brittle maxLength that has to guess how
+                          // much surrounding whitespace to allow.
                           onChange={(event) =>
-                            setCustomColorDraft(event.target.value)
+                            setCustomColorDraft(
+                              event.target.value.replace(/\s/g, "").slice(0, 7),
+                            )
                           }
                           onBlur={commitCustomColorDraft}
                           onKeyDown={(event) => {
