@@ -1714,6 +1714,10 @@ export function SettingsDialog({
                           type="text"
                           spellCheck={false}
                           autoComplete="off"
+                          // `#rrggbb` is the longest value this accepts, so cap
+                          // the field rather than let a huge paste sit there
+                          // visually clobbered until blur reverts it.
+                          maxLength={7}
                           className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
                           value={
                             customColorDraft ??
@@ -1735,6 +1739,7 @@ export function SettingsDialog({
                           aria-label={t("settings.appearance.customColorHex")}
                           aria-invalid={
                             customColorDraft !== null &&
+                            customColorDraft.trim() !== "" &&
                             normalizeHexColor(customColorDraft) === null
                           }
                         />
