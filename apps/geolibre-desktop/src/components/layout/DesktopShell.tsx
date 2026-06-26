@@ -793,6 +793,25 @@ export function DesktopShell({
           window.alert(t("raster.rasterDownloadFailed", { name }));
           return;
         }
+        // A URL can answer 200 with non-GeoTIFF content (an auth/login or error
+        // page), which downloads fine but is not convertible. Check the TIFF
+        // magic bytes ("II*\0" little-endian or "MM\0*" big-endian) up front so
+        // that surfaces as a clear "not a GeoTIFF" message instead of the
+        // misleading "could not convert" one the parser would otherwise trigger.
+        const isTiff =
+          bytes.length >= 4 &&
+          ((bytes[0] === 0x49 &&
+            bytes[1] === 0x49 &&
+            bytes[2] === 0x2a &&
+            bytes[3] === 0x00) ||
+            (bytes[0] === 0x4d &&
+              bytes[1] === 0x4d &&
+              bytes[2] === 0x00 &&
+              bytes[3] === 0x2a));
+        if (!isTiff) {
+          window.alert(t("raster.rasterNotGeotiff", { name }));
+          return;
+        }
         if (!bytesAreRemote) {
           // Local file: pick the prompt by size now that the header is cheap to
           // read, then confirm once. (A remote source already confirmed above.)
