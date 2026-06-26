@@ -903,11 +903,12 @@ interface SecondsFieldProps {
 }
 
 /**
- * A small labeled numeric seconds input with a pluralized "seconds" suffix. It
- * keeps local text state so the field can be cleared and retyped (a controlled
- * number input would snap an empty value straight to the minimum); the parsed
- * value commits to the store only while in range, and the text normalizes to
- * the committed value on blur. Shared by the Hold and Transition controls.
+ * A small labeled numeric seconds input. It keeps local text state so the field
+ * can be cleared and retyped (a controlled number input would snap an empty
+ * value straight to the minimum); the parsed value commits to the store only
+ * while in range, and the text normalizes to the committed value on blur. The
+ * "sec" unit is rendered once per row by the caller, not per field, so the
+ * spinners get the full width. Shared by the Hold and Transition controls.
  */
 function SecondsField({
   label,
@@ -918,7 +919,6 @@ function SecondsField({
   disabled,
   onCommit,
 }: SecondsFieldProps) {
-  const { t } = useTranslation();
   // Seeded once and intentionally not re-synced to `valueSeconds` after mount.
   // The value only ever changes through this field's own onChange/onBlur (which
   // also call setText), or via a keyframe id change that remounts the row, so a
@@ -934,7 +934,7 @@ function SecondsField({
         type="number"
         inputMode="decimal"
         aria-label={ariaLabel}
-        className="h-7 w-14"
+        className="h-7 w-16"
         min={min}
         max={max}
         step="0.5"
@@ -953,9 +953,6 @@ function SecondsField({
           setText(String(seconds));
         }}
       />
-      <span className="text-muted-foreground">
-        {t("recordTour.secondsShort")}
-      </span>
     </label>
   );
 }
@@ -1061,8 +1058,9 @@ function KeyframeRow({
 
       {/* Bottom row: how long to hold on this view, then how long to move to the
           next one (greyed out on the last keyframe, which has no next view).
-          Both sit on one line; the unit is abbreviated to "sec" to fit. */}
-      <div className="flex items-center gap-3 pl-8">
+          Both sit on one line with a single "sec" unit at the end, so the
+          spinners keep their full width. */}
+      <div className="flex items-center gap-2.5 pl-8">
         <SecondsField
           label={t("recordTour.hold")}
           ariaLabel={t("recordTour.holdSeconds")}
@@ -1082,6 +1080,9 @@ function KeyframeRow({
           disabled={disabled || isLast}
           onCommit={onTransitionSeconds}
         />
+        <span className="text-muted-foreground">
+          {t("recordTour.secondsShort")}
+        </span>
       </div>
     </li>
   );
