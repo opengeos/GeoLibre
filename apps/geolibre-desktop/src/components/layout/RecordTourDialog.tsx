@@ -120,6 +120,10 @@ export function RecordTourDialog({
   // re-rendered (fast double-click / keyboard repeat on Enter), which would
   // otherwise fire two save dialogs or two downloads.
   const savingRef = useRef(false);
+  // Same guard for the setup (config) save: without it, two fast "Save setup"
+  // clicks on Tauri/Chromium (which skip the filename prompt) would open the
+  // native save dialog twice.
+  const savingConfigRef = useRef(false);
 
   // Drag-to-reposition. `pos` is null until first dragged, when the default
   // corner placement (CSS class) applies; afterwards it pins to explicit coords.
@@ -395,7 +399,8 @@ export function RecordTourDialog({
   // Export the editable tour setup (keyframes, durations, FPS) as a JSON file so
   // it can be reloaded and refined later, independent of the recorded video.
   const handleSaveConfig = async () => {
-    if (keyframes.length === 0) return;
+    if (keyframes.length === 0 || savingConfigRef.current) return;
+    savingConfigRef.current = true;
     try {
       const content = serializeTourConfig(keyframes, fps);
       const fileType = t("recordTour.configFileType");
@@ -410,7 +415,13 @@ export function RecordTourDialog({
         });
         // Cancelling the name prompt aborts the save entirely.
         if (chosen === null) return;
-        const base = chosen.replace(/\.json$/i, "").replace(/\.+$/, "").trim();
+        // Trim before stripping the extension so a name like "tour.json " (with
+        // a trailing space) becomes "tour", not "tour.json.json".
+        const base = chosen
+          .trim()
+          .replace(/\.json$/i, "")
+          .replace(/\.+$/, "")
+          .trim();
         defaultName = `${base || DEFAULT_CONFIG_FILE_NAME}.json`;
       }
       const name = await saveTextFileWithFallback(content, {
@@ -431,6 +442,8 @@ export function RecordTourDialog({
       console.warn("Tour configuration save failed", err);
       clearResultMessages();
       setError(t("recordTour.configSaveError"));
+    } finally {
+      savingConfigRef.current = false;
     }
   };
 
@@ -795,6 +808,12 @@ function SecondsField({
   onCommit,
 }: SecondsFieldProps) {
   const { t } = useTranslation();
+  // Seeded once and intentionally not re-synced to `valueSeconds` after mount.
+  // The value only ever changes through this field's own onChange/onBlur (which
+  // also call setText), or via a keyframe id change that remounts the row, so a
+  // useEffect re-sync would be redundant and would clobber an in-range value
+  // mid-edit (e.g. reformatting "1.0" to "1" on every keystroke). A future
+  // external reset of holdMs/transitionMs should remount the row to refresh it.
   const [text, setText] = useState(String(valueSeconds));
 
   return (

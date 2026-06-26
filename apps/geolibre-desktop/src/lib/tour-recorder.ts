@@ -303,8 +303,18 @@ function migrateLegacyKeyframes(rawKeyframes: unknown[]): TourKeyframeData[] {
     const transitionMs = next
       ? clampTransitionMs(num(next.durationMs, DEFAULT_SEGMENT_SECONDS * 1000))
       : DEFAULT_SEGMENT_SECONDS * 1000;
+    const isFirst = index === 0;
     const isLast = index === parsed.length - 1;
-    const holdMs = index === 0 ? START_HOLD_MS : isLast ? END_HOLD_MS : 0;
+    // A lone keyframe is both the first and the last, so it inherits both of v1's
+    // implicit holds (it is unrecordable on its own, but keep the total faithful).
+    const holdMs =
+      isFirst && isLast
+        ? START_HOLD_MS + END_HOLD_MS
+        : isFirst
+          ? START_HOLD_MS
+          : isLast
+            ? END_HOLD_MS
+            : 0;
     return { ...camera, holdMs: clampHoldMs(holdMs), transitionMs };
   });
 }
