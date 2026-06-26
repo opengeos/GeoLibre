@@ -49,6 +49,7 @@ export function ProcessingMenu({
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
+  const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
@@ -500,6 +501,11 @@ export function ProcessingMenu({
         {!mobile && show("processing.segmentation") && (
           <DropdownMenuItem onSelect={() => setSegmentationOpen(true)}>
             {t("toolbar.command.segmentation")}
+          </DropdownMenuItem>
+        )}
+        {!mobile && show("processing.objectDetection") && (
+          <DropdownMenuItem onSelect={() => setObjectDetectionOpen(true)}>
+            {t("toolbar.command.objectDetection")}
           </DropdownMenuItem>
         )}
           </DropdownMenuSubContent>

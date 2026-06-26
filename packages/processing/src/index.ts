@@ -149,3 +149,8 @@ export {
   convertGeoTiffToCog,
   type GeoTiffInfo,
 } from "./cog-convert";
+export {
+  detectObjects,
+  type Detection,
+  type DetectionOptions,
+} from "./object-detection";

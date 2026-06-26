@@ -225,6 +225,7 @@ export function TopToolbar({
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
+  const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
@@ -595,6 +596,14 @@ export function TopToolbar({
       keywords: "segmentation samgeo sam3 ai segment imagery",
       icon: Sparkles,
       run: () => setSegmentationOpen(true),
+    },
+    {
+      id: "proc.objectDetection",
+      title: t("toolbar.command.objectDetection"),
+      group: t("toolbar.commandGroup.processing"),
+      keywords: "object detection yolo onnx ai detect imagery boxes",
+      icon: Sparkles,
+      run: () => setObjectDetectionOpen(true),
     },
     ...CONVERSION_COMMANDS.map(({ kind, titleKey }) => ({
       id: `proc.conversion.${kind}`,

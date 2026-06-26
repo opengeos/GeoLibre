@@ -273,6 +273,19 @@ const SegmentationDialog = lazy(() =>
     }),
 );
 
+const ObjectDetectionDialog = lazy(() =>
+  import("../processing/ObjectDetectionDialog")
+    .then((module) => ({
+      default: module.ObjectDetectionDialog,
+    }))
+    .catch((error) => {
+      console.error("Failed to load ObjectDetectionDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ObjectDetectionDialog").ObjectDetectionDialog;
+      return { default: Fallback };
+    }),
+);
+
 const SqlWorkspaceDialog = lazy(() =>
   import("../processing/SqlWorkspaceDialog")
     .then((module) => ({
@@ -1866,6 +1879,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <SegmentationDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <Suspense fallback={null}>
         <SqlWorkspaceDialog />
