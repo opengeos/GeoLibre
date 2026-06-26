@@ -15,6 +15,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import {
   AlertCircle,
@@ -29,6 +30,10 @@ import { useCallback, useEffect, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
+import {
+  BUILTIN_DETECTION_MODELS,
+  fetchDetectionModel,
+} from "../../lib/detection-models";
 
 interface ObjectDetectionDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -148,13 +153,21 @@ export function ObjectDetectionDialog({
 
   const [imageBytes, setImageBytes] = useState<ArrayBuffer | null>(null);
   const [imageName, setImageName] = useState("");
+  // Default to a built-in model so detection works out of the box with no file.
+  const [modelSource, setModelSource] = useState<"builtin" | "local">("builtin");
+  const [builtinModelId, setBuiltinModelId] = useState(
+    BUILTIN_DETECTION_MODELS[0].id,
+  );
   const [modelBytes, setModelBytes] = useState<ArrayBuffer | null>(null);
   const [modelName, setModelName] = useState("");
-  const [classNames, setClassNames] = useState("");
+  const [classNames, setClassNames] = useState(
+    BUILTIN_DETECTION_MODELS[0].classNames.join(", "),
+  );
   const [confidence, setConfidence] = useState(0.25);
   const [iou, setIou] = useState(0.45);
   const [inputSize, setInputSize] = useState(640);
   const [running, setRunning] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
 
@@ -193,6 +206,14 @@ export function ObjectDetectionDialog({
     }
   }, []);
 
+  // Picking a built-in model prefills the class names with that model's labels
+  // (in output order) so detections come out named without any typing.
+  const selectBuiltinModel = useCallback((id: string) => {
+    setBuiltinModelId(id);
+    const model = BUILTIN_DETECTION_MODELS.find((m) => m.id === id);
+    if (model) setClassNames(model.classNames.join(", "));
+  }, []);
+
   const handleRun = useCallback(async () => {
     setError(null);
     setResultMessage(null);
@@ -200,14 +221,39 @@ export function ObjectDetectionDialog({
       setError(t("objectDetection.error.chooseImage"));
       return;
     }
-    if (!modelBytes) {
+    if (modelSource === "local" && !modelBytes) {
       setError(t("objectDetection.error.chooseModel"));
       return;
     }
     setRunning(true);
     try {
+      // Resolve the model bytes: download (and cache) the chosen built-in model,
+      // or use the user-supplied file.
+      let modelData = modelBytes;
+      if (modelSource === "builtin") {
+        const model = BUILTIN_DETECTION_MODELS.find(
+          (m) => m.id === builtinModelId,
+        );
+        if (!model) {
+          setError(t("objectDetection.error.chooseModel"));
+          return;
+        }
+        setDownloading(true);
+        try {
+          modelData = await fetchDetectionModel(model.url);
+        } catch {
+          setError(t("objectDetection.error.downloadModel"));
+          return;
+        } finally {
+          setDownloading(false);
+        }
+      }
+      if (!modelData) {
+        setError(t("objectDetection.error.chooseModel"));
+        return;
+      }
       const raster = await readRasterData(imageBytes);
-      const detections = await detectObjects(raster, modelBytes, {
+      const detections = await detectObjects(raster, modelData, {
         inputSize,
         confidenceThreshold: confidence,
         iouThreshold: iou,
@@ -261,7 +307,9 @@ export function ObjectDetectionDialog({
     }
   }, [
     imageBytes,
+    modelSource,
     modelBytes,
+    builtinModelId,
     inputSize,
     confidence,
     iou,
@@ -317,30 +365,70 @@ export function ObjectDetectionDialog({
             </div>
           </div>
 
-          {/* Model source */}
+          {/* Model source: a built-in model that downloads on demand, or a
+              user-supplied .onnx file. */}
           <div className="grid gap-1.5">
-            <Label htmlFor="det-model" className="text-xs">
+            <Label htmlFor="det-model-source" className="text-xs">
               {t("objectDetection.modelLabel")}
               <span className="text-destructive"> *</span>
             </Label>
-            <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
-              <Input
-                id="det-model"
-                readOnly
-                value={modelName}
-                placeholder={t("objectDetection.modelPlaceholder")}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                title={t("objectDetection.chooseModel")}
-                onClick={() => void pickModel()}
-              >
-                <FolderOpen className="h-4 w-4" />
-              </Button>
-            </div>
+            <Select
+              id="det-model-source"
+              value={modelSource}
+              onChange={(e) =>
+                setModelSource(e.target.value as "builtin" | "local")
+              }
+            >
+              <option value="builtin">
+                {t("objectDetection.modelSourceBuiltin")}
+              </option>
+              <option value="local">
+                {t("objectDetection.modelSourceLocal")}
+              </option>
+            </Select>
           </div>
+
+          {modelSource === "builtin" ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="det-builtin-model" className="text-xs">
+                {t("objectDetection.builtinModelLabel")}
+              </Label>
+              <Select
+                id="det-builtin-model"
+                value={builtinModelId}
+                onChange={(e) => selectBuiltinModel(e.target.value)}
+              >
+                {BUILTIN_DETECTION_MODELS.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label htmlFor="det-model" className="text-xs">
+                {t("objectDetection.modelFileLabel")}
+              </Label>
+              <div className="grid grid-cols-[minmax(0,1fr)_2.25rem] gap-2">
+                <Input
+                  id="det-model"
+                  readOnly
+                  value={modelName}
+                  placeholder={t("objectDetection.modelPlaceholder")}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title={t("objectDetection.chooseModel")}
+                  onClick={() => void pickModel()}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Class names */}
           <div className="grid gap-1.5">
@@ -422,10 +510,14 @@ export function ObjectDetectionDialog({
             </div>
           </div>
 
-          <div>
+          <div className="flex items-center gap-3">
             <Button
               onClick={() => void handleRun()}
-              disabled={running || !imageBytes || !modelBytes}
+              disabled={
+                running ||
+                !imageBytes ||
+                (modelSource === "local" && !modelBytes)
+              }
               className="gap-2"
             >
               {running ? (
@@ -435,6 +527,12 @@ export function ObjectDetectionDialog({
               )}
               {t("objectDetection.detect")}
             </Button>
+            {downloading && (
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {t("objectDetection.downloadingModel")}
+              </span>
+            )}
           </div>
 
           {error && (
