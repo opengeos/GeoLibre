@@ -273,16 +273,16 @@ const SegmentationDialog = lazy(() =>
     }),
 );
 
-const SqlWorkspaceDialog = lazy(() =>
-  import("../processing/SqlWorkspaceDialog")
+const SqlWorkspacePanel = lazy(() =>
+  import("../panels/SqlWorkspacePanel")
     .then((module) => ({
-      default: module.SqlWorkspaceDialog,
+      default: module.SqlWorkspacePanel,
     }))
     .catch((error) => {
       // Same chunk-load fallback rationale as ProcessingDialog above.
-      console.error("Failed to load SqlWorkspaceDialog", error);
+      console.error("Failed to load SqlWorkspacePanel", error);
       const Fallback = (() =>
-        null) as unknown as typeof import("../processing/SqlWorkspaceDialog").SqlWorkspaceDialog;
+        null) as unknown as typeof import("../panels/SqlWorkspacePanel").SqlWorkspacePanel;
       return { default: Fallback };
     }),
 );
@@ -468,6 +468,8 @@ export function DesktopShell({
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
+  const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
+  const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style
@@ -1800,6 +1802,16 @@ export function DesktopShell({
           </Suspense>
         </SectionErrorBoundary>
       ) : null}
+      {sqlWorkspaceOpen ? (
+        <SectionErrorBoundary
+          label="SQL workspace"
+          onClose={() => setSqlWorkspaceOpen(false)}
+        >
+          <Suspense fallback={null}>
+            <SqlWorkspacePanel />
+          </Suspense>
+        </SectionErrorBoundary>
+      ) : null}
       {assistantOpen ? (
         <SectionErrorBoundary label="Assistant">
           <Suspense fallback={null}>
@@ -1866,9 +1878,6 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <SegmentationDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <SqlWorkspaceDialog />
       </Suspense>
       <StoryMapPanel mapControllerRef={mapControllerRef} />
       <StoryMapPresenter mapControllerRef={mapControllerRef} />

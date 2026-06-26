@@ -223,6 +223,53 @@ export function previewLayerTables(
   }));
 }
 
+/** A loaded layer's queryable table name and the columns its table exposes. */
+export interface SqlWorkspaceTableColumns {
+  /** SQL identifier the user references in queries. */
+  tableName: string;
+  /** Column names available on the table (attributes plus the `geom` geometry). */
+  columns: string[];
+}
+
+// The geometry column ST_Read materialises for a registered GeoJSON layer. Used
+// by the autocomplete so `geom` is always offered alongside attribute columns.
+const LAYER_GEOMETRY_COLUMN = "geom";
+// Cap how many features are scanned for property keys so a huge layer cannot
+// make the (synchronous) autocomplete walk the whole collection.
+const COLUMN_SCAN_FEATURE_LIMIT = 50;
+
+/**
+ * Compute, without touching DuckDB, the columns each layer table will expose so
+ * the editor can autocomplete column names. Attribute columns come from the
+ * union of feature property keys (scanning a bounded number of features); the
+ * `geom` geometry column ST_Read creates is always appended.
+ *
+ * @param layers Current app layers; those without `geojson` are skipped.
+ * @returns Table name and its column names, in the same naming as registration.
+ */
+export function previewLayerColumns(
+  layers: GeoLibreLayer[],
+): SqlWorkspaceTableColumns[] {
+  return assignTableNames(layers).map(({ layer, tableName }) => {
+    const seen = new Set<string>();
+    const columns: string[] = [];
+    const features = layer.geojson?.features ?? [];
+    for (const feature of features.slice(0, COLUMN_SCAN_FEATURE_LIMIT)) {
+      const properties = feature.properties;
+      if (!properties) continue;
+      for (const key of Object.keys(properties)) {
+        // Skip GDAL's synthetic FID: it is dropped from registered layers, so
+        // offering it as a completion would only mislead.
+        if (key === GDAL_AUTO_FID_COLUMN || seen.has(key)) continue;
+        seen.add(key);
+        columns.push(key);
+      }
+    }
+    if (!seen.has(LAYER_GEOMETRY_COLUMN)) columns.push(LAYER_GEOMETRY_COLUMN);
+    return { tableName, columns };
+  });
+}
+
 /**
  * Register every loaded layer that carries an in-memory GeoJSON FeatureCollection
  * as a DuckDB table, so user SQL can query the current map data by layer name.

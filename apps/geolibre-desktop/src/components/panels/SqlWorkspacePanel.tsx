@@ -1,0 +1,843 @@
+import { useAppStore } from "@geolibre/core";
+import {
+  Button,
+  Input,
+  ScrollArea,
+  Select,
+  cn,
+} from "@geolibre/ui";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  Download,
+  Eraser,
+  Loader2,
+  MapPlus,
+  Play,
+  X,
+} from "lucide-react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useTranslation } from "react-i18next";
+import {
+  exportBinaryVectorLayer,
+  type BinaryVectorExportResult,
+} from "../../lib/vector-exporter";
+import {
+  previewLayerColumns,
+  previewLayerTables,
+  resultToCsv,
+  runSqlQuery,
+  SAMPLE_DATASET_URL,
+  type SqlQueryResult,
+} from "../../lib/sql-workspace";
+import { runPostgisQuery } from "../../lib/pglite-workspace";
+import { runSedonaQuery } from "../../lib/sedona-workspace";
+import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
+import { useSqlCompletion } from "../../lib/useSqlCompletion";
+
+const CSV_MIME_TYPE = "text/csv";
+
+const DEFAULT_PANEL_HEIGHT = 300;
+const MIN_PANEL_HEIGHT = 160;
+const MAX_PANEL_HEIGHT = 640;
+const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
+const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
+
+/** SQL engine backing the workspace. */
+type SqlEngine = "duckdb" | "postgis" | "sedona";
+
+const ENGINE_STORAGE_KEY = "geolibre.sqlWorkspace.engine";
+
+/** Load the last-used engine from localStorage, defaulting to DuckDB. */
+function loadEngine(): SqlEngine {
+  if (typeof window === "undefined") return "duckdb";
+  const stored = window.localStorage.getItem(ENGINE_STORAGE_KEY);
+  return stored === "postgis" || stored === "sedona" ? stored : "duckdb";
+}
+
+/** Persist the chosen engine; ignore storage failures (quota/privacy mode). */
+function saveEngine(engine: SqlEngine): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(ENGINE_STORAGE_KEY, engine);
+  } catch {
+    // Best-effort persistence only.
+  }
+}
+
+// Cap how many result rows are rendered so a large result set cannot freeze the
+// UI; the full result is still used for export and add-as-layer.
+const MAX_DISPLAYED_ROWS = 500;
+
+const SAMPLE_QUERY = "SELECT 1 AS hello;";
+
+// Curated examples covering plain attribute tables, aggregates, and spatial
+// queries that return a geometry column (so "Add as layer" / export work). All
+// were validated against the dataset above.
+const SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+  {
+    label: "Countries with geometry",
+    sql: `SELECT NAME, CONTINENT, POP_EST, geom\nFROM ${SAMPLE_DATASET_URL}\nLIMIT 100;`,
+  },
+  {
+    label: "Attributes only (no geometry)",
+    sql: `SELECT NAME, CONTINENT, POP_EST, GDP_MD_EST\nFROM ${SAMPLE_DATASET_URL}\nORDER BY POP_EST DESC\nLIMIT 10;`,
+  },
+  {
+    label: "Population by continent (aggregate)",
+    sql: `SELECT CONTINENT, COUNT(*) AS countries, SUM(POP_EST) AS population\nFROM ${SAMPLE_DATASET_URL}\nGROUP BY CONTINENT\nORDER BY population DESC;`,
+  },
+  {
+    label: "Most populous countries (geometry)",
+    sql: `SELECT NAME, POP_EST, geom\nFROM ${SAMPLE_DATASET_URL}\nWHERE POP_EST > 50000000\nORDER BY POP_EST DESC;`,
+  },
+  {
+    label: "Country centroids (spatial)",
+    sql: `SELECT NAME, CONTINENT, ST_Centroid(geom) AS geom\nFROM ${SAMPLE_DATASET_URL}\nWHERE CONTINENT = 'Africa';`,
+  },
+  {
+    label: "Largest countries by area (spatial)",
+    sql: `SELECT NAME, ST_Area(geom) AS area\nFROM ${SAMPLE_DATASET_URL}\nORDER BY area DESC\nLIMIT 10;`,
+  },
+];
+
+// PostGIS examples. PGlite cannot read remote files, so these target registered
+// layer tables (replace `your_layer` with a name from "Queryable layers") plus a
+// couple of table-free spatial constructors. Every table query uses the `geom`
+// column the workspace creates on each registered layer.
+const POSTGIS_SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+  {
+    label: "PostGIS version",
+    sql: "SELECT PostGIS_Full_Version() AS version;",
+  },
+  {
+    label: "Make a point (geometry)",
+    sql: "SELECT ST_SetSRID(ST_MakePoint(-115.1398, 36.1699), 4326) AS geom;",
+  },
+  {
+    label: "First rows of a layer",
+    sql: `SELECT *\nFROM your_layer\nLIMIT 10;`,
+  },
+  {
+    label: "Feature count",
+    sql: `SELECT COUNT(*) AS features\nFROM your_layer;`,
+  },
+  {
+    label: "Centroids of a layer (spatial)",
+    sql: `SELECT ST_Centroid(geom) AS geom\nFROM your_layer;`,
+  },
+  {
+    label: "Buffer features by 0.01 deg (spatial)",
+    sql: `SELECT ST_Buffer(geom, 0.01) AS geom\nFROM your_layer;`,
+  },
+  {
+    label: "Bounding box of a layer (spatial)",
+    sql: `SELECT ST_Envelope(ST_Collect(geom)) AS geom\nFROM your_layer;`,
+  },
+];
+
+// Apache Sedona examples. Both backends (the in-browser CereusDB WASM engine and
+// the SedonaDB sidecar) register loaded layers as tables, so these target a
+// layer table (replace `your_layer` with a name from "Queryable layers") plus a
+// couple of table-free spatial constructors. Each table query uses the `geom`
+// alias for the geometry column the workspace creates on each registered layer.
+const SEDONA_SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+  {
+    label: "Make a point (geometry)",
+    sql: "SELECT ST_Point(-115.1398, 36.1699) AS geom;",
+  },
+  {
+    label: "Buffer a point (spatial)",
+    sql: "SELECT ST_Buffer(ST_Point(-115.1398, 36.1699), 0.5) AS geom;",
+  },
+  {
+    label: "First rows of a layer",
+    sql: `SELECT *\nFROM your_layer\nLIMIT 10;`,
+  },
+  {
+    label: "Feature count",
+    sql: `SELECT COUNT(*) AS features\nFROM your_layer;`,
+  },
+  {
+    label: "Centroids of a layer (spatial)",
+    sql: `SELECT ST_Centroid(geometry) AS geom\nFROM your_layer;`,
+  },
+  {
+    label: "Area of each feature (spatial)",
+    sql: `SELECT ST_Area(geometry) AS area, geometry AS geom\nFROM your_layer\nORDER BY area DESC\nLIMIT 10;`,
+  },
+];
+
+/** Build a starter query that selects the first rows of a layer table. */
+function sampleQueryForTable(tableName: string): string {
+  // Quote the identifier so the generated query stays valid even if the table
+  // name ever contains characters the sanitizer does not currently produce.
+  return `SELECT *\nFROM "${tableName.replaceAll('"', '""')}"\nLIMIT 10;`;
+}
+
+const HISTORY_STORAGE_KEY = "geolibre.sqlWorkspace.history";
+const MAX_HISTORY_ENTRIES = 25;
+
+/** Load saved query history from localStorage, newest first. */
+function loadQueryHistory(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(HISTORY_STORAGE_KEY) ?? "[]",
+    );
+    return Array.isArray(parsed)
+      ? parsed
+        .filter((entry): entry is string => typeof entry === "string")
+        .slice(0, MAX_HISTORY_ENTRIES)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Prepend a query to history (deduped, newest first, capped) and persist it. */
+function saveQueryToHistory(history: string[], query: string): string[] {
+  const trimmed = query.trim();
+  if (!trimmed) return history;
+  const next = [
+    trimmed,
+    ...history.filter((entry) => entry !== trimmed),
+  ].slice(0, MAX_HISTORY_ENTRIES);
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // Best-effort: ignore quota or privacy-mode storage failures.
+    }
+  }
+  return next;
+}
+
+/** One-line, length-capped label for a history entry. */
+function historyLabel(query: string): string {
+  const oneLine = query.replace(/\s+/g, " ").trim();
+  return oneLine.length > 80 ? `${oneLine.slice(0, 80)}…` : oneLine;
+}
+
+/** Format a result cell for display, keeping the grid compact and readable. */
+function formatCell(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "[object]";
+    }
+  }
+  return String(value);
+}
+
+/**
+ * The in-app SQL Workspace: a bottom-docked, resizable panel (à la the Python
+ * Console) that runs DuckDB / PostGIS / Apache Sedona SQL against loaded layers,
+ * local files, and URLs. Results render beside the editor so a query gives
+ * immediate feedback, and the editor autocompletes layer tables, columns, SQL
+ * keywords, and spatial functions. Rendered only while open.
+ */
+export function SqlWorkspacePanel() {
+  const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  const layers = useAppStore((s) => s.layers);
+  const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+
+  const { t } = useTranslation();
+
+  const sectionRef = useRef<HTMLElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  // Tear down an in-flight height drag's window listeners if the panel unmounts
+  // mid-drag (e.g. the user closes it while dragging).
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+
+  const [height, setHeight] = useState(DEFAULT_PANEL_HEIGHT);
+  const [collapsed, setCollapsed] = useState(false);
+  const [engine, setEngine] = useState<SqlEngine>(loadEngine);
+  const [sql, setSql] = useState(SAMPLE_QUERY);
+  const [running, setRunning] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<SqlQueryResult | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>(loadQueryHistory);
+  const [layerName, setLayerName] = useState("");
+
+  const tables = useMemo(() => previewLayerTables(layers), [layers]);
+  const tableColumns = useMemo(() => previewLayerColumns(layers), [layers]);
+  const sampleQueries =
+    engine === "postgis"
+      ? POSTGIS_SAMPLE_QUERIES
+      : engine === "sedona"
+        ? SEDONA_SAMPLE_QUERIES
+        : SAMPLE_QUERIES;
+  // DuckDB can read files/URLs directly; PostGIS and Sedona query loaded layers.
+  const queriesLayersOnly = engine === "postgis" || engine === "sedona";
+
+  const completion = useSqlCompletion({
+    textareaRef: editorRef,
+    sql,
+    setSql,
+    tables: tableColumns,
+    label: t("toolbar.sqlWorkspace.completions"),
+  });
+
+  // `running` state lags a render behind, so a rapid second Ctrl+Enter could
+  // read the stale `false` and fire a concurrent query. A ref is updated
+  // synchronously and guards against that race; `running` only drives the UI.
+  const runningRef = useRef(false);
+  // Same race for exports: the disabled buttons lag a render, so a fast double
+  // click could open two save dialogs. The ref guards synchronously.
+  const exportingRef = useRef(false);
+  // handleAddAsLayer is synchronous, so a rapid double-click could add the same
+  // result as two layers before React re-renders. The ref guards synchronously.
+  const addingLayerRef = useRef(false);
+
+  // Focus the editor when the panel first opens so the user can type at once.
+  useEffect(() => {
+    editorRef.current?.focus();
+  }, []);
+
+  const runQuery = async () => {
+    const trimmed = sql.trim();
+    if (!trimmed || runningRef.current) return;
+    completion.close();
+    setHistory((current) => saveQueryToHistory(current, trimmed));
+    runningRef.current = true;
+    setRunning(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const queryResult =
+        engine === "postgis"
+          ? await runPostgisQuery(trimmed, layers)
+          : engine === "sedona"
+            ? await runSedonaQuery(trimmed, layers)
+            : await runSqlQuery(trimmed, layers);
+      setResult(queryResult);
+    } catch (err) {
+      setResult(null);
+      setError(describeQueryError(err));
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
+    }
+  };
+
+  // Surface the engine error, and when it is a missing-table error append the
+  // names the workspace actually exposes so the user can pick a real one (the
+  // common cause of issue #906: querying a table name that was never loaded).
+  const describeQueryError = (err: unknown): string => {
+    const message = err instanceof Error ? err.message : String(err);
+    const missingTable = /does not exist|not found|no such table|catalog error/i.test(
+      message,
+    );
+    if (missingTable && tables.length > 0) {
+      const names = tables.map((table) => table.tableName).join(", ");
+      return `${message}\n\n${t("toolbar.sqlWorkspace.queryableHint", { names })}`;
+    }
+    return message;
+  };
+
+  const clearWorkspace = () => {
+    setSql("");
+    setResult(null);
+    setError(null);
+    setNotice(null);
+    setLayerName("");
+    completion.close();
+    editorRef.current?.focus();
+  };
+
+  const handleAddAsLayer = () => {
+    if (!result?.geojson || addingLayerRef.current) return;
+    addingLayerRef.current = true;
+    setError(null);
+    const featureCount = result.geojson.features.length;
+    const name =
+      layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
+    addGeoJsonLayer(name, result.geojson);
+    setNotice(`Added ${featureCount} features to the map as "${name}".`);
+    addingLayerRef.current = false;
+  };
+
+  const saveBinary = async (
+    payload: BinaryVectorExportResult,
+    label: string,
+  ) => {
+    const savedName = await saveBinaryFileWithFallback(payload.data, {
+      defaultName: `sql-result.${payload.extension}`,
+      filters: [{ name: label, extensions: [payload.extension] }],
+      browserTypes: [
+        {
+          description: label,
+          accept: { [payload.mimeType]: [`.${payload.extension}`] },
+        },
+      ],
+      mimeType: payload.mimeType,
+    });
+    if (savedName) setNotice(`Saved ${label} as ${savedName}.`);
+  };
+
+  const handleExportCsv = async () => {
+    if (!result || exportingRef.current) return;
+    exportingRef.current = true;
+    setError(null);
+    setNotice(null);
+    setExporting(true);
+    try {
+      const csv = resultToCsv(result.columns, result.rows);
+      await saveBinary(
+        {
+          data: new TextEncoder().encode(csv),
+          extension: "csv",
+          mimeType: CSV_MIME_TYPE,
+        },
+        "CSV",
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      exportingRef.current = false;
+      setExporting(false);
+    }
+  };
+
+  const handleExportGeoParquet = async () => {
+    if (!result?.geojson || exportingRef.current) return;
+    exportingRef.current = true;
+    setError(null);
+    setNotice(null);
+    setExporting(true);
+    try {
+      const exported = await exportBinaryVectorLayer(
+        result.geojson,
+        "geoparquet",
+        "SQL result",
+      );
+      // exportBinaryVectorLayer already sets the GeoParquet mimeType.
+      await saveBinary(exported, "GeoParquet");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      exportingRef.current = false;
+      setExporting(false);
+    }
+  };
+
+  // Drag the top edge to resize the panel height, mirroring the Python Console.
+  // The live size is written straight to the DOM during the drag and committed
+  // to state on release so React re-renders only once.
+  const startResize = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const startY = event.clientY;
+    const startHeight = height;
+    let nextHeight = startHeight;
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.dispatchEvent(new Event(PANEL_RESIZE_START_EVENT));
+
+    const onMove = (moveEvent: MouseEvent) => {
+      const available = Math.max(MIN_PANEL_HEIGHT, window.innerHeight - 180);
+      const maxHeight = Math.min(MAX_PANEL_HEIGHT, available);
+      nextHeight = Math.min(
+        maxHeight,
+        Math.max(MIN_PANEL_HEIGHT, startHeight + startY - moveEvent.clientY),
+      );
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (sectionRef.current) {
+          sectionRef.current.style.height = `${nextHeight}px`;
+        }
+      });
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      resizeCleanupRef.current = null;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      setHeight(nextHeight);
+      window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    resizeCleanupRef.current = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      // Pair the START dispatched on mousedown so MapCanvas clears its
+      // resize-active flag even when unmounted mid-drag.
+      window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  };
+
+  // On unmount, tear down any in-flight drag listeners.
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
+  const displayedRows = result?.rows.slice(0, MAX_DISPLAYED_ROWS) ?? [];
+  const hiddenRowCount = result ? result.rowCount - displayedRows.length : 0;
+
+  return (
+    <section
+      ref={sectionRef}
+      aria-label={t("toolbar.sqlWorkspace.title")}
+      className="relative flex shrink-0 flex-col border-t bg-card"
+      // Collapsed: drop the fixed height so the panel hugs its header.
+      style={collapsed ? undefined : { height }}
+    >
+      {collapsed ? null : (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={t("toolbar.sqlWorkspace.resize")}
+          className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+          onMouseDown={startResize}
+        />
+      )}
+
+      <div className="flex items-center gap-2 border-b px-3 py-1.5">
+        <Database className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-semibold">{t("toolbar.sqlWorkspace.title")}</span>
+        <Select
+          aria-label={t("toolbar.sqlWorkspace.engine")}
+          className="ml-2 h-7 w-auto text-xs"
+          value={engine}
+          onChange={(event) => {
+            const value = event.target.value;
+            const next: SqlEngine =
+              value === "postgis"
+                ? "postgis"
+                : value === "sedona"
+                  ? "sedona"
+                  : "duckdb";
+            setEngine(next);
+            saveEngine(next);
+          }}
+        >
+          <option value="duckdb">Engine: DuckDB</option>
+          <option value="postgis">Engine: PostGIS</option>
+          <option value="sedona">Engine: Apache Sedona</option>
+        </Select>
+        <div className="ml-auto flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title={
+              collapsed
+                ? t("toolbar.sqlWorkspace.expand")
+                : t("toolbar.sqlWorkspace.collapse")
+            }
+            aria-expanded={!collapsed}
+            aria-controls="sql-workspace-body"
+            onClick={() => setCollapsed((v) => !v)}
+          >
+            {collapsed ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title={t("toolbar.sqlWorkspace.close")}
+            onClick={() => setSqlWorkspaceOpen(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div
+        id="sql-workspace-body"
+        className={`flex min-h-0 flex-1 ${collapsed ? "hidden" : ""}`}
+      >
+        {/* Editor pane (left) */}
+        <div className="flex min-w-0 basis-[42%] flex-col gap-2 border-r p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              aria-label="Insert a sample query"
+              className="h-7 w-auto max-w-[11rem] text-xs"
+              value=""
+              onChange={(event) => {
+                const index = Number(event.target.value);
+                const sample = sampleQueries[index];
+                if (sample) setSql(sample.sql);
+              }}
+            >
+              <option value="" disabled>
+                Sample queries…
+              </option>
+              {sampleQueries.map((sample, index) => (
+                <option key={sample.label} value={index}>
+                  {sample.label}
+                </option>
+              ))}
+            </Select>
+            {history.length > 0 ? (
+              <Select
+                aria-label="Reuse a query from history"
+                className="h-7 w-auto max-w-[11rem] text-xs"
+                value=""
+                onChange={(event) => {
+                  const entry = history[Number(event.target.value)];
+                  if (entry) setSql(entry);
+                }}
+              >
+                <option value="" disabled>
+                  History…
+                </option>
+                {history.map((entry, index) => (
+                  <option key={index} value={index}>
+                    {historyLabel(entry)}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+            {tables.length > 0 ? (
+              <Select
+                aria-label="Insert a sample query for a layer"
+                className="h-7 w-auto max-w-[11rem] text-xs"
+                value=""
+                onChange={(event) => {
+                  const tableName = event.target.value;
+                  if (tableName) setSql(sampleQueryForTable(tableName));
+                }}
+              >
+                <option value="" disabled>
+                  Sample query for layer…
+                </option>
+                {tables.map((table) => (
+                  <option key={table.tableName} value={table.tableName}>
+                    {table.tableName}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
+          </div>
+
+          {tables.length > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Queryable layers:{" "}
+              {tables.map((table, index) => (
+                <span key={table.tableName}>
+                  {index > 0 ? ", " : ""}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                    {table.tableName}
+                  </code>
+                </span>
+              ))}
+            </p>
+          ) : queriesLayersOnly ? (
+            <p className="text-xs text-muted-foreground">
+              No vector layers are loaded as tables yet. Load a vector layer to
+              query it with {engine === "sedona" ? "Apache Sedona" : "PostGIS"}.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No vector layers are loaded as tables yet. You can still read files
+              and URLs with {"read_parquet()"}, {"read_csv_auto()"}, or{" "}
+              {"ST_Read()"}.
+            </p>
+          )}
+
+          <label htmlFor="sql-workspace-editor" className="sr-only">
+            SQL query
+          </label>
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            {completion.dropdown}
+            <textarea
+              id="sql-workspace-editor"
+              ref={editorRef}
+              value={sql}
+              onChange={(event) => {
+                setSql(event.target.value);
+                completion.close();
+              }}
+              onKeyDown={(event) => {
+                if (completion.tryKey(event)) return;
+                if (
+                  (event.ctrlKey || event.metaKey) &&
+                  event.key === "Enter"
+                ) {
+                  event.preventDefault();
+                  void runQuery();
+                }
+              }}
+              spellCheck={false}
+              className={cn(
+                "min-h-[4rem] w-full flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2",
+                "font-mono text-sm shadow-xs transition-colors",
+                "placeholder:text-muted-foreground focus-visible:border-2",
+                "focus-visible:border-ring focus-visible:outline-none",
+              )}
+              placeholder={t("toolbar.sqlWorkspace.placeholder")}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={runQuery}
+              disabled={running || !sql.trim()}
+              title={t("toolbar.sqlWorkspace.runHint")}
+            >
+              {running ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+              {t("toolbar.sqlWorkspace.run")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearWorkspace}
+              disabled={running || (!sql && !result && !error && !notice)}
+            >
+              <Eraser className="h-4 w-4" />
+              {t("toolbar.sqlWorkspace.clear")}
+            </Button>
+            {result ? (
+              <span className="text-xs text-muted-foreground">
+                {result.rowCount} row{result.rowCount === 1 ? "" : "s"} ·{" "}
+                {result.columns.length} column
+                {result.columns.length === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Results pane (right) */}
+        <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {result?.geojson ? (
+              <Input
+                aria-label="Layer name"
+                className="h-8 w-44 text-sm"
+                value={layerName}
+                onChange={(event) => setLayerName(event.target.value)}
+                placeholder="Layer name (optional)"
+              />
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAddAsLayer}
+              disabled={!result?.geojson || exporting}
+            >
+              <MapPlus className="h-4 w-4" />
+              Add as layer
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              disabled={!result || result.columns.length === 0 || exporting}
+            >
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportGeoParquet}
+              disabled={!result?.geojson || exporting}
+            >
+              <Download className="h-4 w-4" />
+              Export GeoParquet
+            </Button>
+          </div>
+
+          {error ? (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+              <p className="flex items-start gap-2 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="whitespace-pre-wrap font-mono">{error}</span>
+              </p>
+            </div>
+          ) : null}
+
+          {notice ? (
+            <p className="text-sm text-muted-foreground">{notice}</p>
+          ) : null}
+
+          {result ? (
+            result.columns.length > 0 ? (
+              <ScrollArea className="min-h-0 flex-1 rounded-md border">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="sticky top-0 bg-muted">
+                    <tr>
+                      {result.columns.map((column) => (
+                        <th
+                          key={column}
+                          className="border-b px-2 py-1.5 text-left font-medium"
+                        >
+                          {column}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedRows.map((row, rowIndex) => (
+                      <tr key={rowIndex} className="even:bg-muted/40">
+                        {result.columns.map((column) => (
+                          <td
+                            key={column}
+                            className="max-w-xs truncate border-b px-2 py-1 font-mono"
+                            title={formatCell(row[column])}
+                          >
+                            {formatCell(row[column])}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </ScrollArea>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Statement executed. No rows returned.
+              </p>
+            )
+          ) : error ? null : (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-md border border-dashed">
+              <p className="px-4 text-center text-sm text-muted-foreground">
+                {t("toolbar.sqlWorkspace.resultsPlaceholder")}
+              </p>
+            </div>
+          )}
+
+          {hiddenRowCount > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              Showing first {displayedRows.length} of {result?.rowCount} rows.
+              Export to see them all.
+            </p>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+}
