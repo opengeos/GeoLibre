@@ -112,11 +112,12 @@ export async function promptDownloadNameIfNeeded(
   const base = defaultName.replace(/\.[^./\\]+$/, "");
   const chosen = await useFileNamePrompt.getState().prompt({ defaultName: base });
   if (chosen === null) return null;
+  // `chosen` is already trimmed by the prompt's submit handler.
   const sanitized = chosen
-    .trim()
-    // Replace characters illegal in common filesystems (path separators, the
-    // null byte, etc.) so a pasted name cannot smuggle in a path.
+    // Replace characters illegal in common filesystems (path separators and the
+    // C0 control range plus DEL, incl. the null byte) so a pasted name cannot
+    // smuggle in a path or control character.
     // eslint-disable-next-line no-control-regex
-    .replace(/[/\\:*?"<>|\x00]/g, "_");
+    .replace(/[/\\:*?"<>|\x00-\x1f\x7f]/g, "_");
   return ensureFileExtension(sanitized, extensions);
 }

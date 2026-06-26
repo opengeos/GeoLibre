@@ -202,8 +202,10 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     const clampToViewport = () =>
       setDialogSize((prev) => {
         if (!prev) return prev;
-        const width = Math.min(prev.width, window.innerWidth - 16);
-        const height = Math.min(prev.height, window.innerHeight - 16);
+        // Keep the same minimum dimensions the drag handler enforces so a tiny
+        // window can't shrink the dialog below a usable size.
+        const width = Math.max(360, Math.min(prev.width, window.innerWidth - 16));
+        const height = Math.max(320, Math.min(prev.height, window.innerHeight - 16));
         const left = Math.max(8, Math.min(prev.left, window.innerWidth - width - 8));
         const top = Math.max(8, Math.min(prev.top, window.innerHeight - height - 8));
         if (
