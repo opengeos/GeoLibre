@@ -814,6 +814,7 @@ interface ComponentColorbarGuiState extends ComponentColorbarGuiEntryState {
   hasColorbar: boolean;
   selectedColorbarIndex: number;
   colorbars: ComponentColorbarGuiEntryState[];
+  stackOrientation: "horizontal" | "vertical";
 }
 
 interface ComponentLegendItem {
@@ -1431,7 +1432,8 @@ function normalizeComponentsProjectState(
   };
 }
 
-function normalizeColorbarState(
+/** @internal Exported only so the project-state normalizer can be unit-tested. */
+export function normalizeColorbarState(
   state: unknown
 ): ComponentColorbarGuiState | undefined {
   if (!state || typeof state !== "object") return undefined;
@@ -1452,6 +1454,8 @@ function normalizeColorbarState(
     hasColorbar: colorbars.length > 0,
     selectedColorbarIndex,
     colorbars,
+    stackOrientation:
+      candidate.stackOrientation === "horizontal" ? "horizontal" : "vertical",
   };
 }
 
