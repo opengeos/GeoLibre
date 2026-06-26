@@ -11,6 +11,9 @@ describe("normalizeHexColor", () => {
   it("expands 3-digit shorthand to its six lowercase digits", () => {
     assert.equal(normalizeHexColor("#0f0"), "#00ff00");
     assert.equal(normalizeHexColor("abc"), "#aabbcc");
+    // Uppercase, no leading # — exercises both the case-insensitive match and
+    // the lowercasing of the expanded result.
+    assert.equal(normalizeHexColor("ABC"), "#aabbcc");
   });
 
   it("tolerates surrounding whitespace", () => {
@@ -18,7 +21,18 @@ describe("normalizeHexColor", () => {
   });
 
   it("returns null for anything that is not a valid 3- or 6-digit hex", () => {
-    for (const bad of ["", "#", "nothex", "#12", "#12345", "#1234567", "ggg"]) {
+    // `#1234` is the CSS Color 4 RGBA shorthand — valid in CSS, but this app
+    // only renders 3- or 6-digit hex, so it must be rejected here.
+    for (const bad of [
+      "",
+      "#",
+      "nothex",
+      "#12",
+      "#1234",
+      "#12345",
+      "#1234567",
+      "ggg",
+    ]) {
       assert.equal(normalizeHexColor(bad), null, `expected null for ${bad}`);
     }
   });

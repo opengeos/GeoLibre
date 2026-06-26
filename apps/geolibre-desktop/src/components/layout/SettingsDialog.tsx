@@ -1712,7 +1712,6 @@ export function SettingsDialog({
                             wrapping label drives (#911). */}
                         <input
                           type="text"
-                          inputMode="text"
                           spellCheck={false}
                           autoComplete="off"
                           className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
@@ -1726,8 +1725,10 @@ export function SettingsDialog({
                           onBlur={commitCustomColorDraft}
                           onKeyDown={(event) => {
                             if (event.key === "Enter") {
+                              // Blur is the single commit path; the resulting
+                              // onBlur applies/reverts the draft, so don't also
+                              // commit here and double-write the same value.
                               event.preventDefault();
-                              commitCustomColorDraft();
                               event.currentTarget.blur();
                             }
                           }}
