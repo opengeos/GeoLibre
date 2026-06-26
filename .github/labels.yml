@@ -1,0 +1,47 @@
+# Source of truth for this repository's issue/PR labels.
+# Synced to GitHub by .github/workflows/labels.yml on push to main.
+# The sync is additive (delete-other-labels is off), so labels not listed
+# here are left untouched.
+
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+- name: unconfirmed possible issue
+  color: "fef2c0"
+  description: Reported behavior not yet reproduced or confirmed as a bug
+- name: enhancement
+  color: "a2eeef"
+  description: New feature or request
+- name: enhancement (small)
+  color: "c5f0f5"
+  description: Minor feature, small UI tweak, or text adjustment
+- name: enhancement (medium)
+  color: "76d3dd"
+  description: Broader feature, feasible within a reasonable timeframe
+- name: wishlist
+  color: "4a0aca"
+  description: Feature requests that require significant efforts
+- name: question
+  color: "d876e3"
+  description: Further information is requested
+- name: waiting on user feedback
+  color: "fbca04"
+  description: Progress depends on the reporter (e.g. sample data or verification)
+- name: documentation
+  color: "0075ca"
+  description: Improvements or additions to documentation
+- name: duplicate
+  color: "cfd3d7"
+  description: This issue or pull request already exists
+- name: good first issue
+  color: "7057ff"
+  description: Good for newcomers
+- name: help wanted
+  color: "008672"
+  description: Extra attention is needed
+- name: invalid
+  color: "e4e669"
+  description: This doesn't seem right
+- name: wontfix
+  color: "ffffff"
+  description: This will not be worked on

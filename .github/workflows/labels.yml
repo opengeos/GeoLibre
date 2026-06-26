@@ -1,0 +1,27 @@
+name: Sync labels
+
+# Keeps the repository's labels in sync with .github/labels.yml so they are
+# version-controlled and recreated automatically if deleted. The sync is
+# additive: existing labels not listed in the manifest are left untouched.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/labels.yml
+      - .github/workflows/labels.yml
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/labels.yml
+          delete-other-labels: false
+          token: ${{ secrets.GITHUB_TOKEN }}
