@@ -761,11 +761,11 @@ export function DesktopShell({
     }
   }, []);
 
-  // When a local GeoTIFF fails to load because it is striped (not a tiled COG),
-  // offer to convert it to a COG in the browser and load the result. The raster
-  // plugin detects the case and hands us the bytes; the conversion and the
-  // prompt live here because this layer has i18n and the client-side converter.
-  // See opengeos/GeoLibre#789.
+  // When a GeoTIFF fails to load because it is striped (not a tiled COG), offer
+  // to convert it to a COG in the browser and load the result. Works for both a
+  // local file and a remote URL (issue #916). The raster plugin detects the case
+  // and hands us the bytes; the conversion and the prompt live here because this
+  // layer has i18n and the client-side converter. See opengeos/GeoLibre#789.
   useEffect(() => {
     setNonTiledRasterHandler(async ({ name, readBytes, dismiss }) => {
       try {

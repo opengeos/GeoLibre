@@ -102,19 +102,21 @@ let restorePanelExpandTimeout: number | null = null;
 let rasterControlInterleaved = true;
 
 /**
- * Details of a local raster that the panel could not render because it is a
- * striped (non-tiled) GeoTIFF rather than a tiled COG. Passed to a host handler
- * registered via {@link setNonTiledRasterHandler}, which can offer to convert it
- * to a COG (the conversion + UI live in the app layer, which has i18n and the
- * client-side converter; this framework-agnostic package only detects the case).
+ * Details of a raster that the panel could not render because it is a striped
+ * (non-tiled) GeoTIFF rather than a tiled COG. Covers both a local file and a
+ * remote URL. Passed to a host handler registered via
+ * {@link setNonTiledRasterHandler}, which can offer to convert it to a COG (the
+ * conversion + UI live in the app layer, which has i18n and the client-side
+ * converter; this framework-agnostic package only detects the case).
  */
 export interface NonTiledRasterRequest {
   /** The failed layer's id. */
   layerId: string;
   /** The failed layer's display name (used for the converted layer too). */
   name: string;
-  /** Reads the original uploaded bytes. Must be awaited before {@link dismiss},
-   * which revokes the underlying blob URL. */
+  /** Reads the original bytes (a local file from its blob URL, or a remote URL
+   * fetched whole). Must be awaited before {@link dismiss}, which revokes a
+   * local file's blob URL. */
   readBytes: () => Promise<Uint8Array>;
   /** Removes the failed layer from the map and the store. */
   dismiss: () => void;
@@ -130,9 +132,10 @@ let nonTiledRasterHandler: NonTiledRasterHandler | null = null;
 const nonTiledInFlight = new Set<string>();
 
 /**
- * Register (or clear, with `null`) a handler invoked when a local GeoTIFF fails
- * to load because it is striped rather than tiled. The app uses this to offer an
- * in-browser convert-to-COG flow. Only one handler is active at a time.
+ * Register (or clear, with `null`) a handler invoked when a GeoTIFF (local file
+ * or remote URL) fails to load because it is striped rather than tiled. The app
+ * uses this to offer an in-browser convert-to-COG flow. Only one handler is
+ * active at a time.
  *
  * @param handler - The handler, or `null` to unregister.
  */
@@ -503,12 +506,15 @@ function createRasterControl(
     const layerId = event.layerId;
     if (nonTiledInFlight.has(layerId)) return;
     const info = control.getRaster(layerId);
-    // Only local files can be re-read and converted in the browser; remote
-    // non-tiled URLs keep the plain error.
-    if (!info || !isNonTiledRasterError(info.error) || info.source.kind !== "file") {
-      return;
-    }
-    const objectUrl = info.source.objectUrl;
+    if (!info || !isNonTiledRasterError(info.error)) return;
+    // Re-read the original bytes so the host can convert them to a COG: a local
+    // file from its blob URL, a remote URL by fetching it whole. The remote
+    // fetch only works when the server allows CORS, which it must have already
+    // to get this far (the panel range-fetched the header to detect "not
+    // tiled"); a CORS-less host would have failed earlier with a fetch error.
+    // See opengeos/GeoLibre#916.
+    const bytesUrl =
+      info.source.kind === "file" ? info.source.objectUrl : info.source.url;
     const handler = nonTiledRasterHandler;
     nonTiledInFlight.add(layerId);
     // Invoke inside the promise chain so even a synchronous throw from the
@@ -521,7 +527,7 @@ function createRasterControl(
           layerId,
           name: info.name,
           readBytes: async () => {
-            const response = await fetch(objectUrl);
+            const response = await fetch(bytesUrl);
             if (!response.ok) {
               throw new Error(
                 `Failed to read raster bytes: ${response.status}`,
