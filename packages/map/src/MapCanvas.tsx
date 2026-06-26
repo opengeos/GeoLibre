@@ -166,10 +166,73 @@ function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
 }
 
 /**
+ * Open a photo in a fullscreen lightbox: a backdrop overlay with the image
+ * centered (scaled to fit). Uses the native Fullscreen API so it fills the whole
+ * screen, falling back to a viewport-filling overlay where fullscreen is denied.
+ * Closes on the × button, a backdrop click, Escape, a double-click on the image,
+ * or the user leaving native fullscreen.
+ *
+ * @param src - The image data URL or URL.
+ * @param alt - Accessible label for the image.
+ */
+function openPhotoFullscreen(src: string, alt: string): void {
+  const overlay = document.createElement("div");
+  overlay.className = "geolibre-photo-fullscreen";
+
+  const image = document.createElement("img");
+  image.src = src;
+  image.alt = alt;
+  image.className = "geolibre-photo-fullscreen-img";
+  overlay.appendChild(image);
+
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "geolibre-photo-fullscreen-close";
+  closeButton.setAttribute("aria-label", "Close");
+  closeButton.textContent = "×";
+  overlay.appendChild(closeButton);
+
+  document.body.appendChild(overlay);
+
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("fullscreenchange", onFullscreenChange);
+    if (document.fullscreenElement === overlay) {
+      void document.exitFullscreen().catch(() => {});
+    }
+    overlay.remove();
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") close();
+  };
+  const onFullscreenChange = () => {
+    // Leaving native fullscreen (Esc / F11) should also dismiss the overlay.
+    if (document.fullscreenElement !== overlay) close();
+  };
+
+  closeButton.addEventListener("click", close);
+  // Click the backdrop (but not the image) to dismiss.
+  overlay.addEventListener("click", (event) => {
+    if (event.target === overlay) close();
+  });
+  image.addEventListener("dblclick", close);
+  document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+
+  // Best-effort true fullscreen; the overlay already fills the viewport if the
+  // request is unsupported or denied (e.g. inside a sandboxed embed).
+  void overlay.requestFullscreen?.().catch(() => {});
+}
+
+/**
  * Build the geotagged-photo popup: a resizable box showing the photo scaled to
  * fill it, captioned with the photo's name and timestamp. The box uses CSS
- * `resize` so the user can drag its corner to enlarge the photo. Photos with no
- * thumbnail (e.g. HEIC) fall back to a "No preview available" note.
+ * `resize` so the user can drag its corner to enlarge the photo, and
+ * double-clicking the photo opens it fullscreen. Photos with no thumbnail (e.g.
+ * HEIC) fall back to a "No preview available" note.
  *
  * @param properties - The clicked feature's properties.
  * @returns The popup's DOM content element.
@@ -186,6 +249,14 @@ function createPhotoPopupElement(
     image.src = photo;
     image.alt = typeof properties.name === "string" ? properties.name : "Photo";
     image.className = "geolibre-photo-popup-img";
+    image.title = "Double-click to view fullscreen";
+    // Double-click (not single, so it never fights the resize drag) opens the
+    // photo fullscreen. The image is popup DOM, not the map canvas, so this does
+    // not trigger MapLibre's double-click zoom.
+    image.addEventListener("dblclick", (event) => {
+      event.stopPropagation();
+      openPhotoFullscreen(photo, image.alt);
+    });
     root.appendChild(image);
   } else {
     const placeholder = document.createElement("div");

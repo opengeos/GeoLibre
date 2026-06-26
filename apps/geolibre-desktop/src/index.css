@@ -1982,6 +1982,46 @@ body,
   object-fit: contain;
   border-radius: 0.375rem;
   background: hsl(var(--muted));
+  cursor: zoom-in;
+}
+
+/* Fullscreen lightbox opened by double-clicking the photo popup's image. */
+.geolibre-photo-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 0.92);
+}
+
+.geolibre-photo-fullscreen-img {
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+.geolibre-photo-fullscreen-close {
+  position: fixed;
+  top: 0.75rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.12);
+  color: #fff;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.geolibre-photo-fullscreen-close:hover {
+  background: rgb(255 255 255 / 0.24);
 }
 
 .geolibre-photo-popup-placeholder {
