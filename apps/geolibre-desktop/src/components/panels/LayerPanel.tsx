@@ -339,7 +339,6 @@ export function LayerPanel({
   hideOwnRail = false,
 }: LayerPanelProps) {
   const { t } = useTranslation();
-  // Beginners also get a basemap hint in the empty state; others keep the one-liner (#881).
   const isBeginnerProfile = useDesktopSettingsStore(
     (s) => activeInterfaceProfile(s.desktopSettings.uiProfile) === "beginner",
   );
