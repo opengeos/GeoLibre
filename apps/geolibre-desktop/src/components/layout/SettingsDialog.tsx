@@ -80,7 +80,11 @@ import {
 import { useLanguage } from "../../hooks/useLanguage";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
-import { THEME_SCHEMES, type ThemeScheme } from "../../lib/theme-schemes";
+import {
+  THEME_SCHEMES,
+  normalizeHexColor,
+  type ThemeScheme,
+} from "../../lib/theme-schemes";
 import type { UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
@@ -469,6 +473,9 @@ export function SettingsDialog({
       // focus RAF fires, a leftover target would otherwise fire on a later
       // open that never asked for it.
       setPendingFocus(null);
+      // Discard any uncommitted hex text so a half-typed/invalid value never
+      // resurfaces on the next open (the swatch already shows the saved color).
+      setCustomColorDraft(null);
       return;
     }
     const seededPreferences = clonePreferences(
@@ -795,6 +802,19 @@ export function SettingsDialog({
       ...current,
       theme: { ...current.theme, scheme: "custom", customColor },
     });
+  };
+
+  // In-progress text for the inline hex field next to the swatch. While the user
+  // is typing or pasting a code it holds the raw string; `null` means the field
+  // mirrors the saved color. On commit a valid 3- or 6-digit hex applies and an
+  // invalid one is discarded, so the field reverts to the last valid color (#911).
+  const [customColorDraft, setCustomColorDraft] = useState<string | null>(null);
+
+  const commitCustomColorDraft = () => {
+    if (customColorDraft === null) return;
+    const normalized = normalizeHexColor(customColorDraft);
+    if (normalized) updateSavedThemeCustomColor(normalized);
+    setCustomColorDraft(null);
   };
 
   const updateDraftUpdateSettings = (patch: Partial<UpdateSettings>) => {
@@ -1685,9 +1705,38 @@ export function SettingsDialog({
                           aria-label={t("settings.appearance.customColor")}
                         />
                         <span>{t("settings.appearance.customColor")}</span>
-                        <code className="ml-auto text-xs uppercase text-muted-foreground">
-                          {desktopSettings.theme.customColor}
-                        </code>
+                        {/* Inline hex entry so power users can type or paste an
+                            exact code instead of only dragging the native picker.
+                            The text input is interactive content, so a click lands
+                            here and focuses it rather than reopening the picker the
+                            wrapping label drives (#911). */}
+                        <input
+                          type="text"
+                          inputMode="text"
+                          spellCheck={false}
+                          autoComplete="off"
+                          className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
+                          value={
+                            customColorDraft ??
+                            desktopSettings.theme.customColor
+                          }
+                          onChange={(event) =>
+                            setCustomColorDraft(event.target.value)
+                          }
+                          onBlur={commitCustomColorDraft}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              commitCustomColorDraft();
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          aria-label={t("settings.appearance.customColorHex")}
+                          aria-invalid={
+                            customColorDraft !== null &&
+                            normalizeHexColor(customColorDraft) === null
+                          }
+                        />
                       </label>
                     ) : null}
                   </div>
