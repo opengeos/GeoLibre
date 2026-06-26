@@ -28,7 +28,7 @@ import {
   startLayerGeometryEdit,
   subscribeGeometryEdit,
 } from "@geolibre/plugins";
-import { convertGeoTiffToCog, readGeoTiffInfo } from "@geolibre/processing";
+import { convertGeoTiffToCog, isTiff, readGeoTiffInfo } from "@geolibre/processing";
 import {
   type CSSProperties,
   type DragEvent,
@@ -796,21 +796,12 @@ export function DesktopShell({
           return;
         }
         // A URL can answer 200 with non-GeoTIFF content (an auth/login or error
-        // page), which downloads fine but is not convertible. Check the TIFF
-        // magic bytes ("II*\0" little-endian or "MM\0*" big-endian) up front so
-        // that surfaces as a clear "not a GeoTIFF" message instead of the
-        // misleading "could not convert" one the parser would otherwise trigger.
-        const isTiff =
-          bytes.length >= 4 &&
-          ((bytes[0] === 0x49 &&
-            bytes[1] === 0x49 &&
-            bytes[2] === 0x2a &&
-            bytes[3] === 0x00) ||
-            (bytes[0] === 0x4d &&
-              bytes[1] === 0x4d &&
-              bytes[2] === 0x00 &&
-              bytes[3] === 0x2a));
-        if (!isTiff) {
+        // page), which downloads fine but is not convertible. Sniff the TIFF
+        // signature up front so that surfaces as a clear "not a GeoTIFF" message
+        // instead of the misleading "could not convert" one the parser would
+        // otherwise trigger. isTiff accepts BigTIFF too, matching the wasm
+        // reader/converter, so a valid >4 GiB raster is not wrongly rejected.
+        if (!isTiff(bytes)) {
           window.alert(t("raster.rasterNotGeotiff", { name }));
           return;
         }

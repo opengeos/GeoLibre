@@ -141,6 +141,7 @@ export {
   listWhiteboxWasmTools,
   listGeolibreWasmTools,
   outputBaseName,
+  isTiff,
 } from "./wasm-client";
 export {
   initCogWasm,
