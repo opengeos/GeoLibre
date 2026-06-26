@@ -256,6 +256,9 @@ export function previewLayerColumns(
 ): SqlWorkspaceTableColumns[] {
   return assignTableNames(layers).map(({ layer, tableName }) => {
     const seen = new Set<string>();
+    // Lowercased keys so the geometry column is not offered twice when a
+    // property already provides it under different casing (e.g. "GEOM").
+    const seenLower = new Set<string>();
     const columns: string[] = [];
     const features = layer.geojson?.features ?? [];
     for (const feature of features.slice(0, COLUMN_SCAN_FEATURE_LIMIT)) {
@@ -266,10 +269,13 @@ export function previewLayerColumns(
         // offering it as a completion would only mislead.
         if (key === GDAL_AUTO_FID_COLUMN || seen.has(key)) continue;
         seen.add(key);
+        seenLower.add(key.toLowerCase());
         columns.push(key);
       }
     }
-    if (!seen.has(geometryColumn)) columns.push(geometryColumn);
+    if (!seenLower.has(geometryColumn.toLowerCase())) {
+      columns.push(geometryColumn);
+    }
     return { tableName, columns };
   });
 }

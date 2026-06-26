@@ -1672,7 +1672,24 @@
       "rowsCount_one": "{{count}} row",
       "rowsCount_other": "{{count}} rows",
       "columnsCount_one": "{{count}} column",
-      "columnsCount_other": "{{count}} columns"
+      "columnsCount_other": "{{count}} columns",
+      "samples": {
+        "countriesGeom": "Countries with geometry",
+        "attributesOnly": "Attributes only (no geometry)",
+        "populationByContinent": "Population by continent (aggregate)",
+        "mostPopulous": "Most populous countries (geometry)",
+        "countryCentroids": "Country centroids (spatial)",
+        "largestByArea": "Largest countries by area (spatial)",
+        "postgisVersion": "PostGIS version",
+        "makePoint": "Make a point (geometry)",
+        "firstRows": "First rows of a layer",
+        "featureCount": "Feature count",
+        "layerCentroids": "Centroids of a layer (spatial)",
+        "bufferFeatures": "Buffer features by 0.01 deg (spatial)",
+        "boundingBox": "Bounding box of a layer (spatial)",
+        "bufferPoint": "Buffer a point (spatial)",
+        "areaPerFeature": "Area of each feature (spatial)"
+      }
     }
   },
   "geocode": {

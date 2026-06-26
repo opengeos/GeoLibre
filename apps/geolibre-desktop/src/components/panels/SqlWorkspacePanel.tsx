@@ -26,6 +26,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import type { ParseKeys } from "i18next";
 import {
   exportBinaryVectorLayer,
   type BinaryVectorExportResult,
@@ -81,29 +82,36 @@ const SAMPLE_QUERY = "SELECT 1 AS hello;";
 // Curated examples covering plain attribute tables, aggregates, and spatial
 // queries that return a geometry column (so "Add as layer" / export work). All
 // were validated against the dataset above.
-const SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+// A curated example: its label is an i18n key (resolved with t() at render) and
+// its SQL is inserted verbatim into the editor.
+interface SampleQuery {
+  labelKey: ParseKeys;
+  sql: string;
+}
+
+const SAMPLE_QUERIES: ReadonlyArray<SampleQuery> = [
   {
-    label: "Countries with geometry",
+    labelKey: "toolbar.sqlWorkspace.samples.countriesGeom",
     sql: `SELECT NAME, CONTINENT, POP_EST, geom\nFROM ${SAMPLE_DATASET_URL}\nLIMIT 100;`,
   },
   {
-    label: "Attributes only (no geometry)",
+    labelKey: "toolbar.sqlWorkspace.samples.attributesOnly",
     sql: `SELECT NAME, CONTINENT, POP_EST, GDP_MD_EST\nFROM ${SAMPLE_DATASET_URL}\nORDER BY POP_EST DESC\nLIMIT 10;`,
   },
   {
-    label: "Population by continent (aggregate)",
+    labelKey: "toolbar.sqlWorkspace.samples.populationByContinent",
     sql: `SELECT CONTINENT, COUNT(*) AS countries, SUM(POP_EST) AS population\nFROM ${SAMPLE_DATASET_URL}\nGROUP BY CONTINENT\nORDER BY population DESC;`,
   },
   {
-    label: "Most populous countries (geometry)",
+    labelKey: "toolbar.sqlWorkspace.samples.mostPopulous",
     sql: `SELECT NAME, POP_EST, geom\nFROM ${SAMPLE_DATASET_URL}\nWHERE POP_EST > 50000000\nORDER BY POP_EST DESC;`,
   },
   {
-    label: "Country centroids (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.countryCentroids",
     sql: `SELECT NAME, CONTINENT, ST_Centroid(geom) AS geom\nFROM ${SAMPLE_DATASET_URL}\nWHERE CONTINENT = 'Africa';`,
   },
   {
-    label: "Largest countries by area (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.largestByArea",
     sql: `SELECT NAME, ST_Area(geom) AS area\nFROM ${SAMPLE_DATASET_URL}\nORDER BY area DESC\nLIMIT 10;`,
   },
 ];
@@ -112,33 +120,33 @@ const SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
 // layer tables (replace `your_layer` with a name from "Queryable layers") plus a
 // couple of table-free spatial constructors. Every table query uses the `geom`
 // column the workspace creates on each registered layer.
-const POSTGIS_SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+const POSTGIS_SAMPLE_QUERIES: ReadonlyArray<SampleQuery> = [
   {
-    label: "PostGIS version",
+    labelKey: "toolbar.sqlWorkspace.samples.postgisVersion",
     sql: "SELECT PostGIS_Full_Version() AS version;",
   },
   {
-    label: "Make a point (geometry)",
+    labelKey: "toolbar.sqlWorkspace.samples.makePoint",
     sql: "SELECT ST_SetSRID(ST_MakePoint(-115.1398, 36.1699), 4326) AS geom;",
   },
   {
-    label: "First rows of a layer",
+    labelKey: "toolbar.sqlWorkspace.samples.firstRows",
     sql: `SELECT *\nFROM your_layer\nLIMIT 10;`,
   },
   {
-    label: "Feature count",
+    labelKey: "toolbar.sqlWorkspace.samples.featureCount",
     sql: `SELECT COUNT(*) AS features\nFROM your_layer;`,
   },
   {
-    label: "Centroids of a layer (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.layerCentroids",
     sql: `SELECT ST_Centroid(geom) AS geom\nFROM your_layer;`,
   },
   {
-    label: "Buffer features by 0.01 deg (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.bufferFeatures",
     sql: `SELECT ST_Buffer(geom, 0.01) AS geom\nFROM your_layer;`,
   },
   {
-    label: "Bounding box of a layer (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.boundingBox",
     sql: `SELECT ST_Envelope(ST_Collect(geom)) AS geom\nFROM your_layer;`,
   },
 ];
@@ -148,29 +156,29 @@ const POSTGIS_SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
 // layer table (replace `your_layer` with a name from "Queryable layers") plus a
 // couple of table-free spatial constructors. Each table query uses the `geom`
 // alias for the geometry column the workspace creates on each registered layer.
-const SEDONA_SAMPLE_QUERIES: ReadonlyArray<{ label: string; sql: string }> = [
+const SEDONA_SAMPLE_QUERIES: ReadonlyArray<SampleQuery> = [
   {
-    label: "Make a point (geometry)",
+    labelKey: "toolbar.sqlWorkspace.samples.makePoint",
     sql: "SELECT ST_Point(-115.1398, 36.1699) AS geom;",
   },
   {
-    label: "Buffer a point (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.bufferPoint",
     sql: "SELECT ST_Buffer(ST_Point(-115.1398, 36.1699), 0.5) AS geom;",
   },
   {
-    label: "First rows of a layer",
+    labelKey: "toolbar.sqlWorkspace.samples.firstRows",
     sql: `SELECT *\nFROM your_layer\nLIMIT 10;`,
   },
   {
-    label: "Feature count",
+    labelKey: "toolbar.sqlWorkspace.samples.featureCount",
     sql: `SELECT COUNT(*) AS features\nFROM your_layer;`,
   },
   {
-    label: "Centroids of a layer (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.layerCentroids",
     sql: `SELECT ST_Centroid(geometry) AS geom\nFROM your_layer;`,
   },
   {
-    label: "Area of each feature (spatial)",
+    labelKey: "toolbar.sqlWorkspace.samples.areaPerFeature",
     sql: `SELECT ST_Area(geometry) AS area, geometry AS geom\nFROM your_layer\nORDER BY area DESC\nLIMIT 10;`,
   },
 ];
@@ -617,8 +625,8 @@ export function SqlWorkspacePanel() {
                 {t("toolbar.sqlWorkspace.sampleQueries")}
               </option>
               {sampleQueries.map((sample, index) => (
-                <option key={sample.label} value={index}>
-                  {sample.label}
+                <option key={sample.labelKey} value={index}>
+                  {t(sample.labelKey)}
                 </option>
               ))}
             </Select>
@@ -696,6 +704,7 @@ export function SqlWorkspacePanel() {
             <textarea
               id="sql-workspace-editor"
               ref={editorRef}
+              {...completion.inputProps}
               value={sql}
               onChange={(event) => {
                 setSql(event.target.value);
