@@ -178,6 +178,9 @@ function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
 function openPhotoFullscreen(src: string, alt: string): void {
   const overlay = document.createElement("div");
   overlay.className = "geolibre-photo-fullscreen";
+  overlay.setAttribute("role", "dialog");
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-label", alt);
 
   const image = document.createElement("img");
   image.src = src;
@@ -193,6 +196,9 @@ function openPhotoFullscreen(src: string, alt: string): void {
   overlay.appendChild(closeButton);
 
   document.body.appendChild(overlay);
+  // Move focus into the lightbox so keyboard and screen-reader users land on a
+  // control inside it (and Escape/Enter act on the close button by default).
+  closeButton.focus();
 
   let closed = false;
   const close = () => {
@@ -1150,6 +1156,14 @@ export const MapCanvas = memo(function MapCanvas({
       if (useAppStore.getState().identifyLayerId) return;
       const feature = event.features?.[0];
       if (!feature) return;
+      // Anchor to the feature's own coordinate rather than the click point, so
+      // the tip stays on the photo point even when the user clicks the edge of
+      // a large marker.
+      const geometry = feature.geometry;
+      const anchor =
+        geometry.type === "Point"
+          ? (geometry.coordinates as [number, number])
+          : event.lngLat;
       removePhotoPopup();
       photoPopup.current = new maplibregl.Popup({
         className: "geolibre-photo-popup-root",
@@ -1157,7 +1171,7 @@ export const MapCanvas = memo(function MapCanvas({
         closeOnClick: true,
         maxWidth: "none",
       })
-        .setLngLat(event.lngLat)
+        .setLngLat(anchor)
         .setDOMContent(createPhotoPopupElement(feature.properties ?? {}))
         .addTo(map);
     };
@@ -1198,9 +1212,16 @@ export const MapCanvas = memo(function MapCanvas({
     // event, so re-bind on it to catch layers that did not exist yet when this
     // effect first ran (e.g. before the style finished loading).
     window.addEventListener("geolibre-layer-labels-change", bind);
+    // Close the photo popup when the Identify tool is turned on (which may
+    // happen via a toolbar button, with no map click to dismiss it), so the
+    // photo and identify popups never coexist.
+    const unsubscribeIdentify = useAppStore.subscribe((state) => {
+      if (state.identifyLayerId) removePhotoPopup();
+    });
 
     return () => {
       window.removeEventListener("geolibre-layer-labels-change", bind);
+      unsubscribeIdentify();
       unbind();
       removePhotoPopup();
     };

@@ -121,8 +121,10 @@ export function PhotosSource() {
     };
     source.shell.addLayer(layer, source.beforeLayer);
     // Hand the user a draggable pin on the map to fine-tune the position. It
-    // lives outside React, so closing the dialog (below) does not cancel it;
-    // each drag rewrites the layer's coordinates in the store.
+    // lives outside React, so closing the dialog (below) does not cancel it.
+    // Each drag rewrites the layer's whole geojson, always derived from the
+    // original placement collection (not the current store value) so repeated
+    // moves can't accumulate floating-point drift.
     let unsubscribe = () => {};
     const dispose = source.shell.mapControllerRef.current?.startManualPlacement(
       manualCenter,

@@ -917,21 +917,32 @@ export class MapController {
     // call rewrites the store and re-syncs the source. Coalesce to one update
     // per animation frame so a heavier `onMove` cannot stutter the drag.
     let rafPending = false;
+    const commit = () => {
+      const next = marker.getLngLat();
+      popup.setLngLat(next);
+      options.onMove([next.lng, next.lat]);
+    };
     const handleDrag = () => {
       if (rafPending) return;
       rafPending = true;
       requestAnimationFrame(() => {
         rafPending = false;
         if (disposed) return;
-        const next = marker.getLngLat();
-        popup.setLngLat(next);
-        options.onMove([next.lng, next.lat]);
+        commit();
       });
+    };
+    // The final `drag` may still be sitting in a pending frame when the user
+    // releases and clicks Done; commit the release position synchronously so the
+    // photo never lands one frame stale.
+    const handleDragEnd = () => {
+      if (disposed) return;
+      commit();
     };
     const dispose = () => {
       if (disposed) return;
       disposed = true;
       marker.off("drag", handleDrag);
+      marker.off("dragend", handleDragEnd);
       doneButton.removeEventListener("click", handleDone);
       popup.remove();
       marker.remove();
@@ -942,6 +953,7 @@ export class MapController {
     };
 
     marker.on("drag", handleDrag);
+    marker.on("dragend", handleDragEnd);
     doneButton.addEventListener("click", handleDone);
     return dispose;
   }
