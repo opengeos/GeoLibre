@@ -85,7 +85,8 @@ export function ProcessingMenu({
   const showGeolibreActions =
     show("processing.geocode") ||
     show("processing.modelBuilder") ||
-    (!mobile && show("processing.segmentation"));
+    (!mobile && show("processing.segmentation")) ||
+    show("processing.objectDetection");
   const showGeolibre = showGeolibreTools || showGeolibreActions;
   const showWorkspacesOrServices =
     show("processing.sqlWorkspace") ||

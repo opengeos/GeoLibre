@@ -26,7 +26,13 @@ import {
   Play,
 } from "lucide-react";
 import type { Feature, FeatureCollection } from "geojson";
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
@@ -96,8 +102,11 @@ function detectionsToFeatureCollection(
   const { originX, originY, resX, resY } = raster;
   const features: Feature[] = detections.map((det) => {
     const [minPxX, minPxY, maxPxX, maxPxY] = det.bbox;
-    // Pixel rows grow southward (top-left origin), so the min pixel row is the
-    // northern (max world Y) edge.
+    // Assumes the standard north-to-south row order (resolutionY < 0), where
+    // readRasterData's originY is the northern edge and resY is its magnitude,
+    // so the min pixel row maps to max world Y. A rare south-to-north GeoTIFF
+    // (resolutionY > 0) would need `+` here, but readRasterData does not surface
+    // the sign today.
     const west = originX + minPxX * resX;
     const east = originX + maxPxX * resX;
     const north = originY - minPxY * resY;
@@ -170,14 +179,19 @@ export function ObjectDetectionDialog({
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
+  // The real "is inference in flight" guard. It survives the dialog being
+  // closed and re-opened (the `running` state is only for the spinner), so a
+  // run started, dismissed, then restarted cannot spawn a second concurrent
+  // session that would add duplicate layers.
+  const inferringRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
-    // Reset transient state so a re-opened dialog never shows a stale error,
-    // result, or a `running` spinner left over from a previous session.
+    // Reset transient display state so a re-opened dialog never shows a stale
+    // error or result. `running` is intentionally not reset here: while real
+    // work is still in flight (tracked by inferringRef) the spinner must stay.
     setError(null);
     setResultMessage(null);
-    setRunning(false);
   }, [open]);
 
   const pickImage = useCallback(async () => {
@@ -215,6 +229,9 @@ export function ObjectDetectionDialog({
   }, []);
 
   const handleRun = useCallback(async () => {
+    // Never start a second run while one is still in flight (e.g. the dialog was
+    // closed and re-opened mid-inference), which would add duplicate layers.
+    if (inferringRef.current) return;
     setError(null);
     setResultMessage(null);
     if (!imageBytes) {
@@ -225,6 +242,7 @@ export function ObjectDetectionDialog({
       setError(t("objectDetection.error.chooseModel"));
       return;
     }
+    inferringRef.current = true;
     setRunning(true);
     try {
       // Resolve the model bytes: download (and cache) the chosen built-in model,
@@ -303,6 +321,7 @@ export function ObjectDetectionDialog({
         err instanceof Error ? err.message : t("objectDetection.error.failed"),
       );
     } finally {
+      inferringRef.current = false;
       setRunning(false);
     }
   }, [
@@ -502,9 +521,11 @@ export function ObjectDetectionDialog({
                 onChange={(e) => {
                   const parsed = Number(e.target.value);
                   if (!Number.isFinite(parsed) || parsed < 32) return;
-                  // Clamp to the upper bound too: the HTML `max` is advisory, but
-                  // an oversized input would allocate a huge inference tensor.
-                  setInputSize(Math.min(4096, Math.round(parsed)));
+                  // Round to the nearest multiple of 32 (YOLO stride requirement)
+                  // and clamp to the upper bound: the HTML `step`/`max` are
+                  // advisory, but a non-multiple or oversized input would yield
+                  // a misaligned or huge inference tensor.
+                  setInputSize(Math.min(4096, Math.round(parsed / 32) * 32));
                 }}
               />
             </div>

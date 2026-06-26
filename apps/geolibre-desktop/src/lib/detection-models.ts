@@ -76,27 +76,36 @@ const MODEL_CACHE = "geolibre-detection-models";
  * @throws If the download fails (non-2xx or network error).
  */
 export async function fetchDetectionModel(url: string): Promise<ArrayBuffer> {
+  // Keep the Cache API operations in their own try/catch so only *cache*
+  // failures are swallowed. A failed network fetch (404/5xx) must surface, not
+  // be mistaken for a cache miss and silently retried; and a successful
+  // download must never be discarded just because writing it to the cache
+  // failed (quota/private mode).
+  let cache: Cache | null = null;
   try {
     if (typeof caches !== "undefined") {
-      const cache = await caches.open(MODEL_CACHE);
+      cache = await caches.open(MODEL_CACHE);
       const cached = await cache.match(url);
       if (cached) return await cached.arrayBuffer();
-      const response = await fetch(url, { mode: "cors" });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      // Store a clone so the body we read below is not consumed.
-      await cache.put(url, response.clone());
-      return await response.arrayBuffer();
     }
   } catch (err) {
-    // A Cache API failure (unsupported, quota, insecure context) is not fatal:
-    // fall through to a plain fetch so the download still works, just uncached.
+    // Cache API unavailable (insecure context, quota, etc.): proceed uncached.
     console.debug("detection-models: cache unavailable, fetching directly", err);
+    cache = null;
   }
+
   const response = await fetch(url, { mode: "cors" });
   if (!response.ok) {
     throw new Error(`Failed to download model (HTTP ${response.status}).`);
+  }
+  if (cache) {
+    try {
+      // Store a clone so the body we read below is not consumed.
+      await cache.put(url, response.clone());
+    } catch (err) {
+      // A cache write failure must not discard the already-downloaded bytes.
+      console.debug("detection-models: cache write failed", err);
+    }
   }
   return await response.arrayBuffer();
 }

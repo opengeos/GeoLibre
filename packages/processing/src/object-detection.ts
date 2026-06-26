@@ -56,10 +56,17 @@ const PAD_VALUE = 114 / 255;
 // onnxruntime-web ships its WASM artifacts in its own dist/. Bundlers do not
 // rewrite the runtime's internal fetch of those files, so point the runtime at
 // the pinned CDN copy (already allowed by the Tauri CSP's jsdelivr/npm entry).
-const ORT_VERSION = "1.27.0";
+// MUST stay in lockstep with the `onnxruntime-web` pin in
+// packages/processing/package.json; a guard test asserts they match
+// (tests/object-detection.test.ts) so a dependency bump that forgets this
+// constant fails CI instead of breaking inference at runtime.
+export const ORT_VERSION = "1.27.0";
 const ORT_WASM_BASE = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
-let ortConfigured = false;
+// A promise singleton: the import-and-configure runs exactly once and every
+// caller awaits the same settled promise, so two concurrent detectObjects()
+// calls cannot race on configuration.
+let ortPromise: Promise<typeof import("onnxruntime-web/wasm")> | null = null;
 
 /**
  * Lazily import and configure `onnxruntime-web`.
@@ -76,14 +83,15 @@ let ortConfigured = false;
  *
  * @returns The configured `onnxruntime-web` module namespace.
  */
-async function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
-  const ort = await import("onnxruntime-web/wasm");
-  if (!ortConfigured) {
-    ort.env.wasm.numThreads = 1;
-    ort.env.wasm.wasmPaths = ORT_WASM_BASE;
-    ortConfigured = true;
+function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
+  if (!ortPromise) {
+    ortPromise = import("onnxruntime-web/wasm").then((ort) => {
+      ort.env.wasm.numThreads = 1;
+      ort.env.wasm.wasmPaths = ORT_WASM_BASE;
+      return ort;
+    });
   }
-  return ort;
+  return ortPromise;
 }
 
 /**
@@ -116,12 +124,18 @@ function rgbBands(raster: RasterData): {
   // pixels. Aerial/RGB imagery is almost always 8-bit (0-255); reflectance
   // products may already be 0-1; higher-bit-depth data exceeds 255.
   let max = 0;
+  let hasValid = false;
   const step = Math.max(1, Math.floor(r.length / 4096));
   for (let i = 0; i < r.length; i += step) {
     const v = r[i];
     if (!Number.isFinite(v) || v === nodata) continue;
+    hasValid = true;
     if (v > max) max = v;
   }
+  // If sampling found no valid pixels (e.g. the stride skipped every valid one
+  // in a mostly-NoData raster), assume 8-bit range so the tensor receives 0-1
+  // values rather than raw 0-255 counts.
+  if (!hasValid) max = 255;
   const divisor = max <= 1.5 ? 1 : max <= 255 ? 255 : max;
   return { r, g, b, divisor, nodata };
 }
@@ -153,9 +167,11 @@ function sampleBilinear(
   const v10 = band[cy0 * width + x1];
   const v01 = band[y1 * width + cx0];
   const v11 = band[y1 * width + x1];
-  for (const v of [v00, v10, v01, v11]) {
-    if (!Number.isFinite(v) || v === nodata) return NaN;
-  }
+  // Unrolled (no array allocation) since this runs once per input pixel/channel.
+  if (!Number.isFinite(v00) || v00 === nodata) return NaN;
+  if (!Number.isFinite(v10) || v10 === nodata) return NaN;
+  if (!Number.isFinite(v01) || v01 === nodata) return NaN;
+  if (!Number.isFinite(v11) || v11 === nodata) return NaN;
   const top = v00 + (v10 - v00) * dx;
   const bottom = v01 + (v11 - v01) * dx;
   return top + (bottom - top) * dy;
@@ -194,6 +210,10 @@ function preprocess(
     [g, plane],
     [b, 2 * plane],
   ];
+  // NOTE: this loop is O(inputSize²) and runs synchronously on the main thread.
+  // At the default 640 it is imperceptible; near the 4096 cap it can stall the
+  // UI for a second or two. Running it (and the WASM inference) in a Web Worker
+  // is the proper fix and a tracked follow-up.
   for (let dy = 0; dy < inputSize; dy += 1) {
     const sy = (dy + 0.5 - padY) / scale - 0.5;
     if (sy < -0.5 || sy > height - 0.5) continue;
@@ -265,6 +285,11 @@ function nonMaxSuppression(candidates: Candidate[], iouThreshold: number): Candi
  * objectness) versus the YOLOv5 layout (`[1, anchors, 5 + nc]`, with an
  * objectness channel) from the relative size of the two trailing dimensions.
  *
+ * Assumes the model output is already sigmoid-activated, which is true of the
+ * standard Ultralytics ONNX export (`yolo export format=onnx`) for both v5 and
+ * v8/v11. A raw-logit export (rare) would need a sigmoid applied here; we do not
+ * apply one unconditionally because that would double-activate the common case.
+ *
  * @param data Flat output values.
  * @param dims Output tensor dimensions.
  * @param confidenceThreshold Minimum score to keep a box.
@@ -307,7 +332,9 @@ function decodeYolo(
   const classOffset = hasObjectness ? 5 : 4;
   for (let i = 0; i < numAnchors; i += 1) {
     const objectness = hasObjectness ? at(4, i) : 1;
-    if (objectness < confidenceThreshold) continue;
+    // v5 only: skip anchors whose objectness is already below the threshold.
+    // (For v8/v11 objectness is a constant 1, so this guard is a no-op there.)
+    if (hasObjectness && objectness < confidenceThreshold) continue;
     let bestClass = 0;
     let bestProb = -Infinity;
     for (let c = 0; c < numClasses; c += 1) {
