@@ -79,8 +79,12 @@ export function ensureFileExtension(
   const ext = extensions[0];
   if (!ext) return name;
   const lower = name.toLowerCase();
-  if (extensions.some((e) => lower.endsWith(`.${e.toLowerCase()}`))) {
-    return name;
+  const present = extensions.find((e) => lower.endsWith(`.${e.toLowerCase()}`));
+  if (present) {
+    // Already ends in an allowed extension; keep it, but guard a base-less name
+    // like ".html" (a hidden dotfile) by giving it a "download" stem.
+    const base = name.slice(0, -(present.length + 1)).replace(/\.+$/, "");
+    return base ? name : `download${name.slice(-(present.length + 1))}`;
   }
   // Strip any trailing dots first so "my-story." doesn't become a double dot;
   // fall back to "download" when the name was only dots (e.g. "." / "..") so we

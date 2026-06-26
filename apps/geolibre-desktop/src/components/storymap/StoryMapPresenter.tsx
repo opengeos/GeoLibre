@@ -375,10 +375,11 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
     return () => window.removeEventListener("keydown", onKey);
   }, [presenting, exitPresentation]);
 
-  // A presentation with no chapters has nothing to show; close it.
+  // A presentation with no chapters has nothing to show; close it (routing
+  // through exitPresentation so it still honors the return-to-editor intent).
   useEffect(() => {
-    if (presenting && chapters.length === 0) setPresenting(false);
-  }, [presenting, chapters.length, setPresenting]);
+    if (presenting && chapters.length === 0) exitPresentation();
+  }, [presenting, chapters.length, exitPresentation]);
 
   if (!presenting || chapters.length === 0) return null;
 

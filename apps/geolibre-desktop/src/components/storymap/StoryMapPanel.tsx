@@ -191,6 +191,35 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   // Tear down an in-progress resize drag if the dialog unmounts mid-drag.
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
+  // A dragged size pins the dialog to an absolute top-left, which the browser
+  // window can later shrink past, leaving the dialog clipped and ungrabbable.
+  // Re-clamp the stored geometry into the viewport whenever the window resizes
+  // (#918 review). Keyed on whether a custom size exists so the listener isn't
+  // re-subscribed on every drag frame; the functional update reads the latest.
+  const hasCustomSize = dialogSize !== null;
+  useEffect(() => {
+    if (!hasCustomSize) return;
+    const clampToViewport = () =>
+      setDialogSize((prev) => {
+        if (!prev) return prev;
+        const width = Math.min(prev.width, window.innerWidth - 16);
+        const height = Math.min(prev.height, window.innerHeight - 16);
+        const left = Math.max(8, Math.min(prev.left, window.innerWidth - width - 8));
+        const top = Math.max(8, Math.min(prev.top, window.innerHeight - height - 8));
+        if (
+          width === prev.width &&
+          height === prev.height &&
+          left === prev.left &&
+          top === prev.top
+        ) {
+          return prev;
+        }
+        return { width, height, left, top };
+      });
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
+  }, [hasCustomSize]);
+
   const story: StoryMap = storymap ?? DEFAULT_STORY_MAP;
   const chapters = story.chapters;
   // Reset has something to clear when the story carries chapters or any
@@ -284,7 +313,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     setOpen(false);
     // Presenting from the editor: exiting the presentation should bring the
     // editor back rather than dropping to the bare map (#918).
-    setPresenting(true, true);
+    setPresenting(true, /* returnToEditor */ true);
   }, [chapters.length, setOpen, setPresenting]);
 
   const handleExport = useCallback(async () => {
