@@ -1,13 +1,16 @@
 import type { SqlWorkspaceTableColumns } from "./sql-workspace";
 
 // SQL keywords offered by the workspace autocomplete. Upper-cased so an accepted
-// keyword reads conventionally; matching is case-insensitive.
+// keyword reads conventionally; matching is case-insensitive. Each entry is a
+// single token: `wordPrefixAt` only ever captures one identifier word, so a
+// multi-word candidate like "GROUP BY" would splice a space mid-token and could
+// corrupt an identifier the user was typing. Users compose phrases word by word.
 export const SQL_KEYWORDS: readonly string[] = [
-  "SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "LIMIT", "OFFSET",
-  "JOIN", "LEFT JOIN", "RIGHT JOIN", "INNER JOIN", "FULL JOIN", "ON",
+  "SELECT", "FROM", "WHERE", "GROUP", "ORDER", "BY", "LIMIT", "OFFSET",
+  "JOIN", "LEFT", "RIGHT", "INNER", "FULL", "ON",
   "AS", "AND", "OR", "NOT", "IN", "IS", "NULL", "LIKE", "ILIKE", "BETWEEN",
   "DISTINCT", "COUNT", "SUM", "AVG", "MIN", "MAX", "CASE", "WHEN", "THEN",
-  "ELSE", "END", "HAVING", "UNION", "UNION ALL", "WITH", "DESC", "ASC",
+  "ELSE", "END", "HAVING", "UNION", "ALL", "WITH", "DESC", "ASC",
 ];
 
 // DuckDB scalar/aggregate and spatial (ST_*) functions plus the file readers the

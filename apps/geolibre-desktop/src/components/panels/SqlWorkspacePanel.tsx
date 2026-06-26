@@ -32,7 +32,6 @@ import {
 } from "../../lib/vector-exporter";
 import {
   previewLayerColumns,
-  previewLayerTables,
   resultToCsv,
   runSqlQuery,
   SAMPLE_DATASET_URL,
@@ -272,8 +271,19 @@ export function SqlWorkspacePanel() {
   const [history, setHistory] = useState<string[]>(loadQueryHistory);
   const [layerName, setLayerName] = useState("");
 
-  const tables = useMemo(() => previewLayerTables(layers), [layers]);
-  const tableColumns = useMemo(() => previewLayerColumns(layers), [layers]);
+  // A single pass over the layers supplies both the columns (for autocomplete)
+  // and the table names; deriving `tables` from it avoids walking the layers a
+  // second time via previewLayerTables. The Sedona engine registers the geometry
+  // column as `geometry`; DuckDB and PGlite use `geom`.
+  const tableColumns = useMemo(
+    () =>
+      previewLayerColumns(layers, engine === "sedona" ? "geometry" : "geom"),
+    [layers, engine],
+  );
+  const tables = useMemo(
+    () => tableColumns.map((table) => table.tableName),
+    [tableColumns],
+  );
   const sampleQueries =
     engine === "postgis"
       ? POSTGIS_SAMPLE_QUERIES
@@ -307,6 +317,22 @@ export function SqlWorkspacePanel() {
     editorRef.current?.focus();
   }, []);
 
+  // Surface the engine error, and when it is a missing-table error append the
+  // names the workspace actually exposes so the user can pick a real one (the
+  // common cause of issue #906: querying a table name that was never loaded).
+  // Declared before runQuery so the dependency order is explicit.
+  const describeQueryError = (err: unknown): string => {
+    const message = err instanceof Error ? err.message : String(err);
+    const missingTable = /does not exist|not found|no such table|catalog error/i.test(
+      message,
+    );
+    if (missingTable && tables.length > 0) {
+      const names = tables.join(", ");
+      return `${message}\n\n${t("toolbar.sqlWorkspace.queryableHint", { names })}`;
+    }
+    return message;
+  };
+
   const runQuery = async () => {
     const trimmed = sql.trim();
     if (!trimmed || runningRef.current) return;
@@ -333,21 +359,6 @@ export function SqlWorkspacePanel() {
     }
   };
 
-  // Surface the engine error, and when it is a missing-table error append the
-  // names the workspace actually exposes so the user can pick a real one (the
-  // common cause of issue #906: querying a table name that was never loaded).
-  const describeQueryError = (err: unknown): string => {
-    const message = err instanceof Error ? err.message : String(err);
-    const missingTable = /does not exist|not found|no such table|catalog error/i.test(
-      message,
-    );
-    if (missingTable && tables.length > 0) {
-      const names = tables.map((table) => table.tableName).join(", ");
-      return `${message}\n\n${t("toolbar.sqlWorkspace.queryableHint", { names })}`;
-    }
-    return message;
-  };
-
   const clearWorkspace = () => {
     setSql("");
     setResult(null);
@@ -366,7 +377,9 @@ export function SqlWorkspacePanel() {
     const name =
       layerName.trim() || `SQL result ${new Date().toLocaleTimeString()}`;
     addGeoJsonLayer(name, result.geojson);
-    setNotice(`Added ${featureCount} features to the map as "${name}".`);
+    setNotice(
+      t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }),
+    );
     addingLayerRef.current = false;
   };
 
@@ -385,7 +398,10 @@ export function SqlWorkspacePanel() {
       ],
       mimeType: payload.mimeType,
     });
-    if (savedName) setNotice(`Saved ${label} as ${savedName}.`);
+    if (savedName)
+      setNotice(
+        t("toolbar.sqlWorkspace.savedAs", { label, name: savedName }),
+      );
   };
 
   const handleExportCsv = async () => {
@@ -534,9 +550,15 @@ export function SqlWorkspacePanel() {
             saveEngine(next);
           }}
         >
-          <option value="duckdb">Engine: DuckDB</option>
-          <option value="postgis">Engine: PostGIS</option>
-          <option value="sedona">Engine: Apache Sedona</option>
+          <option value="duckdb">
+            {t("toolbar.sqlWorkspace.engineOption", { name: "DuckDB" })}
+          </option>
+          <option value="postgis">
+            {t("toolbar.sqlWorkspace.engineOption", { name: "PostGIS" })}
+          </option>
+          <option value="sedona">
+            {t("toolbar.sqlWorkspace.engineOption", { name: "Apache Sedona" })}
+          </option>
         </Select>
         <div className="ml-auto flex items-center gap-1">
           <Button
@@ -578,7 +600,7 @@ export function SqlWorkspacePanel() {
         <div className="flex min-w-0 basis-[42%] flex-col gap-2 border-r p-3">
           <div className="flex flex-wrap items-center gap-2">
             <Select
-              aria-label="Insert a sample query"
+              aria-label={t("toolbar.sqlWorkspace.sampleQueriesLabel")}
               className="h-7 w-auto max-w-[11rem] text-xs"
               value=""
               onChange={(event) => {
@@ -588,7 +610,7 @@ export function SqlWorkspacePanel() {
               }}
             >
               <option value="" disabled>
-                Sample queries…
+                {t("toolbar.sqlWorkspace.sampleQueries")}
               </option>
               {sampleQueries.map((sample, index) => (
                 <option key={sample.label} value={index}>
@@ -598,7 +620,7 @@ export function SqlWorkspacePanel() {
             </Select>
             {history.length > 0 ? (
               <Select
-                aria-label="Reuse a query from history"
+                aria-label={t("toolbar.sqlWorkspace.historyLabel")}
                 className="h-7 w-auto max-w-[11rem] text-xs"
                 value=""
                 onChange={(event) => {
@@ -607,7 +629,7 @@ export function SqlWorkspacePanel() {
                 }}
               >
                 <option value="" disabled>
-                  History…
+                  {t("toolbar.sqlWorkspace.history")}
                 </option>
                 {history.map((entry, index) => (
                   <option key={index} value={index}>
@@ -618,7 +640,7 @@ export function SqlWorkspacePanel() {
             ) : null}
             {tables.length > 0 ? (
               <Select
-                aria-label="Insert a sample query for a layer"
+                aria-label={t("toolbar.sqlWorkspace.sampleForLayerLabel")}
                 className="h-7 w-auto max-w-[11rem] text-xs"
                 value=""
                 onChange={(event) => {
@@ -627,11 +649,11 @@ export function SqlWorkspacePanel() {
                 }}
               >
                 <option value="" disabled>
-                  Sample query for layer…
+                  {t("toolbar.sqlWorkspace.sampleForLayer")}
                 </option>
-                {tables.map((table) => (
-                  <option key={table.tableName} value={table.tableName}>
-                    {table.tableName}
+                {tables.map((tableName) => (
+                  <option key={tableName} value={tableName}>
+                    {tableName}
                   </option>
                 ))}
               </Select>
@@ -640,31 +662,30 @@ export function SqlWorkspacePanel() {
 
           {tables.length > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Queryable layers:{" "}
-              {tables.map((table, index) => (
-                <span key={table.tableName}>
+              {t("toolbar.sqlWorkspace.queryableLayers")}{" "}
+              {tables.map((tableName, index) => (
+                <span key={tableName}>
                   {index > 0 ? ", " : ""}
                   <code className="rounded bg-muted px-1 py-0.5 font-mono">
-                    {table.tableName}
+                    {tableName}
                   </code>
                 </span>
               ))}
             </p>
           ) : queriesLayersOnly ? (
             <p className="text-xs text-muted-foreground">
-              No vector layers are loaded as tables yet. Load a vector layer to
-              query it with {engine === "sedona" ? "Apache Sedona" : "PostGIS"}.
+              {t("toolbar.sqlWorkspace.noLayersEngine", {
+                engine: engine === "sedona" ? "Apache Sedona" : "PostGIS",
+              })}
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              No vector layers are loaded as tables yet. You can still read files
-              and URLs with {"read_parquet()"}, {"read_csv_auto()"}, or{" "}
-              {"ST_Read()"}.
+              {t("toolbar.sqlWorkspace.noLayersReaders")}
             </p>
           )}
 
           <label htmlFor="sql-workspace-editor" className="sr-only">
-            SQL query
+            {t("toolbar.sqlWorkspace.queryLabel")}
           </label>
           <div className="relative flex min-h-0 flex-1 flex-col">
             {completion.dropdown}
@@ -735,11 +756,11 @@ export function SqlWorkspacePanel() {
           <div className="flex flex-wrap items-center gap-2">
             {result?.geojson ? (
               <Input
-                aria-label="Layer name"
+                aria-label={t("toolbar.sqlWorkspace.layerName")}
                 className="h-8 w-44 text-sm"
                 value={layerName}
                 onChange={(event) => setLayerName(event.target.value)}
-                placeholder="Layer name (optional)"
+                placeholder={t("toolbar.sqlWorkspace.layerNamePlaceholder")}
               />
             ) : null}
             <Button
@@ -749,7 +770,7 @@ export function SqlWorkspacePanel() {
               disabled={!result?.geojson || exporting}
             >
               <MapPlus className="h-4 w-4" />
-              Add as layer
+              {t("toolbar.sqlWorkspace.addAsLayer")}
             </Button>
             <Button
               variant="outline"
@@ -758,7 +779,7 @@ export function SqlWorkspacePanel() {
               disabled={!result || result.columns.length === 0 || exporting}
             >
               <Download className="h-4 w-4" />
-              Export CSV
+              {t("toolbar.sqlWorkspace.exportCsv")}
             </Button>
             <Button
               variant="outline"
@@ -767,7 +788,7 @@ export function SqlWorkspacePanel() {
               disabled={!result?.geojson || exporting}
             >
               <Download className="h-4 w-4" />
-              Export GeoParquet
+              {t("toolbar.sqlWorkspace.exportGeoParquet")}
             </Button>
           </div>
 
@@ -790,9 +811,11 @@ export function SqlWorkspacePanel() {
                 <table className="w-full border-collapse text-sm">
                   <thead className="sticky top-0 bg-muted">
                     <tr>
-                      {result.columns.map((column) => (
+                      {/* Key by index: a SELECT * over a join can repeat a
+                          column name, and names would not be unique keys. */}
+                      {result.columns.map((column, colIndex) => (
                         <th
-                          key={column}
+                          key={colIndex}
                           className="border-b px-2 py-1.5 text-left font-medium"
                         >
                           {column}
@@ -803,9 +826,9 @@ export function SqlWorkspacePanel() {
                   <tbody>
                     {displayedRows.map((row, rowIndex) => (
                       <tr key={rowIndex} className="even:bg-muted/40">
-                        {result.columns.map((column) => (
+                        {result.columns.map((column, colIndex) => (
                           <td
-                            key={column}
+                            key={colIndex}
                             className="max-w-xs truncate border-b px-2 py-1 font-mono"
                             title={formatCell(row[column])}
                           >
@@ -819,7 +842,7 @@ export function SqlWorkspacePanel() {
               </ScrollArea>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Statement executed. No rows returned.
+                {t("toolbar.sqlWorkspace.noRows")}
               </p>
             )
           ) : error ? null : (
@@ -832,8 +855,10 @@ export function SqlWorkspacePanel() {
 
           {hiddenRowCount > 0 ? (
             <p className="text-xs text-muted-foreground">
-              Showing first {displayedRows.length} of {result?.rowCount} rows.
-              Export to see them all.
+              {t("toolbar.sqlWorkspace.showingRows", {
+                shown: displayedRows.length,
+                total: result?.rowCount ?? 0,
+              })}
             </p>
           ) : null}
         </div>

@@ -1647,7 +1647,27 @@
       "completions": "Completions",
       "placeholder": "SQL here · Ctrl/Cmd+Enter to run · Tab or Ctrl+Space to autocomplete",
       "resultsPlaceholder": "Run a query to see results here.",
-      "queryableHint": "Queryable layers: {{names}}"
+      "queryableHint": "Queryable layers: {{names}}",
+      "queryableLayers": "Queryable layers:",
+      "queryLabel": "SQL query",
+      "engineOption": "Engine: {{name}}",
+      "sampleQueries": "Sample queries…",
+      "sampleQueriesLabel": "Insert a sample query",
+      "history": "History…",
+      "historyLabel": "Reuse a query from history",
+      "sampleForLayer": "Sample query for layer…",
+      "sampleForLayerLabel": "Insert a sample query for a layer",
+      "noLayersEngine": "No vector layers are loaded as tables yet. Load a vector layer to query it with {{engine}}.",
+      "noLayersReaders": "No vector layers are loaded as tables yet. You can still read files and URLs with read_parquet(), read_csv_auto(), or ST_Read().",
+      "layerName": "Layer name",
+      "layerNamePlaceholder": "Layer name (optional)",
+      "addAsLayer": "Add as layer",
+      "exportCsv": "Export CSV",
+      "exportGeoParquet": "Export GeoParquet",
+      "addedAsLayer": "Added {{count}} features to the map as \"{{name}}\".",
+      "savedAs": "Saved {{label}} as {{name}}.",
+      "noRows": "Statement executed. No rows returned.",
+      "showingRows": "Showing first {{shown}} of {{total}} rows. Export to see them all."
     }
   },
   "geocode": {

@@ -142,7 +142,18 @@ export function useSqlCompletion({
         return true;
       }
     }
-    if (event.key === "Tab" || (event.key === " " && event.ctrlKey)) {
+    if (event.key === " " && event.ctrlKey) {
+      event.preventDefault();
+      trigger();
+      return true;
+    }
+    if (event.key === "Tab") {
+      // Only intercept Tab when there is something to complete; otherwise let it
+      // move focus so the editor is not a keyboard trap (WCAG 2.1.2).
+      const ta = textareaRef.current;
+      const cursor = ta?.selectionStart ?? sql.length;
+      const { prefix } = wordPrefixAt(sql, cursor);
+      if (sqlCompletionCandidates(prefix, tables).length === 0) return false;
       event.preventDefault();
       trigger();
       return true;

@@ -231,9 +231,10 @@ export interface SqlWorkspaceTableColumns {
   columns: string[];
 }
 
-// The geometry column ST_Read materialises for a registered GeoJSON layer. Used
-// by the autocomplete so `geom` is always offered alongside attribute columns.
-const LAYER_GEOMETRY_COLUMN = "geom";
+// The geometry column the DuckDB and PGlite engines materialise for a registered
+// GeoJSON layer. The Sedona engine names it `geometry` instead, so the caller
+// passes the engine-appropriate name (see previewLayerColumns).
+const DEFAULT_LAYER_GEOMETRY_COLUMN = "geom";
 // Cap how many features are scanned for property keys so a huge layer cannot
 // make the (synchronous) autocomplete walk the whole collection.
 const COLUMN_SCAN_FEATURE_LIMIT = 50;
@@ -242,13 +243,16 @@ const COLUMN_SCAN_FEATURE_LIMIT = 50;
  * Compute, without touching DuckDB, the columns each layer table will expose so
  * the editor can autocomplete column names. Attribute columns come from the
  * union of feature property keys (scanning a bounded number of features); the
- * `geom` geometry column ST_Read creates is always appended.
+ * registered geometry column is appended.
  *
  * @param layers Current app layers; those without `geojson` are skipped.
+ * @param geometryColumn The geometry column name the active engine registers
+ *   (`geom` for DuckDB/PGlite, `geometry` for Sedona). Defaults to `geom`.
  * @returns Table name and its column names, in the same naming as registration.
  */
 export function previewLayerColumns(
   layers: GeoLibreLayer[],
+  geometryColumn: string = DEFAULT_LAYER_GEOMETRY_COLUMN,
 ): SqlWorkspaceTableColumns[] {
   return assignTableNames(layers).map(({ layer, tableName }) => {
     const seen = new Set<string>();
@@ -265,7 +269,7 @@ export function previewLayerColumns(
         columns.push(key);
       }
     }
-    if (!seen.has(LAYER_GEOMETRY_COLUMN)) columns.push(LAYER_GEOMETRY_COLUMN);
+    if (!seen.has(geometryColumn)) columns.push(geometryColumn);
     return { tableName, columns };
   });
 }
