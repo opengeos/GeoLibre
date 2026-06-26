@@ -2,17 +2,21 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_FPS,
+  DEFAULT_SEGMENT_SECONDS,
   END_HOLD_MS,
   estimateTourDurationMs,
   MAX_FPS,
+  MAX_HOLD_SECONDS,
   MAX_SEGMENT_SECONDS,
   MIN_FPS,
+  MIN_HOLD_SECONDS,
   MIN_SEGMENT_SECONDS,
   parseTourConfig,
   pickSupportedMimeType,
   serializeTourConfig,
   START_HOLD_MS,
   TOUR_CONFIG_TYPE,
+  TOUR_CONFIG_VERSION,
   type TourKeyframe,
   TOUR_MIME_CANDIDATES,
 } from "../apps/geolibre-desktop/src/lib/tour-recorder";
@@ -44,25 +48,28 @@ describe("pickSupportedMimeType", () => {
 describe("estimateTourDurationMs", () => {
   it("is zero for fewer than two keyframes", () => {
     assert.equal(estimateTourDurationMs([]), 0);
-    assert.equal(estimateTourDurationMs([{ durationMs: 4000 }]), 0);
+    assert.equal(
+      estimateTourDurationMs([{ holdMs: 1000, transitionMs: 4000 }]),
+      0,
+    );
   });
 
-  it("sums the segments after the first plus the start/end holds", () => {
-    // First keyframe's duration is ignored (the tour starts parked there).
+  it("sums every hold plus the transition out of all but the last keyframe", () => {
+    // The last keyframe's transition is ignored (there is no view after it).
     const total = estimateTourDurationMs([
-      { durationMs: 9999 },
-      { durationMs: 3000 },
-      { durationMs: 2000 },
+      { holdMs: 1000, transitionMs: 3000 },
+      { holdMs: 500, transitionMs: 2000 },
+      { holdMs: 800, transitionMs: 9999 },
     ]);
-    assert.equal(total, START_HOLD_MS + 5000 + END_HOLD_MS);
+    assert.equal(total, 1000 + 500 + 800 + 3000 + 2000);
   });
 
-  it("treats negative segment durations as zero", () => {
+  it("treats negative hold and transition durations as zero", () => {
     const total = estimateTourDurationMs([
-      { durationMs: 0 },
-      { durationMs: -1000 },
+      { holdMs: -100, transitionMs: -1000 },
+      { holdMs: 0, transitionMs: 0 },
     ]);
-    assert.equal(total, START_HOLD_MS + END_HOLD_MS);
+    assert.equal(total, 0);
   });
 });
 
@@ -74,7 +81,8 @@ describe("serializeTourConfig / parseTourConfig", () => {
       zoom: 12.5,
       pitch: 30,
       bearing: 15,
-      durationMs: 4000,
+      holdMs: 1000,
+      transitionMs: 4000,
     },
     {
       id: "b",
@@ -82,7 +90,8 @@ describe("serializeTourConfig / parseTourConfig", () => {
       zoom: 14,
       pitch: 0,
       bearing: 0,
-      durationMs: 6000,
+      holdMs: 2000,
+      transitionMs: 6000,
     },
   ];
 
@@ -90,6 +99,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
     const text = serializeTourConfig(keyframes, 30);
     const parsed = JSON.parse(text);
     assert.equal(parsed.type, TOUR_CONFIG_TYPE);
+    assert.equal(parsed.version, TOUR_CONFIG_VERSION);
     assert.equal(parsed.fps, 30);
     // Ids are not persisted; they are regenerated on load.
     assert.ok(!("id" in parsed.keyframes[0]));
@@ -98,32 +108,58 @@ describe("serializeTourConfig / parseTourConfig", () => {
     assert.equal(config.fps, 30);
     assert.equal(config.keyframes.length, 2);
     assert.deepEqual(config.keyframes[0].center, [-122.4194, 37.7749]);
-    assert.equal(config.keyframes[1].durationMs, 6000);
+    assert.equal(config.keyframes[0].holdMs, 1000);
+    assert.equal(config.keyframes[1].holdMs, 2000);
+    assert.equal(config.keyframes[1].transitionMs, 6000);
   });
 
-  it("clamps an out-of-range fps and segment durations", () => {
+  it("clamps an out-of-range fps, hold, and transition", () => {
     const text = serializeTourConfig(
       [
-        { ...keyframes[0], durationMs: 1 },
-        { ...keyframes[1], durationMs: 999_999 },
+        { ...keyframes[0], holdMs: -500, transitionMs: 1 },
+        { ...keyframes[1], holdMs: 999_999, transitionMs: 999_999 },
       ],
       // Above MAX_FPS; serialize clamps on write.
       500,
     );
     const config = parseTourConfig(text);
     assert.equal(config.fps, MAX_FPS);
-    assert.equal(config.keyframes[0].durationMs, MIN_SEGMENT_SECONDS * 1000);
-    assert.equal(config.keyframes[1].durationMs, MAX_SEGMENT_SECONDS * 1000);
+    assert.equal(config.keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
+    assert.equal(config.keyframes[0].transitionMs, MIN_SEGMENT_SECONDS * 1000);
+    assert.equal(config.keyframes[1].holdMs, MAX_HOLD_SECONDS * 1000);
+    assert.equal(config.keyframes[1].transitionMs, MAX_SEGMENT_SECONDS * 1000);
+  });
+
+  it("defaults missing hold and transition fields in a v2 file", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        version: 2,
+        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0 }],
+      }),
+    );
+    assert.equal(config.keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
+    assert.equal(
+      config.keyframes[0].transitionMs,
+      DEFAULT_SEGMENT_SECONDS * 1000,
+    );
   });
 
   it("clamps zoom/pitch and wraps bearing into MapLibre's supported ranges", () => {
     const config = parseTourConfig(
       JSON.stringify({
         type: TOUR_CONFIG_TYPE,
-        version: 1,
+        version: 2,
         fps: 30,
         keyframes: [
-          { center: [0, 0], zoom: 200, pitch: 270, bearing: 999, durationMs: 2000 },
+          {
+            center: [0, 0],
+            zoom: 200,
+            pitch: 270,
+            bearing: 999,
+            holdMs: 0,
+            transitionMs: 2000,
+          },
         ],
       }),
     );
@@ -137,8 +173,17 @@ describe("serializeTourConfig / parseTourConfig", () => {
     const config = parseTourConfig(
       JSON.stringify({
         type: TOUR_CONFIG_TYPE,
-        version: 1,
-        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 270, durationMs: 2000 }],
+        version: 2,
+        keyframes: [
+          {
+            center: [0, 0],
+            zoom: 1,
+            pitch: 0,
+            bearing: 270,
+            holdMs: 0,
+            transitionMs: 2000,
+          },
+        ],
       }),
     );
     assert.equal(config.keyframes[0].bearing, -90);
@@ -146,13 +191,63 @@ describe("serializeTourConfig / parseTourConfig", () => {
     assert.equal(config.fps, DEFAULT_FPS);
   });
 
+  it("migrates a legacy v1 file (durationMs) to the hold/transition model", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        version: 1,
+        fps: 30,
+        keyframes: [
+          // v1 durationMs is the time to animate INTO each keyframe.
+          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 9999 },
+          { center: [1, 1], zoom: 2, pitch: 0, bearing: 0, durationMs: 3000 },
+          { center: [2, 2], zoom: 3, pitch: 0, bearing: 0, durationMs: 5000 },
+        ],
+      }),
+    );
+    assert.equal(config.keyframes.length, 3);
+    // Outgoing transition of keyframe i = old incoming durationMs of keyframe i+1.
+    assert.equal(config.keyframes[0].transitionMs, 3000);
+    assert.equal(config.keyframes[1].transitionMs, 5000);
+    // The last keyframe has no successor, so it gets the default transition.
+    assert.equal(config.keyframes[2].transitionMs, DEFAULT_SEGMENT_SECONDS * 1000);
+    // v1 had implicit holds only at the very start and end.
+    assert.equal(config.keyframes[0].holdMs, START_HOLD_MS);
+    assert.equal(config.keyframes[1].holdMs, 0);
+    assert.equal(config.keyframes[2].holdMs, END_HOLD_MS);
+  });
+
+  it("infers the legacy format from durationMs when no version is present", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        keyframes: [
+          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 },
+          { center: [1, 1], zoom: 2, pitch: 0, bearing: 0, durationMs: 7000 },
+        ],
+      }),
+    );
+    assert.equal(config.keyframes[0].transitionMs, 7000);
+    assert.equal(config.keyframes[0].holdMs, START_HOLD_MS);
+    assert.equal(config.keyframes[1].holdMs, END_HOLD_MS);
+  });
+
   it("rejects a keyframe with an out-of-range latitude", () => {
     assert.throws(() =>
       parseTourConfig(
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
-          version: 1,
-          keyframes: [{ center: [0, 999], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+          version: 2,
+          keyframes: [
+            {
+              center: [0, 999],
+              zoom: 1,
+              pitch: 0,
+              bearing: 0,
+              holdMs: 0,
+              transitionMs: 2000,
+            },
+          ],
         }),
       ),
     );
@@ -164,11 +259,12 @@ describe("serializeTourConfig / parseTourConfig", () => {
       zoom: 1,
       pitch: 0,
       bearing: 0,
-      durationMs: 2000,
+      holdMs: 0,
+      transitionMs: 2000,
     }));
     assert.throws(() =>
       parseTourConfig(
-        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 1, keyframes }),
+        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 2, keyframes }),
       ),
     );
   });
@@ -179,7 +275,9 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: 999,
-          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+          keyframes: [
+            { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
+          ],
         }),
       ),
     );
@@ -191,7 +289,9 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: "2",
-          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+          keyframes: [
+            { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
+          ],
         }),
       ),
     );
@@ -203,29 +303,23 @@ describe("serializeTourConfig / parseTourConfig", () => {
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
           version: 0,
-          keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+          keyframes: [
+            { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
+          ],
         }),
       ),
     );
-  });
-
-  it("accepts a file with no version field (legacy / hand-written)", () => {
-    const config = parseTourConfig(
-      JSON.stringify({
-        type: TOUR_CONFIG_TYPE,
-        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
-      }),
-    );
-    assert.equal(config.keyframes.length, 1);
   });
 
   it("clamps a too-low fps on parse", () => {
     const config = parseTourConfig(
       JSON.stringify({
         type: TOUR_CONFIG_TYPE,
-        version: 1,
+        version: 2,
         fps: 1,
-        keyframes: [{ center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+        keyframes: [
+          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
+        ],
       }),
     );
     assert.equal(config.fps, MIN_FPS);
@@ -248,7 +342,7 @@ describe("serializeTourConfig / parseTourConfig", () => {
   it("rejects a tour with no keyframes", () => {
     assert.throws(() =>
       parseTourConfig(
-        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 1, keyframes: [] }),
+        JSON.stringify({ type: TOUR_CONFIG_TYPE, version: 2, keyframes: [] }),
       ),
     );
   });
@@ -258,8 +352,10 @@ describe("serializeTourConfig / parseTourConfig", () => {
       parseTourConfig(
         JSON.stringify({
           type: TOUR_CONFIG_TYPE,
-          version: 1,
-          keyframes: [{ center: [0], zoom: 1, pitch: 0, bearing: 0, durationMs: 2000 }],
+          version: 2,
+          keyframes: [
+            { center: [0], zoom: 1, pitch: 0, bearing: 0, transitionMs: 2000 },
+          ],
         }),
       ),
     );

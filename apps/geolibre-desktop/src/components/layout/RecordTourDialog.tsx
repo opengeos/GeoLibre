@@ -17,19 +17,24 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useFileNamePrompt } from "../../hooks/useFileNamePrompt";
 import {
+  browserSaveFallsBackToDownload,
   openLocalDataFileWithFallback,
   saveBinaryFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
 import {
   DEFAULT_FPS,
+  DEFAULT_HOLD_SECONDS,
   DEFAULT_SEGMENT_SECONDS,
   estimateTourDurationMs,
   isTourRecordingSupported,
   MAX_FPS,
+  MAX_HOLD_SECONDS,
   MAX_SEGMENT_SECONDS,
   MIN_FPS,
+  MIN_HOLD_SECONDS,
   MIN_SEGMENT_SECONDS,
   parseTourConfig,
   recordTour,
@@ -205,7 +210,12 @@ export function RecordTourDialog({
       {
         id: createId(),
         ...view,
-        durationMs: DEFAULT_SEGMENT_SECONDS * 1000,
+        holdMs: DEFAULT_HOLD_SECONDS * 1000,
+        // A new keyframe lands as the last stop, so its own transition is unused
+        // (and greyed out) for now. Seeding it with the default means that once
+        // another keyframe is added below it, the field activates already filled
+        // with the preset transition rather than an empty box.
+        transitionMs: DEFAULT_SEGMENT_SECONDS * 1000,
       },
     ]);
   };
@@ -243,14 +253,23 @@ export function RecordTourDialog({
     });
   };
 
-  const setSegmentSeconds = (id: string, seconds: number) => {
-    const durationMs = Math.round(seconds * 1000);
+  const setHoldSeconds = (id: string, seconds: number) => {
+    const holdMs = Math.round(seconds * 1000);
     // Clear the banner only on a real change, so merely focusing and blurring a
     // duration field (which re-commits the same value) doesn't wipe it.
     const current = keyframes.find((kf) => kf.id === id);
-    if (current && current.durationMs !== durationMs) clearResultMessages();
+    if (current && current.holdMs !== holdMs) clearResultMessages();
     setKeyframes((prev) =>
-      prev.map((kf) => (kf.id === id ? { ...kf, durationMs } : kf)),
+      prev.map((kf) => (kf.id === id ? { ...kf, holdMs } : kf)),
+    );
+  };
+
+  const setTransitionSeconds = (id: string, seconds: number) => {
+    const transitionMs = Math.round(seconds * 1000);
+    const current = keyframes.find((kf) => kf.id === id);
+    if (current && current.transitionMs !== transitionMs) clearResultMessages();
+    setKeyframes((prev) =>
+      prev.map((kf) => (kf.id === id ? { ...kf, transitionMs } : kf)),
     );
   };
 
@@ -380,8 +399,22 @@ export function RecordTourDialog({
     try {
       const content = serializeTourConfig(keyframes, fps);
       const fileType = t("recordTour.configFileType");
+      // Tauri and Chromium already let the user name the file in their native
+      // save dialog. Browsers without the File System Access picker (Firefox,
+      // Safari) would otherwise download under the fixed default name, so prompt
+      // for a name first — the fix for the "always map-tour-setup.json" report.
+      let defaultName = `${DEFAULT_CONFIG_FILE_NAME}.json`;
+      if (browserSaveFallsBackToDownload()) {
+        const chosen = await useFileNamePrompt.getState().prompt({
+          defaultName: DEFAULT_CONFIG_FILE_NAME,
+        });
+        // Cancelling the name prompt aborts the save entirely.
+        if (chosen === null) return;
+        const base = chosen.replace(/\.json$/i, "").replace(/\.+$/, "").trim();
+        defaultName = `${base || DEFAULT_CONFIG_FILE_NAME}.json`;
+      }
       const name = await saveTextFileWithFallback(content, {
-        defaultName: `${DEFAULT_CONFIG_FILE_NAME}.json`,
+        defaultName,
         filters: [{ name: fileType, extensions: ["json"] }],
         browserTypes: [
           { description: fileType, accept: { "application/json": [".json"] } },
@@ -555,8 +588,9 @@ export function RecordTourDialog({
                   onRecapture={() => recaptureKeyframe(kf.id)}
                   onMove={(delta) => move(index, delta)}
                   onRemove={() => removeKeyframe(kf.id)}
-                  onDurationSeconds={(seconds) =>
-                    setSegmentSeconds(kf.id, seconds)
+                  onHoldSeconds={(seconds) => setHoldSeconds(kf.id, seconds)}
+                  onTransitionSeconds={(seconds) =>
+                    setTransitionSeconds(kf.id, seconds)
                   }
                 />
               ))}
@@ -721,7 +755,7 @@ interface KeyframeRowProps {
   keyframe: TourKeyframe;
   index: number;
   isLast: boolean;
-  /** Disables the editing actions (recapture, reorder, remove, duration). */
+  /** Disables the editing actions (recapture, reorder, remove, durations). */
   disabled: boolean;
   /** Disables only the fly-to preview (map is mid-capture/save). */
   previewDisabled: boolean;
@@ -729,21 +763,88 @@ interface KeyframeRowProps {
   onRecapture: () => void;
   onMove: (delta: number) => void;
   onRemove: () => void;
-  onDurationSeconds: (seconds: number) => void;
+  onHoldSeconds: (seconds: number) => void;
+  onTransitionSeconds: (seconds: number) => void;
+}
+
+interface SecondsFieldProps {
+  label: string;
+  ariaLabel: string;
+  /** The committed value in seconds, used to seed and reset the text. */
+  valueSeconds: number;
+  min: number;
+  max: number;
+  disabled: boolean;
+  onCommit: (seconds: number) => void;
+}
+
+/**
+ * A small labeled numeric seconds input with a pluralized "seconds" suffix. It
+ * keeps local text state so the field can be cleared and retyped (a controlled
+ * number input would snap an empty value straight to the minimum); the parsed
+ * value commits to the store only while in range, and the text normalizes to
+ * the committed value on blur. Shared by the Hold and Transition controls.
+ */
+function SecondsField({
+  label,
+  ariaLabel,
+  valueSeconds,
+  min,
+  max,
+  disabled,
+  onCommit,
+}: SecondsFieldProps) {
+  const { t } = useTranslation();
+  const [text, setText] = useState(String(valueSeconds));
+
+  return (
+    <label className="flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}</span>
+      <Input
+        type="number"
+        inputMode="decimal"
+        aria-label={ariaLabel}
+        className="h-7 w-16"
+        min={min}
+        max={max}
+        step="0.5"
+        disabled={disabled}
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          const seconds = Number(event.target.value);
+          if (Number.isFinite(seconds) && seconds >= min && seconds <= max) {
+            onCommit(seconds);
+          }
+        }}
+        onBlur={() => {
+          const seconds = clamp(Number(text), min, max, valueSeconds);
+          onCommit(seconds);
+          setText(String(seconds));
+        }}
+      />
+      <span className="text-muted-foreground">
+        {/* Pluralize against the value being typed (falling back to the
+            committed one) so the unit tracks the input: "1 second", not
+            "1 seconds", even mid-edit before blur commits. */}
+        {t("recordTour.secondsLong", {
+          count: Number.isFinite(Number(text)) ? Number(text) : valueSeconds,
+        })}
+      </span>
+    </label>
+  );
 }
 
 /**
  * One keyframe in the tour list, laid out over two rows so the per-keyframe
- * actions and the transition-duration control each get their own line and never
- * clip in a narrow panel. The top row is the view (click to fly to it) plus the
- * recapture / reorder / remove actions; the bottom row is the transition
- * duration leading into this keyframe (omitted for the first, which the tour
- * simply starts parked on).
+ * actions and the timing controls each get their own line and never clip in a
+ * narrow panel. The top row is the view (click to fly to it) plus the recapture
+ * / reorder / remove actions; the bottom row holds the Hold (still time on this
+ * view) and Transition (time to animate to the next view) fields.
  *
- * The duration field keeps local text state so it can be cleared and retyped (a
- * controlled number input would snap an empty value straight to the minimum);
- * the parsed value commits to the store only while in range, and the text
- * normalizes to the committed value on blur.
+ * Every keyframe gets both fields. The last keyframe's Transition is greyed out
+ * because it has no successor to move toward; once another keyframe is added
+ * below it the field activates, already filled with the preset transition.
  */
 function KeyframeRow({
   keyframe,
@@ -755,10 +856,10 @@ function KeyframeRow({
   onRecapture,
   onMove,
   onRemove,
-  onDurationSeconds,
+  onHoldSeconds,
+  onTransitionSeconds,
 }: KeyframeRowProps) {
   const { t } = useTranslation();
-  const [text, setText] = useState(String(keyframe.durationMs / 1000));
   const isFirst = index === 0;
   // Full camera, shown as a hover tooltip so the visible row stays uncluttered.
   const coords = `${keyframe.center[1].toFixed(4)}, ${keyframe.center[0].toFixed(
@@ -833,60 +934,29 @@ function KeyframeRow({
         </div>
       </div>
 
-      {/* Bottom row: transition into this keyframe (the first has none). */}
-      {isFirst ? (
-        <span className="pl-8 text-muted-foreground">
-          {t("recordTour.startingView")}
-        </span>
-      ) : (
-        <label className="flex items-center gap-2 pl-8">
-          <span className="text-muted-foreground">
-            {t("recordTour.transition")}
-          </span>
-          <Input
-            type="number"
-            inputMode="decimal"
-            aria-label={t("recordTour.segmentSeconds")}
-            className="h-7 w-16"
-            min={MIN_SEGMENT_SECONDS}
-            max={MAX_SEGMENT_SECONDS}
-            step="0.5"
-            disabled={disabled}
-            value={text}
-            onChange={(event) => {
-              setText(event.target.value);
-              const seconds = Number(event.target.value);
-              if (
-                Number.isFinite(seconds) &&
-                seconds >= MIN_SEGMENT_SECONDS &&
-                seconds <= MAX_SEGMENT_SECONDS
-              ) {
-                onDurationSeconds(seconds);
-              }
-            }}
-            onBlur={() => {
-              const seconds = clamp(
-                Number(text),
-                MIN_SEGMENT_SECONDS,
-                MAX_SEGMENT_SECONDS,
-                keyframe.durationMs / 1000,
-              );
-              onDurationSeconds(seconds);
-              setText(String(seconds));
-            }}
-          />
-          <span className="text-muted-foreground">
-            {/* Pluralize against the value being typed (falling back to the
-                committed one) so the unit tracks the input: "1 second", not
-                "1 seconds", even mid-edit before blur commits. */}
-            {t("recordTour.secondsLong", {
-              count: Number.isFinite(Number(text))
-                ? Number(text)
-                : keyframe.durationMs / 1000,
-            })}
-          </span>
-        </label>
-      )}
+      {/* Bottom row: how long to hold on this view, then how long to move to the
+          next one (greyed out on the last keyframe, which has no next view). */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
+        <SecondsField
+          label={t("recordTour.hold")}
+          ariaLabel={t("recordTour.holdSeconds")}
+          valueSeconds={keyframe.holdMs / 1000}
+          min={MIN_HOLD_SECONDS}
+          max={MAX_HOLD_SECONDS}
+          disabled={disabled}
+          onCommit={onHoldSeconds}
+        />
+        <SecondsField
+          label={t("recordTour.transition")}
+          ariaLabel={t("recordTour.segmentSeconds")}
+          valueSeconds={keyframe.transitionMs / 1000}
+          min={MIN_SEGMENT_SECONDS}
+          max={MAX_SEGMENT_SECONDS}
+          // The last keyframe has no following view to transition to.
+          disabled={disabled || isLast}
+          onCommit={onTransitionSeconds}
+        />
+      </div>
     </li>
   );
 }
