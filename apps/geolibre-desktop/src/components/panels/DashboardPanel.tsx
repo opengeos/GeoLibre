@@ -31,9 +31,11 @@ import {
   type ChartSpec,
 } from "./charts/chart-view";
 import { WidgetEditorDialog } from "./WidgetEditorDialog";
+import {
+  PANEL_RESIZE_END_EVENT,
+  PANEL_RESIZE_START_EVENT,
+} from "../../lib/panel-resize";
 
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const MIN_DASHBOARD_HEIGHT = 160;
 const MAX_DASHBOARD_HEIGHT = 720;
 const DEFAULT_DASHBOARD_HEIGHT = 360;

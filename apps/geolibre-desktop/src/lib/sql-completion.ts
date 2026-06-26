@@ -28,9 +28,10 @@ export const SQL_FUNCTIONS: readonly string[] = [
   "COALESCE", "CAST", "ROUND", "ABS", "LOWER", "UPPER", "LENGTH", "CONCAT",
 ];
 
-// Identifier characters that make up a completable SQL word. A leading digit is
-// allowed inside the run so prefixes like `read_csv2` still complete.
-const WORD_CHAR = /[A-Za-z0-9_]/;
+// Identifier characters that make up a completable SQL word. Unicode letters and
+// numbers are included so non-ASCII column names (e.g. "Région", "面積") still
+// scan; a leading digit inside the run is fine so `read_csv2` still completes.
+const WORD_CHAR = /[\p{L}\p{N}_]/u;
 
 // Cap the dropdown so a bare-prefix trigger cannot render hundreds of rows.
 const MAX_CANDIDATES = 40;

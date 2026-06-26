@@ -34,14 +34,16 @@ import {
   PROVIDER_MODELS,
   type AssistantProviderId,
 } from "../../lib/assistant/provider";
+// Paired with MapCanvas so it suspends pointer interaction while dragging.
+import {
+  PANEL_RESIZE_END_EVENT,
+  PANEL_RESIZE_START_EVENT,
+} from "../../lib/panel-resize";
 
 const DEFAULT_PANEL_HEIGHT = 360;
 const MIN_PANEL_HEIGHT = 160;
 const MAX_PANEL_HEIGHT = 640;
 const RUNTIME_ENV_EVENT = "geolibre:runtime-env-change";
-// Paired with MapCanvas so it suspends pointer interaction while dragging.
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 const PROVIDER_STORAGE_KEY = "geolibre.assistant.provider";
 const MODEL_STORAGE_KEY = "geolibre.assistant.model";
 

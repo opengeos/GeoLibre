@@ -56,6 +56,10 @@ import {
   type GeotaggedPhotoResult,
 } from "../../lib/geotagged-photos";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
+import {
+  PANEL_RESIZE_END_EVENT,
+  PANEL_RESIZE_START_EVENT,
+} from "../../lib/panel-resize";
 import i18n from "../../i18n";
 import {
   addOsmPbfLayers,
@@ -378,8 +382,6 @@ const COLLAPSED_PANEL_RAIL_WIDTH = 44;
 const DEFAULT_NOTEBOOK_PANEL_WIDTH = 480;
 const MIN_NOTEBOOK_PANEL_WIDTH = 320;
 const MAX_NOTEBOOK_PANEL_WIDTH = 1100;
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));

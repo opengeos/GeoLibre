@@ -245,6 +245,11 @@ const COLUMN_SCAN_FEATURE_LIMIT = 50;
  * union of feature property keys (scanning a bounded number of features); the
  * registered geometry column is appended.
  *
+ * The result is a heuristic, not an exhaustive schema: only the first
+ * {@link COLUMN_SCAN_FEATURE_LIMIT} features are scanned, so a property that
+ * appears only in later features of a sparse layer may be omitted from the
+ * completions (the query itself still works).
+ *
  * @param layers Current app layers; those without `geojson` are skipped.
  * @param geometryColumn The geometry column name the active engine registers
  *   (`geom` for DuckDB/PGlite, `geometry` for Sedona). Defaults to `geom`.

@@ -102,6 +102,10 @@ import {
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
+import {
+  PANEL_RESIZE_END_EVENT,
+  PANEL_RESIZE_START_EVENT,
+} from "../../lib/panel-resize";
 
 type SortDirection = "asc" | "desc";
 type SortKey = "__featureId" | string;
@@ -125,8 +129,6 @@ const ESTIMATED_ROW_HEIGHT = 37;
 const DEFAULT_TABLE_HEIGHT = 192;
 const MIN_TABLE_HEIGHT = 96;
 const MAX_TABLE_HEIGHT = 520;
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
 function compareAttributeValues(a: unknown, b: unknown): number {
   if (a == null && b == null) return 0;

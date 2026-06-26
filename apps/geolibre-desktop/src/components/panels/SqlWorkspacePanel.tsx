@@ -42,6 +42,10 @@ import { runPostgisQuery } from "../../lib/pglite-workspace";
 import { runSedonaQuery } from "../../lib/sedona-workspace";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { useSqlCompletion } from "../../lib/useSqlCompletion";
+import {
+  PANEL_RESIZE_END_EVENT,
+  PANEL_RESIZE_START_EVENT,
+} from "../../lib/panel-resize";
 
 const CSV_MIME_TYPE = "text/csv";
 
@@ -53,8 +57,6 @@ const MAX_PANEL_HEIGHT = 640;
 const DEFAULT_EDITOR_FRACTION = 0.42;
 const MIN_EDITOR_FRACTION = 0.2;
 const MAX_EDITOR_FRACTION = 0.8;
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
 /** SQL engine backing the workspace. */
 type SqlEngine = "duckdb" | "postgis" | "sedona";
@@ -329,11 +331,6 @@ export function SqlWorkspacePanel() {
   // Same race for exports: the disabled buttons lag a render, so a fast double
   // click could open two save dialogs. The ref guards synchronously.
   const exportingRef = useRef(false);
-  // handleAddAsLayer is synchronous, so a boolean "in progress" ref cannot guard
-  // a rapid double-click (it is reset within the same frame). Instead remember
-  // the exact result already added: a second click on the same result is a
-  // no-op, while a new query produces a fresh geojson object that can be added.
-  const addedGeojsonRef = useRef<SqlQueryResult["geojson"]>(null);
 
   // Focus the editor when the panel first opens so the user can type at once.
   useEffect(() => {
@@ -346,9 +343,11 @@ export function SqlWorkspacePanel() {
   // Declared before runQuery so the dependency order is explicit.
   const describeQueryError = (err: unknown): string => {
     const message = err instanceof Error ? err.message : String(err);
-    const missingTable = /does not exist|not found|no such table|catalog error/i.test(
-      message,
-    );
+    // Match only the missing-table messages from DuckDB ("... does not exist"),
+    // PGlite/PostGIS ("relation ... does not exist"), and SQLite ("no such
+    // table"). The broader "Catalog Error" class also covers "already exists"
+    // and other cases where listing queryable layers would mislead.
+    const missingTable = /does not exist|no such table/i.test(message);
     if (missingTable && tables.length > 0) {
       const names = tables.join(", ");
       return `${message}\n\n${t("toolbar.sqlWorkspace.queryableHint", { names })}`;
@@ -395,9 +394,11 @@ export function SqlWorkspacePanel() {
     editorRef.current?.focus();
   };
 
+  // Each click adds the current result to the map as a new layer. Re-adds are
+  // intentional (e.g. to add the same result again under a different name), so
+  // the action is not one-shot; the notice updates on every add for feedback.
   const handleAddAsLayer = () => {
-    if (!result?.geojson || addedGeojsonRef.current === result.geojson) return;
-    addedGeojsonRef.current = result.geojson;
+    if (!result?.geojson) return;
     setError(null);
     const featureCount = result.geojson.features.length;
     const name =

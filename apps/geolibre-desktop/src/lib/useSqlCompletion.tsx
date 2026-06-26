@@ -115,7 +115,7 @@ export function useSqlCompletion({
     if (candidates.length === 0) {
       close();
     } else if (candidates.length === 1) {
-      applyCompletion(candidates[0], start, cursor);
+      applyCompletion(candidates[0]!, start, cursor);
     } else {
       setCompletion({ open: true, prefix, candidates, index: 0, start });
     }
@@ -138,17 +138,21 @@ export function useSqlCompletion({
       }
       // Plain Enter or forward Tab accepts the highlighted candidate. Ctrl/Cmd+
       // Enter is left to the host so it always runs the query, even with the
-      // dropdown open (the dropdown closes when the query starts). Shift+Tab is
-      // left alone so a keyboard user can still tab backward out of the editor.
+      // dropdown open (the dropdown closes when the query starts). Shift+Enter is
+      // left alone so it inserts a newline, and Shift+Tab so a keyboard user can
+      // still tab backward out of the editor.
       if (
-        (event.key === "Enter" && !event.ctrlKey && !event.metaKey) ||
+        (event.key === "Enter" &&
+          !event.ctrlKey &&
+          !event.metaKey &&
+          !event.shiftKey) ||
         (event.key === "Tab" && !event.shiftKey)
       ) {
         event.preventDefault();
         const ta = textareaRef.current;
         const cursor = ta?.selectionStart ?? completion.start;
         applyCompletion(
-          completion.candidates[completion.index],
+          completion.candidates[completion.index]!,
           completion.start,
           cursor,
         );
@@ -192,13 +196,15 @@ export function useSqlCompletion({
       className="absolute bottom-full left-3 z-30 mb-1 max-h-48 w-72 overflow-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
     >
       {completion.candidates.map((candidate, i) => (
-        <button
-          type="button"
+        // A div, not a button: role="option" overrides the native button role,
+        // which the ARIA spec disallows. The non-interactive element is the
+        // correct listbox-option host.
+        <div
           id={optionId(i)}
           key={candidate}
           role="option"
           aria-selected={i === completion.index}
-          className={`block w-full px-3 py-1 text-left font-mono text-xs ${
+          className={`block w-full cursor-pointer px-3 py-1 text-left font-mono text-xs ${
             i === completion.index
               ? "bg-accent text-accent-foreground"
               : "hover:bg-accent/50"
@@ -212,7 +218,7 @@ export function useSqlCompletion({
           }}
         >
           {candidate}
-        </button>
+        </div>
       ))}
     </div>
   ) : null;
