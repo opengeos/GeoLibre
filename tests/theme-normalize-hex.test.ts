@@ -18,6 +18,8 @@ describe("normalizeHexColor", () => {
 
   it("tolerates surrounding whitespace", () => {
     assert.equal(normalizeHexColor("  #3B82F6  "), "#3b82f6");
+    // No leading # exercises the branch that prepends one after trimming.
+    assert.equal(normalizeHexColor("  D58400  "), "#d58400");
   });
 
   it("returns null for anything that is not a valid 3- or 6-digit hex", () => {

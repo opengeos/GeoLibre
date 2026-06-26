@@ -474,7 +474,10 @@ export function SettingsDialog({
       // open that never asked for it.
       setPendingFocus(null);
       // Discard any uncommitted hex text so a half-typed/invalid value never
-      // resurfaces on the next open (the swatch already shows the saved color).
+      // resurfaces on the next open (the swatch already shows the saved color),
+      // and clear the Escape skip flag so a leftover true can't swallow the
+      // first edit of the next session.
+      skipCustomColorCommitRef.current = false;
       setCustomColorDraft(null);
       return;
     }
@@ -1757,10 +1760,14 @@ export function SettingsDialog({
                             }
                           }}
                           aria-label={t("settings.appearance.customColorHex")}
+                          // `|| undefined` omits the attribute entirely when
+                          // valid; a literal aria-invalid="false" makes some
+                          // screen readers announce "invalid: false" on focus.
                           aria-invalid={
-                            customColorDraft !== null &&
-                            customColorDraft.trim() !== "" &&
-                            normalizeHexColor(customColorDraft) === null
+                            (customColorDraft !== null &&
+                              customColorDraft.trim() !== "" &&
+                              normalizeHexColor(customColorDraft) === null) ||
+                            undefined
                           }
                         />
                       </label>
