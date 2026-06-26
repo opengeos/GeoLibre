@@ -782,17 +782,23 @@ export function DesktopShell({
           return;
         }
         // Read the source bytes in their own try so a failure to obtain them
-        // (only reachable for a remote URL: a network/timeout error, or a
-        // RangeError when the downloaded file is too large to allocate as an
-        // ArrayBuffer) reports a download problem rather than the misleading
-        // "could not convert" message below, which assumes a conversion was
-        // attempted. The rasterDownloadFailed string names both causes.
+        // reports a read/download problem rather than the misleading "could not
+        // convert" message below, which assumes a conversion was attempted. For
+        // a remote URL this is a network/timeout error or a RangeError when the
+        // download is too large to allocate (rasterDownloadFailed names both);
+        // for a local file it is the rare case of the blob URL being revoked
+        // (e.g. the layer removed) before the read, so fall back to the generic
+        // convert-failed message rather than the server-oriented download one.
         let bytes: Uint8Array;
         try {
           bytes = await readBytes();
         } catch (error) {
-          console.error("[GeoLibre] Failed to download raster for conversion", error);
-          window.alert(t("raster.rasterDownloadFailed", { name }));
+          console.error("[GeoLibre] Failed to read raster for conversion", error);
+          window.alert(
+            bytesAreRemote
+              ? t("raster.rasterDownloadFailed", { name })
+              : t("raster.cogConvertFailed", { name }),
+          );
           return;
         }
         // A URL can answer 200 with non-GeoTIFF content (an auth/login or error
