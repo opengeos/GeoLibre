@@ -82,22 +82,7 @@ import {
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
-import { useFileNamePrompt } from "./useFileNamePrompt";
-
-/**
- * Append the first allowed extension to a user-entered file name when it lacks
- * one, so a name like "my-bookmarks" becomes "my-bookmarks.json".
- */
-function ensureFileExtension(name: string, extensions: string[]): string {
-  const ext = extensions[0];
-  if (!ext) return name;
-  const lower = name.toLowerCase();
-  if (extensions.some((e) => lower.endsWith(`.${e.toLowerCase()}`))) {
-    return name;
-  }
-  // Strip any trailing dots first so "my-bookmarks." doesn't become a double dot.
-  return `${name.replace(/\.+$/, "")}.${ext}`;
-}
+import { ensureFileExtension, useFileNamePrompt } from "./useFileNamePrompt";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 

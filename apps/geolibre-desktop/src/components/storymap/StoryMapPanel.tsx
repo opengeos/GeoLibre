@@ -61,6 +61,7 @@ import {
   Upload,
 } from "lucide-react";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
+import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
 import { buildStoryMapHtml } from "../../lib/storymap-export";
 import { StoryMapHandoutDialog } from "./StoryMapHandoutDialog";
 
@@ -91,6 +92,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const storymap = useAppStore((s) => s.storymap);
   const layers = useAppStore((s) => s.layers);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  const projection = useAppStore((s) => s.preferences.map.projection);
 
   const setStorymap = useAppStore((s) => s.setStorymap);
   const updateSettings = useAppStore((s) => s.updateStorymapSettings);
@@ -105,20 +107,26 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importFormatRef = useRef<"json" | "csv">("json");
 
-  // Explicit dialog size once the user drags the bottom-right grip (null = the
-  // default responsive size). The dialog element is read for its live size.
+  // Explicit dialog size/position once the user drags the bottom-right grip
+  // (null = the default centred responsive size). The dialog element is read
+  // for its live geometry. `left`/`top` pin the dialog to its current top-left
+  // corner so resizing grows only the bottom-right corner.
   const dialogRef = useRef<HTMLDivElement>(null);
   const [dialogSize, setDialogSize] = useState<{
     width: number;
     height: number;
+    left: number;
+    top: number;
   } | null>(null);
   // Tears down an in-progress resize drag (removes the window listeners and
   // cancels the pending RAF) so it can't leak if the dialog unmounts mid-drag.
   const resizeCleanupRef = useRef<(() => void) | null>(null);
 
   // Resize the whole dialog from its bottom-right grip. The dialog is centred
-  // via a -50% transform, so the right/bottom edges move by half the size
-  // change; growing by 2x the pointer delta keeps the grip under the cursor.
+  // via a -50% transform by default; on the first drag we pin it to its current
+  // top-left corner (style overrides the transform) so the bottom-right corner
+  // tracks the cursor 1:1, like a normal window resize. The previous "grow from
+  // the centre at 2x the delta" made the whole dialog jump outward (#918).
   const startDialogResize = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -131,7 +139,9 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
       const startY = event.clientY;
       const startW = rect.width;
       const startH = rect.height;
-      let next = { width: startW, height: startH };
+      const left = rect.left;
+      const top = rect.top;
+      let next = { width: startW, height: startH, left, top };
       let frame: number | null = null;
       const prevCursor = document.body.style.cursor;
       const prevSelect = document.body.style.userSelect;
@@ -140,13 +150,15 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
 
       const onMove = (e: PointerEvent) => {
         next = {
+          left,
+          top,
           width: Math.max(
             360,
-            Math.min(window.innerWidth - 16, startW + (e.clientX - startX) * 2),
+            Math.min(window.innerWidth - left - 8, startW + (e.clientX - startX)),
           ),
           height: Math.max(
             320,
-            Math.min(window.innerHeight - 16, startH + (e.clientY - startY) * 2),
+            Math.min(window.innerHeight - top - 8, startH + (e.clientY - startY)),
           ),
         };
         if (frame !== null) return;
@@ -270,7 +282,9 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
   const handlePresent = useCallback(() => {
     if (chapters.length === 0) return;
     setOpen(false);
-    setPresenting(true);
+    // Presenting from the editor: exiting the presentation should bring the
+    // editor back rather than dropping to the bare map (#918).
+    setPresenting(true, true);
   }, [chapters.length, setOpen, setPresenting]);
 
   const handleExport = useCallback(async () => {
@@ -281,14 +295,21 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         storymap: story,
         basemapStyleUrl,
         layers,
+        projection,
       });
       const slug =
         (story.title || "story-map")
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "") || "story-map";
+      // Let the user name the file before it downloads in browsers without a
+      // native save picker, instead of always saving "<slug>.html" (#921).
+      const defaultName = await promptDownloadNameIfNeeded(`${slug}.html`, [
+        "html",
+      ]);
+      if (defaultName === null) return;
       await saveTextFileWithFallback(html, {
-        defaultName: `${slug}.html`,
+        defaultName,
         filters: [{ name: t("storymap.htmlFile"), extensions: ["html"] }],
         browserTypes: [
           {
@@ -303,7 +324,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         error instanceof Error ? error.message : String(error),
       );
     }
-  }, [basemapStyleUrl, chapters.length, layers, story, t]);
+  }, [basemapStyleUrl, chapters.length, layers, projection, story, t]);
 
   const handleExportData = useCallback(
     async (format: "json" | "csv") => {
@@ -320,8 +341,13 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
             ? serializeStoryMapJson(story)
             : serializeStoryMapCsv(story);
         const mimeType = format === "json" ? "application/json" : "text/csv";
+        const defaultName = await promptDownloadNameIfNeeded(
+          `${slug}.${format}`,
+          [format],
+        );
+        if (defaultName === null) return;
         await saveTextFileWithFallback(content, {
-          defaultName: `${slug}.${format}`,
+          defaultName,
           filters: [{ name: format.toUpperCase(), extensions: [format] }],
           browserTypes: [
             {
@@ -377,12 +403,25 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
         ref={dialogRef}
-        className="flex max-h-[88vh] w-[min(92vw,46rem)] flex-col gap-0 p-0"
+        // A definite height (not just max-height) is what lets the inner
+        // ScrollArea size and scroll: under max-height alone the viewport's
+        // percentage height never resolves, so the body overflowed and the
+        // footer was clipped until the user manually resized (#918). max-w-none
+        // lets the dialog reach its intended width instead of the dialog
+        // primitive's default max-w-lg.
+        className="flex h-[88vh] w-[min(92vw,46rem)] max-w-none flex-col gap-0 p-0"
         style={
           dialogSize
             ? {
+                left: dialogSize.left,
+                top: dialogSize.top,
                 width: dialogSize.width,
                 height: dialogSize.height,
+                // The dialog primitive centres itself with the CSS `translate`
+                // property (not `transform`), so cancel that to pin the
+                // top-left corner we measured (#918).
+                translate: "none",
+                transform: "none",
                 maxWidth: "none",
                 maxHeight: "none",
               }

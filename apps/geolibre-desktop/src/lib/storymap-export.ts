@@ -1,7 +1,10 @@
 import type { FeatureCollection, Geometry } from "geojson";
 import {
+  extrusionColorValue,
+  extrusionHeightValue,
   styleValue,
   type GeoLibreLayer,
+  type MapProjection,
   type StoryMap,
 } from "@geolibre/core";
 import { sanitizeStoryHtml } from "./sanitize-html";
@@ -13,6 +16,12 @@ export interface StoryMapExportOptions {
   basemapStyleUrl: string;
   /** Project layers; only in-memory GeoJSON layers are inlined into the export. */
   layers: GeoLibreLayer[];
+  /**
+   * Map projection the exported page renders in. Mirrors the in-app projection
+   * so a globe story stays a globe (and not 2D Mercator) once exported (#917).
+   * Defaults to globe when omitted, matching the app default.
+   */
+  projection?: MapProjection;
 }
 
 interface InlineLayerExport {
@@ -37,7 +46,7 @@ interface InlineLayerExport {
  * @returns A complete HTML document as a string.
  */
 export function buildStoryMapHtml(options: StoryMapExportOptions): string {
-  const { storymap, basemapStyleUrl, layers } = options;
+  const { storymap, basemapStyleUrl, layers, projection = "globe" } = options;
 
   // The template reads chapters[0] for the initial camera, so an empty story
   // cannot produce a working page. Callers gate this behind a chapter count,
@@ -98,6 +107,7 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
 
   const config = {
     style: basemapStyleUrl,
+    projection,
     showMarkers: storymap.showMarkers,
     markerColor: storymap.markerColor,
     inset: storymap.inset,
@@ -244,6 +254,22 @@ function buildLayerSpec(
   if (!kind) return null;
 
   if (kind === "polygon") {
+    // Extruded polygons export as a 3D fill-extrusion (mirroring the in-app
+    // render) so the story keeps its extruded look instead of flattening to a
+    // 2D fill (#917). The opacity is seeded here and scaled by the layer
+    // opacity later, just like the flat-fill path.
+    if (layer.style.extrusionEnabled) {
+      return {
+        type: "fill-extrusion",
+        paint: {
+          "fill-extrusion-color": extrusionColorValue(layer.style),
+          "fill-extrusion-opacity": styleValue(layer.style, "extrusionOpacity"),
+          "fill-extrusion-height": extrusionHeightValue(layer.style),
+          "fill-extrusion-base": styleValue(layer.style, "extrusionBase"),
+          "fill-extrusion-vertical-gradient": true,
+        },
+      };
+    }
     return {
       type: "fill",
       paint: {
@@ -507,6 +533,9 @@ function renderTemplate(
         var cameraToken = 0;
 
         map.on('load', function () {
+            // Match the in-app projection (globe by default) so the exported
+            // story does not silently fall back to 2D Mercator (#917).
+            try { map.setProjection({ type: config.projection || 'globe' }); } catch (e) { console.error('[GeoLibre] projection failed', e); }
 ${inlineLayerScript}
 
             scroller.setup({ step: '.step', offset: 0.5 })

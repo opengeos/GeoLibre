@@ -48,7 +48,17 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   const { t } = useTranslation();
   const presenting = useAppStore((s) => s.ui.storymapPresenting);
   const setPresenting = useAppStore((s) => s.setStorymapPresenting);
+  const setPanelOpen = useAppStore((s) => s.setStorymapPanelOpen);
   const storymap = useAppStore((s) => s.storymap);
+
+  // Exit the presentation, reopening the editor when it was launched from there
+  // so the user lands back in the editor instead of the bare map (#918). Reads
+  // the flag before clearing it via setPresenting(false).
+  const exitPresentation = useCallback(() => {
+    const reopenEditor = useAppStore.getState().ui.storymapReturnToEditor;
+    setPresenting(false);
+    if (reopenEditor) setPanelOpen(true);
+  }, [setPanelOpen, setPresenting]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const insetRef = useRef<HTMLDivElement>(null);
@@ -359,11 +369,11 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
   useEffect(() => {
     if (!presenting) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setPresenting(false);
+      if (event.key === "Escape") exitPresentation();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [presenting, setPresenting]);
+  }, [presenting, exitPresentation]);
 
   // A presentation with no chapters has nothing to show; close it.
   useEffect(() => {
@@ -392,7 +402,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
           variant="secondary"
           size="sm"
           className="shadow-md"
-          onClick={() => setPresenting(false)}
+          onClick={exitPresentation}
         >
           <X className="mr-1 h-4 w-4" />
           {t("storymap.exitPresentation")}

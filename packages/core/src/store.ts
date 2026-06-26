@@ -198,6 +198,10 @@ export interface AppState {
     dashboardOpen: boolean;
     storymapPanelOpen: boolean;
     storymapPresenting: boolean;
+    // True when the active presentation was launched from the editor, so exiting
+    // it reopens the Story Map editor instead of dropping to the bare map
+    // (#918). Auto-presented projects (opened for viewing) leave this false.
+    storymapReturnToEditor: boolean;
     // Id of the chapter currently being composed on the live map. When set, the
     // Story Map dialog is hidden so the user can pan/zoom/tilt the real map and
     // save the resulting camera back into this chapter (issue #775).
@@ -279,7 +283,10 @@ export interface AppState {
   setAttributeTableOpen: (open: boolean) => void;
   setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
-  setStorymapPresenting: (presenting: boolean) => void;
+  setStorymapPresenting: (
+    presenting: boolean,
+    returnToEditor?: boolean,
+  ) => void;
   setStorymapComposing: (chapterId: string | null) => void;
   setModelBuilderOpen: (open: boolean) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
@@ -591,6 +598,7 @@ export const useAppStore = create<AppState>()(
         dashboardOpen: false,
         storymapPanelOpen: false,
         storymapPresenting: false,
+        storymapReturnToEditor: false,
         storymapComposingId: null,
         modelBuilderOpen: false,
         zoomToSelectedFeature: false,
@@ -798,8 +806,16 @@ export const useAppStore = create<AppState>()(
             ...(open ? { storymapComposingId: null } : {}),
           },
         })),
-      setStorymapPresenting: (presenting) =>
-        set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
+      setStorymapPresenting: (presenting, returnToEditor = false) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            storymapPresenting: presenting,
+            // Track whether exiting should reopen the editor; only meaningful
+            // while presenting, so it clears once the presentation ends (#918).
+            storymapReturnToEditor: presenting ? returnToEditor : false,
+          },
+        })),
       setStorymapComposing: (chapterId) =>
         set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
       setModelBuilderOpen: (open) =>
@@ -1285,6 +1301,7 @@ export const useAppStore = create<AppState>()(
           ui: {
             ...s.ui,
             storymapPresenting: false,
+            storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
           },
@@ -1313,6 +1330,9 @@ export const useAppStore = create<AppState>()(
           ui: {
             ...s.ui,
             storymapPresenting: presentStory,
+            // A bundled story auto-presents for viewing, so exiting it should
+            // not pop open the editor (#918).
+            storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
           },

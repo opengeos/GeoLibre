@@ -36,6 +36,7 @@ import {
   type HandoutChapter,
 } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
+import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
 
 interface StoryMapHandoutDialogProps {
   open: boolean;
@@ -245,6 +246,15 @@ export function StoryMapHandoutDialog({
       return;
     }
 
+    // Ask for the file name up front (browsers without a native save picker
+    // would otherwise auto-download a fixed name) so a cancel skips the slow
+    // capture entirely (#921).
+    const defaultName = await promptDownloadNameIfNeeded(
+      `${slugify(title || story.title)}-handout.pdf`,
+      ["pdf"],
+    );
+    if (defaultName === null) return;
+
     const original = mapControllerRef.current?.readView();
     abortRef.current = false;
     setGenerating(true);
@@ -282,7 +292,7 @@ export function StoryMapHandoutDialog({
         footer,
       });
       const saved = await saveBinaryFileWithFallback(bytes, {
-        defaultName: `${slugify(title || story.title)}-handout.pdf`,
+        defaultName,
         filters: [{ name: t("storymap.handout.pdfFile"), extensions: ["pdf"] }],
         browserTypes: [
           {
