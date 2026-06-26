@@ -48,6 +48,11 @@ const CSV_MIME_TYPE = "text/csv";
 const DEFAULT_PANEL_HEIGHT = 300;
 const MIN_PANEL_HEIGHT = 160;
 const MAX_PANEL_HEIGHT = 640;
+// Share of the panel width given to the editor (the left pane), as a fraction.
+// Default 0.42 keeps the editor a little narrower than the results grid.
+const DEFAULT_EDITOR_FRACTION = 0.42;
+const MIN_EDITOR_FRACTION = 0.2;
+const MAX_EDITOR_FRACTION = 0.8;
 const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
 const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
@@ -263,11 +268,19 @@ export function SqlWorkspacePanel() {
 
   const sectionRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  // Tear down an in-flight height drag's window listeners if the panel unmounts
-  // mid-drag (e.g. the user closes it while dragging).
+  // The horizontal flex container holding the editor (left) and results (right);
+  // its width drives the drag-to-resize fraction. The editor pane's width is
+  // written straight to the DOM during a drag and committed to state on release.
+  const splitContainerRef = useRef<HTMLDivElement>(null);
+  const editorPaneRef = useRef<HTMLDivElement>(null);
+  // Tear down an in-flight drag's window listeners if the panel unmounts
+  // mid-drag (e.g. the user closes it while dragging). One per drag axis so a
+  // second drag cannot overwrite the other's cleanup.
   const resizeCleanupRef = useRef<(() => void) | null>(null);
+  const horizontalResizeCleanupRef = useRef<(() => void) | null>(null);
 
   const [height, setHeight] = useState(DEFAULT_PANEL_HEIGHT);
+  const [editorFraction, setEditorFraction] = useState(DEFAULT_EDITOR_FRACTION);
   const [collapsed, setCollapsed] = useState(false);
   const [engine, setEngine] = useState<SqlEngine>(loadEngine);
   const [sql, setSql] = useState(SAMPLE_QUERY);
@@ -519,8 +532,72 @@ export function SqlWorkspacePanel() {
     };
   };
 
-  // On unmount, tear down any in-flight drag listeners.
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
+  // Drag the vertical splitter to resize the editor (left) vs results (right).
+  // The editor's width is tracked as a fraction of the panel so the split stays
+  // proportional as the window resizes, mirroring the Python Console's split.
+  const startEditorResize = (event: ReactMouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const container = splitContainerRef.current;
+    if (!container) return;
+    // The container does not resize during a horizontal drag, so capture its
+    // geometry once instead of forcing a layout read on every mousemove.
+    const rect = container.getBoundingClientRect();
+    if (rect.width === 0) return;
+    let nextFraction = editorFraction;
+    let frame: number | null = null;
+    const prevCursor = document.body.style.cursor;
+    const prevSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (moveEvent: MouseEvent) => {
+      // Editor is the left pane: its width is the gap between the container's
+      // left edge and the cursor.
+      const raw = (moveEvent.clientX - rect.left) / rect.width;
+      nextFraction = Math.min(
+        MAX_EDITOR_FRACTION,
+        Math.max(MIN_EDITOR_FRACTION, raw),
+      );
+      // Throttle to one DOM write per frame; commit to state only on mouseup.
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        frame = null;
+        if (editorPaneRef.current) {
+          editorPaneRef.current.style.flexBasis = `${nextFraction * 100}%`;
+        }
+      });
+    };
+
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      horizontalResizeCleanupRef.current = null;
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      setEditorFraction(nextFraction);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    horizontalResizeCleanupRef.current = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      document.body.style.cursor = prevCursor;
+      document.body.style.userSelect = prevSelect;
+    };
+  };
+
+  // On unmount, tear down any in-flight drag listeners (either axis).
+  useEffect(
+    () => () => {
+      resizeCleanupRef.current?.();
+      horizontalResizeCleanupRef.current?.();
+    },
+    [],
+  );
 
   const displayedRows = result?.rows.slice(0, MAX_DISPLAYED_ROWS) ?? [];
   const hiddenRowCount = result ? result.rowCount - displayedRows.length : 0;
@@ -606,10 +683,15 @@ export function SqlWorkspacePanel() {
 
       <div
         id="sql-workspace-body"
+        ref={splitContainerRef}
         className={`flex min-h-0 flex-1 ${collapsed ? "hidden" : ""}`}
       >
         {/* Editor pane (left) */}
-        <div className="flex min-w-0 basis-[42%] flex-col gap-2 border-r p-3">
+        <div
+          ref={editorPaneRef}
+          className="flex min-w-0 shrink-0 grow-0 flex-col gap-2 p-3"
+          style={{ flexBasis: `${editorFraction * 100}%` }}
+        >
           <div className="flex flex-wrap items-center gap-2">
             <Select
               aria-label={t("toolbar.sqlWorkspace.sampleQueriesLabel")}
@@ -765,6 +847,15 @@ export function SqlWorkspacePanel() {
             ) : null}
           </div>
         </div>
+
+        {/* Draggable splitter between the editor and results panes */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("toolbar.sqlWorkspace.resizeEditor")}
+          className="w-1 shrink-0 cursor-col-resize select-none bg-border hover:bg-primary"
+          onMouseDown={startEditorResize}
+        />
 
         {/* Results pane (right) */}
         <div className="flex min-w-0 flex-1 flex-col gap-2 p-3">

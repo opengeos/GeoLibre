@@ -1638,6 +1638,7 @@
       "title": "SQL Workspace",
       "engine": "SQL engine",
       "resize": "Resize SQL workspace",
+      "resizeEditor": "Resize editor and results panes",
       "collapse": "Collapse SQL workspace",
       "expand": "Expand SQL workspace",
       "close": "Close SQL workspace",
