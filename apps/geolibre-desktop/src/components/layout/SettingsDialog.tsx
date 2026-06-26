@@ -1723,6 +1723,10 @@ export function SettingsDialog({
                             customColorDraft ??
                             desktopSettings.theme.customColor
                           }
+                          // The field already holds a full `#rrggbb` at the
+                          // maxLength cap, so select all on focus to let the user
+                          // type a replacement instead of silently dropping keys.
+                          onFocus={(event) => event.target.select()}
                           onChange={(event) =>
                             setCustomColorDraft(event.target.value)
                           }
