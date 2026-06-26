@@ -26,7 +26,7 @@ function formatCoordinate(value: number): string {
  * When a single photo carries no usable GPS, the dialog offers a manual
  * placement workflow instead of a hard error: the photo is dropped at the
  * current map center and a draggable pin lets the user fine-tune its position
- * on the map (issue #894).
+ * on the map.
  */
 export function PhotosSource() {
   const { t } = useTranslation();

@@ -1216,7 +1216,12 @@ export const MapCanvas = memo(function MapCanvas({
     // happen via a toolbar button, with no map click to dismiss it), so the
     // photo and identify popups never coexist.
     const unsubscribeIdentify = useAppStore.subscribe((state) => {
-      if (state.identifyLayerId) removePhotoPopup();
+      if (state.identifyLayerId) {
+        removePhotoPopup();
+        // If Identify is enabled while the cursor already sits on a photo point,
+        // mouseleave never fires, so clear the hover cursor here too.
+        map.getCanvas().style.cursor = "";
+      }
     });
 
     return () => {

@@ -917,6 +917,14 @@ export class MapController {
     // call rewrites the store and re-syncs the source. Coalesce to one update
     // per animation frame so a heavier `onMove` cannot stutter the drag.
     let rafPending = false;
+    let dragRaf: number | null = null;
+    const cancelPendingFrame = () => {
+      if (dragRaf !== null) {
+        cancelAnimationFrame(dragRaf);
+        dragRaf = null;
+      }
+      rafPending = false;
+    };
     const commit = () => {
       const next = marker.getLngLat();
       popup.setLngLat(next);
@@ -925,7 +933,8 @@ export class MapController {
     const handleDrag = () => {
       if (rafPending) return;
       rafPending = true;
-      requestAnimationFrame(() => {
+      dragRaf = requestAnimationFrame(() => {
+        dragRaf = null;
         rafPending = false;
         if (disposed) return;
         commit();
@@ -933,14 +942,17 @@ export class MapController {
     };
     // The final `drag` may still be sitting in a pending frame when the user
     // releases and clicks Done; commit the release position synchronously so the
-    // photo never lands one frame stale.
+    // photo never lands one frame stale, dropping the queued frame so it does
+    // not fire a second, identical update.
     const handleDragEnd = () => {
       if (disposed) return;
+      cancelPendingFrame();
       commit();
     };
     const dispose = () => {
       if (disposed) return;
       disposed = true;
+      cancelPendingFrame();
       marker.off("drag", handleDrag);
       marker.off("dragend", handleDragEnd);
       doneButton.removeEventListener("click", handleDone);

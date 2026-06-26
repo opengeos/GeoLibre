@@ -54,6 +54,9 @@ const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
  * later: it is sized so the resizable photo popup stays sharp when enlarged
  * (the popup display caps near 900px, doubled here for high-DPI screens) while
  * keeping the inline data URL a few hundred KB rather than the multi-MB source.
+ * Budget ~250-500 KB per photo at this size/quality; since the data URL is held
+ * in the store and serialized into the project file, raising it further trades
+ * sharpness for project size on photo-heavy imports.
  */
 const PHOTO_MAX_DIMENSION = 1600;
 /** JPEG quality for the generated photo image. */
@@ -359,7 +362,9 @@ export async function loadPhotosAtLocation(
  * Return a copy of a photo point collection with every feature moved to
  * `[lng, lat]`. Used while the user drags the manual-placement handle so the
  * rendered points follow the marker; feature properties (thumbnail, EXIF) are
- * preserved.
+ * preserved. The per-feature spread is shallow, so the (potentially large)
+ * inline image string is shared by reference, not duplicated, on each drag
+ * frame.
  *
  * @param collection - The photo point collection to relocate.
  * @param position - The `[lng, lat]` to move every feature to.
