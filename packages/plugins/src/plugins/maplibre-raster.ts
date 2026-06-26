@@ -130,6 +130,11 @@ let nonTiledRasterHandler: NonTiledRasterHandler | null = null;
 // Layer ids currently being handled, so a repeated 'error' event for the same
 // failed layer does not prompt twice.
 const nonTiledInFlight = new Set<string>();
+// Cap the whole-file fetch of a remote striped GeoTIFF so a slow or stalled
+// server surfaces a clear conversion failure instead of hanging the handler
+// until the browser's (often minutes-long) global network timeout. A local
+// file's blob URL resolves instantly, so the bound only ever bites remote URLs.
+const NON_TILED_FETCH_TIMEOUT_MS = 60_000;
 
 /**
  * Register (or clear, with `null`) a handler invoked when a GeoTIFF (local file
@@ -512,9 +517,17 @@ function createRasterControl(
     // fetch only works when the server allows CORS, which it must have already
     // to get this far (the panel range-fetched the header to detect "not
     // tiled"); a CORS-less host would have failed earlier with a fetch error.
-    // See opengeos/GeoLibre#916.
+    // See opengeos/GeoLibre#916. The explicit per-kind check (rather than a
+    // file/else ternary) means a future source kind without a fetchable URL
+    // bails here instead of silently passing fetch(undefined), which would
+    // request the current page.
     const bytesUrl =
-      info.source.kind === "file" ? info.source.objectUrl : info.source.url;
+      info.source.kind === "file"
+        ? info.source.objectUrl
+        : info.source.kind === "url"
+          ? info.source.url
+          : undefined;
+    if (!bytesUrl) return;
     const handler = nonTiledRasterHandler;
     nonTiledInFlight.add(layerId);
     // Invoke inside the promise chain so even a synchronous throw from the
@@ -527,7 +540,9 @@ function createRasterControl(
           layerId,
           name: info.name,
           readBytes: async () => {
-            const response = await fetch(bytesUrl);
+            const response = await fetch(bytesUrl, {
+              signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS),
+            });
             if (!response.ok) {
               throw new Error(
                 `Failed to read raster bytes: ${response.status}`,
