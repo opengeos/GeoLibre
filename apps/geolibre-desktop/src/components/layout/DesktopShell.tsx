@@ -770,12 +770,14 @@ export function DesktopShell({
     setNonTiledRasterHandler(async ({ name, bytesAreRemote, readBytes, dismiss }) => {
       try {
         // For a remote source readBytes() streams the whole file over the
-        // network, so confirm up front before that download starts. A local
-        // file resolves instantly, so it keeps the single post-read prompt
-        // below (which can also surface the large-raster warning). See #916.
+        // network, so confirm up front before that download starts -- with a
+        // message that names the download, since that cost is the part unique to
+        // the remote path. A local file resolves instantly, so it keeps the
+        // single post-read prompt below (which can also surface the large-raster
+        // warning). See #916.
         if (
           bytesAreRemote &&
-          !window.confirm(t("raster.cogConvertConfirm", { name }))
+          !window.confirm(t("raster.cogConvertRemoteConfirm", { name }))
         ) {
           return;
         }
