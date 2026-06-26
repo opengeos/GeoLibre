@@ -59,6 +59,13 @@ const DEFAULT_FILE_NAME = "map-tour";
 // apart in a downloads folder.
 const DEFAULT_CONFIG_FILE_NAME = "map-tour-setup";
 
+// Smallest the panel may be resized to, so its controls never clip away.
+const MIN_PANEL_WIDTH = 320;
+const MIN_PANEL_HEIGHT = 280;
+// Pixels each arrow-key press grows or shrinks the panel when a resize handle is
+// focused (keyboard equivalent of dragging a corner).
+const RESIZE_KEY_STEP = 16;
+
 function createId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -207,9 +214,46 @@ export function RecordTourDialog({
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  // Smallest the panel may be resized to, so its controls never clip away.
-  const MIN_PANEL_WIDTH = 320;
-  const MIN_PANEL_HEIGHT = 280;
+  // Apply a resize relative to a base rect, clamped to the viewport and the
+  // minimum size, and commit it to pos/size. `dx`/`dy` are how far the dragged
+  // edge moves: the bottom edge always moves by `dy`; for the "se" corner the
+  // right edge moves by `dx` (left edge fixed), and for "sw" the left edge moves
+  // by `dx` while the right edge stays put. Shared by pointer drag and keyboard.
+  const applyResize = (
+    corner: "sw" | "se",
+    base: { width: number; height: number; left: number; top: number },
+    dx: number,
+    dy: number,
+  ) => {
+    // Height grows downward from a fixed top for both corners.
+    const maxHeight = window.innerHeight - base.top;
+    const height = Math.max(
+      MIN_PANEL_HEIGHT,
+      Math.min(base.height + dy, maxHeight),
+    );
+    if (corner === "se") {
+      // Left edge fixed; the right edge follows, capped at the viewport edge.
+      const maxWidth = window.innerWidth - base.left;
+      const width = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(base.width + dx, maxWidth),
+      );
+      setPos({ x: base.left, y: base.top });
+      setSize({ width, height });
+    } else {
+      // Right edge fixed; the left edge follows. The width is capped at the
+      // panel's right-edge x-coordinate (left + width) rather than the window
+      // width, since that is what keeps the left edge from crossing x = 0 when
+      // we set `pos.x = right - width`.
+      const maxWidthBeforeEdge = base.left + base.width;
+      const width = Math.max(
+        MIN_PANEL_WIDTH,
+        Math.min(base.width + dx, maxWidthBeforeEdge),
+      );
+      setPos({ x: maxWidthBeforeEdge - width, y: base.top });
+      setSize({ width, height });
+    }
+  };
 
   const onResizeStart =
     (corner: "sw" | "se") => (event: React.PointerEvent) => {
@@ -237,38 +281,58 @@ export function RecordTourDialog({
   const onResizeMove = (event: React.PointerEvent) => {
     const start = resizeRef.current;
     if (!start) return;
-    const dx = event.clientX - start.startX;
-    const dy = event.clientY - start.startY;
-    // Height grows downward from a fixed top for both corners.
-    const maxHeight = window.innerHeight - start.startTop;
-    const height = Math.max(
-      MIN_PANEL_HEIGHT,
-      Math.min(start.startHeight + dy, maxHeight),
+    applyResize(
+      start.corner,
+      {
+        width: start.startWidth,
+        height: start.startHeight,
+        left: start.startLeft,
+        top: start.startTop,
+      },
+      event.clientX - start.startX,
+      event.clientY - start.startY,
     );
-    if (start.corner === "se") {
-      // Left edge fixed; the right edge follows the pointer.
-      const maxWidth = window.innerWidth - start.startLeft;
-      const width = Math.max(
-        MIN_PANEL_WIDTH,
-        Math.min(start.startWidth + dx, maxWidth),
-      );
-      setSize({ width, height });
-    } else {
-      // Right edge fixed; the left edge follows the pointer (so `pos.x` moves).
-      const right = start.startLeft + start.startWidth;
-      const width = Math.max(MIN_PANEL_WIDTH, Math.min(start.startWidth - dx, right));
-      setPos((current) => ({
-        x: right - width,
-        y: current?.y ?? start.startTop,
-      }));
-      setSize({ width, height });
-    }
   };
 
   const onResizeEnd = (event: React.PointerEvent) => {
     resizeRef.current = null;
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
+
+  // Keyboard equivalent of dragging a corner: arrow keys nudge the panel size by
+  // a fixed step so the resize feature is operable without a pointer. Left/Right
+  // grow the side the handle is on; Up/Down adjust the bottom edge.
+  const onResizeKey =
+    (corner: "sw" | "se") => (event: React.KeyboardEvent) => {
+      let dx = 0;
+      let dy = 0;
+      switch (event.key) {
+        case "ArrowDown":
+          dy = RESIZE_KEY_STEP;
+          break;
+        case "ArrowUp":
+          dy = -RESIZE_KEY_STEP;
+          break;
+        case "ArrowLeft":
+          // For the left handle, pressing Left extends the panel leftward.
+          dx = corner === "sw" ? RESIZE_KEY_STEP : -RESIZE_KEY_STEP;
+          break;
+        case "ArrowRight":
+          dx = corner === "sw" ? -RESIZE_KEY_STEP : RESIZE_KEY_STEP;
+          break;
+        default:
+          return;
+      }
+      event.preventDefault();
+      const rect = panelRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      applyResize(
+        corner,
+        { width: rect.width, height: rect.height, left: rect.left, top: rect.top },
+        dx,
+        dy,
+      );
+    };
 
   /** Read the live map camera, rounded for compact display. */
   const captureView = () => {
@@ -495,12 +559,16 @@ export function RecordTourDialog({
         });
         // Cancelling the name prompt aborts the save entirely.
         if (chosen === null) return;
-        // Normalize before re-appending ".json": trim, then drop trailing dots
-        // so "tour.json." doesn't keep its ".json", then strip the extension and
-        // any remaining trailing dots. This avoids a doubled "tour.json.json"
+        // Normalize before re-appending ".json": trim, replace characters that
+        // are illegal in common filesystems (path separators, null byte, etc.)
+        // so a pasted name can't smuggle in a path, then drop trailing dots so
+        // "tour.json." doesn't keep its ".json", strip the extension, and clean
+        // up any remaining trailing dots. This avoids a doubled "tour.json.json"
         // for inputs like "tour.json " or "tour.json.".
         const base = chosen
           .trim()
+          // eslint-disable-next-line no-control-regex
+          .replace(/[/\\:*?"<>|\x00]/g, "_")
           .replace(/\.+$/, "")
           .replace(/\.json$/i, "")
           .replace(/\.+$/, "")
@@ -852,24 +920,27 @@ export function RecordTourDialog({
 
       {/* Resize handles in the two bottom corners. The bottom-left one drags the
           left edge (keeping the right edge fixed); the bottom-right one drags
-          the right edge. Both also drag the bottom edge. */}
-      <div
-        role="separator"
+          the right edge. Both also drag the bottom edge. They are focusable
+          buttons so keyboard users can resize with the arrow keys too. */}
+      <button
+        type="button"
         aria-label={t("recordTour.resizeLeft")}
         onPointerDown={onResizeStart("sw")}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
-        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-bl-lg border-b-2 border-l-2 border-transparent hover:border-muted-foreground/50"
+        onKeyDown={onResizeKey("sw")}
+        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-bl-lg border-b-2 border-l-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
-      <div
-        role="separator"
+      <button
+        type="button"
         aria-label={t("recordTour.resizeRight")}
         onPointerDown={onResizeStart("se")}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
-        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-br-lg border-b-2 border-r-2 border-transparent hover:border-muted-foreground/50"
+        onKeyDown={onResizeKey("se")}
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-br-lg border-b-2 border-r-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
     </div>
   );
@@ -894,7 +965,13 @@ interface KeyframeRowProps {
 interface SecondsFieldProps {
   label: string;
   ariaLabel: string;
-  /** The committed value in seconds, used to seed and reset the text. */
+  /**
+   * The committed value in seconds, used to seed and reset the text. The field
+   * is uncontrolled after mount and is NOT re-synced when this prop changes (see
+   * the note in the component). Callers that update the value without otherwise
+   * remounting the field (its row is keyed on the keyframe id) must remount it
+   * themselves so the displayed text stays in sync.
+   */
   valueSeconds: number;
   min: number;
   max: number;
@@ -941,8 +1018,14 @@ function SecondsField({
         disabled={disabled}
         value={text}
         onChange={(event) => {
-          setText(event.target.value);
-          const seconds = Number(event.target.value);
+          const raw = event.target.value;
+          setText(raw);
+          // Don't commit while the field is empty: Number("") is 0, which would
+          // otherwise commit a hold of 0 on every keystroke that clears it (the
+          // Hold min is 0). The value commits on the next valid digit, or on
+          // blur. The empty text is kept locally so the field can be retyped.
+          if (raw === "") return;
+          const seconds = Number(raw);
           if (Number.isFinite(seconds) && seconds >= min && seconds <= max) {
             onCommit(seconds);
           }

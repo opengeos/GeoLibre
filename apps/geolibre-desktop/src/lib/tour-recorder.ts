@@ -366,9 +366,12 @@ export function parseTourConfig(text: string): ParsedTourConfig {
   if (!Array.isArray(obj.keyframes) || obj.keyframes.length === 0) {
     throw new Error("Tour configuration has no keyframes.");
   }
-  if (obj.keyframes.length > MAX_KEYFRAMES) {
+  // Capture the narrowed array so the field-detection closures below keep their
+  // element type (a closure loses the narrowing on the `obj.keyframes` property).
+  const rawKeyframes: unknown[] = obj.keyframes;
+  if (rawKeyframes.length > MAX_KEYFRAMES) {
     throw new Error(
-      `Tour configuration has too many keyframes (${obj.keyframes.length}; max ${MAX_KEYFRAMES}).`,
+      `Tour configuration has too many keyframes (${rawKeyframes.length}; max ${MAX_KEYFRAMES}).`,
     );
   }
   const fps = clampNumber(
@@ -377,24 +380,26 @@ export function parseTourConfig(text: string): ParsedTourConfig {
     MAX_FPS,
   );
   // Read the legacy (v1) format and migrate it to the current hold/transition
-  // model. A file is legacy when it declares version 1, or when it omits the
-  // version but its keyframes carry the old `durationMs` field with neither of
-  // the new `holdMs`/`transitionMs` (so a hand-written current-format file with
-  // no version is still read as v2).
+  // model. `version: 1` is authoritative: a file that declares it takes the
+  // migration path even if some keyframe happens to carry v2 fields (the author
+  // opted into v1 semantics). When the version is omitted, the format is inferred
+  // from the keyframes: legacy only if at least one keyframe has the old
+  // `durationMs` AND none has the new `holdMs`/`transitionMs`. Requiring the
+  // absence of v2 fields means a hand-edited file mixing both formats is read as
+  // v2 (keeping its persisted holds) rather than silently migrated to defaults.
+  const hasField = (name: string) =>
+    rawKeyframes.some(
+      (kf) => kf !== null && typeof kf === "object" && name in kf,
+    );
   const isLegacy =
     obj.version === 1 ||
     (obj.version === undefined &&
-      obj.keyframes.some(
-        (kf) =>
-          kf !== null &&
-          typeof kf === "object" &&
-          "durationMs" in kf &&
-          !("transitionMs" in kf) &&
-          !("holdMs" in kf),
-      ));
+      hasField("durationMs") &&
+      !hasField("transitionMs") &&
+      !hasField("holdMs"));
   const keyframes = isLegacy
-    ? migrateLegacyKeyframes(obj.keyframes)
-    : obj.keyframes.map(parseKeyframe);
+    ? migrateLegacyKeyframes(rawKeyframes)
+    : rawKeyframes.map(parseKeyframe);
   return { fps, keyframes };
 }
 

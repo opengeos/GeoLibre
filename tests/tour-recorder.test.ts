@@ -222,6 +222,56 @@ describe("serializeTourConfig / parseTourConfig", () => {
     assert.equal(config.keyframes[2].holdMs, END_HOLD_MS);
   });
 
+  it("migrates a single-keyframe legacy v1 file (both implicit holds)", () => {
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        version: 1,
+        fps: 30,
+        keyframes: [
+          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 9999 },
+        ],
+      }),
+    );
+    assert.equal(config.keyframes.length, 1);
+    // A lone keyframe is both first and last, so it inherits both implicit holds.
+    assert.equal(config.keyframes[0].holdMs, START_HOLD_MS + END_HOLD_MS);
+    // It has no successor, so the last-keyframe default transition is used.
+    assert.equal(
+      config.keyframes[0].transitionMs,
+      DEFAULT_SEGMENT_SECONDS * 1000,
+    );
+  });
+
+  it("reads a versionless file with mixed legacy/v2 fields as v2", () => {
+    // One keyframe has only durationMs, another has v2 fields. Because a v2
+    // field is present somewhere, the file is read as v2 (not migrated), so the
+    // persisted hold/transition survive and durationMs is simply ignored.
+    const config = parseTourConfig(
+      JSON.stringify({
+        type: TOUR_CONFIG_TYPE,
+        keyframes: [
+          { center: [0, 0], zoom: 1, pitch: 0, bearing: 0, durationMs: 9999 },
+          {
+            center: [1, 1],
+            zoom: 2,
+            pitch: 0,
+            bearing: 0,
+            holdMs: 3000,
+            transitionMs: 7000,
+          },
+        ],
+      }),
+    );
+    assert.equal(config.keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
+    assert.equal(
+      config.keyframes[0].transitionMs,
+      DEFAULT_SEGMENT_SECONDS * 1000,
+    );
+    assert.equal(config.keyframes[1].holdMs, 3000);
+    assert.equal(config.keyframes[1].transitionMs, 7000);
+  });
+
   it("infers the legacy format from durationMs when no version is present", () => {
     const config = parseTourConfig(
       JSON.stringify({
