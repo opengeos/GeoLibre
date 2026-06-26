@@ -130,7 +130,10 @@ export function layerControlPaintToStyle(
     case "fill-color":
     case "circle-color":
       return hex === null ? null : { fillColor: hex };
+    // Both fill-opacity and circle-opacity derive from fillOpacity in
+    // syncLayer (fillPaint/circlePaint), so they round-trip through that field.
     case "fill-opacity":
+    case "circle-opacity":
       return num === null ? null : { fillOpacity: num };
     case "line-color":
     case "fill-outline-color":
@@ -1379,14 +1382,22 @@ export class MapController {
     // layer control's open style editor so edits made elsewhere — e.g. the
     // right-hand Style sidebar — are reflected there too (issue #912). No-op
     // when no editor is open; skips the input the user is actively dragging.
+    //
+    // Invariant: refreshStyleEditor() must NOT fire onLayerStyleChange. If it
+    // did, this path would loop forever (sync → refresh → onLayerStyleChange →
+    // applyLayerControlStyleChange → setLayerStyle → sync → ...). The upstream
+    // library guarantees this by setting input values programmatically, which
+    // does not dispatch an input event.
     this.layerControl?.refreshStyleEditor();
   }
 
   /**
    * Mirror a paint property edited via the layer control's per-layer style
-   * editor into the store. {@code raster-opacity} maps to the layer-level
-   * opacity; everything else maps to {@link LayerStyle} via
-   * {@link layerControlPaintToStyle}. Unmapped properties are ignored.
+   * editor into the store. The per-type opacities that GeoLibre derives
+   * directly from the layer-level opacity (raster/line/text/icon) map to
+   * {@link AppState.setLayerOpacity}; everything else maps to
+   * {@link LayerStyle} via {@link layerControlPaintToStyle}. Unmapped
+   * properties are ignored.
    */
   private applyLayerControlStyleChange(
     layerId: string,
@@ -1394,7 +1405,17 @@ export class MapController {
     value: unknown,
   ): void {
     const store = useAppStore.getState();
-    if (property === "raster-opacity") {
+    // These paint properties equal the layer-level opacity in syncLayer
+    // (rasterPaint/linePaint use it directly; symbol layers set
+    // text-opacity/icon-opacity to it), so an edit to them is an edit to the
+    // layer's opacity. circle-opacity is intentionally *not* here: circlePaint
+    // derives it from fillOpacity, so it maps to that style field instead.
+    if (
+      property === "raster-opacity" ||
+      property === "line-opacity" ||
+      property === "text-opacity" ||
+      property === "icon-opacity"
+    ) {
       if (typeof value === "number") store.setLayerOpacity(layerId, value);
       return;
     }

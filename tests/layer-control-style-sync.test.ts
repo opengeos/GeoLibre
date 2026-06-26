@@ -35,11 +35,10 @@ describe("layerControlPaintToStyle", () => {
     assert.deepEqual(layerControlPaintToStyle("fill-opacity", 0.5), {
       fillOpacity: 0.5,
     });
-    assert.deepEqual(layerControlPaintToStyle("line-color", "#0000ff"), {
-      strokeColor: "#0000ff",
-    });
-    assert.deepEqual(layerControlPaintToStyle("line-width", 3), {
-      strokeWidth: 3,
+    // circle-opacity round-trips through fillOpacity (circlePaint derives it
+    // from that field), same as fill-opacity.
+    assert.deepEqual(layerControlPaintToStyle("circle-opacity", 0.4), {
+      fillOpacity: 0.4,
     });
     assert.deepEqual(layerControlPaintToStyle("circle-radius", 8), {
       circleRadius: 8,
@@ -49,13 +48,37 @@ describe("layerControlPaintToStyle", () => {
     });
   });
 
-  it("returns null for raster-opacity (handled as layer-level opacity, not style)", () => {
+  it("maps every strokeColor / strokeWidth alias (switch fall-through)", () => {
+    assert.deepEqual(layerControlPaintToStyle("line-color", "#0000ff"), {
+      strokeColor: "#0000ff",
+    });
+    assert.deepEqual(layerControlPaintToStyle("fill-outline-color", "#0000ff"), {
+      strokeColor: "#0000ff",
+    });
+    assert.deepEqual(
+      layerControlPaintToStyle("circle-stroke-color", "#0000ff"),
+      { strokeColor: "#0000ff" },
+    );
+    assert.deepEqual(layerControlPaintToStyle("line-width", 3), {
+      strokeWidth: 3,
+    });
+    assert.deepEqual(layerControlPaintToStyle("circle-stroke-width", 2), {
+      strokeWidth: 2,
+    });
+  });
+
+  it("returns null for opacities applied as the layer-level opacity", () => {
+    // raster/line/text/icon opacity equal layer.opacity in syncLayer, so they
+    // are routed to setLayerOpacity by applyLayerControlStyleChange rather than
+    // mapped to a LayerStyle field here.
     assert.equal(layerControlPaintToStyle("raster-opacity", 0.6), null);
+    assert.equal(layerControlPaintToStyle("line-opacity", 0.6), null);
+    assert.equal(layerControlPaintToStyle("text-opacity", 0.6), null);
+    assert.equal(layerControlPaintToStyle("icon-opacity", 0.6), null);
   });
 
   it("returns null for properties GeoLibre's style model does not track", () => {
     assert.equal(layerControlPaintToStyle("line-blur", 2), null);
-    assert.equal(layerControlPaintToStyle("icon-opacity", 0.5), null);
     assert.equal(layerControlPaintToStyle("unknown-prop", 1), null);
   });
 
