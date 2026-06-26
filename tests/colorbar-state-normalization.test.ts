@@ -2,9 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { normalizeColorbarState } from "../packages/plugins/src/plugins/maplibre-components.ts";
 
-// Guards the colorbar `stackOrientation` flag in saved project state:
-// horizontal persists on reopen, and missing/unknown values fall back to
-// vertical for backward compatibility with older projects.
 describe("normalizeColorbarState stackOrientation", () => {
   it("keeps a horizontal stack orientation", () => {
     const normalized = normalizeColorbarState({
@@ -13,6 +10,12 @@ describe("normalizeColorbarState stackOrientation", () => {
       stackOrientation: "horizontal",
     });
     assert.equal(normalized?.stackOrientation, "horizontal");
+  });
+
+  it("returns undefined for null/undefined/non-object input", () => {
+    assert.equal(normalizeColorbarState(null), undefined);
+    assert.equal(normalizeColorbarState(undefined), undefined);
+    assert.equal(normalizeColorbarState("nope"), undefined);
   });
 
   it("defaults missing stack orientation to vertical (backward compat)", () => {

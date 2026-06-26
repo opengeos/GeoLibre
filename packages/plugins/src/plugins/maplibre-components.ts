@@ -1432,6 +1432,7 @@ function normalizeComponentsProjectState(
   };
 }
 
+/** @internal Exported only so the project-state normalizer can be unit-tested. */
 export function normalizeColorbarState(
   state: unknown
 ): ComponentColorbarGuiState | undefined {
