@@ -2,13 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { normalizeColorbarState } from "../packages/plugins/src/plugins/maplibre-components.ts";
 
-/**
- * The colorbar plugin persists a `stackOrientation` flag (vertical vs
- * horizontal stacking) in the saved project state. These tests guard the
- * normalization path that runs on both live control snapshots and deserialized
- * project JSON, so a user's horizontal choice round-trips on reopen and old
- * projects without the field fall back to the previous (vertical) behavior.
- */
+// Guards the colorbar `stackOrientation` flag in saved project state:
+// horizontal persists on reopen, and missing/unknown values fall back to
+// vertical for backward compatibility with older projects.
 describe("normalizeColorbarState stackOrientation", () => {
   it("keeps a horizontal stack orientation", () => {
     const normalized = normalizeColorbarState({
@@ -33,6 +29,15 @@ describe("normalizeColorbarState stackOrientation", () => {
     assert.equal(normalized?.stackOrientation, "vertical");
   });
 
+  it("preserves an explicit vertical stack orientation", () => {
+    const normalized = normalizeColorbarState({
+      visible: true,
+      colorbars: [],
+      stackOrientation: "vertical",
+    });
+    assert.equal(normalized?.stackOrientation, "vertical");
+  });
+
   it("round-trips a horizontal choice through a second normalization", () => {
     const once = normalizeColorbarState({
       visible: true,
@@ -40,7 +45,7 @@ describe("normalizeColorbarState stackOrientation", () => {
         {
           mode: "named",
           colormap: "viridis",
-          customColors: "",
+          customColors: "#440154, #31688e, #21918c, #90d743, #fde725",
           vmin: 0,
           vmax: 100,
           label: "Depth",
