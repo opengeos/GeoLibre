@@ -64,14 +64,20 @@ let ortConfigured = false;
 /**
  * Lazily import and configure `onnxruntime-web`.
  *
+ * Imports the `/wasm` subpath (CPU WASM backend only) rather than the default
+ * entry, which also bundles the ~26 MB WebGPU/jsep WASM. We force the WASM
+ * execution provider anyway, so the WebGPU artifact is dead weight and, being
+ * over Cloudflare Pages' 25 MiB per-file limit, breaks the preview deploy. The
+ * CPU WASM is ~13 MB and stays under that limit.
+ *
  * Forces single-threaded WASM so the runtime never needs `SharedArrayBuffer`
  * (which requires cross-origin isolation headers the dev/web server does not
  * set), and points `wasmPaths` at the CDN so the runtime can fetch its `.wasm`.
  *
  * @returns The configured `onnxruntime-web` module namespace.
  */
-async function loadOrt(): Promise<typeof import("onnxruntime-web")> {
-  const ort = await import("onnxruntime-web");
+async function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
+  const ort = await import("onnxruntime-web/wasm");
   if (!ortConfigured) {
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.wasmPaths = ORT_WASM_BASE;
@@ -364,7 +370,7 @@ export async function detectObjects(
   }
 
   const ort = await loadOrt();
-  let session: import("onnxruntime-web").InferenceSession;
+  let session: import("onnxruntime-web/wasm").InferenceSession;
   try {
     session = await ort.InferenceSession.create(new Uint8Array(modelBytes), {
       executionProviders: ["wasm"],
