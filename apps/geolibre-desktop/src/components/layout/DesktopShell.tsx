@@ -779,7 +779,18 @@ export function DesktopShell({
         ) {
           return;
         }
-        const bytes = await readBytes();
+        // Read the source bytes in their own try so a network/timeout failure
+        // (only reachable for a remote URL) reports a download problem rather
+        // than the misleading "could not convert" message below, which assumes a
+        // conversion was attempted.
+        let bytes: Uint8Array;
+        try {
+          bytes = await readBytes();
+        } catch (error) {
+          console.error("[GeoLibre] Failed to download raster for conversion", error);
+          window.alert(t("raster.rasterDownloadFailed", { name }));
+          return;
+        }
         const info = await readGeoTiffInfo(bytes);
         const samples = info.width * info.height * Math.max(info.bands, 1);
         if (samples > LARGE_RASTER_SAMPLE_LIMIT) {

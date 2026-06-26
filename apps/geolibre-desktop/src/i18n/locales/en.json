@@ -2292,6 +2292,7 @@
   "raster": {
     "cogConvertConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Convert it to a Cloud-Optimized GeoTIFF now and load that?",
     "cogConvertLargeConfirm": "\"{{name}}\" is a large {{width}}×{{height}} GeoTIFF that is not a Cloud-Optimized GeoTIFF. Converting it in the browser may be slow and memory-intensive. Convert and load it anyway?",
-    "cogConvertFailed": "Could not convert \"{{name}}\" to a Cloud-Optimized GeoTIFF. Try converting it with gdal_translate or rio cogeo, then load the result."
+    "cogConvertFailed": "Could not convert \"{{name}}\" to a Cloud-Optimized GeoTIFF. Try converting it with gdal_translate or rio cogeo, then load the result.",
+    "rasterDownloadFailed": "Could not download \"{{name}}\". The server may be slow, unreachable, or blocking cross-origin requests. Check the URL and try again."
   }
 }

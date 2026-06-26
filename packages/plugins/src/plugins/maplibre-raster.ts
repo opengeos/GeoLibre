@@ -518,14 +518,16 @@ function createRasterControl(
     const info = control.getRaster(layerId);
     if (!info || !isNonTiledRasterError(info.error)) return;
     // Re-read the original bytes so the host can convert them to a COG: a local
-    // file from its blob URL, a remote URL by fetching it whole. The remote
-    // fetch only works when the server allows CORS, which it must have already
-    // to get this far (the panel range-fetched the header to detect "not
-    // tiled"); a CORS-less host would have failed earlier with a fetch error.
-    // See opengeos/GeoLibre#916. The explicit per-kind check (rather than a
-    // file/else ternary) means a future source kind without a fetchable URL
-    // bails here instead of silently passing fetch(undefined), which would
-    // request the current page.
+    // file from its blob URL, a remote URL by fetching it whole. In the browser
+    // the remote fetch needs the server to allow CORS, which it normally has
+    // already (the panel range-fetched the header to detect "not tiled"); the
+    // Tauri build can patch the header read to go through Tauri commands, so a
+    // non-CORS URL can still reach here and the fetch below then fails -- it
+    // degrades safely to the host's download-failed message, not a crash. See
+    // opengeos/GeoLibre#916. The explicit per-kind check (rather than a file/else
+    // ternary) means a future source kind without a fetchable URL bails here
+    // instead of silently passing fetch(undefined), which would request the
+    // current page.
     const bytesUrl =
       info.source.kind === "file"
         ? info.source.objectUrl
