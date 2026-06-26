@@ -25,6 +25,7 @@ describe("normalizeHexColor", () => {
     // only renders 3- or 6-digit hex, so it must be rejected here.
     for (const bad of [
       "",
+      "   ",
       "#",
       "nothex",
       "#12",

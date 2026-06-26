@@ -809,8 +809,17 @@ export function SettingsDialog({
   // mirrors the saved color. On commit a valid 3- or 6-digit hex applies and an
   // invalid one is discarded, so the field reverts to the last valid color (#911).
   const [customColorDraft, setCustomColorDraft] = useState<string | null>(null);
+  // Set just before the Escape-triggered blur so the imminent blur discards the
+  // draft instead of committing it: the dialog still closes (its own Escape
+  // handler), but the typed value is cancelled rather than applied on the way out.
+  const skipCustomColorCommitRef = useRef(false);
 
   const commitCustomColorDraft = () => {
+    if (skipCustomColorCommitRef.current) {
+      skipCustomColorCommitRef.current = false;
+      setCustomColorDraft(null);
+      return;
+    }
     if (customColorDraft === null) return;
     const normalized = normalizeHexColor(customColorDraft);
     if (normalized) updateSavedThemeCustomColor(normalized);
@@ -1714,10 +1723,11 @@ export function SettingsDialog({
                           type="text"
                           spellCheck={false}
                           autoComplete="off"
-                          // `#rrggbb` is the longest value this accepts, so cap
-                          // the field rather than let a huge paste sit there
-                          // visually clobbered until blur reverts it.
-                          maxLength={7}
+                          // `#rrggbb` is the longest value this accepts; the
+                          // extra slot lets a paste with one stray leading/
+                          // trailing space survive intact for normalizeHexColor
+                          // to trim, while still capping a runaway paste.
+                          maxLength={8}
                           className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
                           value={
                             customColorDraft ??
@@ -1737,6 +1747,12 @@ export function SettingsDialog({
                               // onBlur applies/reverts the draft, so don't also
                               // commit here and double-write the same value.
                               event.preventDefault();
+                              event.currentTarget.blur();
+                            } else if (event.key === "Escape") {
+                              // Cancel the edit: flag the commit to skip, then
+                              // blur so the value is dropped, not applied. The
+                              // dialog's own Escape handling still closes it.
+                              skipCustomColorCommitRef.current = true;
                               event.currentTarget.blur();
                             }
                           }}
