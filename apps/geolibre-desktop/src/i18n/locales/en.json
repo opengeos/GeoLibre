@@ -1271,6 +1271,7 @@
       "planetaryComputer": "Planetary Computer",
       "earthEngine": "Earth Engine",
       "segmentation": "AI Segmentation",
+      "objectDetection": "Object Detection",
       "toggleControl": "Toggle {{name}} Control",
       "toggleAtmosphereEffects": "Toggle Atmospheric Effects",
       "toggleDirections": "Toggle Directions",
@@ -2018,6 +2019,37 @@
       "troubleshootingTitle": "How to get the server running",
       "stepInstall": "Make sure the GeoLibre server is installed with the segment-geospatial backend enabled, so the segmentation model is available.",
       "stepStartServerDesktop": "Click \"Start server\" above to launch it, then wait a few seconds for the model to come online."
+    }
+  },
+  "objectDetection": {
+    "title": "Object Detection",
+    "description": "Run a YOLO model exported to ONNX over a GeoTIFF, fully in the browser. Detected boxes are georeferenced and each class is added as its own layer.",
+    "hint": "Use a built-in COCO model (downloaded and cached once) or bring your own YOLOv5/v8/v11 ONNX. Detection runs locally in the browser. Built-in models detect everyday objects; for aerial imagery, supply your own overhead-trained model.",
+    "imageLabel": "Image (GeoTIFF)",
+    "imagePlaceholder": "Choose a GeoTIFF…",
+    "chooseImage": "Choose image",
+    "modelLabel": "Model",
+    "modelSourceBuiltin": "Built-in (download)",
+    "modelSourceLocal": "Local file",
+    "builtinModelLabel": "Built-in model",
+    "modelFileLabel": "Model file (ONNX)",
+    "modelPlaceholder": "Choose a .onnx model…",
+    "chooseModel": "Choose model",
+    "downloadingModel": "Downloading model…",
+    "classNamesLabel": "Class names (comma-separated, optional)",
+    "classNamesPlaceholder": "e.g. car, tree, building",
+    "confidenceLabel": "Confidence",
+    "iouLabel": "IoU (NMS)",
+    "inputSizeLabel": "Input size",
+    "detect": "Detect",
+    "noObjects": "No objects detected. Try lowering the confidence threshold.",
+    "added": "Added {{count}} detection(s) across {{classes}} class(es).",
+    "layerName": "Detection: {{class}}",
+    "error": {
+      "chooseImage": "Choose an image (GeoTIFF) to run detection on.",
+      "chooseModel": "Choose a YOLO model exported to ONNX (.onnx).",
+      "downloadModel": "Could not download the model. Check your connection and try again.",
+      "failed": "Detection failed."
     }
   },
   "pluginPanel": {
