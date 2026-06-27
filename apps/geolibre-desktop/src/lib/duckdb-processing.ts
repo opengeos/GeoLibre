@@ -3,7 +3,7 @@ import type {
   DuckDbGeoJsonSource,
 } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
-import { stripReservedFidProperty } from "./duckdb-geojson-fid";
+import { stripAutoFidColumn } from "./duckdb-geometry";
 import {
   ensureH3Extension,
   ensureSpatialExtension,
@@ -39,9 +39,14 @@ export function createDuckDbCapability(): DuckDbCapability {
       const db = await getDatabase();
       counter += 1;
       const name = `__geolibre_geojson_${Date.now()}_${counter}.geojson`;
+      // Drop any reserved OGC_FID property before ST_Read re-reads the file:
+      // a layer from a GDAL export (e.g. a GeoParquet whose columns include
+      // OGC_FID) carries it as a property, and GDAL's GeoJSON driver adds its
+      // own OGC_FID id column, so the read aborts with a duplicate-column
+      // binder error (issues #499, #944).
       await db.registerFileText(
         name,
-        JSON.stringify(stripReservedFidProperty(geojson)),
+        JSON.stringify(stripAutoFidColumn(geojson)),
       );
       return {
         sql: `ST_Read(${quoteSqlString(name)})`,
