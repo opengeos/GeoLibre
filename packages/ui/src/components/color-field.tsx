@@ -76,14 +76,15 @@ export interface ColorFieldProps
   /**
    * When true, a "Transparent" checkbox is shown after the swatch (QGIS-style
    * "no color"). Checking it calls `onChange(TRANSPARENT_COLOR)`; the swatch is
-   * replaced by a checkerboard with a red slash. Unchecking restores the last
-   * opaque color the field held. Use for fill/outline colors where an invisible
+   * overlaid with a checkerboard + red slash that reads as "no color".
+   * Unchecking (or picking a color from the still-clickable swatch/eyedropper)
+   * restores an opaque value. Use for fill/outline colors where an invisible
    * value is meaningful.
    */
   allowTransparent?: boolean;
   /** Label for the transparent checkbox. Pass a `t()` value from app call-sites. */
   transparentLabel?: string;
-  /** Accessible label for the checkerboard "no color" swatch. */
+  /** Tooltip shown on the swatch while transparent. Pass a `t()` value. */
   transparentSwatchLabel?: string;
 }
 
@@ -115,8 +116,13 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
   ) => {
     const transparent = allowTransparent && isTransparentColor(value);
     // Remember the last opaque color so unchecking "Transparent" can restore it
-    // rather than snapping to an arbitrary default.
-    const lastOpaqueRef = React.useRef("#000000");
+    // rather than snapping to an arbitrary default. Seed it from the prop at
+    // mount so a layer that is opaque on first render is captured immediately;
+    // a layer saved as `transparent` has no prior opaque color to remember, so
+    // it falls back to black until the user picks one.
+    const lastOpaqueRef = React.useRef(
+      transparent || !value ? "#000000" : value,
+    );
     if (!transparent && value) lastOpaqueRef.current = value;
     // Feature-detect after mount so the rendered output stays deterministic
     // across environments that prerender the build.
@@ -165,50 +171,53 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
 
     return (
       <div className={cn("flex items-center gap-2", !fill && "inline-flex")}>
-        {transparent ? (
-          // Replace the native swatch (which can only show #rrggbb) with a
-          // checkerboard + red slash that reads as "no color". Clicking it
-          // restores the last opaque color so the user can pick again.
-          <button
-            type="button"
-            onClick={() => setTransparent(false)}
-            disabled={disabled}
-            aria-label={transparentSwatchLabel}
-            title={transparentSwatchLabel}
-            className={cn(
-              "relative h-9 overflow-hidden rounded-md border border-input shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
-              fill ? "flex-1" : "w-14",
-              className,
-            )}
-            style={{
-              backgroundImage:
-                "linear-gradient(45deg, #c4c4c4 25%, transparent 25%), linear-gradient(-45deg, #c4c4c4 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #c4c4c4 75%), linear-gradient(-45deg, transparent 75%, #c4c4c4 75%)",
-              backgroundSize: "8px 8px",
-              backgroundPosition: "0 0, 0 4px, 4px -4px, -4px 0",
-              backgroundColor: "#ffffff",
-            }}
-          >
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0"
-              style={{
-                background:
-                  "linear-gradient(to top right, transparent calc(50% - 1px), #ef4444 calc(50% - 1px), #ef4444 calc(50% + 1px), transparent calc(50% + 1px))",
-              }}
-            />
-          </button>
-        ) : (
+        {/* The native swatch stays mounted even while transparent so the
+            forwarded ref, `id`, and the rest of `...props` (the StylePanel
+            `Label htmlFor` target, ARIA wiring, etc.) always point at a usable
+            control. When transparent it shows the remembered opaque color under
+            a decorative checkerboard + red slash that reads as "no color";
+            since the overlay is pointer-events-none, clicking the swatch (or
+            the eyedropper) still opens the picker and commits a hex, which
+            clears the transparent state. */}
+        <div
+          className={cn(
+            "relative inline-flex",
+            supportsEyeDropper && fill && "flex-1",
+          )}
+        >
           <Input
             ref={ref}
             type="color"
-            value={value}
+            value={transparent ? lastOpaqueRef.current : value}
             disabled={disabled}
+            title={transparent ? transparentSwatchLabel : props.title}
             onChange={(event) => onChange(event.target.value)}
-            className={cn(supportsEyeDropper && fill && "flex-1", className)}
+            className={cn(fill && "w-full", className)}
             {...props}
           />
-        )}
-        {supportsEyeDropper && !transparent ? (
+          {transparent ? (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 overflow-hidden rounded-md border border-input"
+              style={{
+                backgroundColor: "hsl(var(--background))",
+                backgroundImage:
+                  "linear-gradient(45deg, hsl(var(--muted-foreground) / 0.35) 25%, transparent 25%), linear-gradient(-45deg, hsl(var(--muted-foreground) / 0.35) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, hsl(var(--muted-foreground) / 0.35) 75%), linear-gradient(-45deg, transparent 75%, hsl(var(--muted-foreground) / 0.35) 75%)",
+                backgroundSize: "8px 8px",
+                backgroundPosition: "0 0, 0 4px, 4px -4px, -4px 0",
+              }}
+            >
+              <span
+                className="absolute inset-0"
+                style={{
+                  background:
+                    "linear-gradient(to top right, transparent calc(50% - 1px), #ef4444 calc(50% - 1px), #ef4444 calc(50% + 1px), transparent calc(50% + 1px))",
+                }}
+              />
+            </span>
+          ) : null}
+        </div>
+        {supportsEyeDropper ? (
           <button
             type="button"
             onClick={pickFromScreen}
