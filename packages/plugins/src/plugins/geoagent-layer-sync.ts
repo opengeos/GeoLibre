@@ -7,7 +7,7 @@ import type { FeatureCollection } from "geojson";
 
 /**
  * Mirrors the private `Overlay` record kept by MapLibreAgentTools in
- * maplibre-gl-geoagent (verified against v0.4.2). The tools instance exposes
+ * maplibre-gl-geoagent (verified against v0.5.0). The tools instance exposes
  * these through its `overlays` Map; re-verify the shape when bumping the
  * dependency.
  */
