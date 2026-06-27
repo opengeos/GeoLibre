@@ -86,6 +86,12 @@ export interface ColorFieldProps
    * Unchecking (or picking a color from the still-clickable swatch/eyedropper)
    * restores an opaque value. Use for fill/outline colors where an invisible
    * value is meaningful.
+   *
+   * Note: the checkbox is the reliable way to clear transparency. Picking from
+   * the native swatch also clears it, except in the edge case where the user
+   * re-selects the exact remembered color — `<input type="color">` fires no
+   * `change` event when the value is unchanged, so the transparent state would
+   * persist. The checkbox covers that case.
    */
   allowTransparent?: boolean;
   /** Label for the transparent checkbox. Pass a `t()` value from app call-sites. */
@@ -139,16 +145,18 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
     // Remember the last opaque color so unchecking "Transparent" can restore it
     // rather than snapping to an arbitrary default. Seed it from the prop at
     // mount so a layer that is opaque on first render is captured immediately;
-    // a layer saved as `transparent` has no prior opaque color to remember, so
-    // it falls back to `fallbackColor` until the user picks one.
+    // a layer with no prior opaque color (mounted transparent, or empty) falls
+    // back to `fallbackColor` until the user picks one. The guard keys off the
+    // value itself (not the `transparent` flag, which also depends on
+    // `allowTransparent`) so the ref can never hold the transparent sentinel.
     const lastOpaqueRef = React.useRef(
-      transparent || !value ? fallbackColor : value,
+      isTransparentColor(value) || !value ? fallbackColor : value,
     );
     // Keep the remembered color current via an effect rather than a render-time
     // ref write, so a discarded/replayed concurrent render can't double-apply.
     React.useEffect(() => {
-      if (!transparent && value) lastOpaqueRef.current = value;
-    }, [transparent, value]);
+      if (value && !isTransparentColor(value)) lastOpaqueRef.current = value;
+    }, [value]);
     // Feature-detect after mount so the rendered output stays deterministic
     // across environments that prerender the build.
     const [supportsEyeDropper, setSupportsEyeDropper] = React.useState(false);
