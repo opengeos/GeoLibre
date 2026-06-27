@@ -60,6 +60,7 @@ nav:
       - Settings & Preferences: user-guide/settings.md
       - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md
+      - Troubleshooting: user-guide/troubleshooting.md
   - Tutorials:
       - Overview: tutorials/index.md
       - Your First Map: tutorials/first-map.md
