@@ -3,6 +3,7 @@ import type {
   DuckDbGeoJsonSource,
 } from "@geolibre/processing";
 import type { FeatureCollection } from "geojson";
+import { stripReservedFidProperty } from "./duckdb-geojson-fid";
 import {
   ensureH3Extension,
   ensureSpatialExtension,
@@ -38,7 +39,10 @@ export function createDuckDbCapability(): DuckDbCapability {
       const db = await getDatabase();
       counter += 1;
       const name = `__geolibre_geojson_${Date.now()}_${counter}.geojson`;
-      await db.registerFileText(name, JSON.stringify(geojson));
+      await db.registerFileText(
+        name,
+        JSON.stringify(stripReservedFidProperty(geojson)),
+      );
       return {
         sql: `ST_Read(${quoteSqlString(name)})`,
         async release(): Promise<void> {
