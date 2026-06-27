@@ -802,7 +802,14 @@ describe("PluginManager panel auto-expand on restore", () => {
     });
   }
 
-  const flushTimers = () => new Promise((resolve) => setTimeout(resolve, 0));
+  // Drain several macrotask ticks: the re-collapse is double-deferred so it
+  // lands after the plugin's own setTimeout(0) expand, and an async activation
+  // adds another tick before its control even exists.
+  async function flushTimers(times = 4) {
+    for (let i = 0; i < times; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
 
   it("keeps restored plugin panels collapsed", async () => {
     const manager = new PluginManager();
@@ -829,9 +836,52 @@ describe("PluginManager panel auto-expand on restore", () => {
     );
   });
 
+  it("collapses panels added by an async activation", async () => {
+    const manager = new PluginManager();
+    const control = fakeControl();
+    const addMapControl = () => true;
+    const mockApp = { addMapControl } as unknown as GeoLibreAppAPI;
+
+    // A plugin mounted behind a dynamic import: it adds its control (and
+    // auto-expands) only after activate()'s promise has begun resolving, so the
+    // collapse must follow each control rather than fire once after the loop.
+    manager.register(
+      testPlugin({
+        id: "async-basemaps",
+        activate: (api) =>
+          new Promise<void>((resolve) => {
+            setTimeout(() => {
+              api.addMapControl(control as never);
+              setTimeout(() => control.expand(), 0);
+              resolve();
+            }, 0);
+          }),
+      }),
+    );
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["async-basemaps"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      mockApp,
+    );
+
+    await flushTimers();
+    assert.equal(
+      control.collapsed,
+      true,
+      "a panel added by an async activation during restore must end collapsed",
+    );
+  });
+
   it("still expands the panel on a user activation", async () => {
     const manager = new PluginManager();
     const control = fakeControl();
+    // Start collapsed so the assertion only passes if activate() really expands.
+    control.collapsed = true;
     const addMapControl = () => true;
     const mockApp = { addMapControl } as unknown as GeoLibreAppAPI;
     manager.register(panelPlugin("basemaps", control));

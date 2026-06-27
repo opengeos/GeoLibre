@@ -193,7 +193,9 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       // Seed every opacity paint property the layer type fades. When chapter 0
       // assigns this layer an opacity, start there (matching the in-app first
       // frame, #950); otherwise use the style's per-property opacity scaled by
-      // the layer opacity so the export matches what GeoLibre renders. Circles
+      // the layer opacity so the export matches what GeoLibre renders. A chapter
+      // 0 opacity wins outright, including over a hidden layer's 0, exactly as
+      // the in-app presenter's setLayerOpacity overwrites the live value. Circles
       // carry both fill and stroke opacity so a faded point hides fully (#934).
       for (const opacityProp of opacityProperties(entry.layerSpec.type as string)) {
         const styleOpacity =

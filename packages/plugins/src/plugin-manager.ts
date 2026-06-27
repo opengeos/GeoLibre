@@ -363,19 +363,27 @@ export class PluginManager {
     // Plugins pop their control panel open when activated so a user who just
     // enabled one lands in it. On a project restore that is unwanted: a loaded
     // project (e.g. a gallery `?url=` link) would bury the map under every
-    // expanded panel it carries (#952). Collect each control added during the
-    // restore and collapse it immediately (so the first paint is collapsed) and
-    // again on the next tick, after the auto-expand that plugins schedule from
-    // activate() with setTimeout(0) has run.
-    const restoredControls: IControl[] = [];
-    const collapseControl = (control: IControl): void => {
+    // expanded panel it carries (#952). Collapse each control added while
+    // restoring so panels stay closed. This also closes a panel re-added by
+    // setMapControlPosition for an already-active plugin whose saved position
+    // differs, which matches the project-load intent.
+    const collapseRestoredPanel = (control: IControl): void => {
       const collapsible = control as { collapse?: () => void };
       if (typeof collapsible.collapse !== "function") return;
+      // Collapse now so the first paint is collapsed, then again after the
+      // plugin's own auto-expand. Plugins open their panel with a setTimeout(0)
+      // expand from activate(), queued after this control was added, so a single
+      // deferred collapse here would run before that expand and lose; defer twice
+      // so the re-collapse lands after it. Doing this per control (instead of
+      // once after the activate loop) also covers controls a plugin adds
+      // asynchronously while restoring, e.g. behind a dynamic-import mount.
       collapsible.collapse();
-      restoredControls.push(control);
+      setTimeout(() => {
+        setTimeout(() => collapsible.collapse?.(), 0);
+      }, 0);
     };
     const scopeForRestore = (id: string): GeoLibreAppAPI =>
-      scopeAppToPlugin(app, id, { onControlAdded: collapseControl });
+      scopeAppToPlugin(app, id, { onControlAdded: collapseRestoredPanel });
 
     // Deactivate first so plugins that should be inactive tear down their live
     // controls before we touch positions or settings. This keeps the order of
@@ -435,18 +443,6 @@ export class PluginManager {
       // would, so an async mount that later fails (e.g. a stale chunk after a
       // redeploy) must roll back here too, not just from activate().
       this.watchAsyncActivation(id, activated, scopedApp, generation);
-    }
-
-    // Re-collapse after the synchronous restore returns. Plugins schedule their
-    // auto-expand with setTimeout(0) from activate(); this runs after all of
-    // them (it is queued last) so the panels end collapsed even though each one
-    // tried to open itself.
-    if (restoredControls.length > 0) {
-      setTimeout(() => {
-        for (const control of restoredControls) {
-          (control as { collapse?: () => void }).collapse?.();
-        }
-      }, 0);
     }
 
     if (changed) this.notify();
