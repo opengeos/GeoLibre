@@ -6,6 +6,7 @@ import {
 } from "@geolibre/core";
 import type {
   GeoLibreLayer,
+  LayerStyle,
   MapPreferences,
   MapProjection,
   MapViewState,
@@ -91,6 +92,45 @@ const EMPTY_HIGHLIGHT: FeatureCollection = {
 
 function isCustomControllableLayer(layer: GeoLibreLayer): boolean {
   return typeof layer.metadata.customLayerType === "string";
+}
+
+/**
+ * Translate a MapLibre paint property edited in the layer control's per-layer
+ * style editor into a partial {@link LayerStyle} update for the store, so the
+ * floating editor and the right-hand Style sidebar stay in sync (issue #912).
+ *
+ * Scope is deliberately limited to the raster color adjustments, which map
+ * one-to-one to {@link LayerStyle} fields. Vector paint is **not** round-tripped
+ * here: GeoLibre renders vector layers through an expression-based style model
+ * (opacities are scaled by the layer opacity, and width/radius/colors become
+ * `interpolate`/`case` expressions under proportional sizing, the meters width
+ * unit, a data-driven `vectorStyleMode`, or simplestyle). The value the control
+ * reads back is the *rendered* paint, so storing it verbatim would corrupt
+ * those configurations. The control still applies vector edits to the map; the
+ * sidebar Style panel remains the canonical editor for vector symbology.
+ * Layer-level opacity is handled separately — see
+ * {@link MapController.applyLayerControlStyleChange}.
+ */
+export function layerControlPaintToStyle(
+  property: string,
+  value: unknown,
+): Partial<LayerStyle> | null {
+  if (typeof value !== "number") return null;
+
+  switch (property) {
+    case "raster-brightness-min":
+      return { rasterBrightnessMin: value };
+    case "raster-brightness-max":
+      return { rasterBrightnessMax: value };
+    case "raster-saturation":
+      return { rasterSaturation: value };
+    case "raster-contrast":
+      return { rasterContrast: value };
+    case "raster-hue-rotate":
+      return { rasterHueRotate: value };
+    default:
+      return null;
+  }
 }
 
 function nativeLayerSuffix(layerId: string): string | undefined {
@@ -216,6 +256,10 @@ export class MapController {
   private logoControl: maplibregl.LogoControl | null = null;
   private layerControl: LayerControl | null = null;
   private layerControlSignature = "";
+  // True while pushing store paint back into the layer control's open style
+  // editor, so onLayerStyleChange callbacks during that refresh are ignored
+  // (reentrancy guard against a sync loop). See syncLayerControlState.
+  private refreshingStyleEditor = false;
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private basemapVisible = true;
   private basemapOpacity = 1;
@@ -1278,6 +1322,12 @@ export class MapController {
       onBackgroundOpacityChange: (opacity) => {
         useAppStore.getState().setBasemapOpacity(opacity);
       },
+      // The per-layer style editor edits MapLibre paint directly; mirror those
+      // edits into the store (the source of truth) so the right-hand Style
+      // sidebar stays in sync and the change survives the next layer sync.
+      onLayerStyleChange: (layerId, property, value) => {
+        this.applyLayerControlStyleChange(layerId, property, value);
+      },
     });
     this.map.addControl(
       this.layerControl,
@@ -1314,6 +1364,60 @@ export class MapController {
   private syncLayerControlState(): void {
     this.syncLayerControlBackgroundState();
     this.syncLayerControlLayerStates(this.syncedLayers);
+    // Push the latest paint (already applied to the map by syncLayer) into the
+    // layer control's open style editor so edits made elsewhere — e.g. the
+    // right-hand Style sidebar — are reflected there too (issue #912). No-op
+    // when no editor is open; skips the input the user is actively dragging.
+    //
+    // Invariant: refreshStyleEditor() must NOT fire onLayerStyleChange. If it
+    // did, this path would loop forever (sync → refresh → onLayerStyleChange →
+    // applyLayerControlStyleChange → setLayerStyle → sync → ...). The upstream
+    // library guarantees this by setting input values programmatically, which
+    // does not dispatch an input event. The reentrancy guard below is a cheap
+    // defense in case a future upstream version regresses that guarantee.
+    this.refreshingStyleEditor = true;
+    try {
+      this.layerControl?.refreshStyleEditor();
+    } finally {
+      this.refreshingStyleEditor = false;
+    }
+  }
+
+  /**
+   * Mirror a paint property edited via the layer control's per-layer style
+   * editor into the store. The per-type opacities that GeoLibre derives
+   * directly from the layer-level opacity (raster/line/text/icon) map to
+   * {@link AppState.setLayerOpacity}; raster color adjustments map to
+   * {@link LayerStyle} via {@link layerControlPaintToStyle}. Other properties
+   * (vector paint) are ignored — see that helper for why.
+   */
+  private applyLayerControlStyleChange(
+    layerId: string,
+    property: string,
+    value: unknown,
+  ): void {
+    // Ignore callbacks that fire while we are pushing store values back into
+    // the editor; otherwise a misbehaving refresh could create a sync loop.
+    if (this.refreshingStyleEditor) return;
+    const store = useAppStore.getState();
+    // These paint properties equal the layer-level opacity in syncLayer
+    // (rasterPaint/heatmapPaint/linePaint use it directly; symbol layers set
+    // text-opacity/icon-opacity to it), so an edit to them is an edit to the
+    // layer's opacity and round-trips losslessly. fill-opacity/circle-opacity
+    // are deliberately not here: syncLayer scales them by the layer opacity, so
+    // the rendered value the control reports is not the raw style value.
+    if (
+      property === "raster-opacity" ||
+      property === "heatmap-opacity" ||
+      property === "line-opacity" ||
+      property === "text-opacity" ||
+      property === "icon-opacity"
+    ) {
+      if (typeof value === "number") store.setLayerOpacity(layerId, value);
+      return;
+    }
+    const styleUpdate = layerControlPaintToStyle(property, value);
+    if (styleUpdate) store.setLayerStyle(layerId, styleUpdate);
   }
 
   private createLayerControlConfig(
