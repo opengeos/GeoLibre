@@ -1401,13 +1401,14 @@ export class MapController {
     if (this.refreshingStyleEditor) return;
     const store = useAppStore.getState();
     // These paint properties equal the layer-level opacity in syncLayer
-    // (rasterPaint/linePaint use it directly; symbol layers set
+    // (rasterPaint/heatmapPaint/linePaint use it directly; symbol layers set
     // text-opacity/icon-opacity to it), so an edit to them is an edit to the
     // layer's opacity and round-trips losslessly. fill-opacity/circle-opacity
     // are deliberately not here: syncLayer scales them by the layer opacity, so
     // the rendered value the control reports is not the raw style value.
     if (
       property === "raster-opacity" ||
+      property === "heatmap-opacity" ||
       property === "line-opacity" ||
       property === "text-opacity" ||
       property === "icon-opacity"
