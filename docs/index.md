@@ -1,5 +1,5 @@
 ---
-title: GeoLibre
+title: Home
 hide:
   - toc
 ---
