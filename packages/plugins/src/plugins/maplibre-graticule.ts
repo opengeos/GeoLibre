@@ -686,6 +686,10 @@ function buildPanelBody(container: HTMLElement): void {
       const disabled = isDisabled?.() ?? false;
       el.disabled = disabled;
       row.style.opacity = disabled ? "0.5" : "";
+      // The disabled input shows `not-allowed` on its own, but the label text
+      // beside it would otherwise keep the default cursor; set it on the whole
+      // row so hovering anywhere signals the control is inactive.
+      row.style.cursor = disabled ? "not-allowed" : "";
     };
     applyDisabled();
     controls.push(() => {
