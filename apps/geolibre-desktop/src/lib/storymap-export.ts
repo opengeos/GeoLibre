@@ -31,8 +31,12 @@ interface InlineLayerExport {
   layerSpec: Record<string, unknown>;
   /** GeoLibre layer-level opacity, combined with the style's per-geometry one. */
   layerOpacity: number;
-  /** Whether a chapter fades this layer in (so it starts hidden). */
-  fadesIn: boolean;
+  /**
+   * Absolute opacity chapter 0 assigns this layer, or undefined when chapter 0
+   * does not touch it (then the natural opacity applies). Mirrors the in-app
+   * presenter's chapter 0 so the first frame is not blank (#950).
+   */
+  chapterZeroOpacity?: number;
 }
 
 /**
@@ -78,18 +82,27 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
 
   // Only inline layers that are actually referenced by a chapter transition or
   // that are visible GeoJSON layers, so the export stays focused on the story.
-  // `referenced` (enter ∪ exit) drives which layers to inline; only layers a
-  // chapter fades *in* should start hidden, so those are tracked separately.
+  // `referenced` (enter ∪ exit) drives which layers to inline.
   const referenced = new Set<string>();
-  const referencedOnEnter = new Set<string>();
   for (const chapter of storymap.chapters) {
     for (const change of chapter.onChapterEnter) {
       referenced.add(change.layerId);
-      referencedOnEnter.add(change.layerId);
     }
     for (const change of chapter.onChapterExit) {
       referenced.add(change.layerId);
     }
+  }
+
+  // A layer's starting opacity must match what the in-app presenter shows on the
+  // first chapter, which applies chapter 0's onChapterEnter on top of the live
+  // (naturally visible) layers via enterChapter(0). So seed each layer from
+  // chapter 0's opacity if it sets one, and otherwise leave it at its natural
+  // opacity. The previous heuristic started *any* layer a later chapter fades in
+  // at opacity 0, which hid a basemap raster that a chapter fades to 1 until the
+  // reader scrolled to it, leaving the map blank on load (#950).
+  const chapterZeroOpacity = new Map<string, number>();
+  for (const change of storymap.chapters[0].onChapterEnter) {
+    chapterZeroOpacity.set(change.layerId, change.opacity);
   }
 
   const inlineLayers: InlineLayerExport[] = [];
@@ -112,9 +125,9 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       // Hidden layers export fully transparent so the export matches what
       // GeoLibre renders (the opacity slider value alone ignores visibility).
       layerOpacity: layer.visible ? layer.opacity : 0,
-      // Layers a chapter fades in start hidden; exit-only and unreferenced
-      // layers keep their natural opacity so they are visible until faded out.
-      fadesIn: referencedOnEnter.has(layer.id),
+      // Absolute opacity chapter 0 sets for this layer, if any. When present it
+      // overrides the natural opacity below so the first frame matches the app.
+      chapterZeroOpacity: chapterZeroOpacity.get(layer.id),
     });
   }
 
@@ -177,8 +190,9 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     .map((entry) => {
       const sourceId = `${entry.id}-source`;
       const paint = { ...(entry.layerSpec.paint as Record<string, unknown>) };
-      // Seed every opacity paint property the layer type fades: 0 when a chapter
-      // fades the layer in, otherwise the style's per-property opacity scaled by
+      // Seed every opacity paint property the layer type fades. When chapter 0
+      // assigns this layer an opacity, start there (matching the in-app first
+      // frame, #950); otherwise use the style's per-property opacity scaled by
       // the layer opacity so the export matches what GeoLibre renders. Circles
       // carry both fill and stroke opacity so a faded point hides fully (#934).
       for (const opacityProp of opacityProperties(entry.layerSpec.type as string)) {
@@ -186,9 +200,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
           typeof paint[opacityProp] === "number"
             ? (paint[opacityProp] as number)
             : 1;
-        paint[opacityProp] = entry.fadesIn
-          ? 0
-          : styleOpacity * entry.layerOpacity;
+        paint[opacityProp] =
+          entry.chapterZeroOpacity !== undefined
+            ? entry.chapterZeroOpacity
+            : styleOpacity * entry.layerOpacity;
       }
       const spec = {
         ...entry.layerSpec,

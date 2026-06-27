@@ -776,3 +776,73 @@ describe("PluginManager toolbar menu scoping", () => {
     assert.deepEqual(seen, ["settings-menu-plugin"]);
   });
 });
+
+describe("PluginManager panel auto-expand on restore", () => {
+  // A control like the Basemaps panel: starts expanded and pops itself open
+  // (with setTimeout(0), the way the real plugins do) when its plugin activates.
+  function fakeControl() {
+    return {
+      collapsed: false,
+      expand() {
+        this.collapsed = false;
+      },
+      collapse() {
+        this.collapsed = true;
+      },
+    };
+  }
+
+  function panelPlugin(id: string, control: ReturnType<typeof fakeControl>) {
+    return testPlugin({
+      id,
+      activate: (api) => {
+        api.addMapControl(control as never);
+        setTimeout(() => control.expand(), 0);
+      },
+    });
+  }
+
+  const flushTimers = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("keeps restored plugin panels collapsed", async () => {
+    const manager = new PluginManager();
+    const control = fakeControl();
+    const addMapControl = () => true;
+    const mockApp = { addMapControl } as unknown as GeoLibreAppAPI;
+    manager.register(panelPlugin("basemaps", control));
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["basemaps"],
+        mapControlPositions: {},
+        settings: {},
+      },
+      mockApp,
+    );
+
+    await flushTimers();
+    assert.equal(
+      control.collapsed,
+      true,
+      "a project restore must not leave plugin panels expanded over the map",
+    );
+  });
+
+  it("still expands the panel on a user activation", async () => {
+    const manager = new PluginManager();
+    const control = fakeControl();
+    const addMapControl = () => true;
+    const mockApp = { addMapControl } as unknown as GeoLibreAppAPI;
+    manager.register(panelPlugin("basemaps", control));
+
+    manager.activate("basemaps", mockApp);
+
+    await flushTimers();
+    assert.equal(
+      control.collapsed,
+      false,
+      "activating a plugin from the menu should still open its panel",
+    );
+  });
+});
