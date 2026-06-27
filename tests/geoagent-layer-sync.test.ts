@@ -113,6 +113,33 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.deepEqual(layer.metadata.nativeLayerIds, ["ndvi"]);
   });
 
+  it("maps raster and basemap overlays to raster store layers", () => {
+    // raster, basemap, and gee share the single raster-tile branch in
+    // createGeoAgentStoreLayer. Pin that here so a future `kind` added to the
+    // union that should NOT be a raster layer fails visibly instead of silently
+    // falling through to this branch.
+    for (const kind of ["raster", "basemap"] as const) {
+      const layer = createGeoAgentStoreLayer({
+        kind,
+        name: `Overlay ${kind}`,
+        sourceIds: [`${kind}-source`],
+        layerIds: [kind],
+        url: `https://tiles.example.com/${kind}/{z}/{x}/{y}.png`,
+        attribution: "Example",
+      });
+
+      assert.equal(layer.type, "raster");
+      assert.equal(layer.opacity, 1);
+      assert.equal(layer.metadata.identifiable, false);
+      assert.equal(layer.metadata.tileType, "raster");
+      assert.equal(layer.metadata.geoAgentOverlayKind, kind);
+      assert.equal(
+        layer.metadata.tileUrl,
+        `https://tiles.example.com/${kind}/{z}/{x}/{y}.png`,
+      );
+    }
+  });
+
   it("removes store layers whose overlays are gone, leaving others alone", () => {
     useAppStore.getState().addLayer(otherStoreLayer());
     syncGeoAgentOverlaysToStore(overlayMap(geojsonOverlay(), geeOverlay()));
