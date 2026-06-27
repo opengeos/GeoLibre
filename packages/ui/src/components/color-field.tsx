@@ -92,6 +92,13 @@ export interface ColorFieldProps
   transparentLabel?: string;
   /** Tooltip shown on the swatch while transparent. Pass a `t()` value. */
   transparentSwatchLabel?: string;
+  /**
+   * Opaque color restored when the user clears transparency on a field that was
+   * already `TRANSPARENT_COLOR` at mount (no prior opaque color to remember).
+   * Defaults to black; call-sites should pass the domain default (e.g. the
+   * layer style's default fill/stroke color) for a more meaningful restore.
+   */
+  fallbackColor?: string;
 }
 
 /**
@@ -116,6 +123,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       allowTransparent = false,
       transparentLabel = "Transparent",
       transparentSwatchLabel = "No color (transparent). Click to choose a color.",
+      fallbackColor = "#000000",
       // `title`/`name`/`form` are pulled out so they can be applied
       // conditionally below: `title` must win over a forwarded value while
       // transparent, and a `name`d color input would otherwise submit the
@@ -132,9 +140,9 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
     // rather than snapping to an arbitrary default. Seed it from the prop at
     // mount so a layer that is opaque on first render is captured immediately;
     // a layer saved as `transparent` has no prior opaque color to remember, so
-    // it falls back to black until the user picks one.
+    // it falls back to `fallbackColor` until the user picks one.
     const lastOpaqueRef = React.useRef(
-      transparent || !value ? "#000000" : value,
+      transparent || !value ? fallbackColor : value,
     );
     // Keep the remembered color current via an effect rather than a render-time
     // ref write, so a discarded/replayed concurrent render can't double-apply.
@@ -210,6 +218,7 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
               type="hidden"
               name={name}
               form={form}
+              disabled={disabled}
               value={TRANSPARENT_COLOR}
             />
           ) : null}
@@ -221,6 +230,10 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             value={transparent ? lastOpaqueRef.current : value}
             disabled={disabled}
             title={transparent ? transparentSwatchLabel : title}
+            // The swatch shows the remembered opaque color while transparent, so
+            // give assistive tech an accessible name that conveys the "no color"
+            // state instead of letting it announce that opaque value.
+            aria-label={transparent ? transparentSwatchLabel : undefined}
             onChange={(event) => onChange(event.target.value)}
             // `peer` so the overlay (which covers the input's own
             // focus-visible border) can re-expose the focus ring below.

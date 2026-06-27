@@ -103,6 +103,43 @@ describe("vectorColorExpression rule-based mode", () => {
   });
 });
 
+describe("vectorColorExpression with a transparent fallback", () => {
+  it("single mode: passes 'transparent' through as a flat color", () => {
+    assert.equal(
+      vectorColorExpression(style({ vectorStyleMode: "single" }), "transparent"),
+      "transparent",
+    );
+  });
+
+  it("categorized mode: uses 'transparent' as the match fallback", () => {
+    const result = vectorColorExpression(
+      style({
+        vectorStyleMode: "categorized",
+        vectorStyleProperty: "TYPE",
+        vectorStyleStops: [{ value: "park", color: "#00ff00" }],
+      }),
+      "transparent",
+    );
+    assert.deepEqual(result, [
+      "match",
+      ["to-string", ["get", "TYPE"]],
+      "park",
+      "#00ff00",
+      "transparent",
+    ]);
+  });
+
+  it("rule-based mode: uses 'transparent' as the else fallback", () => {
+    assert.equal(
+      vectorColorExpression(
+        style({ vectorStyleMode: "rule-based", vectorRules: [] }),
+        "transparent",
+      ),
+      "transparent",
+    );
+  });
+});
+
 describe("circleRadiusValue proportional sizing", () => {
   it("returns the constant radius when disabled", () => {
     assert.equal(circleRadiusValue(style({ circleRadius: 7 })), 7);

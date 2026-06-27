@@ -2757,6 +2757,7 @@ export function StylePanel({
             value={style.fillColor}
             onChange={(fillColor) => setLayerStyle(layer.id, { fillColor })}
             allowTransparent
+            fallbackColor={DEFAULT_LAYER_STYLE.fillColor}
             transparentLabel={t("style.symbology.transparent")}
             transparentSwatchLabel={t("style.symbology.transparentSwatch")}
           />
@@ -2769,6 +2770,7 @@ export function StylePanel({
           value={style.strokeColor}
           onChange={(strokeColor) => setLayerStyle(layer.id, { strokeColor })}
           allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.strokeColor}
           transparentLabel={t("style.symbology.transparent")}
           transparentSwatchLabel={t("style.symbology.transparentSwatch")}
         />
