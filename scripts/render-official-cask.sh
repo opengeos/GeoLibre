@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 #
-# Render the cask for submission to the official homebrew/homebrew-cask repo.
+# Render the cask for the official homebrew/homebrew-cask repo.
 #
-# Unlike scripts/render-homebrew-cask.sh (which renders the self-hosted-tap cask
-# consumed by the release workflow), this emits the cask intended for the
-# official repository as Casks/g/geolibre.rb. It uses the `arch` helper and a
-# `livecheck` block so Homebrew's BrewTestBot can auto-bump the version on each
-# new GitHub release.
+# GeoLibre is published in the official repository as Casks/g/geolibre.rb, where
+# Homebrew's BrewTestBot auto-bumps the version on each new GitHub release via
+# the `livecheck` block below. Use this script to regenerate that cask (e.g. when
+# editing metadata or re-submitting). Unlike scripts/render-homebrew-cask.sh
+# (which renders the self-hosted-tap fallback consumed by the release workflow),
+# this emits the official cask and uses the `arch` helper.
 #
 # The official tap rejects unsigned/non-notarized apps, so this is only valid
 # for Developer ID signed and notarized DMGs (v1.4.1 and later).

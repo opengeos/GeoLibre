@@ -99,19 +99,17 @@ Prebuilt desktop installers for Linux, Windows, and macOS are published on the
 can install the signed, auto-updating build from the
 [Microsoft Store](https://apps.microsoft.com/detail/9nwt67rv531x), or the
 unsigned GitHub Release build via `winget install OpenGeos.GeoLibre`. On macOS
-you can install and update with Homebrew:
+you can install and update with Homebrew — GeoLibre is in the official
+[Homebrew Cask](https://github.com/Homebrew/homebrew-cask/blob/main/Casks/g/geolibre.rb)
+repository, so no tap is required:
 
 ```bash
-brew tap opengeos/geolibre
-brew trust --cask opengeos/geolibre/geolibre
 brew install --cask geolibre
 ```
 
-`brew trust` is a one-time approval for the non-official tap (skip it on
-Homebrew older than 5.1). The macOS app is signed with an Apple Developer ID
-certificate and notarized by Apple, so it launches normally with no quarantine
-workaround. See [Downloads](docs/downloads.md) for details and the manual
-install steps.
+The macOS app is signed with an Apple Developer ID certificate and notarized by
+Apple, so it launches normally with no quarantine workaround. See
+[Downloads](docs/downloads.md) for details and the manual install steps.
 
 To build from source instead:
 

@@ -3,9 +3,13 @@
 # Render the Homebrew cask for the GeoLibre desktop app.
 #
 # The macOS DMGs are signed with an Apple Developer ID certificate and notarized
-# by Apple, so they install and launch without a quarantine workaround. The cask
-# is distributed from a self-hosted tap because it has not been submitted to the
-# official homebrew/cask repository.
+# by Apple, so they install and launch without a quarantine workaround.
+#
+# GeoLibre is now published in the official homebrew/homebrew-cask repository
+# (Casks/g/geolibre.rb), which is what users install via `brew install --cask
+# geolibre`. This script renders the cask for the self-hosted tap
+# (opengeos/homebrew-geolibre), which is kept as a fallback and updated by the
+# release workflow. See scripts/render-official-cask.sh for the official cask.
 #
 # Usage:
 #   VERSION=1.2.0 \
