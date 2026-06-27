@@ -26,13 +26,34 @@ export interface StoryMapExportOptions {
 
 interface InlineLayerExport {
   id: string;
-  geojson: FeatureCollection;
+  /** MapLibre source spec (a GeoJSON source, or a raster tile source). */
+  source: Record<string, unknown>;
   layerSpec: Record<string, unknown>;
   /** GeoLibre layer-level opacity, combined with the style's per-geometry one. */
   layerOpacity: number;
   /** Whether a chapter fades this layer in (so it starts hidden). */
   fadesIn: boolean;
 }
+
+/**
+ * Minimal blank MapLibre style used when the project has no basemap style URL.
+ *
+ * Basemaps added through the Basemaps plugin are raster *layers* (inlined
+ * below), not a style URL, so the project's `basemapStyleUrl` is empty. Passing
+ * an empty string to MapLibre yields a blank page (#936); a valid blank style
+ * lets the inlined raster basemap and overlays render on top.
+ */
+const BLANK_EXPORT_STYLE: Record<string, unknown> = {
+  version: 8,
+  sources: {},
+  layers: [
+    {
+      id: "background",
+      type: "background",
+      paint: { "background-color": "#ffffff" },
+    },
+  ],
+};
 
 /**
  * Build a self-contained MapLibre storytelling HTML document for a story map.
@@ -73,15 +94,18 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
 
   const inlineLayers: InlineLayerExport[] = [];
   for (const layer of layers) {
-    if (layer.type !== "geojson" || !layer.geojson) continue;
     const isReferenced = referenced.has(layer.id);
     if (!isReferenced && !layer.visible) continue;
-    const layerSpec = buildLayerSpec(layer);
-    if (!layerSpec) continue;
+    // Inline GeoJSON layers and raster tile layers (the latter covers basemaps
+    // added through the Basemaps plugin, which are raster layers rather than a
+    // style URL, #936). Layers iterate in store order, which is bottom-to-top,
+    // so a basemap raster (lower in the array) is added before the overlays.
+    const built = buildInlineLayer(layer);
+    if (!built) continue;
     inlineLayers.push({
       id: layer.id,
-      geojson: layer.geojson,
-      layerSpec,
+      source: built.source,
+      layerSpec: built.layerSpec,
       // Hidden layers export fully transparent so the export matches what
       // GeoLibre renders (the opacity slider value alone ignores visibility).
       layerOpacity: layer.visible ? layer.opacity : 0,
@@ -106,7 +130,10 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
       }));
 
   const config = {
-    style: basemapStyleUrl,
+    // Fall back to a blank style when the project carries no basemap style URL
+    // (e.g. the basemap is a Basemaps-plugin raster layer, inlined above), so
+    // MapLibre renders instead of showing a blank page (#936).
+    style: basemapStyleUrl || BLANK_EXPORT_STYLE,
     projection,
     showMarkers: storymap.showMarkers,
     markerColor: storymap.markerColor,
@@ -147,11 +174,11 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     .map((entry) => {
       const sourceId = `${entry.id}-source`;
       const paint = { ...(entry.layerSpec.paint as Record<string, unknown>) };
-      // Seed the opacity paint property: 0 when a chapter fades the layer in,
-      // otherwise the style's per-geometry opacity scaled by the layer opacity
-      // so the export matches what GeoLibre renders.
-      const opacityProp = opacityProperty(entry.layerSpec.type as string);
-      if (opacityProp) {
+      // Seed every opacity paint property the layer type fades: 0 when a chapter
+      // fades the layer in, otherwise the style's per-property opacity scaled by
+      // the layer opacity so the export matches what GeoLibre renders. Circles
+      // carry both fill and stroke opacity so a faded point hides fully (#934).
+      for (const opacityProp of opacityProperties(entry.layerSpec.type as string)) {
         const styleOpacity =
           typeof paint[opacityProp] === "number"
             ? (paint[opacityProp] as number)
@@ -166,7 +193,7 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
         source: sourceId,
         paint,
       };
-      return `    map.addSource(${jsonForScript(sourceId)}, { type: 'geojson', data: ${jsonForScript(entry.geojson)} });
+      return `    map.addSource(${jsonForScript(sourceId)}, ${jsonForScript(entry.source)});
     map.addLayer(${jsonForScript(spec)});`;
     })
     .join("\n");
@@ -187,19 +214,88 @@ function jsonForScript(value: unknown, space?: number): string {
     .replace(/<!--/g, "<\\!--");
 }
 
-function opacityProperty(type: string): string | null {
+function opacityProperties(type: string): string[] {
   switch (type) {
     case "fill":
-      return "fill-opacity";
+      return ["fill-opacity"];
     case "line":
-      return "line-opacity";
+      return ["line-opacity"];
     case "circle":
-      return "circle-opacity";
+      return ["circle-opacity", "circle-stroke-opacity"];
     case "fill-extrusion":
-      return "fill-extrusion-opacity";
+      return ["fill-extrusion-opacity"];
+    case "raster":
+      return ["raster-opacity"];
     default:
-      return null;
+      return [];
   }
+}
+
+/**
+ * Build the MapLibre source and layer spec for a layer the export inlines.
+ *
+ * Handles in-memory GeoJSON layers and raster tile layers (XYZ basemaps and
+ * services). Returns `null` for layer types the export cannot reproduce
+ * stand-alone (e.g. PMTiles or MBTiles that need GeoLibre's own protocols).
+ */
+function buildInlineLayer(
+  layer: GeoLibreLayer,
+): { source: Record<string, unknown>; layerSpec: Record<string, unknown> } | null {
+  if (layer.type === "geojson" && layer.geojson) {
+    const layerSpec = buildLayerSpec(layer);
+    if (!layerSpec) return null;
+    return {
+      source: { type: "geojson", data: layer.geojson },
+      layerSpec,
+    };
+  }
+  const rasterSource = buildRasterTileSource(layer);
+  if (rasterSource) {
+    return {
+      source: rasterSource,
+      layerSpec: { type: "raster", paint: { "raster-opacity": 1 } },
+    };
+  }
+  return null;
+}
+
+/**
+ * Build a MapLibre raster tile source from a raster/XYZ/WMS/WMTS layer, or
+ * `null` when the layer carries no tile URL template. Mirrors the live app's
+ * external raster tile sync so basemaps and tile services render in the export.
+ */
+function buildRasterTileSource(
+  layer: GeoLibreLayer,
+): Record<string, unknown> | null {
+  if (
+    layer.type !== "raster" &&
+    layer.type !== "xyz" &&
+    layer.type !== "wms" &&
+    layer.type !== "wmts"
+  ) {
+    return null;
+  }
+  const tiles = Array.isArray(layer.source.tiles)
+    ? layer.source.tiles.filter((tile): tile is string => typeof tile === "string")
+    : [];
+  if (tiles.length === 0) return null;
+  const source: Record<string, unknown> = {
+    type: "raster",
+    tiles,
+    tileSize:
+      typeof layer.source.tileSize === "number" ? layer.source.tileSize : 256,
+  };
+  if (typeof layer.source.minzoom === "number") {
+    source.minzoom = layer.source.minzoom;
+  }
+  if (typeof layer.source.maxzoom === "number") {
+    source.maxzoom = layer.source.maxzoom;
+  }
+  if (layer.source.scheme === "tms") source.scheme = "tms";
+  if (typeof layer.source.attribution === "string") {
+    source.attribution = layer.source.attribution;
+  }
+  return source;
 }
 
 /** Pick the dominant (most common) geometry kind for the MapLibre layer type. */
@@ -377,7 +473,7 @@ function renderTemplate(
         var layerTypes = {
             'fill': ['fill-opacity'],
             'line': ['line-opacity'],
-            'circle': ['circle-opacity'],
+            'circle': ['circle-opacity', 'circle-stroke-opacity'],
             'symbol': ['icon-opacity', 'text-opacity'],
             'raster': ['raster-opacity'],
             'fill-extrusion': ['fill-extrusion-opacity'],

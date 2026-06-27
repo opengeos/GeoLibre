@@ -60,7 +60,10 @@ const NON_BASEMAP_STYLE_LAYER_IDS = [
 ];
 const OPACITY_PAINT_PROPERTIES: Record<string, string[]> = {
   background: ["background-opacity"],
-  circle: ["circle-opacity"],
+  // A point's outline fades with its fill so story playback can fully hide a
+  // circle layer; without the stroke property a faded-out point still renders
+  // as a hollow ring (#934).
+  circle: ["circle-opacity", "circle-stroke-opacity"],
   fill: ["fill-opacity"],
   "fill-extrusion": ["fill-extrusion-opacity"],
   heatmap: ["heatmap-opacity"],
@@ -363,6 +366,44 @@ export class MapController {
 
   getMap(): maplibregl.Map | null {
     return this.map;
+  }
+
+  /**
+   * Resolve a layer's rendered GeoJSON from its live MapLibre source.
+   *
+   * The store only keeps inline GeoJSON for layers added from in-memory data;
+   * URL-backed layers (remote GeoJSON, or Parquet/Shapefile converted in the
+   * browser) keep their features only in the MapLibre source. Reading the
+   * source lets callers such as the story-map HTML export inline those features
+   * even when the layer record carries no `geojson`, so the export renders the
+   * same data as the live map (#936).
+   *
+   * @param layerId GeoLibre store layer id.
+   * @returns The source's FeatureCollection, or null when it has none.
+   */
+  async getLayerGeoJson(layerId: string): Promise<FeatureCollection | null> {
+    if (!this.map) return null;
+    const map = this.map;
+    for (const nativeId of this.getNativeLayerIdsByLayerId(layerId)) {
+      const styleLayer = map.getLayer(nativeId);
+      const sourceId =
+        styleLayer && "source" in styleLayer
+          ? (styleLayer as { source?: unknown }).source
+          : undefined;
+      if (typeof sourceId !== "string") continue;
+      const source = map.getSource(sourceId);
+      if (source?.type !== "geojson") continue;
+      try {
+        const data = await (source as maplibregl.GeoJSONSource).getData();
+        if (data && typeof data === "object" && "features" in data) {
+          return data as FeatureCollection;
+        }
+      } catch {
+        // A source still loading (or a URL that failed) has no usable data;
+        // fall through so the export simply omits this layer's features.
+      }
+    }
+    return null;
   }
 
   /**

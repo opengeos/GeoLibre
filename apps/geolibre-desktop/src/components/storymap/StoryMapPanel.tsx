@@ -322,10 +322,24 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
     setExportError(null);
     if (chapters.length === 0) return;
     try {
+      // URL-backed GeoJSON layers (remote GeoJSON, in-browser Parquet/Shapefile
+      // conversion) keep their features only in the live MapLibre source, not in
+      // the store record, so read them back so the export inlines the same data
+      // the map shows instead of dropping the layer (#936).
+      const controller = mapControllerRef.current;
+      const layersForExport = controller
+        ? await Promise.all(
+            layers.map(async (layer) => {
+              if (layer.type !== "geojson" || layer.geojson) return layer;
+              const geojson = await controller.getLayerGeoJson(layer.id);
+              return geojson ? { ...layer, geojson } : layer;
+            }),
+          )
+        : layers;
       const html = buildStoryMapHtml({
         storymap: story,
         basemapStyleUrl,
-        layers,
+        layers: layersForExport,
         projection,
       });
       const slug =
@@ -355,7 +369,15 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         error instanceof Error ? error.message : String(error),
       );
     }
-  }, [basemapStyleUrl, chapters.length, layers, projection, story, t]);
+  }, [
+    basemapStyleUrl,
+    chapters.length,
+    layers,
+    mapControllerRef,
+    projection,
+    story,
+    t,
+  ]);
 
   const handleExportData = useCallback(
     async (format: "json" | "csv") => {
