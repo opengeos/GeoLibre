@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next";
 import { AddDataShellProvider } from "./add-data/context";
 import { KIND_I18N_KEY } from "./add-data/constants";
 import { ArcGISSource } from "./add-data/sources/ArcGISSource";
+import { CadSource } from "./add-data/sources/CadSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
@@ -65,6 +66,8 @@ function renderSource(
       return <GeoRssSource />;
     case "delimited-text":
       return <DelimitedTextSource />;
+    case "cad":
+      return <CadSource />;
     case "photos":
       return <PhotosSource />;
     case "mbtiles":

@@ -59,6 +59,7 @@ export function AddDataMenu({
     vector: { onSelect: addLayer.vector },
     raster: { onSelect: addLayer.raster },
     "delimited-text": { onSelect: () => onSetAddDataKind("delimited-text") },
+    cad: { onSelect: () => onSetAddDataKind("cad") },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },

@@ -126,6 +126,10 @@
         "label": "Add Delimited Text Layer",
         "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields."
       },
+      "cad": {
+        "label": "Add CAD (DXF/DWG) Layer",
+        "description": "Add an AutoCAD DXF or DWG drawing as a vector layer, choosing which layer to load and the coordinate reference system to project it from."
+      },
       "photos": {
         "label": "Add Geotagged Photos",
         "description": "Import JPEG/HEIC photos as a point layer, placing each one from its EXIF GPS location."
@@ -282,6 +286,23 @@
       "url": "GeoRSS URL",
       "file": "GeoRSS file",
       "urlPlaceholder": "https://example.com/feed.atom"
+    },
+    "cad": {
+      "defaultName": "CAD Layer",
+      "fileFilter": "CAD (DXF/DWG)",
+      "layer": "CAD layer",
+      "layerPlaceholder": "Choose a CAD file first",
+      "readingLayers": "Reading layers...",
+      "layerOption": "{{name}} ({{type}}, {{count}} features)",
+      "crs": "Source CRS",
+      "crsPlaceholder": "e.g. EPSG:26915",
+      "crsPresetLabel": "Common coordinate systems...",
+      "crsHelp": "Leave blank if the drawing is already in longitude/latitude (WGS84). Otherwise enter the EPSG code of the drawing's coordinate system to reproject it.",
+      "readError": "Could not read this CAD file.",
+      "errorNoLayers": "No layers were found in this CAD file.",
+      "errorChooseFile": "Choose a CAD (DXF/DWG) file first.",
+      "errorNoLayer": "Select a CAD layer to load.",
+      "errorUnsupportedGeometry": "This CAD layer contains mixed or collection geometry that cannot be displayed. Try another layer."
     },
     "delimitedText": {
       "defaultName": "Delimited Text Layer",
@@ -1475,6 +1496,7 @@
       "sectionDatabases": "Databases",
       "georeferencing": "Georeferencing",
       "vectorLayer": "Vector Layer",
+      "cadLayer": "CAD (DXF/DWG) Layer",
       "rasterLayer": "Raster Layer",
       "osmPbfLayer": "OSM PBF Layer",
       "stacLayer": "STAC Layer",

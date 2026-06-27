@@ -104,6 +104,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   titleKey: ParseKeys;
 }> = [
   { kind: "delimited-text", titleKey: "toolbar.layerType.delimitedText" },
+  { kind: "cad", titleKey: "toolbar.item.cadLayer" },
   { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
   { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
   { kind: "xyz", titleKey: "toolbar.layerType.xyz" },

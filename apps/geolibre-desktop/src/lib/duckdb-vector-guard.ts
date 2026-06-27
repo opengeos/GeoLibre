@@ -38,6 +38,21 @@ export interface DuckDbVectorLoadOptions {
    * single-pass (the extra `COUNT(*)` is only run when a guard is attached).
    */
   onLargeDataset?: (dataset: LargeVectorDataset) => boolean | Promise<boolean>;
+  /**
+   * Read a specific OGR layer from a multi-layer source (e.g. a CAD DWG with
+   * several layers) by passing its name to `ST_Read(..., layer=...)`. When
+   * omitted, `ST_Read` reads the first layer, matching its default. Ignored for
+   * Parquet sources, which have no layer concept.
+   */
+  layer?: string;
+  /**
+   * Treat the source geometry as this CRS (an `AUTHORITY:CODE` string such as
+   * `EPSG:26915`) and reproject it to WGS84, overriding any CRS read from the
+   * file. Used for formats that carry no CRS metadata of their own (CAD
+   * DXF/DWG), where the user supplies the coordinate system. A blank value
+   * falls back to the file's own CRS.
+   */
+  overrideSourceCrs?: string;
 }
 
 /**

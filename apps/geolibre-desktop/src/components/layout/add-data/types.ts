@@ -10,6 +10,7 @@ export type AddDataKind =
   | "gpx"
   | "georss"
   | "delimited-text"
+  | "cad"
   | "photos"
   | "mbtiles"
   | "arcgis"

@@ -204,12 +204,19 @@ async function registerVectorFileBuffers(
   }
 }
 
-function sourceSql(fileName: string, extension: string): string {
+function sourceSql(
+  fileName: string,
+  extension: string,
+  layer?: string,
+): string {
   const quotedName = quoteSqlString(fileName);
   if (isParquetExtension(extension)) {
     return `SELECT * FROM read_parquet(${quotedName})`;
   }
-  return `SELECT * FROM ST_Read(${quotedName})`;
+  // A named layer targets one OGR layer in a multi-layer source (CAD DWG); the
+  // default (no layer=) reads the first layer.
+  const layerArg = layer ? `, layer=${quoteSqlString(layer)}` : "";
+  return `SELECT * FROM ST_Read(${quotedName}${layerArg})`;
 }
 
 /**
@@ -408,7 +415,7 @@ export async function loadDuckDbVectorFile(
       parquetWarmUp(connection, file.extension, file.name),
     );
 
-    const sql = sourceSql(file.name, file.extension);
+    const sql = sourceSql(file.name, file.extension, options.layer);
     const description = rowsFromResult(
       await connection.query(`DESCRIBE ${sql}`),
     );
@@ -426,7 +433,11 @@ export async function loadDuckDbVectorFile(
       await confirmLargeDataset({ name: file.name, featureCount }, options.onLargeDataset);
     }
 
-    const sourceCrs = await readSourceCrs(connection, file);
+    // A caller-supplied CRS (CAD DXF/DWG, which carry none of their own) wins
+    // over the file's metadata; a blank override falls back to the file's CRS.
+    const sourceCrs =
+      options.overrideSourceCrs?.trim() ||
+      (await readSourceCrs(connection, file));
     const geometryJsonSql = geometryGeoJsonSql(
       geometryExpr(detected),
       sourceCrs,
@@ -439,6 +450,60 @@ export async function loadDuckDbVectorFile(
     // Features may carry a null geometry; the app's layer model treats them as
     // a regular FeatureCollection and the map ignores null geometries.
     return toFeatureCollection(rowsFromResult(result)) as FeatureCollection;
+  } finally {
+    await connection.close();
+  }
+}
+
+/** One OGR layer in a multi-layer source, as reported by `ST_Read_Meta`. */
+export interface CadLayerInfo {
+  /** The OGR layer name, passed to `ST_Read(..., layer=...)` to read it. */
+  name: string;
+  /** Feature count GDAL reports for the layer. */
+  featureCount: number;
+  /** The layer's first geometry field type (e.g. `Line String`), or "". */
+  geometryType: string;
+}
+
+/**
+ * List the OGR layers in a CAD (DXF/DWG) file via `ST_Read_Meta`, so the Add CAD
+ * Layer dialog can let the user choose which one to load. DXF exposes a single
+ * `entities` layer; DWG drawings are usually multi-layer. The reported layers
+ * include ones whose geometry `ST_Read` cannot decode (e.g. Geometry
+ * Collection); the load surfaces that per-layer rather than hiding the layer
+ * here, since the count and type are still useful context.
+ *
+ * @param file The CAD file (bytes + name + extension) to inspect.
+ * @returns One {@link CadLayerInfo} per layer, in the file's layer order.
+ */
+export async function readCadLayers(
+  file: DuckDbVectorFile,
+): Promise<CadLayerInfo[]> {
+  const db = await getDatabase();
+  const connection = await db.connect();
+  try {
+    await registerVectorFileBuffers(db, file);
+    await ensureSpatialExtension(connection);
+    const rows = rowsFromResult(
+      await connection.query(
+        `SELECT
+           l.name AS name,
+           l.feature_count AS feature_count,
+           l.geometry_fields[1].type AS geom_type
+         FROM (
+           SELECT UNNEST(layers) AS l
+           FROM ST_Read_Meta(${quoteSqlString(file.name)})
+         )`,
+      ),
+    );
+    return rows.map((row) => ({
+      name: String(row.name ?? ""),
+      featureCount:
+        typeof row.feature_count === "bigint"
+          ? Number(row.feature_count)
+          : Number(row.feature_count ?? 0),
+      geometryType: typeof row.geom_type === "string" ? row.geom_type : "",
+    }));
   } finally {
     await connection.close();
   }

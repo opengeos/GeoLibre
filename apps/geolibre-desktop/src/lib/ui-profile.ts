@@ -86,6 +86,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "vector", section: "files", labelKey: "toolbar.item.vectorLayer", tier: "basic" },
   { id: "raster", section: "files", labelKey: "toolbar.item.rasterLayer", tier: "basic" },
   { id: "delimited-text", section: "files", labelKey: "toolbar.layerType.delimitedText", tier: "basic" },
+  { id: "cad", section: "files", labelKey: "toolbar.item.cadLayer", tier: "intermediate" },
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
   { id: "mbtiles", section: "files", labelKey: "toolbar.layerType.mbtiles", tier: "basic" },

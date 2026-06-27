@@ -22,6 +22,7 @@ export type KindI18nKey =
   | "gpx"
   | "georss"
   | "delimitedText"
+  | "cad"
   | "photos"
   | "mbtiles"
   | "arcgis"
@@ -42,6 +43,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   gpx: "gpx",
   georss: "georss",
   "delimited-text": "delimitedText",
+  cad: "cad",
   photos: "photos",
   mbtiles: "mbtiles",
   arcgis: "arcgis",
@@ -97,6 +99,20 @@ export const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
 // service-library.ts). Bumping the key would orphan a user's saved services.
 export const SERVICE_LIBRARY_STORAGE_KEY = "geolibre.serviceLibrary";
 export const MAX_SAVED_SERVICES = 200;
+// A short list of common coordinate systems offered as quick presets in the Add
+// CAD Layer dialog (CAD files carry no CRS of their own, so the user names one).
+// The labels are CRS proper names and stay untranslated; selecting one fills the
+// free-text EPSG field, which remains the source of truth.
+export const CAD_CRS_PRESETS: readonly { label: string; value: string }[] = [
+  { label: "WGS 84 (EPSG:4326)", value: "EPSG:4326" },
+  { label: "Web Mercator (EPSG:3857)", value: "EPSG:3857" },
+  { label: "NAD83 (EPSG:4269)", value: "EPSG:4269" },
+  { label: "NAD83 / UTM zone 15N (EPSG:26915)", value: "EPSG:26915" },
+  { label: "NAD83 / Conus Albers (EPSG:5070)", value: "EPSG:5070" },
+  { label: "British National Grid (EPSG:27700)", value: "EPSG:27700" },
+  { label: "ETRS89 / UTM zone 32N (EPSG:25832)", value: "EPSG:25832" },
+];
+
 export const DELIMITED_TEXT_DELIMITERS: Record<
   Exclude<DelimitedTextDelimiter, "custom">,
   string
