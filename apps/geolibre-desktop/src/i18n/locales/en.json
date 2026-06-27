@@ -2,7 +2,7 @@
   "about": {
     "trigger": "About",
     "title": "About GeoLibre",
-    "description": "GeoLibre is a lightweight cloud-native desktop GIS.",
+    "description": "GeoLibre is a lightweight cloud-native GIS platform.",
     "version": "Version",
     "checkForUpdates": "Check for updates",
     "tryAgain": "Try again",
@@ -1295,6 +1295,8 @@
       "switchToLight": "Switch to Light Mode",
       "switchToDark": "Switch to Dark Mode",
       "keyboardShortcuts": "Keyboard Shortcuts",
+      "website": "Website",
+      "documentation": "Documentation",
       "diagnostics": "Diagnostics",
       "giveFeedback": "Give Feedback",
       "checkForUpdates": "Check for Updates",

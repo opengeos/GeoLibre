@@ -8,8 +8,10 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import {
+  BookOpen,
   Bug,
   CircleHelp,
+  Globe,
   Info,
   Keyboard,
   MessageSquare,
@@ -19,7 +21,13 @@ import {
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
-import { FEEDBACK_URL, openExternalLink, type ToolbarChrome } from "./constants";
+import {
+  DOCUMENTATION_URL,
+  FEEDBACK_URL,
+  openExternalLink,
+  type ToolbarChrome,
+  WEBSITE_URL,
+} from "./constants";
 
 interface HelpMenuProps {
   chrome: ToolbarChrome;
@@ -74,6 +82,23 @@ export function HelpMenu({
           </DropdownMenuItem>
         )}
         {(show("help.commandPalette") || show("help.keyboardShortcuts")) && (
+          <DropdownMenuSeparator />
+        )}
+        {show("help.website") && (
+          <DropdownMenuItem onSelect={() => void openExternalLink(WEBSITE_URL)}>
+            <Globe className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.website")}
+          </DropdownMenuItem>
+        )}
+        {show("help.documentation") && (
+          <DropdownMenuItem
+            onSelect={() => void openExternalLink(DOCUMENTATION_URL)}
+          >
+            <BookOpen className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.documentation")}
+          </DropdownMenuItem>
+        )}
+        {(show("help.website") || show("help.documentation")) && (
           <DropdownMenuSeparator />
         )}
         {show("help.diagnostics") && (

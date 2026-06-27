@@ -36,6 +36,7 @@ import { Button, cn, Input } from "@geolibre/ui";
 import {
   ArrowLeft,
   ArrowRight,
+  BookOpen,
   Bug,
   Compass,
   Crosshair,
@@ -47,6 +48,7 @@ import {
   FilePlus2,
   Folder,
   FolderOpen,
+  Globe,
   Info,
   Keyboard,
   Link2,
@@ -121,6 +123,7 @@ import {
   ALL_BUILT_IN_CONTROL_IDS,
   type AddLayerHandlers,
   CONVERSION_COMMANDS,
+  DOCUMENTATION_URL,
   FEEDBACK_URL,
   MAP_CONTROL_ITEMS,
   NEW_PROJECT_VISIBLE_BUILT_IN_CONTROLS,
@@ -130,6 +133,7 @@ import {
   type ToolbarChrome,
   type ToolbarMapControl,
   VECTOR_TOOL_COMMANDS,
+  WEBSITE_URL,
 } from "./toolbar/constants";
 
 interface TopToolbarProps {
@@ -775,6 +779,22 @@ export function TopToolbar({
       keywords: "hotkeys cheat sheet",
       icon: Keyboard,
       run: () => setShortcutsOpen(true),
+    },
+    {
+      id: "help.website",
+      title: t("toolbar.command.website"),
+      group: t("toolbar.commandGroup.help"),
+      keywords: "home page site geolibre.app",
+      icon: Globe,
+      run: () => void openExternalLink(WEBSITE_URL),
+    },
+    {
+      id: "help.documentation",
+      title: t("toolbar.command.documentation"),
+      group: t("toolbar.commandGroup.help"),
+      keywords: "docs guide user guide help manual",
+      icon: BookOpen,
+      run: () => void openExternalLink(DOCUMENTATION_URL),
     },
     {
       id: "help.diagnostics",
