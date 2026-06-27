@@ -3,6 +3,19 @@ import { Pipette } from "lucide-react";
 import { cn } from "../lib/utils";
 import { Input } from "./input";
 
+/**
+ * The sentinel value a {@link ColorField} stores when its transparent toggle is
+ * on. It is the CSS/MapLibre `transparent` keyword, so it flows straight through
+ * to paint properties (an invisible fill/outline) and round-trips through the
+ * project format as a plain string.
+ */
+export const TRANSPARENT_COLOR = "transparent";
+
+/** Whether a color value is the {@link TRANSPARENT_COLOR} sentinel. */
+export function isTransparentColor(value: string): boolean {
+  return value.trim().toLowerCase() === TRANSPARENT_COLOR;
+}
+
 // The EyeDropper API is not yet part of TypeScript's DOM lib, so declare the
 // minimal surface we use. Unlike the native color input's built-in eyedropper
 // (whose magnifier can render *behind* the picker popup in some browsers), the
@@ -60,6 +73,18 @@ export interface ColorFieldProps
   className?: string;
   /** Classes sizing the eyedropper button; match the swatch for compact rows. */
   buttonClassName?: string;
+  /**
+   * When true, a "Transparent" checkbox is shown after the swatch (QGIS-style
+   * "no color"). Checking it calls `onChange(TRANSPARENT_COLOR)`; the swatch is
+   * replaced by a checkerboard with a red slash. Unchecking restores the last
+   * opaque color the field held. Use for fill/outline colors where an invisible
+   * value is meaningful.
+   */
+  allowTransparent?: boolean;
+  /** Label for the transparent checkbox. Pass a `t()` value from app call-sites. */
+  transparentLabel?: string;
+  /** Accessible label for the checkerboard "no color" swatch. */
+  transparentSwatchLabel?: string;
 }
 
 /**
@@ -81,10 +106,18 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       eyedropperLabel = "Pick a color from the screen",
       fill = true,
       buttonClassName = "h-9 w-9",
+      allowTransparent = false,
+      transparentLabel = "Transparent",
+      transparentSwatchLabel = "No color (transparent). Click to choose a color.",
       ...props
     },
     ref,
   ) => {
+    const transparent = allowTransparent && isTransparentColor(value);
+    // Remember the last opaque color so unchecking "Transparent" can restore it
+    // rather than snapping to an arbitrary default.
+    const lastOpaqueRef = React.useRef("#000000");
+    if (!transparent && value) lastOpaqueRef.current = value;
     // Feature-detect after mount so the rendered output stays deterministic
     // across environments that prerender the build.
     const [supportsEyeDropper, setSupportsEyeDropper] = React.useState(false);
@@ -122,18 +155,60 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       }
     }, [onChange, onCommit]);
 
+    const setTransparent = React.useCallback(
+      (next: boolean) => {
+        onChange(next ? TRANSPARENT_COLOR : lastOpaqueRef.current);
+        onCommit?.();
+      },
+      [onChange, onCommit],
+    );
+
     return (
       <div className={cn("flex items-center gap-2", !fill && "inline-flex")}>
-        <Input
-          ref={ref}
-          type="color"
-          value={value}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-          className={cn(supportsEyeDropper && fill && "flex-1", className)}
-          {...props}
-        />
-        {supportsEyeDropper ? (
+        {transparent ? (
+          // Replace the native swatch (which can only show #rrggbb) with a
+          // checkerboard + red slash that reads as "no color". Clicking it
+          // restores the last opaque color so the user can pick again.
+          <button
+            type="button"
+            onClick={() => setTransparent(false)}
+            disabled={disabled}
+            aria-label={transparentSwatchLabel}
+            title={transparentSwatchLabel}
+            className={cn(
+              "relative h-9 overflow-hidden rounded-md border border-input shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+              fill ? "flex-1" : "w-14",
+              className,
+            )}
+            style={{
+              backgroundImage:
+                "linear-gradient(45deg, #c4c4c4 25%, transparent 25%), linear-gradient(-45deg, #c4c4c4 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #c4c4c4 75%), linear-gradient(-45deg, transparent 75%, #c4c4c4 75%)",
+              backgroundSize: "8px 8px",
+              backgroundPosition: "0 0, 0 4px, 4px -4px, -4px 0",
+              backgroundColor: "#ffffff",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "linear-gradient(to top right, transparent calc(50% - 1px), #ef4444 calc(50% - 1px), #ef4444 calc(50% + 1px), transparent calc(50% + 1px))",
+              }}
+            />
+          </button>
+        ) : (
+          <Input
+            ref={ref}
+            type="color"
+            value={value}
+            disabled={disabled}
+            onChange={(event) => onChange(event.target.value)}
+            className={cn(supportsEyeDropper && fill && "flex-1", className)}
+            {...props}
+          />
+        )}
+        {supportsEyeDropper && !transparent ? (
           <button
             type="button"
             onClick={pickFromScreen}
@@ -147,6 +222,18 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
           >
             <Pipette className="h-4 w-4" aria-hidden="true" />
           </button>
+        ) : null}
+        {allowTransparent ? (
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground select-none">
+            <input
+              type="checkbox"
+              checked={transparent}
+              disabled={disabled}
+              onChange={(event) => setTransparent(event.target.checked)}
+              className="h-3.5 w-3.5 cursor-pointer accent-primary disabled:cursor-not-allowed"
+            />
+            {transparentLabel}
+          </label>
         ) : null}
       </div>
     );

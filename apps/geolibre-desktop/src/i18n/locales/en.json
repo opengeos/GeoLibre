@@ -2214,7 +2214,9 @@
         "vertical": "Vertical lines",
         "dots": "Dots",
         "svg": "Custom SVG"
-      }
+      },
+      "transparent": "Transparent",
+      "transparentSwatch": "No color (transparent). Click to choose a color."
     }
   },
   "layers": {

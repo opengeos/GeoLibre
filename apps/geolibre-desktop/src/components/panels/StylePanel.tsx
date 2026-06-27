@@ -2756,6 +2756,9 @@ export function StylePanel({
             id="fillColor"
             value={style.fillColor}
             onChange={(fillColor) => setLayerStyle(layer.id, { fillColor })}
+            allowTransparent
+            transparentLabel={t("style.symbology.transparent")}
+            transparentSwatchLabel={t("style.symbology.transparentSwatch")}
           />
         </div>
       ) : null}
@@ -2765,6 +2768,9 @@ export function StylePanel({
           id="strokeColor"
           value={style.strokeColor}
           onChange={(strokeColor) => setLayerStyle(layer.id, { strokeColor })}
+          allowTransparent
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
         />
       </div>
       <NumericStyleInput
