@@ -877,6 +877,53 @@ describe("PluginManager panel auto-expand on restore", () => {
     );
   });
 
+  it("collapses a panel re-added when a restored position differs", async () => {
+    const manager = new PluginManager();
+    const control = fakeControl();
+    let currentPosition = "top-right";
+    const addMapControl = () => true;
+    const mockApp = { addMapControl } as unknown as GeoLibreAppAPI;
+
+    // A plugin whose saved position differs from the live one: restore calls
+    // setMapControlPosition, which re-adds (and re-expands) the control. That
+    // re-add must go through the restore collapse too, not just activate().
+    manager.register(
+      testPlugin({
+        id: "positioned-plugin",
+        activate: (api) => {
+          api.addMapControl(control as never, "top-right" as never);
+          setTimeout(() => control.expand(), 0);
+        },
+        getMapControlPosition: () => currentPosition as never,
+        setMapControlPosition: (api, position) => {
+          currentPosition = position;
+          api.addMapControl(control as never, position);
+          setTimeout(() => control.expand(), 0);
+        },
+      }),
+    );
+
+    manager.activate("positioned-plugin", mockApp);
+    await flushTimers();
+
+    manager.restoreProjectState(
+      {
+        manifestUrls: [],
+        activePluginIds: ["positioned-plugin"],
+        mapControlPositions: { "positioned-plugin": "bottom-left" as never },
+        settings: {},
+      },
+      mockApp,
+    );
+
+    await flushTimers();
+    assert.equal(
+      control.collapsed,
+      true,
+      "a panel re-added by a position change during restore must stay collapsed",
+    );
+  });
+
   it("still expands the panel on a user activation", async () => {
     const manager = new PluginManager();
     const control = fakeControl();

@@ -581,6 +581,13 @@ export interface GeoLibrePlugin {
    * that resolves to `false` (or rejects) when the mount ultimately fails; the
    * host then rolls back the optimistic active state so the Plugins menu does
    * not show a plugin that never came up.
+   *
+   * If a plugin auto-opens its control panel on activation, expand it with a
+   * `setTimeout(() => control.expand(), 0)` (the convention every built-in
+   * control follows). On a project restore the host re-collapses panels one
+   * tick after that expand so a loaded project does not bury the map (#952);
+   * deferring the expand by more than one tick would defeat that and leave the
+   * panel open after restore.
    */
   activate: (app: GeoLibreAppAPI) => boolean | void | Promise<boolean | void>;
   deactivate: (app: GeoLibreAppAPI) => void;
