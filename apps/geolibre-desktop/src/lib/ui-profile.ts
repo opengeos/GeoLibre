@@ -287,7 +287,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "help.commandPalette", menuId: "help", labelKey: "toolbar.item.commandPalette", tier: "basic" },
   { id: "help.keyboardShortcuts", menuId: "help", labelKey: "toolbar.command.keyboardShortcuts", tier: "intermediate" },
   { id: "help.website", menuId: "help", labelKey: "toolbar.command.website", tier: "basic" },
-  { id: "help.documentation", menuId: "help", labelKey: "toolbar.command.documentation", tier: "basic" },
+  { id: "help.github", menuId: "help", labelKey: "toolbar.command.githubRepository", tier: "basic" },
   { id: "help.diagnostics", menuId: "help", labelKey: "toolbar.command.diagnostics", tier: "advanced" },
   { id: "help.feedback", menuId: "help", labelKey: "toolbar.command.giveFeedback", tier: "intermediate" },
   { id: "help.checkForUpdates", menuId: "help", labelKey: "toolbar.command.checkForUpdates", tier: "intermediate" },

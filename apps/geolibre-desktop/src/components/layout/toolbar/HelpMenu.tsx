@@ -8,9 +8,9 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import {
-  BookOpen,
   Bug,
   CircleHelp,
+  FolderGit2,
   Globe,
   Info,
   Keyboard,
@@ -22,8 +22,8 @@ import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import {
-  DOCUMENTATION_URL,
   FEEDBACK_URL,
+  GITHUB_URL,
   openExternalLink,
   type ToolbarChrome,
   WEBSITE_URL,
@@ -90,17 +90,17 @@ export function HelpMenu({
             {t("toolbar.command.website")}
           </DropdownMenuItem>
         )}
-        {show("help.documentation") && (
-          <DropdownMenuItem
-            onSelect={() => void openExternalLink(DOCUMENTATION_URL)}
-          >
-            <BookOpen className="mr-2 h-3.5 w-3.5" />
-            {t("toolbar.command.documentation")}
+        {show("help.github") && (
+          <DropdownMenuItem onSelect={() => void openExternalLink(GITHUB_URL)}>
+            <FolderGit2 className="mr-2 h-3.5 w-3.5" />
+            {t("toolbar.command.githubRepository")}
           </DropdownMenuItem>
         )}
-        {(show("help.website") || show("help.documentation")) && (
-          <DropdownMenuSeparator />
-        )}
+        {(show("help.website") || show("help.github")) &&
+          (show("help.diagnostics") ||
+            show("help.feedback") ||
+            show("help.checkForUpdates") ||
+            show("help.about")) && <DropdownMenuSeparator />}
         {show("help.diagnostics") && (
           <DropdownMenuItem onSelect={onOpenDiagnostics}>
             <Bug className="mr-2 h-3.5 w-3.5" />

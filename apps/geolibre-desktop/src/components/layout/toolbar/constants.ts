@@ -89,7 +89,7 @@ export const PLUGIN_POSITION_ITEMS: Array<{
 
 export const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
 export const WEBSITE_URL = "https://geolibre.app";
-export const DOCUMENTATION_URL = "https://geolibre.app/user-guide/interface/";
+export const GITHUB_URL = "https://github.com/opengeos/GeoLibre";
 // A small (~350 KB) CORS-enabled Las Vegas Strip sample, so the URL field works
 // out of the box on both the desktop and web builds.
 export const DEFAULT_OSM_PBF_URL =
