@@ -3002,8 +3002,10 @@ export function StylePanel({
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-        <ScrollArea className="flex-1 p-3">
-          <div className="space-y-4">
+        <ScrollArea className="flex-1">
+          {/* Padding on the inner content with extra right clearance so the
+              overlay scrollbar never covers a control's right edge. */}
+          <div className="space-y-4 p-3 pr-5">
             {beforeIdControl}
             {zoomRangeControls}
             <RasterStyleSlider
@@ -3179,8 +3181,11 @@ export function StylePanel({
           <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
-      <ScrollArea className="flex-1 p-3">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1">
+        {/* Padding lives on the inner content (not the ScrollArea root) with
+            extra right clearance so the overlay scrollbar never covers the
+            right edge of a control (e.g. the "Transparent" label). */}
+        <div className="space-y-4 p-3 pr-5">
           {beforeIdControl}
           {zoomRangeControls}
           {hasExtrusionControls && (
