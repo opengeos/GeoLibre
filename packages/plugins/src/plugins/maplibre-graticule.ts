@@ -671,8 +671,9 @@ function buildPanelBody(container: HTMLElement): void {
       const v = Number(el.value);
       if (Number.isFinite(v)) set(v);
     });
-    // Pressing Enter commits the value (via the change event above) and then
-    // releases focus, so map navigation hotkeys are not trapped in the field.
+    // Pressing Enter releases focus; the resulting blur fires the change event
+    // above, which commits the value, so map navigation hotkeys are no longer
+    // trapped in the field.
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") el.blur();
     });
