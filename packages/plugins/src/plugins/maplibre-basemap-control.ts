@@ -157,6 +157,9 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
     unregisterAllRasterBasemaps(app);
     app.removeMapControl(basemapControl);
     basemapControl = null;
+    // Drop any pending style-failure fallback so a later reactivation cannot
+    // act on it against a fresh control instance.
+    styleChangeFallback = null;
   },
   getMapControlPosition: () => basemapControlPosition,
   setMapControlPosition: (
@@ -251,6 +254,10 @@ function handleBasemapChange(
 ): void {
   // Narrows the BasemapControlEventPayload union so event.basemap is accessible.
   if (event.type !== "basemapchange") return;
+  // Any fresh user selection (a different style, or a raster overlay) supersedes
+  // a pending style-failure fallback, so drop it here before the early returns
+  // below. The control's own rollback carries `restored` and must keep it.
+  if (!event.restored) styleChangeFallback = null;
   const { source } = event.basemap;
   if (source.type === "raster") {
     registerRasterBasemap(app, event.basemap, event);
