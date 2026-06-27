@@ -102,19 +102,26 @@ let restorePanelExpandTimeout: number | null = null;
 let rasterControlInterleaved = true;
 
 /**
- * Details of a local raster that the panel could not render because it is a
- * striped (non-tiled) GeoTIFF rather than a tiled COG. Passed to a host handler
- * registered via {@link setNonTiledRasterHandler}, which can offer to convert it
- * to a COG (the conversion + UI live in the app layer, which has i18n and the
- * client-side converter; this framework-agnostic package only detects the case).
+ * Details of a raster that the panel could not render because it is a striped
+ * (non-tiled) GeoTIFF rather than a tiled COG. Covers both a local file and a
+ * remote URL. Passed to a host handler registered via
+ * {@link setNonTiledRasterHandler}, which can offer to convert it to a COG (the
+ * conversion + UI live in the app layer, which has i18n and the client-side
+ * converter; this framework-agnostic package only detects the case).
  */
 export interface NonTiledRasterRequest {
   /** The failed layer's id. */
   layerId: string;
   /** The failed layer's display name (used for the converted layer too). */
   name: string;
-  /** Reads the original uploaded bytes. Must be awaited before {@link dismiss},
-   * which revokes the underlying blob URL. */
+  /** Whether {@link readBytes} streams a full file over the network (a remote
+   * URL source) rather than resolving instantly from a local blob URL. The host
+   * uses this to confirm with the user *before* a potentially large download
+   * starts, instead of after. */
+  bytesAreRemote: boolean;
+  /** Reads the original bytes (a local file from its blob URL, or a remote URL
+   * fetched whole). Must be awaited before {@link dismiss}, which revokes a
+   * local file's blob URL. */
   readBytes: () => Promise<Uint8Array>;
   /** Removes the failed layer from the map and the store. */
   dismiss: () => void;
@@ -128,11 +135,20 @@ let nonTiledRasterHandler: NonTiledRasterHandler | null = null;
 // Layer ids currently being handled, so a repeated 'error' event for the same
 // failed layer does not prompt twice.
 const nonTiledInFlight = new Set<string>();
+// Cap the whole-file fetch of a remote striped GeoTIFF so a slow or stalled
+// server surfaces a clear conversion failure instead of hanging the handler
+// until the browser's (often minutes-long) global network timeout. A local
+// file's blob URL resolves instantly, so the bound only ever bites remote URLs.
+// Tuning knob: generous for the small striped GeoTIFFs this targets, but a very
+// large file on a slow link could hit it (the host then shows a download error);
+// raise it if that becomes common.
+const NON_TILED_FETCH_TIMEOUT_MS = 60_000;
 
 /**
- * Register (or clear, with `null`) a handler invoked when a local GeoTIFF fails
- * to load because it is striped rather than tiled. The app uses this to offer an
- * in-browser convert-to-COG flow. Only one handler is active at a time.
+ * Register (or clear, with `null`) a handler invoked when a GeoTIFF (local file
+ * or remote URL) fails to load because it is striped rather than tiled. The app
+ * uses this to offer an in-browser convert-to-COG flow. Only one handler is
+ * active at a time.
  *
  * @param handler - The handler, or `null` to unregister.
  */
@@ -503,12 +519,28 @@ function createRasterControl(
     const layerId = event.layerId;
     if (nonTiledInFlight.has(layerId)) return;
     const info = control.getRaster(layerId);
-    // Only local files can be re-read and converted in the browser; remote
-    // non-tiled URLs keep the plain error.
-    if (!info || !isNonTiledRasterError(info.error) || info.source.kind !== "file") {
-      return;
-    }
-    const objectUrl = info.source.objectUrl;
+    if (!info || !isNonTiledRasterError(info.error)) return;
+    // Re-read the original bytes so the host can convert them to a COG: a local
+    // file from its blob URL, a remote URL by fetching it whole. In the browser
+    // the remote fetch needs the server to allow CORS, which it normally has
+    // already (the panel range-fetched the header to detect "not tiled"); the
+    // Tauri build can patch the header read to go through Tauri commands, so a
+    // non-CORS URL can still reach here and the fetch below then fails -- it
+    // degrades safely to the host's download-failed message, not a crash. See
+    // opengeos/GeoLibre#916. The explicit per-kind check (rather than a file/else
+    // ternary) means a future source kind without a fetchable URL bails here
+    // instead of silently passing fetch(undefined), which would request the
+    // current page.
+    const bytesUrl =
+      info.source.kind === "file"
+        ? info.source.objectUrl
+        : info.source.kind === "url"
+          ? info.source.url
+          : undefined;
+    if (!bytesUrl) return;
+    // A remote URL streams the whole file over the network when read; a local
+    // file's blob URL resolves instantly. The host confirms before the download.
+    const bytesAreRemote = info.source.kind === "url";
     const handler = nonTiledRasterHandler;
     nonTiledInFlight.add(layerId);
     // Invoke inside the promise chain so even a synchronous throw from the
@@ -520,8 +552,16 @@ function createRasterControl(
         handler({
           layerId,
           name: info.name,
+          bytesAreRemote,
           readBytes: async () => {
-            const response = await fetch(objectUrl);
+            // Only bound the remote download; a local blob URL resolves from
+            // memory in microseconds, so a timeout timer there is pure overhead.
+            const response = await fetch(
+              bytesUrl,
+              bytesAreRemote
+                ? { signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS) }
+                : undefined,
+            );
             if (!response.ok) {
               throw new Error(
                 `Failed to read raster bytes: ${response.status}`,

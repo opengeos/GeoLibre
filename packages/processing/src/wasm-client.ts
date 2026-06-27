@@ -166,10 +166,18 @@ function isFeatureCollection(value: unknown): value is FeatureCollection {
   );
 }
 
-// TIFF magic: "II" (little-endian) or "MM" (big-endian) followed by the version
-// number in the byte-order's own endianness - 42 (0x2a) for classic TIFF or 43
-// (0x2b) for BigTIFF (rasters larger than 4 GiB).
-function isTiff(b: Uint8Array): boolean {
+/**
+ * Whether bytes start with the TIFF signature: "II" (little-endian) or "MM"
+ * (big-endian) followed by the version number in the byte order's own
+ * endianness -- 42 (0x2a) for classic TIFF or 43 (0x2b) for BigTIFF (rasters
+ * larger than 4 GiB). A cheap header-only sniff used to reject non-GeoTIFF
+ * content (e.g. an HTML error or login page served with a 200) before handing
+ * the bytes to the wasm reader.
+ *
+ * @param b - The candidate file bytes (only the first four are inspected).
+ * @returns `true` if the bytes look like a TIFF/BigTIFF.
+ */
+export function isTiff(b: Uint8Array): boolean {
   if (b.length < 4) return false;
   const le = b[0] === 0x49 && b[1] === 0x49;
   const be = b[0] === 0x4d && b[1] === 0x4d;
