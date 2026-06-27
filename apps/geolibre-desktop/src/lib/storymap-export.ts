@@ -98,8 +98,11 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     if (!isReferenced && !layer.visible) continue;
     // Inline GeoJSON layers and raster tile layers (the latter covers basemaps
     // added through the Basemaps plugin, which are raster layers rather than a
-    // style URL, #936). Layers iterate in store order, which is bottom-to-top,
-    // so a basemap raster (lower in the array) is added before the overlays.
+    // style URL, #936). Layers iterate in store order; the store array is
+    // bottom-to-top, and `map.addLayer` appends each layer above the previous,
+    // so the export reproduces whatever stacking the user set in the app
+    // (the Basemaps plugin inserts basemaps at the bottom, so they end up under
+    // the overlays here too).
     const built = buildInlineLayer(layer);
     if (!built) continue;
     inlineLayers.push({
@@ -253,7 +256,20 @@ function buildInlineLayer(
   if (rasterSource) {
     return {
       source: rasterSource,
-      layerSpec: { type: "raster", paint: { "raster-opacity": 1 } },
+      // Mirror the live app's rasterPaint so raster color adjustments
+      // (brightness/saturation/contrast/hue) survive the export. raster-opacity
+      // is the seed the opacity loop later scales by the layer opacity.
+      layerSpec: {
+        type: "raster",
+        paint: {
+          "raster-opacity": 1,
+          "raster-brightness-min": styleValue(layer.style, "rasterBrightnessMin"),
+          "raster-brightness-max": styleValue(layer.style, "rasterBrightnessMax"),
+          "raster-saturation": styleValue(layer.style, "rasterSaturation"),
+          "raster-contrast": styleValue(layer.style, "rasterContrast"),
+          "raster-hue-rotate": styleValue(layer.style, "rasterHueRotate"),
+        },
+      },
     };
   }
   return null;
@@ -294,6 +310,18 @@ function buildRasterTileSource(
   if (layer.source.scheme === "tms") source.scheme = "tms";
   if (typeof layer.source.attribution === "string") {
     source.attribution = layer.source.attribution;
+  }
+  // Carry the source's coverage extent so the export, like the live map, stops
+  // requesting tiles outside a bounded tile service.
+  if (
+    Array.isArray(layer.source.bounds) &&
+    layer.source.bounds.length === 4 &&
+    layer.source.bounds.every(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value),
+    )
+  ) {
+    source.bounds = layer.source.bounds;
   }
   return source;
 }
