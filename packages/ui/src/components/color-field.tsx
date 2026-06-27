@@ -44,9 +44,15 @@ export interface ColorFieldProps
     React.InputHTMLAttributes<HTMLInputElement>,
     "type" | "value" | "onChange"
   > {
-  /** The current color as a `#rrggbb` hex string. */
+  /**
+   * The current color as a `#rrggbb` hex string, or `TRANSPARENT_COLOR` when
+   * the transparent toggle is on (only possible with `allowTransparent`).
+   */
   value: string;
-  /** Called with the new `#rrggbb` hex string from the swatch or eyedropper. */
+  /**
+   * Called with the new `#rrggbb` hex string from the swatch or eyedropper, or
+   * `TRANSPARENT_COLOR` when the transparent toggle is checked.
+   */
   onChange: (hex: string) => void;
   /**
    * Called once after a screen-eyedropper pick commits a color. Callers using a
@@ -110,6 +116,13 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
       allowTransparent = false,
       transparentLabel = "Transparent",
       transparentSwatchLabel = "No color (transparent). Click to choose a color.",
+      // `title`/`name`/`form` are pulled out so they can be applied
+      // conditionally below: `title` must win over a forwarded value while
+      // transparent, and a `name`d color input would otherwise submit the
+      // remembered opaque hex instead of the transparent sentinel.
+      title,
+      name,
+      form,
       ...props
     },
     ref,
@@ -123,7 +136,11 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
     const lastOpaqueRef = React.useRef(
       transparent || !value ? "#000000" : value,
     );
-    if (!transparent && value) lastOpaqueRef.current = value;
+    // Keep the remembered color current via an effect rather than a render-time
+    // ref write, so a discarded/replayed concurrent render can't double-apply.
+    React.useEffect(() => {
+      if (!transparent && value) lastOpaqueRef.current = value;
+    }, [transparent, value]);
     // Feature-detect after mount so the rendered output stays deterministic
     // across environments that prerender the build.
     const [supportsEyeDropper, setSupportsEyeDropper] = React.useState(false);
@@ -185,20 +202,35 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
             supportsEyeDropper && fill && "flex-1",
           )}
         >
+          {/* While transparent, the visible color input is left unnamed and a
+              hidden input carries `name`/`form` so a form submits the
+              transparent sentinel rather than the remembered opaque hex. */}
+          {transparent && name ? (
+            <input
+              type="hidden"
+              name={name}
+              form={form}
+              value={TRANSPARENT_COLOR}
+            />
+          ) : null}
           <Input
             ref={ref}
             type="color"
+            name={transparent ? undefined : name}
+            form={form}
             value={transparent ? lastOpaqueRef.current : value}
             disabled={disabled}
-            title={transparent ? transparentSwatchLabel : props.title}
+            title={transparent ? transparentSwatchLabel : title}
             onChange={(event) => onChange(event.target.value)}
-            className={cn(fill && "w-full", className)}
+            // `peer` so the overlay (which covers the input's own
+            // focus-visible border) can re-expose the focus ring below.
+            className={cn("peer", fill && "w-full", className)}
             {...props}
           />
           {transparent ? (
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-0 overflow-hidden rounded-md border border-input"
+              className="pointer-events-none absolute inset-0 overflow-hidden rounded-md border border-input peer-focus-visible:border-2 peer-focus-visible:border-ring"
               style={{
                 backgroundColor: "hsl(var(--background))",
                 backgroundImage:
