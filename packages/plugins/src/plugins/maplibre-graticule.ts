@@ -620,7 +620,7 @@ function buildPanelBody(container: HTMLElement): void {
 
   const controls: Array<() => void> = [];
 
-  const addRow = (labelText: string, input: HTMLElement): void => {
+  const addRow = (labelText: string, input: HTMLElement): HTMLElement => {
     const row = document.createElement("label");
     row.style.display = "flex";
     row.style.alignItems = "center";
@@ -631,6 +631,7 @@ function buildPanelBody(container: HTMLElement): void {
     row.appendChild(span);
     row.appendChild(input);
     container.appendChild(row);
+    return row;
   };
 
   const select = (
@@ -659,6 +660,9 @@ function buildPanelBody(container: HTMLElement): void {
     attrs: { min: number; max: number; step: number },
     get: () => number,
     set: (value: number) => void,
+    // Optional predicate; when it returns true the row is grayed out and the
+    // input is disabled (e.g. Interval has no effect while Spacing is Auto).
+    isDisabled?: () => boolean,
   ): void => {
     const el = document.createElement("input");
     el.type = "number";
@@ -677,10 +681,17 @@ function buildPanelBody(container: HTMLElement): void {
     el.addEventListener("keydown", (e) => {
       if (e.key === "Enter") el.blur();
     });
+    const row = addRow(labelText, el);
+    const applyDisabled = (): void => {
+      const disabled = isDisabled?.() ?? false;
+      el.disabled = disabled;
+      row.style.opacity = disabled ? "0.5" : "";
+    };
+    applyDisabled();
     controls.push(() => {
       el.value = String(get());
+      applyDisabled();
     });
-    addRow(labelText, el);
   };
 
   const color = (
@@ -729,6 +740,8 @@ function buildPanelBody(container: HTMLElement): void {
     { min: 0.001, max: 45, step: 0.001 },
     () => settings.spacingDegrees,
     (v) => setGraticuleSettings({ spacingDegrees: v }),
+    // Auto spacing is purely zoom-driven, so the interval has no effect there.
+    () => settings.spacingMode === "auto",
   );
   color(labels.lineColor, () => settings.lineColor, (v) => setGraticuleSettings({ lineColor: v }));
   number(
