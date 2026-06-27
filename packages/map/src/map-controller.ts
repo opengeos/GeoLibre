@@ -395,9 +395,11 @@ export class MapController {
       if (source?.type !== "geojson") continue;
       try {
         const data = await (source as maplibregl.GeoJSONSource).getData();
-        // A URL-backed source that has not finished loading resolves to the raw
-        // URL string rather than a FeatureCollection; the `"features"` guard
-        // skips it so the export omits the layer instead of embedding a bare URL.
+        // `getData()` returns the source's original data spec: the inline
+        // FeatureCollection for sources set via setData (in-browser-converted
+        // layers), or the raw URL string for URL-backed sources. The `"features"`
+        // guard skips the string case so the export omits such a layer rather
+        // than embedding a bare URL.
         if (data && typeof data === "object" && "features" in data) {
           return data as FeatureCollection;
         }
