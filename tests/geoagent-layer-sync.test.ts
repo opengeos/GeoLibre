@@ -114,10 +114,10 @@ describe("syncGeoAgentOverlaysToStore", () => {
   });
 
   it("maps raster and basemap overlays to raster store layers", () => {
-    // raster, basemap, and gee share the single raster-tile branch in
-    // createGeoAgentStoreLayer. Pin that here so a future `kind` added to the
-    // union that should NOT be a raster layer fails visibly instead of silently
-    // falling through to this branch.
+    // raster and basemap share the single raster-tile branch in
+    // createGeoAgentStoreLayer (gee is covered by the Earth Engine test above).
+    // Pin that here so a future `kind` added to the union that should NOT be a
+    // raster layer fails visibly instead of silently falling through.
     for (const kind of ["raster", "basemap"] as const) {
       const layer = createGeoAgentStoreLayer({
         kind,
