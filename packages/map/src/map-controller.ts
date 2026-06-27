@@ -99,53 +99,35 @@ function isCustomControllableLayer(layer: GeoLibreLayer): boolean {
  * style editor into a partial {@link LayerStyle} update for the store, so the
  * floating editor and the right-hand Style sidebar stay in sync (issue #912).
  *
- * Layer-level opacity is handled separately (it lives on the layer record, not
- * its style); see {@link MapController.applyLayerControlStyleChange}. Properties
- * GeoLibre's style model does not track return `null` and are ignored — the
- * control still applies them to the map, they just are not mirrored to the
- * store.
+ * Scope is deliberately limited to the raster color adjustments, which map
+ * one-to-one to {@link LayerStyle} fields. Vector paint is **not** round-tripped
+ * here: GeoLibre renders vector layers through an expression-based style model
+ * (opacities are scaled by the layer opacity, and width/radius/colors become
+ * `interpolate`/`case` expressions under proportional sizing, the meters width
+ * unit, a data-driven `vectorStyleMode`, or simplestyle). The value the control
+ * reads back is the *rendered* paint, so storing it verbatim would corrupt
+ * those configurations. The control still applies vector edits to the map; the
+ * sidebar Style panel remains the canonical editor for vector symbology.
+ * Layer-level opacity is handled separately — see
+ * {@link MapController.applyLayerControlStyleChange}.
  */
 export function layerControlPaintToStyle(
   property: string,
   value: unknown,
 ): Partial<LayerStyle> | null {
-  const num = typeof value === "number" ? value : null;
-  const hex = typeof value === "string" ? value : null;
+  if (typeof value !== "number") return null;
 
   switch (property) {
-    // Raster color adjustments (the primary #912 case: basemap/raster sliders).
     case "raster-brightness-min":
-      return num === null ? null : { rasterBrightnessMin: num };
+      return { rasterBrightnessMin: value };
     case "raster-brightness-max":
-      return num === null ? null : { rasterBrightnessMax: num };
+      return { rasterBrightnessMax: value };
     case "raster-saturation":
-      return num === null ? null : { rasterSaturation: num };
+      return { rasterSaturation: value };
     case "raster-contrast":
-      return num === null ? null : { rasterContrast: num };
+      return { rasterContrast: value };
     case "raster-hue-rotate":
-      return num === null ? null : { rasterHueRotate: num };
-    // Common vector paint props, best-effort mapped to the flat single-symbol
-    // style fields. Layers using a data-driven vectorStyleMode override these,
-    // matching how the sidebar already behaves.
-    case "fill-color":
-    case "circle-color":
-      return hex === null ? null : { fillColor: hex };
-    // Both fill-opacity and circle-opacity derive from fillOpacity in
-    // syncLayer (fillPaint/circlePaint), so they round-trip through that field.
-    case "fill-opacity":
-    case "circle-opacity":
-      return num === null ? null : { fillOpacity: num };
-    case "line-color":
-    case "fill-outline-color":
-    case "circle-stroke-color":
-      return hex === null ? null : { strokeColor: hex };
-    case "line-width":
-    case "circle-stroke-width":
-      return num === null ? null : { strokeWidth: num };
-    case "circle-radius":
-      return num === null ? null : { circleRadius: num };
-    case "text-color":
-      return hex === null ? null : { textColor: hex };
+      return { rasterHueRotate: value };
     default:
       return null;
   }
@@ -274,6 +256,10 @@ export class MapController {
   private logoControl: maplibregl.LogoControl | null = null;
   private layerControl: LayerControl | null = null;
   private layerControlSignature = "";
+  // True while pushing store paint back into the layer control's open style
+  // editor, so onLayerStyleChange callbacks during that refresh are ignored
+  // (reentrancy guard against a sync loop). See syncLayerControlState.
+  private refreshingStyleEditor = false;
   private basemapStyleUrl = DEFAULT_BASEMAP;
   private basemapVisible = true;
   private basemapOpacity = 1;
@@ -1387,29 +1373,39 @@ export class MapController {
     // did, this path would loop forever (sync → refresh → onLayerStyleChange →
     // applyLayerControlStyleChange → setLayerStyle → sync → ...). The upstream
     // library guarantees this by setting input values programmatically, which
-    // does not dispatch an input event.
-    this.layerControl?.refreshStyleEditor();
+    // does not dispatch an input event. The reentrancy guard below is a cheap
+    // defense in case a future upstream version regresses that guarantee.
+    this.refreshingStyleEditor = true;
+    try {
+      this.layerControl?.refreshStyleEditor();
+    } finally {
+      this.refreshingStyleEditor = false;
+    }
   }
 
   /**
    * Mirror a paint property edited via the layer control's per-layer style
    * editor into the store. The per-type opacities that GeoLibre derives
    * directly from the layer-level opacity (raster/line/text/icon) map to
-   * {@link AppState.setLayerOpacity}; everything else maps to
-   * {@link LayerStyle} via {@link layerControlPaintToStyle}. Unmapped
-   * properties are ignored.
+   * {@link AppState.setLayerOpacity}; raster color adjustments map to
+   * {@link LayerStyle} via {@link layerControlPaintToStyle}. Other properties
+   * (vector paint) are ignored — see that helper for why.
    */
   private applyLayerControlStyleChange(
     layerId: string,
     property: string,
     value: unknown,
   ): void {
+    // Ignore callbacks that fire while we are pushing store values back into
+    // the editor; otherwise a misbehaving refresh could create a sync loop.
+    if (this.refreshingStyleEditor) return;
     const store = useAppStore.getState();
     // These paint properties equal the layer-level opacity in syncLayer
     // (rasterPaint/linePaint use it directly; symbol layers set
     // text-opacity/icon-opacity to it), so an edit to them is an edit to the
-    // layer's opacity. circle-opacity is intentionally *not* here: circlePaint
-    // derives it from fillOpacity, so it maps to that style field instead.
+    // layer's opacity and round-trips losslessly. fill-opacity/circle-opacity
+    // are deliberately not here: syncLayer scales them by the layer opacity, so
+    // the rendered value the control reports is not the raw style value.
     if (
       property === "raster-opacity" ||
       property === "line-opacity" ||
