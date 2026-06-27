@@ -1,4 +1,4 @@
-// viewer.geolibre.app
+// web.geolibre.app
 //
 // Serves the GeoLibre web viewer at a clean subdomain by proxying to the build
 // already published at https://geolibre.app/demo (GitHub Pages). We proxy rather
@@ -7,10 +7,10 @@
 // Pages has no such limit, so it stays the origin of record.
 //
 // The viewer build uses relative asset paths, so requests map 1:1:
-//   viewer.geolibre.app/<path>?<query> -> geolibre.app/demo/<path>?<query>
+//   web.geolibre.app/<path>?<query> -> geolibre.app/demo/<path>?<query>
 //
 // Origin redirects (e.g. trailing slash) are followed server-side so the public
-// viewer.geolibre.app URL is preserved and geolibre.app/demo is never exposed.
+// web.geolibre.app URL is preserved and geolibre.app/demo is never exposed.
 
 const ORIGIN = "https://geolibre.app/demo";
 
@@ -33,7 +33,7 @@ export default {
 
     // Follow origin redirects (e.g. trailing slash) server-side to preserve the
     // public URL. This assumes geolibre.app/demo never redirects back to
-    // viewer.geolibre.app, which would otherwise make the worker loop on itself.
+    // web.geolibre.app, which would otherwise make the worker loop on itself.
     try {
       return await fetch(target, {
         method: request.method,

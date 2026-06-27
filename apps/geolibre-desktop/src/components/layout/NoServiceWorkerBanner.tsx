@@ -7,7 +7,7 @@ import { openExternalLink } from "../../lib/open-external";
  * active. Offered as the remediation link when the current build (desktop, or
  * the dev server) has no controlling service worker so downloads can't persist.
  */
-const OFFLINE_WEB_APP_URL = "https://viewer.geolibre.app";
+const OFFLINE_WEB_APP_URL = "https://web.geolibre.app";
 
 interface NoServiceWorkerBannerProps {
   /** The build-specific warning text shown above the web-app link. */

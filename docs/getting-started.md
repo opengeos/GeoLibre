@@ -1,6 +1,6 @@
 # Getting Started
 
-[![Launch GeoLibre Web](https://img.shields.io/badge/Launch-GeoLibre%20Web-green.svg)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
+[![Launch GeoLibre Web](https://img.shields.io/badge/Launch-GeoLibre%20Web-green.svg)](https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 [![GeoLibre shared project](https://img.shields.io/badge/GeoLibre-share-green.svg)](https://share.geolibre.app)
 [![GeoLibre plugins](https://img.shields.io/badge/GeoLibre-plugins-green.svg)](https://plugins.geolibre.app)
 [![image](https://img.shields.io/pypi/v/geolibre.svg)](https://pypi.python.org/pypi/geolibre)
@@ -27,7 +27,7 @@ Pick whichever fits how you work. The same app ships in every form, so projects 
 
 GeoLibre Web is the full app running in your browser, with nothing to install. It keeps your data local and private, processing everything client-side in your browser session.
 
-[Launch GeoLibre Web](https://viewer.geolibre.app/){ .md-button .md-button--primary }
+[Launch GeoLibre Web](https://web.geolibre.app/){ .md-button .md-button--primary }
 
 You can load browser-selected vector data supported by DuckDB-WASM Spatial, drag GeoTIFF/COG rasters onto the map, add URL-based services and datasets (XYZ, WMS, GeoJSON, vector tiles, COG, ArcGIS, FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats), style layers, and test plugins. Desktop-only file dialogs, local MBTiles, local raster file reads, and project save/open need the desktop app.
 

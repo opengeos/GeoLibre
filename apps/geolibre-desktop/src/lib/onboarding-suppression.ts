@@ -6,7 +6,7 @@ const WELCOME_DISABLED_VALUES = new Set(["0", "false", "off", "no"]);
 /**
  * Whether to suppress the first-launch onboarding wizard because the app is
  * opened as an embed/deep link, where the modal would just cover the map:
- *   - a project deep link (e.g. viewer.geolibre.app `?url=`) opens straight
+ *   - a project deep link (e.g. web.geolibre.app `?url=`) opens straight
  *     into a shared project, or
  *   - an explicit `?welcome=0` (also `false`/`off`/`no`) opts out, for embeds
  *     that don't load a project URL but still want a clean first paint.

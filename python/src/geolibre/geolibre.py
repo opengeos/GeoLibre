@@ -773,7 +773,7 @@ class Map(anywidget.AnyWidget):
     # Hosted GeoLibre viewer used as the default to_html() app, so an exported
     # file is portable (loads the app over the network instead of the
     # session-bound localhost bundle).
-    _DEFAULT_HTML_APP_URL = "https://viewer.geolibre.app/"
+    _DEFAULT_HTML_APP_URL = "https://web.geolibre.app/"
 
     def to_html(
         self,

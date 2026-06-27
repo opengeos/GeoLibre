@@ -16,7 +16,7 @@ hide:
       work, project files, styling, plugins, and modern geospatial workflows.
     </p>
     <div class="hero__actions">
-      <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Launch GeoLibre Web</a>
+      <a class="md-button md-button--primary" href="https://web.geolibre.app/">Launch GeoLibre Web</a>
       <a class="md-button" href="getting-started/">Get started</a>
       <a class="md-button" href="user-guide/interface/">User guide</a>
       <a class="md-button" href="downloads/">Download app</a>
@@ -129,19 +129,19 @@ GeoLibre Web is the full browser version of the GeoLibre app, ready to use with 
 Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
 ```
 
 For narrow embeds, add `?layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact
 ```
 
 For map-focused embeds, add `&panels=none` to hide the Layers, Style, and Attribute table panels:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact&panels=none
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact&panels=none
 ```
 
 Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
@@ -149,12 +149,12 @@ Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden
 For a fully chrome-free, map-only embed, add `&maponly` to hide the toolbar menu, all panels, and the status bar:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
 ```
 
 Other parameters control the toolbar, panels, and theme. See [Embedding & Sharing](user-guide/embedding.md) for the full parameter reference and `<iframe>` examples.
 
-[Launch GeoLibre Web](https://viewer.geolibre.app/){ .md-button .md-button--primary }
+[Launch GeoLibre Web](https://web.geolibre.app/){ .md-button .md-button--primary }
 [Embedding & Sharing](user-guide/embedding.md){ .md-button }
 
 ## Project status

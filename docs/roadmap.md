@@ -63,7 +63,7 @@
 
 ## v0.8: Viewer, desktop packaging, plugins, and dynamic layers
 
-- [x] Cloudflare Worker viewer served from `viewer.geolibre.app`
+- [x] Cloudflare Worker viewer served from `web.geolibre.app`
 - [x] Browser demo links updated to the production viewer
 - [x] GPX drag-and-drop split into named waypoint, track, and route layers
 - [x] Vector layers reprojected to EPSG:4326 on load

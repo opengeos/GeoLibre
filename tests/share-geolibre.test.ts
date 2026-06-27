@@ -14,7 +14,7 @@ const PROJECT_DTO = {
   username: "giswqs",
   slug: "my-map",
   projectUrl: "https://share.geolibre.app/giswqs/my-map",
-  viewerUrl: "https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/my-map.geolibre.json",
+  viewerUrl: "https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/my-map.geolibre.json",
   rawJsonUrl: "https://share.geolibre.app/giswqs/my-map.geolibre.json",
 };
 
