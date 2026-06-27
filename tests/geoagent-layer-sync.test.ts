@@ -106,6 +106,8 @@ describe("syncGeoAgentOverlaysToStore", () => {
     assert.equal(layer.type, "raster");
     assert.equal(layer.opacity, 1);
     assert.equal(layer.metadata.identifiable, false);
+    assert.equal(layer.metadata.tileType, "raster");
+    assert.equal(layer.metadata.geoAgentOverlayKind, "gee");
     assert.equal(
       layer.metadata.tileUrl,
       "https://earthengine.googleapis.com/tiles/{z}/{x}/{y}",
