@@ -43,7 +43,9 @@ import {
   saveBinaryFileWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
+import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import i18n from "../../i18n";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
@@ -550,21 +552,46 @@ export function ConversionDialog() {
       ]),
     );
     try {
-      const [{ loadDuckDbVectorFile }, { exportVectorLayer }] = await Promise.all(
-        [
-          import("../../lib/duckdb-vector-loader"),
-          import("../../lib/vector-export"),
-        ],
-      );
+      const [
+        { loadDuckDbVectorFile, VectorLoadCancelledError },
+        { exportVectorLayer },
+      ] = await Promise.all([
+        import("../../lib/duckdb-vector-loader"),
+        import("../../lib/vector-export"),
+      ]);
       const toVectorFile = async (file: File) => ({
         name: file.name,
         extension: fileExtension(file.name),
         data: new Uint8Array(await file.arrayBuffer()),
       });
-      const geojson = await loadDuckDbVectorFile({
-        ...(await toVectorFile(mainFile)),
-        siblingFiles: await Promise.all(siblings.map(toVectorFile)),
-      });
+      let geojson;
+      try {
+        geojson = await loadDuckDbVectorFile(
+          {
+            ...(await toVectorFile(mainFile)),
+            siblingFiles: await Promise.all(siblings.map(toVectorFile)),
+          },
+          {
+            // Preflight a feature count and confirm before materializing a huge
+            // dataset to GeoJSON in memory, matching the Add Data vector loaders.
+            onLargeDataset: ({ name, featureCount }: LargeVectorDataset) =>
+              window.confirm(
+                i18n.t("toolbar.item.largeVectorDesc", {
+                  name,
+                  count: featureCount.toLocaleString(),
+                }),
+              ),
+          },
+        );
+      } catch (loadErr) {
+        if (loadErr instanceof VectorLoadCancelledError) {
+          // The user declined the large-dataset confirmation; clear the job
+          // rather than showing it as a failure.
+          setJob(null);
+          return;
+        }
+        throw loadErr;
+      }
       const baseName = stripExtension(outputName) || "output";
       const savedName = await exportVectorLayer(geojson, format, baseName);
       setJob(
