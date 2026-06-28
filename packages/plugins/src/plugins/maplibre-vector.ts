@@ -273,8 +273,13 @@ export function restoreVectorLayers(app: GeoLibreAppAPI): void {
                   useAppStore.getState().removeLayer(layer.id);
                   return undefined;
                 }
-                return replayVectorLayer(control, layer, file.file, {
-                  companionFiles: file.companionFiles,
+                const source = file.nativeData
+                  ? nativeGeoJsonFile(file.file, file.nativeData)
+                  : file.file;
+                return replayVectorLayer(control, layer, source, {
+                  companionFiles: file.nativeData
+                    ? undefined
+                    : file.companionFiles,
                   localPath,
                 });
               })
@@ -729,10 +734,26 @@ export async function addPickedVectorFiles(
   control: VectorDataSink,
   picked: GeoLibrePickedVectorFile[],
 ): Promise<void> {
-  for (const { file, companionFiles, sourcePath } of picked) {
-    await control.addData(file, {
-      ...(companionFiles.length > 0 ? { companionFiles } : {}),
+  for (const { file, companionFiles, sourcePath, nativeData } of picked) {
+    const source = nativeData ? nativeGeoJsonFile(file, nativeData) : file;
+    await control.addData(source, {
+      ...(nativeData ? { name: file.name } : {}),
+      ...(!nativeData && companionFiles.length > 0 ? { companionFiles } : {}),
       ...(sourcePath ? { sourcePath } : {}),
     });
   }
+}
+
+function nativeGeoJsonFile(file: File, data: FeatureCollection): File {
+  return new File([JSON.stringify(data)], `${fileBaseName(file.name)}.geojson`, {
+    type: "application/geo+json",
+  });
+}
+
+function fileBaseName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "vector";
+  const lastSlash = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const fileName = lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
+  return fileName.replace(/\.[^.]+$/, "") || "vector";
 }

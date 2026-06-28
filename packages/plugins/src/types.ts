@@ -173,6 +173,12 @@ export interface GeoLibrePickedVectorFile {
    * file when a saved project reopens.
    */
   sourcePath?: string;
+  /**
+   * FeatureCollection materialized by a desktop host's native vector reader.
+   * When present, the Add Vector Layer bridge can load it as GeoJSON while
+   * still persisting {@link sourcePath} for project restore.
+   */
+  nativeData?: FeatureCollection;
 }
 
 export interface GeoLibreAppAPI {
@@ -276,7 +282,11 @@ export interface GeoLibreAppAPI {
    */
   readLocalVectorFile?: (
     path: string,
-  ) => Promise<{ file: File; companionFiles: File[] } | null>;
+  ) => Promise<{
+    file: File;
+    companionFiles: File[];
+    nativeData?: FeatureCollection;
+  } | null>;
   /**
    * Save text content to a file chosen by the user. The host handles the
    * platform specifics (a native save dialog under Tauri, a browser download

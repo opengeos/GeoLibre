@@ -25,7 +25,10 @@ import {
   parseDelimitedTextLayer,
 } from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
-import type { DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
+import {
+  confirmLargeDataset,
+  type DuckDbVectorLoadOptions,
+} from "./duckdb-vector-guard";
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import {
   PHOTO_IMAGE_EXTENSIONS,
@@ -35,6 +38,7 @@ import {
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
 import { parseKmlText } from "./kml";
+import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
 // working; the implementation lives in the lightweight ./is-tauri module.
@@ -524,6 +528,73 @@ async function loadDuckDbVector(
   return loadDuckDbVectorFile(file, options);
 }
 
+interface NativeDuckDbVectorInvokeOptions {
+  layer?: string;
+  overrideSourceCrs?: string;
+  spatialExtensionPath?: string;
+}
+
+interface NativeDuckDbVectorAttempt {
+  data: FeatureCollection | null;
+  largeDatasetApproved: boolean;
+}
+
+function nativeDuckDbInvokeOptions(
+  options?: DuckDbVectorLoadOptions,
+): NativeDuckDbVectorInvokeOptions {
+  return {
+    ...(options?.layer?.trim() ? { layer: options.layer.trim() } : {}),
+    ...(options?.overrideSourceCrs?.trim()
+      ? { overrideSourceCrs: options.overrideSourceCrs.trim() }
+      : {}),
+    ...(getSpatialExtensionPath()
+      ? { spatialExtensionPath: getSpatialExtensionPath() }
+      : {}),
+  };
+}
+
+async function tryLoadNativeDuckDbVectorPath(
+  path: string,
+  options?: DuckDbVectorLoadOptions,
+): Promise<NativeDuckDbVectorAttempt> {
+  if (!isTauri()) return { data: null, largeDatasetApproved: false };
+
+  const invokeOptions = nativeDuckDbInvokeOptions(options);
+  let largeDatasetApproved = false;
+  try {
+    if (options?.onLargeDataset) {
+      const featureCount = await invoke<number>(
+        "count_native_vector_file_features",
+        {
+          path,
+          ...invokeOptions,
+        },
+      );
+      await confirmLargeDataset(
+        { name: browserSafeFileName(path), featureCount },
+        options.onLargeDataset,
+      );
+      largeDatasetApproved = true;
+    }
+
+    const value = await invoke<unknown>("load_native_vector_file", {
+      path,
+      ...invokeOptions,
+    });
+    return {
+      data: assertFeatureCollection(value),
+      largeDatasetApproved,
+    };
+  } catch (error) {
+    if (isVectorLoadCancelled(error)) throw error;
+    console.warn(
+      "[GeoLibre] Native DuckDB vector load failed; falling back to DuckDB-WASM.",
+      error,
+    );
+    return { data: null, largeDatasetApproved };
+  }
+}
+
 /**
  * Load one KML entry, preferring the styled in-house reader so embedded
  * symbology survives, and falling back to DuckDB/GDAL for KML the reader does
@@ -688,6 +759,11 @@ export interface PickedVectorFile {
   companionFiles: File[];
   /** Absolute filesystem path the main file was read from. */
   sourcePath: string;
+  /**
+   * GeoJSON materialized by native duckdb-rs for formats that would otherwise
+   * make the Add Vector Layer panel load DuckDB-WASM.
+   */
+  nativeData?: FeatureCollection;
 }
 
 /**
@@ -729,7 +805,12 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
               (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
             )
           : [];
-      picked.push({ file, companionFiles, sourcePath: path });
+      picked.push({
+        file,
+        companionFiles,
+        sourcePath: path,
+        nativeData: await tryLoadPickedNativeVectorPath(path),
+      });
     } catch (error) {
       console.warn(`Could not read the selected file "${path}".`, error);
     }
@@ -749,7 +830,11 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
  */
 export async function readVectorFileWithSidecars(
   path: string,
-): Promise<{ file: File; companionFiles: File[] } | null> {
+): Promise<{
+  file: File;
+  companionFiles: File[];
+  nativeData?: FeatureCollection;
+} | null> {
   // Reject `..` segments as well as relative paths: the path comes from a
   // (possibly hand-edited) project file, so a traversal must not reach outside
   // wherever Tauri's filesystem scope allows. The scope is the real boundary;
@@ -771,11 +856,33 @@ export async function readVectorFileWithSidecars(
             (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
           )
         : [];
-    return { file, companionFiles };
+    return {
+      file,
+      companionFiles,
+      nativeData: await tryLoadPickedNativeVectorPath(path),
+    };
   } catch (error) {
     console.warn(`Could not read local vector file "${path}".`, error);
     return null;
   }
+}
+
+async function tryLoadPickedNativeVectorPath(
+  path: string,
+): Promise<FeatureCollection | undefined> {
+  const extension = fileExtension(path);
+  if (
+    extension === "geojson" ||
+    extension === "json" ||
+    extension === "kml" ||
+    extension === "kmz" ||
+    extension === "gpx" ||
+    extension === "zip"
+  ) {
+    return undefined;
+  }
+  const result = await tryLoadNativeDuckDbVectorPath(path);
+  return result.data ?? undefined;
 }
 
 export function isAbsoluteLocalPath(path: string): boolean {
@@ -864,6 +971,18 @@ async function loadTauriVectorFile(
     }
   }
 
+  const nativeAttempt = await tryLoadNativeDuckDbVectorPath(path, options);
+  if (nativeAttempt.data) {
+    return {
+      data: nativeAttempt.data,
+      path,
+    };
+  }
+  const wasmOptions =
+    nativeAttempt.largeDatasetApproved && options
+      ? { ...options, onLargeDataset: undefined }
+      : options;
+
   try {
     const siblingFiles =
       extension === "shp" ? await readShapefileSiblings(path) : [];
@@ -875,7 +994,7 @@ async function loadTauriVectorFile(
           data: await readLocalFileBytes(path),
           siblingFiles,
         },
-        options,
+        wasmOptions,
       ),
       path,
     };

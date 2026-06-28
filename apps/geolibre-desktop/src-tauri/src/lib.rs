@@ -1,4 +1,5 @@
 mod earth_engine_oauth;
+mod native_duckdb;
 
 use earth_engine_oauth::{
     poll_earth_engine_oauth, start_earth_engine_oauth, EarthEngineOAuthState,
@@ -176,9 +177,11 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             close_oauth_popups,
+            native_duckdb::count_native_vector_file_features,
             ensure_martin_binary,
             fetch_url_bytes,
             install_external_plugin_archive,
+            native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
             read_admin_profile,
             read_local_file,
@@ -250,7 +253,7 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// byte-oriented rather than `std::path` based so they behave identically for the
 /// Windows-style paths a project may carry regardless of the host the binary
 /// runs on.
-fn is_allowed_local_vector_path(path: &str) -> bool {
+pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
 
