@@ -48,6 +48,7 @@ let planetaryComputerStacClient: STACClient | null = null;
 let planetaryComputerTilerClient: TiTilerClient | null = null;
 let planetaryComputerStoreUnsubscribe: (() => void) | null = null;
 let planetaryComputerRestoreToken = 0;
+let planetaryComputerRestorePreservedLayerIds = new Set<string>();
 
 export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePlanetaryComputerControl(app);
@@ -212,7 +213,10 @@ function syncPlanetaryComputerLayersToStore(
 
   for (const storeLayer of store.layers) {
     if (!isPlanetaryComputerLayer(storeLayer)) continue;
-    if (!activeLayerIds.has(storeLayer.id)) {
+    if (
+      !activeLayerIds.has(storeLayer.id) &&
+      !planetaryComputerRestorePreservedLayerIds.has(storeLayer.id)
+    ) {
       store.removeLayer(storeLayer.id);
     }
   }
@@ -339,16 +343,22 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
     if (restoreToken !== planetaryComputerRestoreToken) return;
 
     let restoredCount = 0;
-    const failedLayers: PlanetaryComputerFailedRestore[] = [];
+    const invalidLayers: PlanetaryComputerRestoreFailure[] = [];
+    const transientFailures: PlanetaryComputerRestoreFailure[] = [];
     for (const [index, result] of results.entries()) {
       const layer = layersToRestore[index];
       if (result.status === "fulfilled") {
         if (result.value) restoredCount += 1;
       } else {
-        failedLayers.push({
+        const failure = {
           id: layer?.id ?? "",
           name: layer?.name ?? "unknown",
-        });
+        };
+        if (isInvalidPlanetaryComputerLayerMetadataError(result.reason)) {
+          invalidLayers.push(failure);
+        } else {
+          transientFailures.push(failure);
+        }
         console.error(
           `[GeoLibre] Failed to restore Planetary Computer layer "${
             layer?.name ?? "unknown"
@@ -358,26 +368,29 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
       }
     }
 
-    if (failedLayers.length > 0) {
-      removeFailedPlanetaryComputerStoreLayers(control, failedLayers);
+    if (invalidLayers.length > 0) {
+      removeInvalidPlanetaryComputerStoreLayers(control, invalidLayers);
+      console.warn(
+        "[GeoLibre] Some Planetary Computer layers had invalid saved " +
+          `metadata and were removed from the layer list: ${invalidLayers
+            .map((layer) => layer.name)
+            .join(", ")}`
+      );
+    }
+
+    if (transientFailures.length > 0) {
+      console.warn(
+        "[GeoLibre] Some Planetary Computer layers could not be restored " +
+          `and were kept in the layer list: ${transientFailures
+            .map((layer) => layer.name)
+            .join(", ")}`
+      );
     }
 
     if (restoredCount > 0) {
-      if (failedLayers.length > 0) {
-        console.warn(
-          "[GeoLibre] Some Planetary Computer layers could not be restored " +
-            `and were removed from the layer list: ${failedLayers
-              .map((layer) => layer.name)
-              .join(", ")}`
-        );
-      }
-      emitPlanetaryComputerRestore(control);
-    } else if (failedLayers.length > 0) {
-      console.warn(
-        "[GeoLibre] No Planetary Computer layers could be restored; " +
-          `the saved layers were removed from the layer list: ${failedLayers
-            .map((layer) => layer.name)
-            .join(", ")}`
+      emitPlanetaryComputerRestore(
+        control,
+        new Set(transientFailures.map((layer) => layer.id).filter(Boolean))
       );
     }
   })().catch((error) => {
@@ -396,7 +409,7 @@ async function restorePlanetaryComputerLayer(
   const collectionId = stringMetadata(layer, "stacCollectionId");
   const layerType = stringMetadata(layer, "planetaryComputerLayerType");
   if (!collectionId) {
-    throw new Error(
+    throw new InvalidPlanetaryComputerLayerMetadataError(
       "Saved Planetary Computer layer is missing a collection id."
     );
   }
@@ -420,7 +433,7 @@ async function restorePlanetaryComputerLayer(
 
   const itemId = stringMetadata(layer, "stacItemId");
   if (!itemId) {
-    throw new Error(
+    throw new InvalidPlanetaryComputerLayerMetadataError(
       "Saved Planetary Computer item layer is missing an item id."
     );
   }
@@ -529,20 +542,20 @@ function registerRestoredPlanetaryComputerLayer(
   }
 }
 
-function removeFailedPlanetaryComputerStoreLayers(
+function removeInvalidPlanetaryComputerStoreLayers(
   control: PlanetaryComputerControl,
-  failedLayers: PlanetaryComputerFailedRestore[]
+  invalidLayers: PlanetaryComputerRestoreFailure[]
 ): void {
   const activeLayerIds = new Set(
     control.getState().activeLayers.map((layer) => layer.id)
   );
-  for (const failedLayer of failedLayers) {
-    if (!failedLayer.id || activeLayerIds.has(failedLayer.id)) continue;
+  for (const invalidLayer of invalidLayers) {
+    if (!invalidLayer.id || activeLayerIds.has(invalidLayer.id)) continue;
     const storeLayer = useAppStore
       .getState()
-      .layers.find((layer) => layer.id === failedLayer.id);
+      .layers.find((layer) => layer.id === invalidLayer.id);
     if (storeLayer && isPlanetaryComputerLayer(storeLayer)) {
-      useAppStore.getState().removeLayer(failedLayer.id);
+      useAppStore.getState().removeLayer(invalidLayer.id);
     }
   }
 }
@@ -605,7 +618,10 @@ function renderedLayerIds(layer: GeoLibreLayer): string[] {
   return [...nativeLayerIds, layer.id];
 }
 
-function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
+function emitPlanetaryComputerRestore(
+  control: PlanetaryComputerControl,
+  preservedLayerIds = new Set<string>()
+): void {
   // Private API verified against maplibre-gl-planetary-computer 0.3.0. These
   // calls are needed so the upstream panel and GeoLibre store see restored
   // layers that were re-registered with saved IDs. In 0.3.0, _emit constructs
@@ -620,9 +636,15 @@ function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
     );
     return;
   }
-  internals._emit?.("layer:add");
-  internals._emit?.("statechange");
-  internals._renderContent?.();
+  const previousPreservedLayerIds = planetaryComputerRestorePreservedLayerIds;
+  planetaryComputerRestorePreservedLayerIds = preservedLayerIds;
+  try {
+    internals._emit("layer:add");
+    internals._emit("statechange");
+    internals._renderContent?.();
+  } finally {
+    planetaryComputerRestorePreservedLayerIds = previousPreservedLayerIds;
+  }
 }
 
 function getPlanetaryComputerStacClient(): STACClient {
@@ -731,10 +753,21 @@ type PlanetaryComputerRestoreInternals = {
   layerManagerLayers: Map<string, ActiveLayer>;
 };
 
-type PlanetaryComputerFailedRestore = {
+type PlanetaryComputerRestoreFailure = {
   id: string;
   name: string;
 };
+
+class InvalidPlanetaryComputerLayerMetadataError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidPlanetaryComputerLayerMetadataError";
+  }
+}
+
+function isInvalidPlanetaryComputerLayerMetadataError(error: unknown): boolean {
+  return error instanceof InvalidPlanetaryComputerLayerMetadataError;
+}
 
 function requiredPlanetaryComputerRestoreInternals(
   control: PlanetaryComputerControl
