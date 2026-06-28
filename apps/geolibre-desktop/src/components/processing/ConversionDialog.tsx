@@ -165,27 +165,50 @@ const PARQUET_COMPRESSIONS = ["zstd", "snappy", "gzip", "lz4", "uncompressed"];
 
 // Input extensions the generic Vector to Vector tool accepts. Reading is handled
 // by ST_Read (or read_parquet), so this only bounds the file picker; the actual
-// detection is by content/extension at read time.
+// detection is by content/extension at read time. `.zip` is a zipped Shapefile,
+// read by the sidecar via GDAL's /vsizip/ (browser input is gated separately —
+// the in-browser DuckDB reader can't open a zip).
 const VECTOR_TO_VECTOR_INPUT_EXTENSIONS = [
   "geojson",
+  "geojsonl",
   "json",
   "parquet",
   "geoparquet",
   "fgb",
   "gpkg",
   "shp",
+  "zip",
   "kml",
   "gml",
   "gpx",
 ];
 
+// In-browser writers, keyed by output extension. DuckDB-WASM cannot write GDAL
+// vector formats (its virtual filesystem lacks the random-access seek/write the
+// GDAL drivers need), so the web build is limited to GeoParquet (DuckDB) plus
+// the pure-JS GeoJSON/CSV/GeoPackage/Shapefile writers. The Shapefile writer
+// always emits a zip, so `.zip` (not bare `.shp`) is the browser Shapefile
+// option; a bare `.shp` is produced only by the desktop sidecar.
+const BROWSER_OUTPUT_FORMATS: Record<
+  string,
+  "geojson" | "csv" | "geoparquet" | "geopackage" | "shapefile"
+> = {
+  geojson: "geojson",
+  json: "geojson",
+  csv: "csv",
+  parquet: "geoparquet",
+  geoparquet: "geoparquet",
+  gpkg: "geopackage",
+  zip: "shapefile",
+};
+
 // Output extensions the generic Vector to Vector tool offers. The sidecar
 // (native DuckDB spatial) writes every one of these via a GDAL driver; the
-// in-browser runtime can only produce the subset DuckDB-WASM + the bundled JS
-// writers support (see browserExportFormatForExtension).
+// in-browser runtime can only produce the BROWSER_OUTPUT_FORMATS subset.
 const VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS = [
   "geojson",
   "geojsonl",
+  "json",
   "fgb",
   "gpkg",
   "shp",
@@ -199,35 +222,9 @@ const VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS = [
   "geoparquet",
 ];
 
-// In-browser writers, keyed by output extension. DuckDB-WASM cannot write GDAL
-// vector formats (its virtual filesystem lacks the random-access seek/write the
-// GDAL drivers need), so the web build is limited to GeoParquet (DuckDB) plus
-// the pure-JS GeoJSON/CSV/GeoPackage/Shapefile writers. Other formats need the
-// desktop app's sidecar. Returns the export format, or null when unsupported.
-function browserExportFormatForExtension(
-  extension: string,
-): "geojson" | "csv" | "geoparquet" | "geopackage" | "shapefile" | null {
-  switch (extension) {
-    case "geojson":
-    case "json":
-      return "geojson";
-    case "csv":
-      return "csv";
-    case "parquet":
-    case "geoparquet":
-      return "geoparquet";
-    case "gpkg":
-      return "geopackage";
-    case "shp":
-    case "zip":
-      // The in-browser Shapefile writer always emits a zip archive (a bare .shp
-      // needs sidecar files the browser can't bundle), so both extensions map to
-      // the same writer; the save dialog and the "Saved …" log then surface the
-      // actual `.zip` name. A bare `.shp` is only produced by the desktop sidecar.
-      return "shapefile";
-    default:
-      return null;
-  }
+/** The in-browser writer for an output extension, or null when unsupported. */
+function browserExportFormatForExtension(extension: string) {
+  return BROWSER_OUTPUT_FORMATS[extension] ?? null;
 }
 
 const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
@@ -536,6 +533,17 @@ export function ConversionDialog() {
   const runBrowserVectorToVector = async (mainFile: File, siblings: File[]) => {
     if (!kind) return;
     const toolId = kind;
+    // The in-browser DuckDB reader cannot open a zipped Shapefile (ST_Read needs
+    // GDAL's /vsizip/, which only the sidecar uses); guide the user instead of
+    // failing deep in the loader. The desktop app reads .zip inputs directly.
+    if (fileExtension(mainFile.name) === "zip") {
+      setError(
+        "Zipped Shapefiles can only be converted in the GeoLibre desktop app. " +
+          "In the browser, select the unzipped .shp together with its .dbf, " +
+          ".shx, and .prj files.",
+      );
+      return;
+    }
     const outputName =
       outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
     const outputExtension = fileExtension(outputName);

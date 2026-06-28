@@ -79,7 +79,10 @@ VECTOR_OUTPUT_DRIVERS = {
     "mif": "MapInfo File",
     "jml": "JML",
     "gpx": "GPX",
-    "gdb": "OpenFileGDB",
+    # NOTE: directory-based formats (e.g. FileGDB `.gdb/`) are intentionally
+    # excluded — `_validate_paths` treats inputs/outputs as files, and the
+    # failure cleanup unlinks a single file, so a `.gdb` directory would break
+    # both validation and cleanup. They need dedicated directory handling.
 }
 
 
@@ -435,6 +438,10 @@ if output_kind == "gdal":
 low = input_path.lower()
 if low.endswith((".parquet", ".geoparquet")):
     relation = f"read_parquet({quote(input_path)})"
+elif low.endswith(".zip"):
+    # A zipped vector dataset (commonly a zipped Shapefile) is read through
+    # GDAL's /vsizip/ virtual filesystem; a bare path fails to open.
+    relation = f"ST_Read({quote('/vsizip/' + input_path)})"
 else:
     relation = f"ST_Read({quote(input_path)})"
 
