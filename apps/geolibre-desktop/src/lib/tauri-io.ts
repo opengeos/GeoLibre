@@ -870,7 +870,12 @@ export async function readVectorFileWithSidecars(
       file,
       companionFiles,
       nativeData: await tryLoadPickedNativeVectorPath(path, {
-        onLargeDataset: () => false,
+        onLargeDataset: ({ name, featureCount }) => {
+          console.warn(
+            `[GeoLibre] Skipping native vector restore for "${name}" because it contains ${featureCount.toLocaleString()} features; re-add the file to confirm loading it as GeoJSON.`,
+          );
+          return false;
+        },
       }),
     };
   } catch (error) {

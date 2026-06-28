@@ -115,7 +115,26 @@ fn vector_extension(path: &str) -> String {
 }
 
 fn has_duckdb_glob_metacharacter(path: &str) -> bool {
-    path.contains('*') || path.contains('?') || path.contains('[')
+    path.contains('*')
+        || path.contains('?')
+        || (has_duckdb_bracket_glob(path) && !Path::new(path).is_file())
+}
+
+fn has_duckdb_bracket_glob(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    for (index, byte) in bytes.iter().enumerate() {
+        if *byte != b'[' {
+            continue;
+        }
+        if bytes[index + 1..]
+            .iter()
+            .position(|candidate| *candidate == b']')
+            .is_some_and(|closing_index| closing_index > 0)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn count_native_vector_file_features_blocking(
@@ -183,8 +202,6 @@ fn load_native_vector_file_blocking(
 fn open_native_duckdb() -> Result<Connection, String> {
     let conn = Connection::open_in_memory()
         .map_err(|error| format!("Could not open native DuckDB: {error}"))?;
-    conn.execute_batch("LOAD parquet;")
-        .map_err(|error| format!("Could not load DuckDB parquet extension: {error}"))?;
     ensure_spatial_extension(&conn)?;
     Ok(conn)
 }
@@ -626,6 +643,28 @@ mod tests {
         let error = native_options("/tmp/*.parquet".to_string(), None, None)
             .expect_err("glob path should be rejected");
         assert!(error.contains("glob paths are not allowed"));
+
+        let bracket_pattern = format!(
+            "{}/geolibre-native-duckdb-[{}].parquet",
+            std::env::temp_dir().display(),
+            std::process::id()
+        );
+        let error = native_options(bracket_pattern, None, None)
+            .expect_err("bracket glob should be rejected");
+        assert!(error.contains("glob paths are not allowed"));
+    }
+
+    #[test]
+    fn native_options_allows_literal_brackets_in_existing_paths() {
+        let path = format!(
+            "{}/geolibre-native-duckdb-[literal]-{}.parquet",
+            std::env::temp_dir().display(),
+            std::process::id()
+        );
+        std::fs::write(&path, []).expect("create literal bracket file");
+        let options = native_options(path.clone(), None, None).expect("native options");
+        assert_eq!(options.path, path);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
