@@ -18,13 +18,12 @@ const WKB_GEOMETRY_COLUMN_NAMES: [&str; 6] = [
     "wkb",
 ];
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct NativeVectorOptions {
     path: String,
     extension: String,
     layer: Option<String>,
     override_source_crs: Option<String>,
-    spatial_extension_path: Option<String>,
 }
 
 #[derive(Debug)]
@@ -43,9 +42,8 @@ struct DescribedColumn {
 pub async fn count_native_vector_file_features(
     path: String,
     layer: Option<String>,
-    spatial_extension_path: Option<String>,
 ) -> Result<usize, String> {
-    let options = native_options(path, layer, None, spatial_extension_path)?;
+    let options = native_options(path, layer, None)?;
     tauri::async_runtime::spawn_blocking(move || {
         count_native_vector_file_features_blocking(options)
     })
@@ -58,9 +56,8 @@ pub async fn load_native_vector_file(
     path: String,
     layer: Option<String>,
     override_source_crs: Option<String>,
-    spatial_extension_path: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let options = native_options(path, layer, override_source_crs, spatial_extension_path)?;
+    let options = native_options(path, layer, override_source_crs)?;
     tauri::async_runtime::spawn_blocking(move || load_native_vector_file_blocking(options))
         .await
         .map_err(|error| format!("Native DuckDB load task failed: {error}"))?
@@ -70,11 +67,15 @@ fn native_options(
     path: String,
     layer: Option<String>,
     override_source_crs: Option<String>,
-    spatial_extension_path: Option<String>,
 ) -> Result<NativeVectorOptions, String> {
     if !crate::is_allowed_local_vector_path(&path) {
         return Err(format!(
             "Refusing to read \"{path}\": not an absolute local vector file path"
+        ));
+    }
+    if has_duckdb_glob_metacharacter(&path) {
+        return Err(format!(
+            "Refusing to read \"{path}\": glob paths are not allowed"
         ));
     }
     Ok(NativeVectorOptions {
@@ -82,7 +83,6 @@ fn native_options(
         path,
         layer: blank_to_none(layer),
         override_source_crs: blank_to_none(override_source_crs),
-        spatial_extension_path: blank_to_none(spatial_extension_path),
     })
 }
 
@@ -114,10 +114,14 @@ fn vector_extension(path: &str) -> String {
     }
 }
 
+fn has_duckdb_glob_metacharacter(path: &str) -> bool {
+    path.contains('*') || path.contains('?') || path.contains('[')
+}
+
 fn count_native_vector_file_features_blocking(
     options: NativeVectorOptions,
 ) -> Result<usize, String> {
-    let conn = open_native_duckdb(&options)?;
+    let conn = open_native_duckdb()?;
     let sql = source_sql(&options);
     let count_sql = format!(
         "SELECT count(*) AS {} FROM ({sql}) AS data",
@@ -131,7 +135,7 @@ fn count_native_vector_file_features_blocking(
 fn load_native_vector_file_blocking(
     options: NativeVectorOptions,
 ) -> Result<serde_json::Value, String> {
-    let conn = open_native_duckdb(&options)?;
+    let conn = open_native_duckdb()?;
     let sql = source_sql(&options);
     let columns = describe_source_columns(&conn, &sql)?;
     let detected = detect_geometry_column(&columns)?;
@@ -176,19 +180,17 @@ fn load_native_vector_file_blocking(
     }))
 }
 
-fn open_native_duckdb(options: &NativeVectorOptions) -> Result<Connection, String> {
+fn open_native_duckdb() -> Result<Connection, String> {
     let conn = Connection::open_in_memory()
         .map_err(|error| format!("Could not open native DuckDB: {error}"))?;
-    let _ = conn.execute_batch("LOAD parquet;");
-    ensure_spatial_extension(&conn, options.spatial_extension_path.as_deref())?;
+    conn.execute_batch("LOAD parquet;")
+        .map_err(|error| format!("Could not load DuckDB parquet extension: {error}"))?;
+    ensure_spatial_extension(&conn)?;
     Ok(conn)
 }
 
-fn ensure_spatial_extension(
-    conn: &Connection,
-    spatial_extension_path: Option<&str>,
-) -> Result<(), String> {
-    if let Some(path) = spatial_extension_path {
+fn ensure_spatial_extension(conn: &Connection) -> Result<(), String> {
+    if let Some(path) = trusted_spatial_extension_path()? {
         conn.execute_batch(&format!(
             "LOAD {}",
             quote_sql_string(&path.replace('\\', "/"))
@@ -201,6 +203,26 @@ fn ensure_spatial_extension(
 
     conn.execute_batch("INSTALL spatial; LOAD spatial;")
         .map_err(|error| format!("Could not install/load DuckDB spatial extension: {error}"))
+}
+
+fn trusted_spatial_extension_path() -> Result<Option<String>, String> {
+    let Some(path) = blank_to_none(std::env::var("GEOLIBRE_DUCKDB_SPATIAL_EXTENSION_PATH").ok())
+    else {
+        return Ok(None);
+    };
+    let canonical = Path::new(&path)
+        .canonicalize()
+        .map_err(|error| format!("Could not resolve DuckDB spatial extension path: {error}"))?;
+    if !canonical.is_file() {
+        return Err(format!(
+            "DuckDB spatial extension path is not a file: {}",
+            canonical.display()
+        ));
+    }
+    canonical
+        .to_str()
+        .map(|path| Some(path.to_string()))
+        .ok_or_else(|| "DuckDB spatial extension path was not valid UTF-8".to_string())
 }
 
 fn is_parquet_extension(extension: &str) -> bool {
@@ -248,7 +270,7 @@ fn describe_source_columns(conn: &Connection, sql: &str) -> Result<Vec<Described
 }
 
 fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometry, String> {
-    let mut wkb_candidate = None;
+    let mut wkb_candidate: Option<(usize, String)> = None;
     for column in columns {
         if column
             .column_type
@@ -267,11 +289,21 @@ fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometr
             || upper_type.starts_with("VARBINARY"))
             && WKB_GEOMETRY_COLUMN_NAMES.contains(&lower_name.as_str())
         {
-            wkb_candidate = Some(column.name.clone());
+            let rank = WKB_GEOMETRY_COLUMN_NAMES
+                .iter()
+                .position(|candidate| *candidate == lower_name.as_str())
+                .unwrap_or(WKB_GEOMETRY_COLUMN_NAMES.len());
+            if wkb_candidate
+                .as_ref()
+                .map(|(current_rank, _)| rank < *current_rank)
+                .unwrap_or(true)
+            {
+                wkb_candidate = Some((rank, column.name.clone()));
+            }
         }
     }
 
-    if let Some(column) = wkb_candidate {
+    if let Some((_, column)) = wkb_candidate {
         return Ok(DetectedGeometry {
             column,
             is_wkb: true,
@@ -283,7 +315,7 @@ fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometr
 
 fn read_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<String> {
     if is_parquet_extension(&options.extension) {
-        return None;
+        return read_geoparquet_source_crs(conn, options);
     }
     let meta_sql = format!(
         "SELECT layers[1].geometry_fields[1].crs.auth_name AS auth_name, \
@@ -306,6 +338,52 @@ fn read_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<S
             Some(format!("{auth_name}:{auth_code}"))
         }
     })
+}
+
+fn read_geoparquet_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<String> {
+    let metadata_sql = format!(
+        "SELECT decode(value) FROM parquet_kv_metadata({}) WHERE decode(key) = 'geo' LIMIT 1",
+        quote_sql_string(&options.path.replace('\\', "/"))
+    );
+    let metadata: String = conn.query_row(&metadata_sql, [], |row| row.get(0)).ok()?;
+    geoparquet_crs_from_metadata(&metadata)
+}
+
+fn geoparquet_crs_from_metadata(metadata: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(metadata).ok()?;
+    let primary_column = value
+        .get("primary_column")
+        .and_then(|value| value.as_str())
+        .unwrap_or("geometry");
+    let crs = value.get("columns")?.get(primary_column)?.get("crs")?;
+    if crs.is_null() {
+        return None;
+    }
+    crs_auth_code(crs)
+}
+
+fn crs_auth_code(crs: &serde_json::Value) -> Option<String> {
+    let id = match crs.get("id")? {
+        serde_json::Value::Array(ids) => ids.last()?,
+        id => id,
+    };
+    let authority = id
+        .get("authority")
+        .or_else(|| id.get("auth_name"))?
+        .as_str()?
+        .trim()
+        .to_ascii_uppercase();
+    let code = id.get("code").or_else(|| id.get("auth_code"))?;
+    let code = match code {
+        serde_json::Value::String(value) => value.trim().to_string(),
+        serde_json::Value::Number(value) => value.to_string(),
+        _ => return None,
+    };
+    if authority.is_empty() || code.is_empty() {
+        None
+    } else {
+        Some(format!("{authority}:{code}"))
+    }
 }
 
 fn geometry_expr(detected: &DetectedGeometry) -> String {
@@ -366,14 +444,14 @@ fn duckdb_value_to_json(value: &Value) -> serde_json::Value {
     match value {
         Value::Null => serde_json::Value::Null,
         Value::Boolean(value) => json!(value),
-        Value::TinyInt(value) => json!(value),
-        Value::SmallInt(value) => json!(value),
-        Value::Int(value) => json!(value),
+        Value::TinyInt(value) => json_number_or_string_i128(*value as i128),
+        Value::SmallInt(value) => json_number_or_string_i128(*value as i128),
+        Value::Int(value) => json_number_or_string_i128(*value as i128),
         Value::BigInt(value) => json_number_or_string_i128(*value as i128),
         Value::HugeInt(value) => json_number_or_string_i128(*value),
-        Value::UTinyInt(value) => json!(value),
-        Value::USmallInt(value) => json!(value),
-        Value::UInt(value) => json!(value),
+        Value::UTinyInt(value) => json_number_or_string_u128(*value as u128),
+        Value::USmallInt(value) => json_number_or_string_u128(*value as u128),
+        Value::UInt(value) => json_number_or_string_u128(*value as u128),
         Value::UBigInt(value) => json_number_or_string_u128(*value as u128),
         Value::Float(value) => json!(value),
         Value::Double(value) => json!(value),
@@ -411,7 +489,9 @@ fn duckdb_value_to_json(value: &Value) -> serde_json::Value {
 }
 
 fn json_number_or_string_i128(value: i128) -> serde_json::Value {
-    if value >= i64::MIN as i128 && value <= i64::MAX as i128 {
+    const MIN_SAFE_INTEGER: i128 = -9_007_199_254_740_991;
+    const MAX_SAFE_INTEGER: i128 = 9_007_199_254_740_991;
+    if (MIN_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(&value) {
         json!(value as i64)
     } else {
         json!(value.to_string())
@@ -419,7 +499,8 @@ fn json_number_or_string_i128(value: i128) -> serde_json::Value {
 }
 
 fn json_number_or_string_u128(value: u128) -> serde_json::Value {
-    if value <= u64::MAX as u128 {
+    const MAX_SAFE_INTEGER: u128 = 9_007_199_254_740_991;
+    if value <= MAX_SAFE_INTEGER {
         json!(value as u64)
     } else {
         json!(value.to_string())
@@ -457,7 +538,7 @@ fn format_time(unit: TimeUnit, value: i64) -> String {
     };
     let seconds = micros.div_euclid(1_000_000);
     let nanos = (micros.rem_euclid(1_000_000) as u32).saturating_mul(1_000);
-    NaiveTime::from_num_seconds_from_midnight_opt(seconds as u32, nanos)
+    NaiveTime::from_num_seconds_from_midnight_opt(u32::try_from(seconds).unwrap_or(u32::MAX), nanos)
         .map(|time| time.format("%H:%M:%S%.6f").to_string())
         .unwrap_or_else(|| format!("{micros}us"))
 }
@@ -498,7 +579,7 @@ mod tests {
 
     fn create_real_geoparquet(path: &str) {
         let conn = Connection::open_in_memory().expect("open DuckDB");
-        ensure_spatial_extension(&conn, None).expect("load spatial");
+        ensure_spatial_extension(&conn).expect("load spatial");
         conn.execute_batch(&format!(
             "
             CREATE TABLE places AS
@@ -517,7 +598,7 @@ mod tests {
         let path = temp_geoparquet_path();
         create_real_geoparquet(&path);
 
-        let options = native_options(path.clone(), None, None, None).expect("native options");
+        let options = native_options(path.clone(), None, None).expect("native options");
         let feature_count =
             count_native_vector_file_features_blocking(options.clone()).expect("count features");
         assert_eq!(feature_count, 2);
@@ -533,5 +614,75 @@ mod tests {
         assert_eq!(features[0]["geometry"]["coordinates"][1], 37.7749);
 
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn native_options_rejects_duckdb_glob_paths() {
+        let error = native_options("/tmp/*.parquet".to_string(), None, None)
+            .expect_err("glob path should be rejected");
+        assert!(error.contains("glob paths are not allowed"));
+    }
+
+    #[test]
+    fn wkb_detection_uses_preferred_column_name() {
+        let detected = detect_geometry_column(&[
+            DescribedColumn {
+                name: "wkb".to_string(),
+                column_type: "BLOB".to_string(),
+            },
+            DescribedColumn {
+                name: "geometry".to_string(),
+                column_type: "BLOB".to_string(),
+            },
+        ])
+        .expect("detect WKB geometry");
+        assert_eq!(detected.column, "geometry");
+        assert!(detected.is_wkb);
+    }
+
+    #[test]
+    fn integer_json_uses_javascript_safe_range() {
+        assert_eq!(
+            json_number_or_string_i128(9_007_199_254_740_991),
+            json!(9_007_199_254_740_991_i64)
+        );
+        assert_eq!(
+            json_number_or_string_i128(9_007_199_254_740_992),
+            json!("9007199254740992")
+        );
+        assert_eq!(
+            json_number_or_string_u128(9_007_199_254_740_992),
+            json!("9007199254740992")
+        );
+    }
+
+    #[test]
+    fn out_of_range_time_falls_back_to_raw_microseconds() {
+        let micros = (u32::MAX as i64 + 1) * 1_000_000;
+        assert_eq!(
+            format_time(TimeUnit::Microsecond, micros),
+            format!("{micros}us")
+        );
+    }
+
+    #[test]
+    fn geoparquet_crs_reads_primary_column_authority_code() {
+        let metadata = r#"{
+            "version": "1.1.0",
+            "primary_column": "geom",
+            "columns": {
+                "geom": {
+                    "encoding": "WKB",
+                    "crs": {
+                        "type": "ProjectedCRS",
+                        "id": { "authority": "EPSG", "code": 3857 }
+                    }
+                }
+            }
+        }"#;
+        assert_eq!(
+            geoparquet_crs_from_metadata(metadata),
+            Some("EPSG:3857".to_string())
+        );
     }
 }
