@@ -173,7 +173,7 @@ export function InsertBeforeField({
   return (
     <div className="space-y-1.5">
       <Label htmlFor="add-data-before-id">
-        {t("addData.shared.insertBefore")}
+        {t("addData.shared.insertBelow")}
       </Label>
       <Select
         id="add-data-before-id"
