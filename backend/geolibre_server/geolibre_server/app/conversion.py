@@ -388,6 +388,28 @@ def quote(value):
 def quote_ident(value):
     return '"' + str(value).replace('"', '""') + '"'
 
+def shapefile_field_warnings(column_names):
+    # The Shapefile format caps field names at 10 characters and silently
+    # truncates longer ones, which can also collapse distinct fields into one
+    # name. Surface both so attribute renames/merges on write are not a surprise.
+    long_names = [name for name in column_names if len(name) > 10]
+    messages = []
+    if long_names:
+        messages.append(
+            "Shapefile truncates field names to 10 characters: "
+            + ", ".join(long_names)
+        )
+    truncated = {}
+    for name in column_names:
+        truncated.setdefault(name[:10].lower(), []).append(name)
+    collisions = [group for group in truncated.values() if len(group) > 1]
+    if collisions:
+        messages.append(
+            "Truncating to 10 characters produces duplicate field names: "
+            + "; ".join(", ".join(group) for group in collisions)
+        )
+    return messages
+
 con = duckdb.connect()
 con.execute("INSTALL spatial; LOAD spatial;")
 
@@ -442,10 +464,12 @@ else:
         f"FROM {relation}"
     )
 
-# GeoJSON and Parquet carry no CRS on the GEOMETRY column (both are WGS84 by
-# spec), so a GDAL writer would emit no .prj/SRS; tag it explicitly. Other
-# inputs keep the CRS embedded in their geometry and need no override.
-if low.endswith((".geojson", ".json", ".parquet", ".geoparquet")):
+# GeoJSON is WGS84 by spec (RFC 7946) but carries no CRS on the GEOMETRY
+# column, so a GDAL writer would emit no .prj/SRS; tag it explicitly. Parquet is
+# NOT always WGS84 (GeoParquet embeds its own CRS, e.g. a projected dataset), so
+# it is left untagged like every other input and the GDAL writer uses whatever
+# CRS the geometry carries rather than a hardcoded one. Mirrors _VECTOR_SCRIPT.
+if low.endswith((".geojson", ".json")):
     output_srs = "EPSG:4326"
 else:
     output_srs = None
@@ -456,7 +480,16 @@ else:
     srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
     to_clause = f"(FORMAT GDAL, DRIVER {quote(output_driver)}{srs_clause})"
 
+# Surface Shapefile field-name truncation for any Shapefile output (bare .shp or
+# zipped .zip), where GDAL silently caps field names at 10 characters.
 warnings = []
+if output_driver == "ESRI Shapefile":
+    warnings = shapefile_field_warnings(
+        [name for name, *_ in columns if name != geometry_column]
+    )
+    for message in warnings:
+        print(f"Warning: {message}")
+
 tmp_dir = None
 if zip_shapefile:
     # The Shapefile driver writes a .shp plus .shx/.dbf/.prj/.cpg sidecars, so
