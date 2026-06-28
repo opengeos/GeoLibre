@@ -135,6 +135,7 @@ export {
 export {
   closePlanetaryComputerPanel,
   openPlanetaryComputerPanel,
+  restorePlanetaryComputerLayers,
 } from "./plugins/maplibre-planetary-computer";
 export {
   closeEarthEnginePanel,

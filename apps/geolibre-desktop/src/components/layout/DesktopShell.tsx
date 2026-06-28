@@ -19,6 +19,7 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
   restoreEffects,
   restoreLidarLayers,
+  restorePlanetaryComputerLayers,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -862,6 +863,7 @@ export function DesktopShell({
     );
     restoreThreeDTilesLayers(appAPI);
     restoreRasterLayers(appAPI);
+    restorePlanetaryComputerLayers(appAPI);
     restoreVectorLayers(appAPI);
     // Re-stream saved LiDAR (COPC) point clouds. A `lidar-url` layer restores
     // into the store as inert metadata; the point cloud is loaded by the LiDAR

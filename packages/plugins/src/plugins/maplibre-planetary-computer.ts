@@ -8,11 +8,20 @@ import type {
   PlanetaryComputerControl,
   PlanetaryComputerEventData,
   PlanetaryComputerOptions,
+  STACClient,
+  STACCollection,
+  STACItem,
+  TiTilerClient,
+  TileParams,
 } from "maplibre-gl-planetary-computer";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 
 type PlanetaryComputerControlConstructor =
-  (typeof import("maplibre-gl-planetary-computer"))["PlanetaryComputerControl"];
+  typeof import("maplibre-gl-planetary-computer")["PlanetaryComputerControl"];
+type STACClientConstructor =
+  typeof import("maplibre-gl-planetary-computer")["STACClient"];
+type TiTilerClientConstructor =
+  typeof import("maplibre-gl-planetary-computer")["TiTilerClient"];
 
 const planetaryComputerControlPosition: GeoLibreMapControlPosition = "top-left";
 
@@ -27,7 +36,16 @@ let planetaryComputerControl: PlanetaryComputerControl | null = null;
 let planetaryComputerControlMounted = false;
 let planetaryComputerConstructorsPromise: Promise<{
   PlanetaryComputerControl: PlanetaryComputerControlConstructor;
+  STACClient: STACClientConstructor;
+  TiTilerClient: TiTilerClientConstructor;
 }> | null = null;
+let planetaryComputerConstructors: {
+  PlanetaryComputerControl: PlanetaryComputerControlConstructor;
+  STACClient: STACClientConstructor;
+  TiTilerClient: TiTilerClientConstructor;
+} | null = null;
+let planetaryComputerStacClient: STACClient | null = null;
+let planetaryComputerTilerClient: TiTilerClient | null = null;
 let planetaryComputerStoreUnsubscribe: (() => void) | null = null;
 
 export function openPlanetaryComputerPanel(app: GeoLibreAppAPI): void {
@@ -45,32 +63,13 @@ export function closePlanetaryComputerPanel(app: GeoLibreAppAPI): void {
 async function openStandalonePlanetaryComputerControl(
   app: GeoLibreAppAPI,
 ): Promise<boolean> {
-  // Unlike the deck.gl-based plugins (GeoParquet, DuckDB), no
-  // ensureMercatorProjection call is needed: the control adds native
-  // MapLibre raster layers, which render correctly on the globe projection.
-  const { PlanetaryComputerControl: PlanetaryComputerControlClass } =
-    await getPlanetaryComputerConstructors();
-
-  planetaryComputerControl ??= createPlanetaryComputerControl(
-    PlanetaryComputerControlClass,
-  );
-
-  if (!planetaryComputerControlMounted) {
-    const added = app.addMapControl(
-      planetaryComputerControl,
-      planetaryComputerControlPosition,
-    );
-    if (!added) {
-      resetPlanetaryComputerControl(planetaryComputerControl);
-      return false;
-    }
-    planetaryComputerControlMounted = true;
-  }
+  const control = await ensurePlanetaryComputerControl(app);
+  if (!control) return false;
 
   setTimeout(() => {
-    showPlanetaryComputerControl(planetaryComputerControl);
-    planetaryComputerControl?.expand();
-    wirePlanetaryComputerCloseButton(planetaryComputerControl);
+    showPlanetaryComputerControl(control);
+    control.expand();
+    wirePlanetaryComputerCloseButton(control);
   }, 0);
   return true;
 }
@@ -97,14 +96,55 @@ function wirePlanetaryComputerCloseButton(
 
 function getPlanetaryComputerConstructors(): Promise<{
   PlanetaryComputerControl: PlanetaryComputerControlConstructor;
+  STACClient: STACClientConstructor;
+  TiTilerClient: TiTilerClientConstructor;
 }> {
-  planetaryComputerConstructorsPromise ??=
-    import("maplibre-gl-planetary-computer").then(
-      ({ PlanetaryComputerControl: PlanetaryComputerControlClass }) => ({
-        PlanetaryComputerControl: PlanetaryComputerControlClass,
-      }),
-    );
+  planetaryComputerConstructorsPromise ??= import(
+    "maplibre-gl-planetary-computer"
+  ).then((module) => {
+    const {
+      PlanetaryComputerControl: PlanetaryComputerControlClass,
+      STACClient: STACClientClass,
+      TiTilerClient: TiTilerClientClass,
+    } = module;
+    planetaryComputerConstructors = {
+      PlanetaryComputerControl: PlanetaryComputerControlClass,
+      STACClient: STACClientClass,
+      TiTilerClient: TiTilerClientClass,
+    };
+    return planetaryComputerConstructors;
+  });
   return planetaryComputerConstructorsPromise;
+}
+
+async function ensurePlanetaryComputerControl(
+  app: GeoLibreAppAPI,
+): Promise<PlanetaryComputerControl | null> {
+  // Unlike the deck.gl-based plugins (GeoParquet, DuckDB), no
+  // ensureMercatorProjection call is needed: the control adds native
+  // MapLibre raster layers, which render correctly on the globe projection.
+  const { PlanetaryComputerControl: PlanetaryComputerControlClass } =
+    await getPlanetaryComputerConstructors();
+
+  planetaryComputerControl ??= createPlanetaryComputerControl(
+    PlanetaryComputerControlClass,
+  );
+
+  if (!planetaryComputerControlMounted) {
+    const added = app.addMapControl(
+      planetaryComputerControl,
+      planetaryComputerControlPosition,
+    );
+    if (!added) {
+      resetPlanetaryComputerControl(planetaryComputerControl);
+      return null;
+    }
+    planetaryComputerControlMounted = true;
+    hidePlanetaryComputerControl(planetaryComputerControl);
+    wirePlanetaryComputerCloseButton(planetaryComputerControl);
+  }
+
+  return planetaryComputerControl;
 }
 
 function createPlanetaryComputerControl(
@@ -238,6 +278,231 @@ function createPlanetaryComputerStoreLayer(
   };
 }
 
+/**
+ * Replays saved Planetary Computer raster layers into the upstream control.
+ * The upstream addItemLayer/addCollectionLayer methods generate fresh IDs, so
+ * project restore has to recreate the native MapLibre layers with the saved
+ * GeoLibre IDs and register them with the control's runtime layer manager.
+ *
+ * @param app - The GeoLibre app API.
+ */
+export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
+  const hasPlanetaryComputerLayers = useAppStore
+    .getState()
+    .layers.some(isPlanetaryComputerLayer);
+  if (!hasPlanetaryComputerLayers && !planetaryComputerControl) return;
+
+  void (async () => {
+    const control = await ensurePlanetaryComputerControl(app);
+    if (!control) return;
+
+    const storeLayers = useAppStore
+      .getState()
+      .layers.filter(isPlanetaryComputerLayer);
+    const storeLayerIds = new Set(storeLayers.map((layer) => layer.id));
+
+    for (const activeLayer of control.getState().activeLayers) {
+      if (!storeLayerIds.has(activeLayer.id)) {
+        control.removeLayer(activeLayer.id);
+      }
+    }
+
+    const activeLayerIds = new Set(
+      control.getState().activeLayers.map((layer) => layer.id),
+    );
+
+    let restoredCount = 0;
+    for (const layer of storeLayers) {
+      if (activeLayerIds.has(layer.id)) {
+        control.updateLayer(layer.id, {
+          opacity: layer.opacity,
+          visible: layer.visible,
+        });
+        continue;
+      }
+
+      try {
+        await restorePlanetaryComputerLayer(control, layer);
+        restoredCount += 1;
+      } catch (error) {
+        console.error(
+          `[GeoLibre] Failed to restore Planetary Computer layer "${layer.name}"`,
+          error,
+        );
+      }
+    }
+
+    if (restoredCount > 0) {
+      emitPlanetaryComputerRestore(control);
+    }
+  })().catch((error) => {
+    console.error(
+      "[GeoLibre] Failed to restore Planetary Computer layers",
+      error,
+    );
+  });
+}
+
+async function restorePlanetaryComputerLayer(
+  control: PlanetaryComputerControl,
+  layer: GeoLibreLayer,
+): Promise<void> {
+  const collectionId = stringMetadata(layer, "stacCollectionId");
+  const layerType = stringMetadata(layer, "planetaryComputerLayerType");
+  if (!collectionId) {
+    throw new Error(
+      "Saved Planetary Computer layer is missing a collection id.",
+    );
+  }
+
+  if (layerType === "collection" || layerType === "mosaic") {
+    const collection = await getPlanetaryComputerStacClient().getCollection(
+      collectionId,
+    );
+    registerRestoredPlanetaryComputerLayer(control, layer, {
+      collection,
+      type: layerType,
+    });
+    return;
+  }
+
+  const itemId = stringMetadata(layer, "stacItemId");
+  if (!itemId) {
+    throw new Error(
+      "Saved Planetary Computer item layer is missing an item id.",
+    );
+  }
+
+  const item = await getPlanetaryComputerStacClient().getItem(
+    collectionId,
+    itemId,
+  );
+  registerRestoredPlanetaryComputerLayer(control, layer, {
+    item,
+    type: "item",
+  });
+}
+
+function registerRestoredPlanetaryComputerLayer(
+  control: PlanetaryComputerControl,
+  layer: GeoLibreLayer,
+  source:
+    | { item: STACItem; type: "item" }
+    | { collection: STACCollection; type: "collection" | "mosaic" },
+): void {
+  const map = control.getMap();
+  if (!map) throw new Error("Planetary Computer control is not attached.");
+
+  const sourceId = stringMetadata(layer, "sourceId") || `${layer.id}-source`;
+  const renderParams = tileParamsMetadata(layer, "renderParams");
+  const assets =
+    stringArrayMetadata(layer, "assets") || renderParams.assets || [];
+  const savedBounds = numberArrayMetadata(layer, "bounds");
+  const tileParams = assets.length ? { ...renderParams, assets } : renderParams;
+
+  if (map.getLayer(layer.id)) map.removeLayer(layer.id);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+  if (source.type === "item") {
+    const collectionId = source.item.collection || "";
+    map.addSource(sourceId, {
+      type: "raster",
+      url: getPlanetaryComputerTilerClient().getItemTileJSONUrl(
+        collectionId,
+        source.item.id,
+        tileParams,
+      ),
+      tileSize: tileParams.tile_size || 256,
+      bounds: boundsTuple(source.item.bbox),
+      attribution: "Microsoft Planetary Computer",
+    });
+  } else {
+    map.addSource(sourceId, {
+      type: "raster",
+      tiles: [
+        getPlanetaryComputerTilerClient().getCollectionTileUrl(
+          source.collection.id,
+          tileParams,
+        ),
+      ],
+      tileSize: tileParams.tile_size || 256,
+      bounds:
+        savedBounds ?? boundsTuple(source.collection.extent.spatial.bbox[0]),
+      attribution: "Microsoft Planetary Computer",
+    });
+  }
+
+  map.addLayer({
+    id: layer.id,
+    type: "raster",
+    source: sourceId,
+    layout: {
+      visibility: layer.visible ? "visible" : "none",
+    },
+    paint: {
+      "raster-opacity": layer.opacity,
+    },
+  });
+
+  const activeLayer: ActiveLayer = {
+    id: layer.id,
+    type: source.type,
+    sourceId,
+    ...(source.type === "item"
+      ? { item: source.item, collection: undefined }
+      : { collection: source.collection }),
+    visible: layer.visible,
+    opacity: layer.opacity,
+    assets,
+    renderParams: tileParams,
+    presetName: stringMetadata(layer, "presetName"),
+    showControls: false,
+  };
+
+  const internals = control as unknown as PlanetaryComputerControlInternals;
+  internals._layerManager?.layers?.set(layer.id, activeLayer);
+  if (
+    !internals._state.activeLayers.some((current) => current.id === layer.id)
+  ) {
+    internals._state.activeLayers.push(activeLayer);
+  }
+}
+
+function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
+  const internals = control as unknown as PlanetaryComputerControlInternals;
+  internals._emit?.("layer:add");
+  internals._emit?.("statechange");
+  internals._renderContent?.();
+}
+
+function getPlanetaryComputerStacClient(): STACClient {
+  if (!planetaryComputerStacClient) {
+    const { STACClient: STACClientClass } =
+      getResolvedPlanetaryComputerConstructors();
+    planetaryComputerStacClient = new STACClientClass();
+  }
+  return planetaryComputerStacClient;
+}
+
+function getPlanetaryComputerTilerClient(): TiTilerClient {
+  if (!planetaryComputerTilerClient) {
+    const { TiTilerClient: TiTilerClientClass } =
+      getResolvedPlanetaryComputerConstructors();
+    planetaryComputerTilerClient = new TiTilerClientClass();
+  }
+  return planetaryComputerTilerClient;
+}
+
+function getResolvedPlanetaryComputerConstructors(): {
+  STACClient: STACClientConstructor;
+  TiTilerClient: TiTilerClientConstructor;
+} {
+  if (!planetaryComputerConstructors) {
+    throw new Error("Planetary Computer constructors are not loaded.");
+  }
+  return planetaryComputerConstructors;
+}
+
 function planetaryComputerLayerName(activeLayer: ActiveLayer): string {
   if (activeLayer.item) return activeLayer.item.id;
   if (activeLayer.collection) {
@@ -294,4 +559,56 @@ function isPlanetaryComputerLayer(layer: GeoLibreLayer): boolean {
     layer.metadata.sourceKind === "planetary-computer-raster" &&
     layer.metadata.externalNativeLayer === true
   );
+}
+
+type PlanetaryComputerLayerManagerInternals = {
+  layers?: Map<string, ActiveLayer>;
+};
+
+type PlanetaryComputerControlInternals = {
+  _layerManager?: PlanetaryComputerLayerManagerInternals;
+  _state: { activeLayers: ActiveLayer[] };
+  _emit?: (event: "layer:add" | "statechange") => void;
+  _renderContent?: () => void;
+};
+
+function stringMetadata(layer: GeoLibreLayer, key: string): string | undefined {
+  const value = layer.metadata[key];
+  return typeof value === "string" && value ? value : undefined;
+}
+
+function stringArrayMetadata(
+  layer: GeoLibreLayer,
+  key: string,
+): string[] | undefined {
+  const value = layer.metadata[key];
+  return Array.isArray(value) &&
+    value.every((entry) => typeof entry === "string")
+    ? value
+    : undefined;
+}
+
+function numberArrayMetadata(
+  layer: GeoLibreLayer,
+  key: string,
+): [number, number, number, number] | undefined {
+  const value = layer.metadata[key];
+  return boundsTuple(value);
+}
+
+function tileParamsMetadata(layer: GeoLibreLayer, key: string): TileParams {
+  const value = layer.metadata[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as TileParams)
+    : {};
+}
+
+function boundsTuple(
+  value: unknown,
+): [number, number, number, number] | undefined {
+  return Array.isArray(value) &&
+    value.length === 4 &&
+    value.every((entry) => typeof entry === "number")
+    ? (value as [number, number, number, number])
+    : undefined;
 }
