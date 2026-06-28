@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createGunzip } from "node:zlib";
 import { pipeline } from "node:stream/promises";
+import { parseTargetTripleArg } from "./duckdb-target.mjs";
 
 const DUCKDB_VERSION = "v1.5.4";
 const PLATFORMS = [
@@ -63,14 +64,11 @@ const HOST_TO_PLATFORM = {
 };
 
 function parseTargetTriple(argv) {
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if ((arg === "--target" || arg === "-t") && argv[i + 1]) return argv[i + 1];
-    if (arg.startsWith("--target=")) return arg.slice("--target=".length);
-    if (arg.startsWith("-t=")) return arg.slice("-t=".length);
-  }
   return (
-    process.env.GEOLIBRE_DUCKDB_TARGET || process.env.CARGO_BUILD_TARGET || ""
+    parseTargetTripleArg(argv) ||
+    process.env.GEOLIBRE_DUCKDB_TARGET ||
+    process.env.CARGO_BUILD_TARGET ||
+    ""
   );
 }
 
@@ -153,7 +151,9 @@ async function fetchPlatform(platform, expected, recorded) {
 
     const digest = await sha256File(tmpFile);
     const pinned = expected[platform];
-    if (pinned && pinned !== digest) {
+    // In re-pin mode a changed digest is recorded (the committed manifest diff
+    // is the human review gate); otherwise a mismatch aborts the build.
+    if (pinned && pinned !== digest && !writeChecksums) {
       throw new Error(
         `Checksum mismatch for ${platform}.\n  expected ${pinned}\n  got      ${digest}\n` +
           `Refusing to bundle an unverified native extension. If the upstream artifact ` +
@@ -170,7 +170,9 @@ async function fetchPlatform(platform, expected, recorded) {
     recorded[platform] = digest;
     await rename(tmpFile, outFile);
     console.log(
-      pinned ? "done (verified)" : `done (recorded ${digest.slice(0, 12)}...)`
+      pinned === digest
+        ? "done (verified)"
+        : `done (recorded ${digest.slice(0, 12)}...)`
     );
   } catch (error) {
     await rm(tmpFile, { force: true });

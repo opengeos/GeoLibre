@@ -1,25 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseTargetTripleArg } from "./duckdb-target.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const userArgs = process.argv.slice(2);
 
 // Forward an explicit cross-build target to the fetch helper so it pulls the
-// matching DuckDB artifact rather than the host's. `tauri build` accepts the
-// split (`--target <triple>`, `-t <triple>`) and joined (`--target=<triple>`,
-// `-t=<triple>`) forms, so handle all of them.
-function extractTargetTriple(args) {
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === "--target" || arg === "-t") return args[i + 1] || "";
-    if (arg.startsWith("--target=")) return arg.slice("--target=".length);
-    if (arg.startsWith("-t=")) return arg.slice("-t=".length);
-  }
-  return "";
-}
-const targetTriple = extractTargetTriple(userArgs);
+// matching DuckDB artifact rather than the host's.
+const targetTriple = parseTargetTripleArg(userArgs);
 const targetArgs = targetTriple ? ["--target", targetTriple] : [];
 
 // Fetch and verify the DuckDB spatial extension into the Tauri resources tree
