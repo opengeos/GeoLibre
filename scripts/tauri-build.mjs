@@ -6,13 +6,18 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const userArgs = process.argv.slice(2);
 
-// Forward an explicit `--target <triple>` (cross-build) to the fetch helper so
-// it pulls the matching DuckDB artifact rather than the host's.
+// Forward an explicit cross-build target to the fetch helper so it pulls the
+// matching DuckDB artifact rather than the host's. Tauri accepts both the split
+// form (`--target <triple>`) and the joined form (`--target=<triple>`).
 const targetIndex = userArgs.indexOf("--target");
-const targetArgs =
+const targetEqualsArg = userArgs.find((arg) => arg.startsWith("--target="));
+const targetTriple =
   targetIndex !== -1 && userArgs[targetIndex + 1]
-    ? ["--target", userArgs[targetIndex + 1]]
-    : [];
+    ? userArgs[targetIndex + 1]
+    : targetEqualsArg
+    ? targetEqualsArg.slice("--target=".length)
+    : "";
+const targetArgs = targetTriple ? ["--target", targetTriple] : [];
 
 // Fetch and verify the DuckDB spatial extension into the Tauri resources tree
 // before bundling, so packaged desktop builds ship a signed extension the native
