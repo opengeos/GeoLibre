@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "node ../../scripts/tauri-build.mjs"
+    "tauri:build": "node ../../scripts/tauri-build.mjs",
+    "tauri:build:native-duckdb": "node ../../scripts/tauri-build.mjs --native-duckdb"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",

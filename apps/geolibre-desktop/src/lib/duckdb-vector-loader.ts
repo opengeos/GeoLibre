@@ -1,8 +1,4 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
-import duckdbWasmEh from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
-import ehWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
-import duckdbWasmMvp from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
-import mvpWorker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import {
   detectGeometryColumn,
@@ -19,6 +15,7 @@ import {
 } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
+import { selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
 // Re-exported for existing importers (sql-workspace, duckdb-processing, etc.)
@@ -43,17 +40,6 @@ const EXPORT_GEOJSON_EXTENSION = "geojson";
 const EXPORT_GEOPARQUET_EXTENSION = "parquet";
 
 const FEATURE_COUNT_COLUMN = "__geolibre_feature_count";
-
-const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
-  mvp: {
-    mainModule: duckdbWasmMvp,
-    mainWorker: mvpWorker,
-  },
-  eh: {
-    mainModule: duckdbWasmEh,
-    mainWorker: ehWorker,
-  },
-};
 
 let dbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
 
@@ -158,7 +144,7 @@ export async function ensureH3Extension(
 }
 
 async function createDatabase(): Promise<duckdb.AsyncDuckDB> {
-  const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+  const bundle = await selectDuckDbBundle();
   const worker = new Worker(bundle.mainWorker!, { type: "module" });
   const logger = new duckdb.ConsoleLogger(duckdb.LogLevel.WARNING);
   const db = new duckdb.AsyncDuckDB(logger, worker);

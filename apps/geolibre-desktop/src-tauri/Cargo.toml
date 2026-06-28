@@ -9,6 +9,10 @@ edition = "2021"
 name = "geolibre_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
+[features]
+default = []
+native-duckdb = ["dep:duckdb"]
+
 # Optimize the release binary for size. The frontend assets dominate the binary,
 # but these still trim the Rust code: LTO + a single codegen unit let the linker
 # drop dead code across crates, `strip` removes symbols/debuginfo, `opt-level="s"`
@@ -29,7 +33,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
-duckdb = { version = "1.10504.0", features = ["bundled", "parquet"] }
+duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 flate2 = "1"

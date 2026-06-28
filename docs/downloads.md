@@ -181,4 +181,8 @@ npm install
 npm run tauri:build
 ```
 
+The default desktop build keeps the Linux binary small and uses DuckDB-WASM for
+DuckDB-backed browser features. To build a larger desktop binary with the native
+`duckdb-rs` vector loader enabled, run `npm run tauri:build:native-duckdb`.
+
 Desktop builds require the Rust toolchain and Tauri platform prerequisites.

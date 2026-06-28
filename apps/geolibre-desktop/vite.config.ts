@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -469,6 +469,38 @@ function cereusCdnLoaderPlugin(): Plugin {
   };
 }
 
+function duckdbWasmBundlesPlugin(): Plugin {
+  const modulePath = path.resolve(
+    __dirname,
+    IS_TAURI_BUILD
+      ? "src/lib/duckdb-wasm-bundles.tauri.ts"
+      : "src/lib/duckdb-wasm-bundles.ts",
+  );
+  return {
+    name: "geolibre-duckdb-wasm-bundles",
+    enforce: "pre",
+    resolveId(source) {
+      return /(?:^|\/)duckdb-wasm-bundles(?:\.ts)?$/.test(source)
+        ? modulePath
+        : null;
+    },
+  };
+}
+
+function removeJupyterLiteFromTauriDistPlugin(): Plugin {
+  return {
+    name: "geolibre-remove-jupyterlite-from-tauri-dist",
+    apply: "build",
+    closeBundle() {
+      if (!IS_TAURI_BUILD) return;
+      rmSync(path.resolve(__dirname, "dist/jupyterlite"), {
+        recursive: true,
+        force: true,
+      });
+    },
+  };
+}
+
 function projectUrlQueryPlugin(): Plugin {
   return {
     name: "geolibre-project-url-query",
@@ -728,6 +760,7 @@ export default defineConfig({
   plugins: [
     ...(PGLITE_CDN ? [pgliteCdnLoaderPlugin()] : []),
     ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
+    duckdbWasmBundlesPlugin(),
     stripDuckDbWorkerSourcemapPlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
@@ -744,6 +777,7 @@ export default defineConfig({
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
+    removeJupyterLiteFromTauriDistPlugin(),
     ...pwaPlugin(),
   ],
   clearScreen: false,

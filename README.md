@@ -400,6 +400,14 @@ npm run build
 npm run tauri:build
 ```
 
+The default desktop build keeps the Linux binary small and uses DuckDB-WASM for
+DuckDB-backed browser features. To build a larger desktop binary with the native
+`duckdb-rs` vector loader enabled, run:
+
+```bash
+npm run tauri:build:native-duckdb
+```
+
 Where to find the output:
 
 - **Web build** — static files in `apps/geolibre-desktop/dist/`. Serve this directory with any static web server (or the Docker image above).

@@ -1,5 +1,25 @@
 mod earth_engine_oauth;
+#[cfg(feature = "native-duckdb")]
 mod native_duckdb;
+#[cfg(not(feature = "native-duckdb"))]
+mod native_duckdb {
+    #[tauri::command]
+    pub async fn count_native_vector_file_features(
+        _path: String,
+        _layer: Option<String>,
+    ) -> Result<usize, String> {
+        Err("Native DuckDB is not enabled in this build.".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn load_native_vector_file(
+        _path: String,
+        _layer: Option<String>,
+        _override_source_crs: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        Err("Native DuckDB is not enabled in this build.".to_string())
+    }
+}
 
 use earth_engine_oauth::{
     poll_earth_engine_oauth, start_earth_engine_oauth, EarthEngineOAuthState,
