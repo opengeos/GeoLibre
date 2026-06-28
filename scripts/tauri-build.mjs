@@ -3,6 +3,22 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Fetch and verify the DuckDB spatial extension into the Tauri resources tree
+// before bundling, so packaged desktop builds ship a signed extension the native
+// DuckDB loader can read offline. A checksum mismatch aborts the build here.
+const fetched = spawnSync(
+  "node",
+  [resolve(repoRoot, "scripts/fetch-duckdb-spatial.mjs")],
+  {
+    cwd: repoRoot,
+    stdio: "inherit",
+  },
+);
+if (fetched.status !== 0) {
+  process.exit(fetched.status ?? 1);
+}
+
 const userArgs = process.argv.slice(2);
 const buildArgs =
   userArgs.length === 0 && process.platform === "linux"

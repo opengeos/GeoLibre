@@ -1,0 +1,10 @@
+{
+  "version": "v1.5.4",
+  "sha256": {
+    "osx_arm64": "575c609c1eb0b45be5d4000792528579746233c5d57d3fa83aa825d11740a1ec",
+    "osx_amd64": "df5af2359bd4be3f347ba3a843fd440f4db653dadd8eb31fe6c16a67abbb1bc8",
+    "windows_amd64": "9952e232a1dcb400ea4da0d1e6d91f34ae525e116233868e7906187d3d58133c",
+    "linux_amd64": "819a0fa94d2e8257371bb4d97f32c47586b42c85e24bab1bcbf8712a88b8ccfa",
+    "linux_arm64": "af2547875834496f3112261631cc8d8c96ae67912edab6b4e3d5f4f7545e547a"
+  }
+}

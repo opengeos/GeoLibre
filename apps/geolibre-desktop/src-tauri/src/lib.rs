@@ -200,11 +200,78 @@ pub fn run() {
             poll_earth_engine_oauth
         ])
         .setup(|app| {
+            point_native_duckdb_at_bundled_spatial_extension(app.handle());
             create_main_window(app)?;
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running GeoLibre Desktop");
+}
+
+/// Environment variable the native DuckDB loader reads to find a local spatial
+/// extension to `LOAD` (see `native_duckdb::trusted_spatial_extension_path`).
+const DUCKDB_SPATIAL_EXTENSION_ENV: &str = "GEOLIBRE_DUCKDB_SPATIAL_EXTENSION_PATH";
+
+/// Per-platform resource subpath of the bundled DuckDB spatial extension,
+/// populated by `scripts/fetch-duckdb-spatial.mjs` and shipped via the
+/// `resources/duckdb/**/*` entry in `tauri.conf.json`. Returns `None` on
+/// platforms we do not fetch a binary for, where the loader falls back to a
+/// runtime `LOAD spatial`.
+fn bundled_spatial_extension_subpath() -> Option<&'static str> {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        Some("resources/duckdb/osx_arm64/spatial.duckdb_extension")
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        Some("resources/duckdb/osx_amd64/spatial.duckdb_extension")
+    }
+    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+    {
+        Some("resources/duckdb/windows_amd64/spatial.duckdb_extension")
+    }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    {
+        Some("resources/duckdb/linux_amd64/spatial.duckdb_extension")
+    }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    {
+        Some("resources/duckdb/linux_arm64/spatial.duckdb_extension")
+    }
+    #[cfg(not(any(
+        all(target_os = "macos", target_arch = "aarch64"),
+        all(target_os = "macos", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
+    )))]
+    {
+        None
+    }
+}
+
+/// Point the native DuckDB loader at the spatial extension bundled with the app
+/// so packaged, offline desktop builds can `LOAD` a signed extension without a
+/// network install. A pre-set environment variable wins, so developers and CI
+/// can override the bundled binary. When no binary is bundled for this platform
+/// (for example in `tauri dev` before `fetch:duckdb-spatial` has run), the loader
+/// falls back to a runtime `LOAD spatial`.
+fn point_native_duckdb_at_bundled_spatial_extension(app: &tauri::AppHandle) {
+    if env::var_os(DUCKDB_SPATIAL_EXTENSION_ENV).is_some() {
+        return;
+    }
+    let Some(subpath) = bundled_spatial_extension_subpath() else {
+        return;
+    };
+    let Ok(path) = app
+        .path()
+        .resolve(subpath, tauri::path::BaseDirectory::Resource)
+    else {
+        return;
+    };
+    if path.is_file() {
+        env::set_var(DUCKDB_SPATIAL_EXTENSION_ENV, path);
+    }
 }
 
 #[tauri::command]
@@ -2490,8 +2557,28 @@ fn configure_linux_webkit() {}
 
 #[cfg(test)]
 mod tests {
-    use super::{find_zip_manifest_path, is_allowed_local_vector_path, plugin_archive_file_name};
+    use super::{
+        bundled_spatial_extension_subpath, find_zip_manifest_path, is_allowed_local_vector_path,
+        plugin_archive_file_name,
+    };
     use std::io::{Cursor, Write};
+
+    #[test]
+    fn bundled_spatial_extension_subpath_matches_fetch_layout() {
+        // On every platform we fetch a binary for, the subpath must live under
+        // resources/duckdb and name the spatial extension file the loader LOADs.
+        // scripts/fetch-duckdb-spatial.mjs writes exactly this layout.
+        if let Some(subpath) = bundled_spatial_extension_subpath() {
+            assert!(
+                subpath.starts_with("resources/duckdb/"),
+                "subpath {subpath} must be under resources/duckdb/"
+            );
+            assert!(
+                subpath.ends_with("/spatial.duckdb_extension"),
+                "subpath {subpath} must name the spatial extension file"
+            );
+        }
+    }
 
     #[test]
     fn allows_absolute_vector_paths() {
