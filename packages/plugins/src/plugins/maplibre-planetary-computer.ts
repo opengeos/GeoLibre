@@ -64,7 +64,9 @@ export function closePlanetaryComputerPanel(app: GeoLibreAppAPI): void {
 async function openStandalonePlanetaryComputerControl(
   app: GeoLibreAppAPI
 ): Promise<boolean> {
-  const control = await ensurePlanetaryComputerControl(app);
+  const control = await ensurePlanetaryComputerControl(app, {
+    hiddenOnMount: false,
+  });
   if (!control) return false;
 
   setTimeout(() => {
@@ -119,7 +121,8 @@ function getPlanetaryComputerConstructors(): Promise<{
 }
 
 async function ensurePlanetaryComputerControl(
-  app: GeoLibreAppAPI
+  app: GeoLibreAppAPI,
+  options: { hiddenOnMount?: boolean } = {}
 ): Promise<PlanetaryComputerControl | null> {
   // Unlike the deck.gl-based plugins (GeoParquet, DuckDB), no
   // ensureMercatorProjection call is needed: the control adds native
@@ -141,7 +144,9 @@ async function ensurePlanetaryComputerControl(
       return null;
     }
     planetaryComputerControlMounted = true;
-    hidePlanetaryComputerControl(planetaryComputerControl);
+    if (options.hiddenOnMount ?? true) {
+      hidePlanetaryComputerControl(planetaryComputerControl);
+    }
     wirePlanetaryComputerCloseButton(planetaryComputerControl);
   }
 
@@ -331,12 +336,16 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
         restorePlanetaryComputerLayer(control, layer, restoreToken)
       )
     );
+    if (restoreToken !== planetaryComputerRestoreToken) return;
+
     let restoredCount = 0;
+    const failedLayerNames: string[] = [];
     for (const [index, result] of results.entries()) {
       const layer = layersToRestore[index];
       if (result.status === "fulfilled") {
         if (result.value) restoredCount += 1;
       } else {
+        failedLayerNames.push(layer?.name ?? "unknown");
         console.error(
           `[GeoLibre] Failed to restore Planetary Computer layer "${
             layer?.name ?? "unknown"
@@ -347,11 +356,16 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
     }
 
     if (restoredCount > 0) {
+      if (failedLayerNames.length > 0) {
+        console.warn(
+          "[GeoLibre] Some Planetary Computer layers could not be restored " +
+            `and will be removed from the layer list: ${failedLayerNames.join(
+              ", "
+            )}`
+        );
+      }
       emitPlanetaryComputerRestore(control);
-    } else if (
-      layersToRestore.length > 0 &&
-      restoreToken === planetaryComputerRestoreToken
-    ) {
+    } else if (layersToRestore.length > 0) {
       console.warn(
         "[GeoLibre] No Planetary Computer layers could be restored; " +
           "the saved layers will remain in the panel but will not render."
@@ -499,7 +513,15 @@ function registerRestoredPlanetaryComputerLayer(
   };
 
   const internals = control as unknown as PlanetaryComputerControlInternals;
-  internals._layerManager?.layers?.set(layer.id, activeLayer);
+  if (internals._layerManager?.layers) {
+    internals._layerManager.layers.set(layer.id, activeLayer);
+  } else {
+    console.warn(
+      "[GeoLibre] Planetary Computer _layerManager.layers not found; " +
+        "layer manager may be out of sync after restore. " +
+        "Re-verify against maplibre-gl-planetary-computer internals."
+    );
+  }
   if (
     internals._state?.activeLayers &&
     !internals._state.activeLayers.some((current) => current.id === layer.id)
@@ -567,6 +589,9 @@ function renderedLayerIds(layer: GeoLibreLayer): string[] {
 }
 
 function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
+  // Private API verified against maplibre-gl-planetary-computer 0.3.0. These
+  // calls are needed so the upstream panel and GeoLibre store see restored
+  // layers that were re-registered with saved IDs.
   const internals = control as unknown as PlanetaryComputerControlInternals;
   internals._emit?.("layer:add");
   internals._emit?.("statechange");
@@ -663,6 +688,9 @@ type PlanetaryComputerLayerManagerInternals = {
   layers?: Map<string, ActiveLayer>;
 };
 
+// Mirrors private maplibre-gl-planetary-computer 0.3.0 internals used only by
+// the restore path. Keep all access guarded so dependency drift degrades with a
+// warning/no-op instead of crashing project open.
 type PlanetaryComputerControlInternals = {
   _layerManager?: PlanetaryComputerLayerManagerInternals;
   _state?: { activeLayers: ActiveLayer[] };
