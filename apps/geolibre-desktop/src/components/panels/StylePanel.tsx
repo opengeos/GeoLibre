@@ -1635,7 +1635,7 @@ export function StylePanel({
     showBasemapStyleLayers || valueIsBasemapStyleLayer;
   const beforeIdControl = (
     <div className="space-y-2">
-      <Label htmlFor="beforeId">Insert before</Label>
+      <Label htmlFor="beforeId">Insert below</Label>
       <Select
         id="beforeId"
         value={draftBeforeId}

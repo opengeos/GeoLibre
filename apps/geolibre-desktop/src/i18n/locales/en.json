@@ -157,7 +157,7 @@
     },
     "shared": {
       "layerName": "Layer name",
-      "insertBefore": "Insert before",
+      "insertBefore": "Insert below",
       "insertTop": "Top of layer list (default)",
       "layersGroup": "Layers",
       "basemapLayersGroup": "Basemap layers",
