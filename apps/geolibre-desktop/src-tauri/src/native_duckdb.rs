@@ -201,8 +201,8 @@ fn ensure_spatial_extension(conn: &Connection) -> Result<(), String> {
         return Ok(());
     }
 
-    conn.execute_batch("INSTALL spatial; LOAD spatial;")
-        .map_err(|error| format!("Could not install/load DuckDB spatial extension: {error}"))
+    conn.execute_batch("LOAD spatial;")
+        .map_err(|error| format!("Could not load DuckDB spatial extension: {error}"))
 }
 
 fn trusted_spatial_extension_path() -> Result<Option<String>, String> {
@@ -579,7 +579,7 @@ mod tests {
 
     fn create_real_geoparquet(path: &str) {
         let conn = Connection::open_in_memory().expect("open DuckDB");
-        ensure_spatial_extension(&conn).expect("load spatial");
+        install_spatial_extension_for_tests(&conn).expect("load spatial");
         conn.execute_batch(&format!(
             "
             CREATE TABLE places AS
@@ -591,6 +591,11 @@ mod tests {
             quote_sql_string(path)
         ))
         .expect("write GeoParquet fixture");
+    }
+
+    fn install_spatial_extension_for_tests(conn: &Connection) -> Result<(), String> {
+        conn.execute_batch("INSTALL spatial; LOAD spatial;")
+            .map_err(|error| format!("Could not install/load DuckDB spatial extension: {error}"))
     }
 
     #[test]
