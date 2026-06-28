@@ -339,13 +339,16 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
     if (restoreToken !== planetaryComputerRestoreToken) return;
 
     let restoredCount = 0;
-    const failedLayerNames: string[] = [];
+    const failedLayers: PlanetaryComputerFailedRestore[] = [];
     for (const [index, result] of results.entries()) {
       const layer = layersToRestore[index];
       if (result.status === "fulfilled") {
         if (result.value) restoredCount += 1;
       } else {
-        failedLayerNames.push(layer?.name ?? "unknown");
+        failedLayers.push({
+          id: layer?.id ?? "",
+          name: layer?.name ?? "unknown",
+        });
         console.error(
           `[GeoLibre] Failed to restore Planetary Computer layer "${
             layer?.name ?? "unknown"
@@ -355,20 +358,26 @@ export function restorePlanetaryComputerLayers(app: GeoLibreAppAPI): void {
       }
     }
 
+    if (failedLayers.length > 0) {
+      removeFailedPlanetaryComputerStoreLayers(control, failedLayers);
+    }
+
     if (restoredCount > 0) {
-      if (failedLayerNames.length > 0) {
+      if (failedLayers.length > 0) {
         console.warn(
           "[GeoLibre] Some Planetary Computer layers could not be restored " +
-            `and will be removed from the layer list: ${failedLayerNames.join(
-              ", "
-            )}`
+            `and were removed from the layer list: ${failedLayers
+              .map((layer) => layer.name)
+              .join(", ")}`
         );
       }
       emitPlanetaryComputerRestore(control);
-    } else if (layersToRestore.length > 0) {
+    } else if (failedLayers.length > 0) {
       console.warn(
         "[GeoLibre] No Planetary Computer layers could be restored; " +
-          "the saved layers will remain in the panel but will not render."
+          `the saved layers were removed from the layer list: ${failedLayers
+            .map((layer) => layer.name)
+            .join(", ")}`
       );
     }
   })().catch((error) => {
@@ -427,6 +436,7 @@ async function restorePlanetaryComputerLayer(
   );
   if (!currentLayer) return false;
   registerRestoredPlanetaryComputerLayer(control, currentLayer, {
+    collectionId,
     item,
     type: "item",
   });
@@ -437,7 +447,7 @@ function registerRestoredPlanetaryComputerLayer(
   control: PlanetaryComputerControl,
   layer: GeoLibreLayer,
   source:
-    | { item: STACItem; type: "item" }
+    | { collectionId: string; item: STACItem; type: "item" }
     | { collection: STACCollection; type: "collection" | "mosaic" }
 ): void {
   const map = control.getMap();
@@ -449,16 +459,16 @@ function registerRestoredPlanetaryComputerLayer(
     stringArrayMetadata(layer, "assets") || renderParams.assets || [];
   const savedBounds = numberArrayMetadata(layer, "bounds");
   const tileParams = assets.length ? { ...renderParams, assets } : renderParams;
+  const internals = requiredPlanetaryComputerRestoreInternals(control);
 
   if (map.getLayer(layer.id)) map.removeLayer(layer.id);
   if (map.getSource(sourceId)) map.removeSource(sourceId);
 
   if (source.type === "item") {
-    const collectionId = source.item.collection || "";
     map.addSource(sourceId, {
       type: "raster",
       url: getPlanetaryComputerTilerClient().getItemTileJSONUrl(
-        collectionId,
+        source.item.collection || source.collectionId,
         source.item.id,
         tileParams
       ),
@@ -477,7 +487,8 @@ function registerRestoredPlanetaryComputerLayer(
       ],
       tileSize: tileParams.tile_size || 256,
       bounds:
-        savedBounds ?? boundsTuple(source.collection.extent.spatial.bbox[0]),
+        savedBounds ??
+        boundsTuple(source.collection.extent?.spatial?.bbox?.[0]),
       attribution: "Microsoft Planetary Computer",
     });
   }
@@ -512,21 +523,27 @@ function registerRestoredPlanetaryComputerLayer(
     showControls: false,
   };
 
-  const internals = control as unknown as PlanetaryComputerControlInternals;
-  if (internals._layerManager?.layers) {
-    internals._layerManager.layers.set(layer.id, activeLayer);
-  } else {
-    console.warn(
-      "[GeoLibre] Planetary Computer _layerManager.layers not found; " +
-        "layer manager may be out of sync after restore. " +
-        "Re-verify against maplibre-gl-planetary-computer internals."
-    );
+  internals.layerManagerLayers.set(layer.id, activeLayer);
+  if (!internals.activeLayers.some((current) => current.id === layer.id)) {
+    internals.activeLayers.push(activeLayer);
   }
-  if (
-    internals._state?.activeLayers &&
-    !internals._state.activeLayers.some((current) => current.id === layer.id)
-  ) {
-    internals._state.activeLayers.push(activeLayer);
+}
+
+function removeFailedPlanetaryComputerStoreLayers(
+  control: PlanetaryComputerControl,
+  failedLayers: PlanetaryComputerFailedRestore[]
+): void {
+  const activeLayerIds = new Set(
+    control.getState().activeLayers.map((layer) => layer.id)
+  );
+  for (const failedLayer of failedLayers) {
+    if (!failedLayer.id || activeLayerIds.has(failedLayer.id)) continue;
+    const storeLayer = useAppStore
+      .getState()
+      .layers.find((layer) => layer.id === failedLayer.id);
+    if (storeLayer && isPlanetaryComputerLayer(storeLayer)) {
+      useAppStore.getState().removeLayer(failedLayer.id);
+    }
   }
 }
 
@@ -591,8 +608,18 @@ function renderedLayerIds(layer: GeoLibreLayer): string[] {
 function emitPlanetaryComputerRestore(control: PlanetaryComputerControl): void {
   // Private API verified against maplibre-gl-planetary-computer 0.3.0. These
   // calls are needed so the upstream panel and GeoLibre store see restored
-  // layers that were re-registered with saved IDs.
+  // layers that were re-registered with saved IDs. In 0.3.0, _emit constructs
+  // PlanetaryComputerEventData from _state.activeLayers synchronously, which is
+  // why one "layer:add" emit is enough to reconcile all restored layers.
   const internals = control as unknown as PlanetaryComputerControlInternals;
+  if (!internals._emit) {
+    console.warn(
+      "[GeoLibre] Planetary Computer _emit not found; " +
+        "the restored panel state may not refresh. " +
+        "Re-verify against maplibre-gl-planetary-computer internals."
+    );
+    return;
+  }
   internals._emit?.("layer:add");
   internals._emit?.("statechange");
   internals._renderContent?.();
@@ -689,14 +716,40 @@ type PlanetaryComputerLayerManagerInternals = {
 };
 
 // Mirrors private maplibre-gl-planetary-computer 0.3.0 internals used only by
-// the restore path. Keep all access guarded so dependency drift degrades with a
-// warning/no-op instead of crashing project open.
+// the restore path. Missing required internals make the affected layer restore
+// fail before any map mutation, so dependency drift does not corrupt control
+// state.
 type PlanetaryComputerControlInternals = {
   _layerManager?: PlanetaryComputerLayerManagerInternals;
   _state?: { activeLayers: ActiveLayer[] };
   _emit?: (event: "layer:add" | "statechange") => void;
   _renderContent?: () => void;
 };
+
+type PlanetaryComputerRestoreInternals = {
+  activeLayers: ActiveLayer[];
+  layerManagerLayers: Map<string, ActiveLayer>;
+};
+
+type PlanetaryComputerFailedRestore = {
+  id: string;
+  name: string;
+};
+
+function requiredPlanetaryComputerRestoreInternals(
+  control: PlanetaryComputerControl
+): PlanetaryComputerRestoreInternals {
+  const internals = control as unknown as PlanetaryComputerControlInternals;
+  const layerManagerLayers = internals._layerManager?.layers;
+  const activeLayers = internals._state?.activeLayers;
+  if (!layerManagerLayers || !activeLayers) {
+    throw new Error(
+      "Planetary Computer restore internals are unavailable; " +
+        "re-verify against maplibre-gl-planetary-computer internals."
+    );
+  }
+  return { activeLayers, layerManagerLayers };
+}
 
 function stringMetadata(layer: GeoLibreLayer, key: string): string | undefined {
   const value = layer.metadata[key];
