@@ -65,8 +65,9 @@ const HOST_TO_PLATFORM = {
 function parseTargetTriple(argv) {
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === "--target" && argv[i + 1]) return argv[i + 1];
+    if ((arg === "--target" || arg === "-t") && argv[i + 1]) return argv[i + 1];
     if (arg.startsWith("--target=")) return arg.slice("--target=".length);
+    if (arg.startsWith("-t=")) return arg.slice("-t=".length);
   }
   return (
     process.env.GEOLIBRE_DUCKDB_TARGET || process.env.CARGO_BUILD_TARGET || ""

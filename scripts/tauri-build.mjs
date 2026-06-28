@@ -7,16 +7,19 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const userArgs = process.argv.slice(2);
 
 // Forward an explicit cross-build target to the fetch helper so it pulls the
-// matching DuckDB artifact rather than the host's. Tauri accepts both the split
-// form (`--target <triple>`) and the joined form (`--target=<triple>`).
-const targetIndex = userArgs.indexOf("--target");
-const targetEqualsArg = userArgs.find((arg) => arg.startsWith("--target="));
-const targetTriple =
-  targetIndex !== -1 && userArgs[targetIndex + 1]
-    ? userArgs[targetIndex + 1]
-    : targetEqualsArg
-    ? targetEqualsArg.slice("--target=".length)
-    : "";
+// matching DuckDB artifact rather than the host's. `tauri build` accepts the
+// split (`--target <triple>`, `-t <triple>`) and joined (`--target=<triple>`,
+// `-t=<triple>`) forms, so handle all of them.
+function extractTargetTriple(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--target" || arg === "-t") return args[i + 1] || "";
+    if (arg.startsWith("--target=")) return arg.slice("--target=".length);
+    if (arg.startsWith("-t=")) return arg.slice("-t=".length);
+  }
+  return "";
+}
+const targetTriple = extractTargetTriple(userArgs);
 const targetArgs = targetTriple ? ["--target", targetTriple] : [];
 
 // Fetch and verify the DuckDB spatial extension into the Tauri resources tree
