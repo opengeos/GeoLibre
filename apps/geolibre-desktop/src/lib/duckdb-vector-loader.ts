@@ -250,9 +250,13 @@ function parquetWarmUp(
 function crsSql(fileName: string): string {
   return `
     SELECT
-      -- Always reads the first layer's first geometry field. This matches
-      -- ST_Read's default (no layer= argument) but would be wrong for
-      -- multi-layer or multi-geometry-column files if layer selection is added.
+      -- Always reads the FIRST layer's first geometry field, regardless of the
+      -- loader's \`layer\` option: that option selects which geometry ST_Read
+      -- materializes, not which layer CRS is discovered here. The two formats
+      -- that use a non-first layer (CAD DXF/DWG) carry no embedded CRS, so this
+      -- returns null for them anyway and the user-supplied \`overrideSourceCrs\`
+      -- drives reprojection instead. A future multi-layer format that DOES embed
+      -- per-layer CRS would need this query to look the chosen layer up by name.
       layers[1].geometry_fields[1].crs.auth_name AS auth_name,
       layers[1].geometry_fields[1].crs.auth_code AS auth_code
     FROM ST_Read_Meta(${quoteSqlString(fileName)})
@@ -505,6 +509,12 @@ export async function readCadLayers(
       geometryType: typeof row.geom_type === "string" ? row.geom_type : "",
     }));
   } finally {
+    // Release the probe's file buffer so the worker does not hold a second copy
+    // while the subsequent loadDuckDbVectorFile re-registers the same name.
+    await dropFilesIfPresent(db, [
+      file.name,
+      ...(file.siblingFiles?.map((sibling) => sibling.name) ?? []),
+    ]);
     await connection.close();
   }
 }

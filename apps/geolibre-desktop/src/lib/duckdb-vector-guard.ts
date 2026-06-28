@@ -43,6 +43,10 @@ export interface DuckDbVectorLoadOptions {
    * several layers) by passing its name to `ST_Read(..., layer=...)`. When
    * omitted, `ST_Read` reads the first layer, matching its default. Ignored for
    * Parquet sources, which have no layer concept.
+   *
+   * Note: this selects which geometry is read, not which layer's CRS is
+   * discovered — `readSourceCrs` always inspects the first layer. Callers that
+   * need a non-first layer's CRS must supply {@link overrideSourceCrs}.
    */
   layer?: string;
   /**

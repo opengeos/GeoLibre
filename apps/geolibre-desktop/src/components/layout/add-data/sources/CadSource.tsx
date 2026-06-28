@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { FileUp, Layers } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type CadLayerInfo,
@@ -46,10 +46,17 @@ function normalizeCrs(raw: string): string {
   return value.toUpperCase();
 }
 
-/** True when DuckDB rejected the layer's geometry (mixed / Geometry Collection). */
+/**
+ * True when DuckDB rejected the layer's geometry (a mixed / Geometry Collection
+ * layer it cannot decode to WKB). Matches the known DuckDB 1.5.x wording plus
+ * close variants so a minor message change does not silently leak the raw error;
+ * the caller also logs the original for DevTools.
+ */
 function isUnsupportedGeometryError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /unsupported geometry type/i.test(message);
+  return /unsupported geometry|unknown geometry|geometry collection|geometry type in wkb/i.test(
+    message,
+  );
 }
 
 /**
@@ -66,9 +73,14 @@ export function CadSource() {
     null,
   );
   const [layers, setLayers] = useState<CadLayerInfo[]>([]);
-  const [selectedLayer, setSelectedLayer] = useState("");
+  // `null` = nothing chosen yet; "" is a real selection (an unnamed OGR layer,
+  // which ST_Read reads as the first layer), so the two must stay distinct.
+  const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [crs, setCrs] = useState("");
   const [isReadingLayers, setIsReadingLayers] = useState(false);
+  // Bumped on every file pick / sample load so a slow probe that resolves after
+  // a newer one cannot overwrite the newer file's layers (stale-result guard).
+  const loadSeq = useRef(0);
 
   // `registerFileBuffer` transfers the bytes to the DuckDB worker, which
   // detaches the backing ArrayBuffer. The file is read twice (the layer probe,
@@ -83,51 +95,65 @@ export function CadSource() {
   // Shared by the file picker and the sample loader: stash the bytes, default
   // the layer name, then read the CAD layer list up front so the picker is
   // populated before the user submits (DXF has a single `entities` layer; DWG
-  // is multi-layer).
-  const applyCadBytes = async (path: string, data: ArrayBuffer) => {
+  // is multi-layer). `requestId` is captured by the caller; a probe that the
+  // user has since superseded bails out before touching state. The caller owns
+  // the `isReadingLayers` flag (so the fetch in `handleSelectSample` is covered
+  // too) — this helper never toggles it.
+  const applyCadBytes = async (
+    requestId: number,
+    path: string,
+    data: ArrayBuffer,
+  ) => {
     const file: SelectedCadFile = { path, data };
     setSelectedFile(file);
     setLayers([]);
-    setSelectedLayer("");
+    setSelectedLayer(null);
     source.setLayerName((current) =>
       current.trim() && current !== defaultName
         ? current
         : layerNameFromPath(path, defaultName),
     );
 
-    setIsReadingLayers(true);
-    try {
-      const cadLayers = await readCadLayers(buildVectorFile(file));
-      if (cadLayers.length === 0) {
-        throw new Error(t("addData.cad.errorNoLayers"));
-      }
-      setLayers(cadLayers);
-      setSelectedLayer(cadLayers[0].name);
-    } finally {
-      setIsReadingLayers(false);
+    const cadLayers = await readCadLayers(buildVectorFile(file));
+    if (requestId !== loadSeq.current) return; // superseded by a newer load
+    if (cadLayers.length === 0) {
+      throw new Error(t("addData.cad.errorNoLayers"));
     }
+    setLayers(cadLayers);
+    setSelectedLayer(cadLayers[0].name);
   };
 
   const handleChooseFile = async () => {
     source.setError(null);
-    try {
-      const result = await openLocalDataFileWithFallback({
-        filters: [
-          { name: t("addData.cad.fileFilter"), extensions: ["dxf", "dwg"] },
-        ],
-        accept: ".dxf,.dwg",
-        readBinary: true,
-      });
-      if (!result) return;
-      if (!result.data) throw new Error(t("addData.cad.readError"));
-      await applyCadBytes(result.path, result.data);
-    } catch (err) {
+    const result = await openLocalDataFileWithFallback({
+      filters: [
+        { name: t("addData.cad.fileFilter"), extensions: ["dxf", "dwg"] },
+      ],
+      accept: ".dxf,.dwg",
+      readBinary: true,
+    }).catch((err: unknown) => {
       source.setError(errorMessage(err, t("addData.cad.readError")));
+      return null;
+    });
+    if (!result) return;
+
+    const requestId = ++loadSeq.current;
+    setIsReadingLayers(true);
+    try {
+      if (!result.data) throw new Error(t("addData.cad.readError"));
+      await applyCadBytes(requestId, result.path, result.data);
+    } catch (err) {
+      if (requestId === loadSeq.current) {
+        source.setError(errorMessage(err, t("addData.cad.readError")));
+      }
+    } finally {
+      if (requestId === loadSeq.current) setIsReadingLayers(false);
     }
   };
 
   const handleSelectSample = async (sample: (typeof CAD_SAMPLES)[number]) => {
     source.setError(null);
+    const requestId = ++loadSeq.current;
     setIsReadingLayers(true); // cover the fetch too, not just the layer read
     try {
       const response = await fetch(sample.url);
@@ -137,18 +163,27 @@ export function CadSource() {
         );
       }
       const data = await response.arrayBuffer();
+      if (requestId !== loadSeq.current) return; // a newer load started
       setCrs(sample.crs);
-      await applyCadBytes(sample.url.split("/").pop() || "sample.dxf", data);
+      // Parse the path off the URL so a query string/fragment can't leak into
+      // the filename (and thus the extension detection).
+      const filename =
+        new URL(sample.url).pathname.split("/").pop() || "sample.dxf";
+      await applyCadBytes(requestId, filename, data);
     } catch (err) {
-      source.setError(errorMessage(err, t("addData.cad.readError")));
+      if (requestId === loadSeq.current) {
+        source.setError(errorMessage(err, t("addData.cad.readError")));
+      }
     } finally {
-      setIsReadingLayers(false);
+      if (requestId === loadSeq.current) setIsReadingLayers(false);
     }
   };
 
   const handleSubmit = source.runSubmit(async () => {
     if (!selectedFile) throw new Error(t("addData.cad.errorChooseFile"));
-    if (!selectedLayer) throw new Error(t("addData.cad.errorNoLayer"));
+    // `selectedLayer === ""` is a valid choice (unnamed layer); only `null`
+    // means nothing has been picked.
+    if (selectedLayer === null) throw new Error(t("addData.cad.errorNoLayer"));
 
     const name = source.layerName.trim() || defaultName;
     const overrideSourceCrs = normalizeCrs(crs);
@@ -161,6 +196,8 @@ export function CadSource() {
       );
     } catch (err) {
       if (isUnsupportedGeometryError(err)) {
+        // Keep the raw cause in DevTools while showing the friendly message.
+        console.warn("[GeoLibre] CAD layer geometry could not be decoded", err);
         throw new Error(t("addData.cad.errorUnsupportedGeometry"));
       }
       throw err;
@@ -198,12 +235,17 @@ export function CadSource() {
         source.isSubmitting ||
         isReadingLayers ||
         !selectedFile ||
-        !selectedLayer
+        selectedLayer === null
       }
     >
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={handleChooseFile}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleChooseFile}
+            disabled={isReadingLayers || source.isSubmitting}
+          >
             <FileUp className="mr-2 h-3.5 w-3.5" />
             {t("addData.common.chooseFile")}
           </Button>
@@ -221,7 +263,7 @@ export function CadSource() {
           </Label>
           <Select
             id="cad-layer"
-            value={selectedLayer}
+            value={selectedLayer ?? ""}
             disabled={isReadingLayers || layers.length === 0}
             onChange={(event) => setSelectedLayer(event.target.value)}
           >
