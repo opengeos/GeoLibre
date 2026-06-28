@@ -4,22 +4,30 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
+const userArgs = process.argv.slice(2);
+
+// Forward an explicit `--target <triple>` (cross-build) to the fetch helper so
+// it pulls the matching DuckDB artifact rather than the host's.
+const targetIndex = userArgs.indexOf("--target");
+const targetArgs =
+  targetIndex !== -1 && userArgs[targetIndex + 1]
+    ? ["--target", userArgs[targetIndex + 1]]
+    : [];
+
 // Fetch and verify the DuckDB spatial extension into the Tauri resources tree
 // before bundling, so packaged desktop builds ship a signed extension the native
 // DuckDB loader can read offline. A checksum mismatch aborts the build here.
 const fetched = spawnSync(
-  "node",
-  [resolve(repoRoot, "scripts/fetch-duckdb-spatial.mjs")],
+  process.execPath,
+  [resolve(repoRoot, "scripts/fetch-duckdb-spatial.mjs"), ...targetArgs],
   {
     cwd: repoRoot,
     stdio: "inherit",
-  },
+  }
 );
 if (fetched.status !== 0) {
   process.exit(fetched.status ?? 1);
 }
-
-const userArgs = process.argv.slice(2);
 const buildArgs =
   userArgs.length === 0 && process.platform === "linux"
     ? ["--bundles", "deb,rpm"]
@@ -32,7 +40,7 @@ const result = spawnSync(
     cwd: repoRoot,
     shell: process.platform === "win32",
     stdio: "inherit",
-  },
+  }
 );
 
 process.exit(result.status ?? 1);
