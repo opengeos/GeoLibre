@@ -11,6 +11,7 @@ import {
   isGeometryColumnType,
   quoteIdentifier,
   quoteSqlString,
+  stripAutoFidColumn,
 } from "./duckdb-geometry";
 import {
   confirmLargeDataset,
@@ -616,7 +617,15 @@ async function registerGeoJsonExportSource(
   geojson: FeatureCollection,
   sourceFile: string,
 ): Promise<void> {
-  await db.registerFileText(sourceFile, JSON.stringify(geojson));
+  // Drop any reserved OGC_FID property before ST_Read re-reads the file. A
+  // collection previously read with ST_Read (e.g. a Shapefile/GeoPackage layer,
+  // or this tool's own input load) carries OGC_FID as a property, and GDAL's
+  // GeoJSON driver adds its own OGC_FID id column, so the read would otherwise
+  // abort with `duplicate column name "OGC_FID"` (issue #499).
+  await db.registerFileText(
+    sourceFile,
+    JSON.stringify(stripAutoFidColumn(geojson)),
+  );
 }
 
 export interface GeoParquetConversionOptions {
