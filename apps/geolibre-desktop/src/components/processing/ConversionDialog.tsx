@@ -220,6 +220,10 @@ function browserExportFormatForExtension(
       return "geopackage";
     case "shp":
     case "zip":
+      // The in-browser Shapefile writer always emits a zip archive (a bare .shp
+      // needs sidecar files the browser can't bundle), so both extensions map to
+      // the same writer; the save dialog and the "Saved …" log then surface the
+      // actual `.zip` name. A bare `.shp` is only produced by the desktop sidecar.
       return "shapefile";
     default:
       return null;

@@ -389,6 +389,9 @@ def quote_ident(value):
     return '"' + str(value).replace('"', '""') + '"'
 
 def shapefile_field_warnings(column_names):
+    # NOTE: kept identical to the copy embedded in _VECTOR_SCRIPT — each script
+    # is a self-contained subprocess source string, so the helper cannot be
+    # imported/shared. Update both copies together if this logic changes.
     # The Shapefile format caps field names at 10 characters and silently
     # truncates longer ones, which can also collapse distinct fields into one
     # name. Surface both so attribute renames/merges on write are not a surprise.
@@ -491,9 +494,13 @@ if output_driver == "ESRI Shapefile":
         print(f"Warning: {message}")
 
 tmp_dir = None
-if zip_shapefile:
-    # The Shapefile driver writes a .shp plus .shx/.dbf/.prj/.cpg sidecars, so
-    # write into a temp directory and zip them into the requested output path.
+is_shapefile = output_driver == "ESRI Shapefile"
+if is_shapefile:
+    # The Shapefile driver writes a .shp plus .shx/.dbf/.prj/.cpg sidecars. Write
+    # the whole set into a temp directory first so a mid-write failure leaves
+    # nothing behind in the user's directory (the outer cleanup only unlinks
+    # output_path, not the sidecars). On success the bundle is zipped into
+    # output_path (.zip) or moved next to it (.shp).
     tmp_dir = tempfile.mkdtemp(prefix="geolibre-shapefile-")
     stem = os.path.splitext(os.path.basename(output_path))[0] or "layer"
     copy_target = os.path.join(tmp_dir, stem + ".shp")
@@ -516,10 +523,20 @@ try:
         \"\"\"
     ).fetchone()
     count = copy_result[0] if copy_result else None
-    if zip_shapefile:
-        with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
-            for sidecar in sorted(glob.glob(os.path.join(tmp_dir, stem + ".*"))):
-                archive.write(sidecar, os.path.basename(sidecar))
+    if is_shapefile:
+        produced = sorted(glob.glob(os.path.join(tmp_dir, stem + ".*")))
+        if zip_shapefile:
+            with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                for sidecar in produced:
+                    archive.write(sidecar, os.path.basename(sidecar))
+        else:
+            # Move the .shp and every sidecar next to output_path, keeping the
+            # output's basename stem. Only happens after a successful COPY, so a
+            # failure never scatters partial sidecars in the user's directory.
+            out_dir = os.path.dirname(output_path) or "."
+            for sidecar in produced:
+                ext = os.path.splitext(sidecar)[1]
+                shutil.move(sidecar, os.path.join(out_dir, stem + ext))
 finally:
     if tmp_dir:
         shutil.rmtree(tmp_dir, ignore_errors=True)
