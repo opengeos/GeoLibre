@@ -113,6 +113,33 @@ export const CAD_CRS_PRESETS: readonly { label: string; value: string }[] = [
   { label: "ETRS89 / UTM zone 32N (EPSG:25832)", value: "EPSG:25832" },
 ];
 
+// Sample CAD drawings offered in the Add CAD Layer dialog's "Load sample data"
+// dropdown. Each is a recognizable dataset written in a known CRS (CAD carries
+// none), so selecting one fetches the file and pre-fills the matching EPSG; a
+// blank `crs` loads the drawing as-is (already lon/lat). Hosted on Source
+// Cooperative alongside the other GeoLibre samples.
+export const CAD_SAMPLES: readonly {
+  label: string;
+  url: string;
+  crs: string;
+}[] = [
+  {
+    label: "US states (Albers, EPSG:5070)",
+    url: "https://data.source.coop/giswqs/opengeos/us_states_albers_5070.dxf",
+    crs: "EPSG:5070",
+  },
+  {
+    label: "NYC boroughs (State Plane, EPSG:2263)",
+    url: "https://data.source.coop/giswqs/opengeos/nyc_boroughs_stateplane_2263.dxf",
+    crs: "EPSG:2263",
+  },
+  {
+    label: "World populated places (WGS84)",
+    url: "https://data.source.coop/giswqs/opengeos/ne_populated_places_wgs84.dxf",
+    crs: "",
+  },
+];
+
 export const DELIMITED_TEXT_DELIMITERS: Record<
   Exclude<DelimitedTextDelimiter, "custom">,
   string

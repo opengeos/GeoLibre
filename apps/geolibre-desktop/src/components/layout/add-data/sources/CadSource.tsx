@@ -9,14 +9,18 @@ import {
   readCadLayers,
 } from "../../../../lib/duckdb-vector-loader";
 import { openLocalDataFileWithFallback } from "../../../../lib/tauri-io";
-import { CAD_CRS_PRESETS } from "../constants";
+import { CAD_CRS_PRESETS, CAD_SAMPLES } from "../constants";
 import {
   createBaseLayer,
   errorMessage,
   fileNameFromPath,
   layerNameFromPath,
 } from "../helpers";
-import { AddDataSourceForm, useAddDataSource } from "../shared";
+import {
+  AddDataSourceForm,
+  SampleDataSelect,
+  useAddDataSource,
+} from "../shared";
 
 interface SelectedCadFile {
   path: string;
@@ -76,6 +80,34 @@ export function CadSource() {
     data: new Uint8Array(file.data.slice(0)),
   });
 
+  // Shared by the file picker and the sample loader: stash the bytes, default
+  // the layer name, then read the CAD layer list up front so the picker is
+  // populated before the user submits (DXF has a single `entities` layer; DWG
+  // is multi-layer).
+  const applyCadBytes = async (path: string, data: ArrayBuffer) => {
+    const file: SelectedCadFile = { path, data };
+    setSelectedFile(file);
+    setLayers([]);
+    setSelectedLayer("");
+    source.setLayerName((current) =>
+      current.trim() && current !== defaultName
+        ? current
+        : layerNameFromPath(path, defaultName),
+    );
+
+    setIsReadingLayers(true);
+    try {
+      const cadLayers = await readCadLayers(buildVectorFile(file));
+      if (cadLayers.length === 0) {
+        throw new Error(t("addData.cad.errorNoLayers"));
+      }
+      setLayers(cadLayers);
+      setSelectedLayer(cadLayers[0].name);
+    } finally {
+      setIsReadingLayers(false);
+    }
+  };
+
   const handleChooseFile = async () => {
     source.setError(null);
     try {
@@ -88,31 +120,29 @@ export function CadSource() {
       });
       if (!result) return;
       if (!result.data) throw new Error(t("addData.cad.readError"));
-      const file: SelectedCadFile = { path: result.path, data: result.data };
-      setSelectedFile(file);
-      setLayers([]);
-      setSelectedLayer("");
-      source.setLayerName((current) =>
-        current.trim() && current !== defaultName
-          ? current
-          : layerNameFromPath(result.path, defaultName),
-      );
-
-      // Read the CAD layer list up front so the picker is populated before the
-      // user submits (DXF has a single `entities` layer; DWG is multi-layer).
-      setIsReadingLayers(true);
-      try {
-        const cadLayers = await readCadLayers(buildVectorFile(file));
-        if (cadLayers.length === 0) {
-          throw new Error(t("addData.cad.errorNoLayers"));
-        }
-        setLayers(cadLayers);
-        setSelectedLayer(cadLayers[0].name);
-      } finally {
-        setIsReadingLayers(false);
-      }
+      await applyCadBytes(result.path, result.data);
     } catch (err) {
       source.setError(errorMessage(err, t("addData.cad.readError")));
+    }
+  };
+
+  const handleSelectSample = async (sample: (typeof CAD_SAMPLES)[number]) => {
+    source.setError(null);
+    setIsReadingLayers(true); // cover the fetch too, not just the layer read
+    try {
+      const response = await fetch(sample.url);
+      if (!response.ok) {
+        throw new Error(
+          t("addData.common.requestFailed", { status: response.status }),
+        );
+      }
+      const data = await response.arrayBuffer();
+      setCrs(sample.crs);
+      await applyCadBytes(sample.url.split("/").pop() || "sample.dxf", data);
+    } catch (err) {
+      source.setError(errorMessage(err, t("addData.cad.readError")));
+    } finally {
+      setIsReadingLayers(false);
     }
   };
 
@@ -243,6 +273,14 @@ export function CadSource() {
             {t("addData.cad.crsHelp")}
           </p>
         </div>
+
+        <SampleDataSelect
+          samples={CAD_SAMPLES.map((sample) => ({
+            label: sample.label,
+            value: sample,
+          }))}
+          onSelect={handleSelectSample}
+        />
       </div>
     </AddDataSourceForm>
   );
