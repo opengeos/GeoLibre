@@ -537,11 +537,7 @@ export function ConversionDialog() {
     // GDAL's /vsizip/, which only the sidecar uses); guide the user instead of
     // failing deep in the loader. The desktop app reads .zip inputs directly.
     if (fileExtension(mainFile.name) === "zip") {
-      setError(
-        "Zipped Shapefiles can only be converted in the GeoLibre desktop app. " +
-          "In the browser, select the unzipped .shp together with its .dbf, " +
-          ".shx, and .prj files.",
-      );
+      setError(i18n.t("toolbar.conversion.zipInputBrowserError"));
       return;
     }
     const outputName =
@@ -551,16 +547,17 @@ export function ConversionDialog() {
     if (!format) {
       setError(
         outputExtension
-          ? `In the browser, the output can be GeoJSON, CSV, GeoParquet, GeoPackage, ` +
-              `or Shapefile (.zip). ".${outputExtension}" output needs the GeoLibre desktop app.`
-          : "Add a file extension to the output name to choose the format.",
+          ? i18n.t("toolbar.conversion.browserOutputUnsupported", {
+              extension: outputExtension,
+            })
+          : i18n.t("toolbar.conversion.outputExtensionRequired"),
       );
       return;
     }
     setError(null);
     setJob(
       browserConversionJob(toolId, "running", [
-        `Reading ${mainFile.name} with DuckDB-WASM`,
+        i18n.t("toolbar.conversion.readingWithDuckDb", { name: mainFile.name }),
       ]),
     );
     try {
@@ -608,12 +605,15 @@ export function ConversionDialog() {
       const savedName = await exportVectorLayer(geojson, format, baseName);
       setJob(
         browserConversionJob(toolId, "succeeded", [
-          `Read ${geojson.features.length} features from ${mainFile.name}`,
+          i18n.t("toolbar.conversion.readFeatures", {
+            features: geojson.features.length,
+            name: mainFile.name,
+          }),
           // Cancelling the save dialog is a deliberate user action, not a
           // failure, so keep the status green.
           savedName
-            ? `Saved ${savedName}`
-            : "Conversion finished; save was canceled.",
+            ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
+            : i18n.t("toolbar.conversion.saveCanceled"),
         ]),
       );
     } catch (err) {

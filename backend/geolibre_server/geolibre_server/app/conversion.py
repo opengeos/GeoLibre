@@ -71,6 +71,7 @@ VECTOR_OUTPUT_DRIVERS = {
     "zip": "ESRI Shapefile",
     "gml": "GML",
     "kml": "KML",
+    "csv": "CSV",
     "sqlite": "SQLite",
     "db": "SQLite",
     "gmt": "OGR_GMT",
@@ -96,6 +97,35 @@ COG_COMPRESSIONS = {"deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"}
 DEFAULT_COG_COMPRESSION = "deflate"
 
 _RESULT_MARKER = "__GEOLIBRE_CONVERSION_RESULT__"
+
+# Single source of truth for the Shapefile field-warning helper. Each conversion
+# script is a self-contained subprocess source string and cannot import from the
+# module, so this definition is interpolated into both _VECTOR_SCRIPT and
+# _VECTOR_TO_VECTOR_SCRIPT via the `{shapefile_field_warnings}` token (the
+# scripts use `.replace`, not f-strings, so the literal `{}` inside are safe).
+_SHAPEFILE_FIELD_WARNINGS_FN = '''
+def shapefile_field_warnings(column_names):
+    # The Shapefile format caps field names at 10 characters and silently
+    # truncates longer ones, which can also collapse distinct fields into one
+    # name. Surface both so attribute renames/merges on write are not a surprise.
+    long_names = [name for name in column_names if len(name) > 10]
+    messages = []
+    if long_names:
+        messages.append(
+            "Shapefile truncates field names to 10 characters: "
+            + ", ".join(long_names)
+        )
+    truncated = {}
+    for name in column_names:
+        truncated.setdefault(name[:10].lower(), []).append(name)
+    collisions = [group for group in truncated.values() if len(group) > 1]
+    if collisions:
+        messages.append(
+            "Truncating to 10 characters produces duplicate field names: "
+            + "; ".join(", ".join(group) for group in collisions)
+        )
+    return messages
+'''
 
 # Optional allowlist of directories that conversion inputs/outputs must live
 # under, set via GEOLIBRE_CONVERSION_ROOTS (os.pathsep-separated). Unset means
@@ -279,27 +309,7 @@ GDAL_DRIVERS = {
     "shapefile": "ESRI Shapefile",
 }
 
-def shapefile_field_warnings(column_names):
-    # The Shapefile format caps field names at 10 characters and silently
-    # truncates longer ones, which can also collapse distinct fields into one
-    # name. Surface both so attribute renames/merges on write are not a surprise.
-    long_names = [name for name in column_names if len(name) > 10]
-    messages = []
-    if long_names:
-        messages.append(
-            "Shapefile truncates field names to 10 characters: "
-            + ", ".join(long_names)
-        )
-    truncated = {}
-    for name in column_names:
-        truncated.setdefault(name[:10].lower(), []).append(name)
-    collisions = [group for group in truncated.values() if len(group) > 1]
-    if collisions:
-        messages.append(
-            "Truncating to 10 characters produces duplicate field names: "
-            + "; ".join(", ".join(group) for group in collisions)
-        )
-    return messages
+{shapefile_field_warnings}
 
 if output_format in GDAL_DRIVERS:
     srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
@@ -364,7 +374,9 @@ print(
         }
     )
 )
-""".replace("{marker}", _RESULT_MARKER)
+""".replace("{shapefile_field_warnings}", _SHAPEFILE_FIELD_WARNINGS_FN).replace(
+    "{marker}", _RESULT_MARKER
+)
 
 
 # Generic vector-to-vector conversion. The input format is detected by ST_Read
@@ -391,30 +403,7 @@ def quote(value):
 def quote_ident(value):
     return '"' + str(value).replace('"', '""') + '"'
 
-def shapefile_field_warnings(column_names):
-    # NOTE: kept identical to the copy embedded in _VECTOR_SCRIPT — each script
-    # is a self-contained subprocess source string, so the helper cannot be
-    # imported/shared. Update both copies together if this logic changes.
-    # The Shapefile format caps field names at 10 characters and silently
-    # truncates longer ones, which can also collapse distinct fields into one
-    # name. Surface both so attribute renames/merges on write are not a surprise.
-    long_names = [name for name in column_names if len(name) > 10]
-    messages = []
-    if long_names:
-        messages.append(
-            "Shapefile truncates field names to 10 characters: "
-            + ", ".join(long_names)
-        )
-    truncated = {}
-    for name in column_names:
-        truncated.setdefault(name[:10].lower(), []).append(name)
-    collisions = [group for group in truncated.values() if len(group) > 1]
-    if collisions:
-        messages.append(
-            "Truncating to 10 characters produces duplicate field names: "
-            + "; ".join(", ".join(group) for group in collisions)
-        )
-    return messages
+{shapefile_field_warnings}
 
 con = duckdb.connect()
 con.execute("INSTALL spatial; LOAD spatial;")
@@ -474,12 +463,12 @@ else:
         f"FROM {relation}"
     )
 
-# GeoJSON is WGS84 by spec (RFC 7946) but carries no CRS on the GEOMETRY
-# column, so a GDAL writer would emit no .prj/SRS; tag it explicitly. Parquet is
-# NOT always WGS84 (GeoParquet embeds its own CRS, e.g. a projected dataset), so
-# it is left untagged like every other input and the GDAL writer uses whatever
-# CRS the geometry carries rather than a hardcoded one. Mirrors _VECTOR_SCRIPT.
-if low.endswith((".geojson", ".json")):
+# GeoJSON / GeoJSONSeq are WGS84 by spec (RFC 7946) but carry no CRS on the
+# GEOMETRY column, so a GDAL writer would emit no .prj/SRS; tag them explicitly.
+# Parquet is NOT always WGS84 (GeoParquet embeds its own CRS, e.g. a projected
+# dataset), so it is left untagged like every other input and the GDAL writer
+# uses whatever CRS the geometry carries rather than a hardcoded one.
+if low.endswith((".geojson", ".json", ".geojsonl", ".geojsons", ".ndjson")):
     output_srs = "EPSG:4326"
 else:
     output_srs = None
@@ -488,7 +477,15 @@ if output_kind == "parquet":
     to_clause = "(FORMAT PARQUET, COMPRESSION 'zstd', ROW_GROUP_SIZE 30000)"
 else:
     srs_clause = f", SRS {quote(output_srs)}" if output_srs else ""
-    to_clause = f"(FORMAT GDAL, DRIVER {quote(output_driver)}{srs_clause})"
+    # The CSV driver drops geometry unless told how to write it; emit it as a
+    # WKT column so the conversion is lossless rather than failing with
+    # "Could not set geometry".
+    lco = (
+        ", LAYER_CREATION_OPTIONS 'GEOMETRY=AS_WKT'"
+        if output_driver == "CSV"
+        else ""
+    )
+    to_clause = f"(FORMAT GDAL, DRIVER {quote(output_driver)}{srs_clause}{lco})"
 
 # Surface Shapefile field-name truncation for any Shapefile output (bare .shp or
 # zipped .zip), where GDAL silently caps field names at 10 characters.
@@ -560,7 +557,9 @@ print(
         }
     )
 )
-""".replace("{marker}", _RESULT_MARKER)
+""".replace("{shapefile_field_warnings}", _SHAPEFILE_FIELD_WARNINGS_FN).replace(
+    "{marker}", _RESULT_MARKER
+)
 
 
 # Vector to PMTiles via freestiler (pip-installable Rust engine). The input is

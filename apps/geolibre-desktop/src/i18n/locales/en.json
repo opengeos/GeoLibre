@@ -1343,6 +1343,13 @@
     },
     "conversion": {
       "vectorToVector": "Vector to Vector",
+      "zipInputBrowserError": "Zipped Shapefiles can only be converted in the GeoLibre desktop app. In the browser, select the unzipped .shp together with its .dbf, .shx, and .prj files.",
+      "browserOutputUnsupported": "In the browser, the output can be GeoJSON, CSV, GeoParquet, GeoPackage, or Shapefile (.zip). \".{{extension}}\" output needs the GeoLibre desktop app.",
+      "outputExtensionRequired": "Add a file extension to the output name to choose the format.",
+      "readingWithDuckDb": "Reading {{name}} with DuckDB-WASM",
+      "readFeatures": "Read {{features}} features from {{name}}",
+      "savedFile": "Saved {{name}}",
+      "saveCanceled": "Conversion finished; save was canceled.",
       "vectorToGeoparquet": "Vector to GeoParquet",
       "vectorToFlatgeobuf": "Vector to FlatGeobuf",
       "vectorToShapefile": "Vector to Shapefile",

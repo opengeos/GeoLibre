@@ -301,6 +301,7 @@ def test_vector_to_vector_rejects_missing_input(tmp_path: Path) -> None:
         ("out.kml", "gdal", "KML", False),
         ("out.shp", "gdal", "ESRI Shapefile", False),
         ("out.zip", "gdal", "ESRI Shapefile", True),
+        ("out.csv", "gdal", "CSV", False),
         ("out.parquet", "parquet", "", False),
         ("out.geoparquet", "parquet", "", False),
     ],
