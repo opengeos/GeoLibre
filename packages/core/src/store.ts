@@ -55,6 +55,7 @@ import {
 import { hasSimpleStyleProperties } from "./vector-color";
 
 export type ConversionToolKind =
+  | "vector-to-vector"
   | "vector-to-geoparquet"
   | "vector-to-flatgeobuf"
   | "vector-to-shapefile"

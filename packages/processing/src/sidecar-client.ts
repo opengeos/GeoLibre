@@ -336,6 +336,16 @@ export interface ConversionJob {
   error?: string | null;
 }
 
+export interface VectorToVectorRequest {
+  input_path: string;
+  /**
+   * Output file path. Its extension selects the output format (`.gpkg`, `.fgb`,
+   * `.shp`/`.zip`, `.geojson`, `.kml`, `.parquet`, ...); the backend maps it to
+   * the matching DuckDB spatial driver.
+   */
+  output_path: string;
+}
+
 export interface VectorToGeoParquetRequest {
   input_path: string;
   output_path: string;
@@ -405,6 +415,17 @@ export async function fetchConversionStatus(
     throw new Error(`Conversion status failed: HTTP ${res.status}`);
   }
   return (await res.json()) as ConversionStatus;
+}
+
+export async function runVectorToVector(
+  request: VectorToVectorRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-vector`,
+    request,
+    baseUrl,
+  );
 }
 
 export async function runVectorToGeoParquet(
@@ -521,6 +542,7 @@ export async function runRasterTool(
 }
 
 type ConversionRequest =
+  | VectorToVectorRequest
   | VectorToGeoParquetRequest
   | VectorToFlatGeobufRequest
   | VectorToShapefileRequest

@@ -1342,6 +1342,7 @@
       "postgres": "PostgreSQL Layer"
     },
     "conversion": {
+      "vectorToVector": "Vector to Vector",
       "vectorToGeoparquet": "Vector to GeoParquet",
       "vectorToFlatgeobuf": "Vector to FlatGeobuf",
       "vectorToShapefile": "Vector to Shapefile",
