@@ -596,7 +596,10 @@ function confirmPickedNativeVectorDataset({
   featureCount,
 }: LargeVectorDataset): boolean {
   return window.confirm(
-    `${name} contains ${featureCount.toLocaleString()} features. Loading it as GeoJSON may use a lot of memory. Continue?`,
+    i18next.t("toolbar.item.largeVectorDesc", {
+      name,
+      count: featureCount.toLocaleString(),
+    }),
   );
 }
 
