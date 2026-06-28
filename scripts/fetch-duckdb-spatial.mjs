@@ -122,7 +122,13 @@ async function loadManifest() {
     // and re-pinning an unverified extension from the network.
     throw error;
   }
-  const parsed = JSON.parse(raw);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    // A corrupt manifest must fail loudly, not be re-pinned from the network.
+    throw new Error(`${manifestPath} contains invalid JSON: ${error.message}`);
+  }
   return parsed.version === DUCKDB_VERSION ? parsed.sha256 ?? {} : {};
 }
 
@@ -133,11 +139,39 @@ async function fetchPlatform(platform, expected, recorded) {
   const tmpFile = `${outFile}.tmp`;
   await mkdir(outDir, { recursive: true });
   process.stdout.write(`Fetching ${platform} ... `);
-  let res;
+  // The abort signal bounds the whole download, including the streaming body,
+  // so a stalled CDN fails fast rather than hanging the build. Any failure
+  // along the way removes the temp file so an unverified artifact never lingers.
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
     });
+    if (!res.ok) {
+      throw new Error(`Failed ${platform}: HTTP ${res.status} from ${url}`);
+    }
+    await pipeline(res.body, createGunzip(), createWriteStream(tmpFile));
+
+    const digest = await sha256File(tmpFile);
+    const pinned = expected[platform];
+    if (pinned && pinned !== digest) {
+      throw new Error(
+        `Checksum mismatch for ${platform}.\n  expected ${pinned}\n  got      ${digest}\n` +
+          `Refusing to bundle an unverified native extension. If the upstream artifact ` +
+          `legitimately changed, re-pin with GEOLIBRE_WRITE_CHECKSUMS=1 and review the diff.`
+      );
+    }
+    if (!pinned && !writeChecksums) {
+      throw new Error(
+        `No pinned checksum for ${platform} (DuckDB ${DUCKDB_VERSION}). ` +
+          `Re-run with GEOLIBRE_WRITE_CHECKSUMS=1 to record it, then commit ` +
+          `scripts/duckdb-spatial-checksums.json.`
+      );
+    }
+    recorded[platform] = digest;
+    await rename(tmpFile, outFile);
+    console.log(
+      pinned ? "done (verified)" : `done (recorded ${digest.slice(0, 12)}...)`
+    );
   } catch (error) {
     await rm(tmpFile, { force: true });
     if (error?.name === "TimeoutError") {
@@ -147,35 +181,6 @@ async function fetchPlatform(platform, expected, recorded) {
     }
     throw error;
   }
-  if (!res.ok) {
-    await rm(tmpFile, { force: true });
-    throw new Error(`Failed ${platform}: HTTP ${res.status} from ${url}`);
-  }
-  await pipeline(res.body, createGunzip(), createWriteStream(tmpFile));
-
-  const digest = await sha256File(tmpFile);
-  const pinned = expected[platform];
-  if (pinned && pinned !== digest) {
-    await rm(tmpFile, { force: true });
-    throw new Error(
-      `Checksum mismatch for ${platform}.\n  expected ${pinned}\n  got      ${digest}\n` +
-        `Refusing to bundle an unverified native extension. If the upstream artifact ` +
-        `legitimately changed, re-pin with GEOLIBRE_WRITE_CHECKSUMS=1 and review the diff.`
-    );
-  }
-  if (!pinned && !writeChecksums) {
-    await rm(tmpFile, { force: true });
-    throw new Error(
-      `No pinned checksum for ${platform} (DuckDB ${DUCKDB_VERSION}). ` +
-        `Re-run with GEOLIBRE_WRITE_CHECKSUMS=1 to record it, then commit ` +
-        `scripts/duckdb-spatial-checksums.json.`
-    );
-  }
-  recorded[platform] = digest;
-  await rename(tmpFile, outFile);
-  console.log(
-    pinned ? "done (verified)" : `done (recorded ${digest.slice(0, 12)}...)`
-  );
 }
 
 // Removes platform directories we are not bundling so `resources/duckdb/**/*`
