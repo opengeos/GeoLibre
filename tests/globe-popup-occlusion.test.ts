@@ -51,7 +51,9 @@ function createMaplibreStub(): typeof maplibregl {
     _container = createContainer();
     _map = {
       transform: {
-        isLocationOccluded: () => false,
+        isLocationOccluded(_lngLat?: unknown) {
+          return false;
+        },
       },
     };
     _updateOpacity: () => void;
@@ -133,6 +135,60 @@ describe("installGlobePopupOcclusion", () => {
 
     assert.equal(popup.options.locationOccludedOpacity, 0.35);
     assert.equal(popup._container.style.opacity, "0.35");
+    assert.equal(popup._container.style.pointerEvents, "auto");
+    assert.equal(popup._container.style.visibility, "visible");
+    assert.equal(
+      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
+      false,
+    );
+  });
+
+  it("calls isLocationOccluded with the transform receiver", () => {
+    const maplibre = createMaplibreStub();
+    installGlobePopupOcclusion(maplibre);
+
+    const popup = new maplibre.Popup() as maplibregl.Popup & {
+      _container: HTMLElement;
+      _map: {
+        transform: {
+          receiverMarker: string;
+          isLocationOccluded: (lngLat?: unknown) => boolean;
+        };
+      };
+      _updateOpacity: () => void;
+    };
+
+    popup._map.transform = {
+      receiverMarker: "transform",
+      isLocationOccluded(this: { receiverMarker: string }) {
+        return this.receiverMarker === "transform";
+      },
+    };
+    popup._updateOpacity();
+
+    assert.equal(popup._container.style.opacity, "0");
+    assert.equal(popup._container.style.pointerEvents, "none");
+  });
+
+  it("treats a popup with no coordinate as visible", () => {
+    const maplibre = createMaplibreStub();
+    installGlobePopupOcclusion(maplibre);
+
+    const popup = new maplibre.Popup() as maplibregl.Popup & {
+      _container: HTMLElement;
+      _map: { transform: { isLocationOccluded: () => boolean } };
+      _updateOpacity: () => void;
+      getLngLat: () => undefined;
+    };
+    let called = false;
+    popup.getLngLat = () => undefined;
+    popup._map.transform.isLocationOccluded = () => {
+      called = true;
+      return true;
+    };
+    popup._updateOpacity();
+
+    assert.equal(called, false);
     assert.equal(popup._container.style.pointerEvents, "auto");
     assert.equal(popup._container.style.visibility, "visible");
     assert.equal(

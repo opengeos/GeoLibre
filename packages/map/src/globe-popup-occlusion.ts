@@ -1,5 +1,6 @@
 import type maplibregl from "maplibre-gl";
 
+/** JS-observable marker for occluded popups; visual hiding is applied inline. */
 export const GLOBE_POPUP_OCCLUDED_CLASS = "geolibre-globe-popup-occluded";
 
 const PATCHED_POPUP_MARKER = "__geolibreGlobePopupOcclusionPatched";
@@ -40,6 +41,7 @@ const hiddenPopupStyles = new WeakMap<HTMLElement, InteractiveStyles>();
 
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
   const opacity = popup.options?.locationOccludedOpacity;
+  // MapLibre accepts CSS opacity strings too; treat an explicit "0" like 0.
   return opacity === DEFAULT_OCCLUDED_OPACITY || opacity === "0";
 }
 
@@ -72,20 +74,23 @@ function setPopupOccluded(container: HTMLElement, occluded: boolean): void {
 export function syncPopupGlobeOcclusion(popup: maplibregl.Popup): boolean {
   const popupInternals = popup as unknown as PopupInternals;
   const container = popupInternals._container;
-  const isLocationOccluded =
-    popupInternals._map?.transform?.isLocationOccluded;
+  const opacity = popupInternals.options?.locationOccludedOpacity;
+  const transform = popupInternals._map?.transform;
+  const isLocationOccluded = transform?.isLocationOccluded;
 
-  if (
-    !container ||
-    !isLocationOccluded ||
-    !shouldSuppressInteraction(popupInternals)
-  ) {
+  if (!container || opacity === undefined) {
     if (container) setPopupOccluded(container, false);
     return false;
   }
 
-  const occluded = Boolean(isLocationOccluded(popupInternals.getLngLat()));
-  setPopupOccluded(container, occluded);
+  const lngLat = popupInternals.getLngLat();
+  const occluded =
+    Boolean(lngLat) && Boolean(isLocationOccluded?.call(transform, lngLat));
+  container.style.opacity = occluded ? `${opacity}` : "";
+  setPopupOccluded(
+    container,
+    occluded && shouldSuppressInteraction(popupInternals),
+  );
   return occluded;
 }
 
@@ -104,10 +109,7 @@ export function installGlobePopupOcclusion(
           options.locationOccludedOpacity ?? DEFAULT_OCCLUDED_OPACITY,
       });
 
-      const popup = this as unknown as PopupInternals;
-      const updateOpacity = popup._updateOpacity;
-      popup._updateOpacity = () => {
-        updateOpacity?.call(this);
+      (this as unknown as PopupInternals)._updateOpacity = () => {
         syncPopupGlobeOcclusion(this);
       };
     }
