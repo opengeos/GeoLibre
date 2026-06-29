@@ -32,3 +32,21 @@ export function getPyodideIndexUrl(
   const url = override || DEFAULT_INDEX_URL;
   return url.endsWith("/") ? url : `${url}/`;
 }
+
+/**
+ * Whether `indexURL` is the built-in jsDelivr CDN default (rather than a custom
+ * `VITE_PYODIDE_INDEX_URL` mirror).
+ *
+ * The default CDN origin is whitelisted in the app's `script-src` CSP, so
+ * consumers can take Pyodide's normal load path for it and reserve the
+ * fetch-then-blob workaround for non-whitelisted mirrors.
+ *
+ * Args:
+ *   indexURL: A resolved indexURL, e.g. from `getPyodideIndexUrl()`.
+ *
+ * Returns:
+ *   True when `indexURL` is the default CDN URL.
+ */
+export function isDefaultPyodideIndexUrl(indexURL: string): boolean {
+  return indexURL === DEFAULT_INDEX_URL;
+}
