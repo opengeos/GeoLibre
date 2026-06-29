@@ -38,8 +38,14 @@ export function isGeometryColumnType(columnType: unknown): boolean {
 
 export interface DetectedGeometry {
   column: string;
-  /** True when the column is a raw WKB blob that needs ST_GeomFromWKB. */
+  /** True when the column stores WKB that needs ST_GeomFromWKB. */
   isWkb: boolean;
+  /** True when a WKB value is stored as a base64 string. */
+  isBase64Wkb?: boolean;
+  /** True when schema detection found a string WKB candidate that still needs a value probe. */
+  requiresBase64WkbValidation?: boolean;
+  /** Ranked string WKB candidates to value-probe before SQL generation. */
+  base64WkbCandidates?: string[];
 }
 
 /**
@@ -60,21 +66,57 @@ export function detectGeometryColumn(
   if (typeof native === "string") {
     return { column: native, isWkb: false };
   }
-  // Require the WKB candidate to be a binary/blob type. Matching on name alone
-  // would route a same-named non-binary column (e.g. a VARCHAR "geometry")
-  // through ST_GeomFromWKB and surface an opaque DuckDB error instead of the
-  // clear "no geometry column" message callers expect.
-  const wkb = description.find(
+  const rankedWkbCandidates = description
+    .filter(
+      (row): row is Record<string, unknown> & { column_name: string } =>
+        typeof row.column_name === "string" &&
+        WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
+    )
+    .sort(
+      (a, b) =>
+        wkbColumnRank(a.column_name) - wkbColumnRank(b.column_name),
+    );
+
+  // Prefer binary/blob WKB candidates because DuckDB reads canonical WKB as
+  // binary data. String WKB candidates are intentionally a later fallback and
+  // must be value-probed by the loader before being decoded: they may be base64
+  // geometry, but WKB-style names are still user-authored attributes in some
+  // loose Parquet files.
+  const wkb = rankedWkbCandidates.find(
     (row) =>
-      typeof row.column_name === "string" &&
       typeof row.column_type === "string" &&
-      /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type) &&
-      WKB_GEOMETRY_COLUMN_NAMES.has(row.column_name.toLowerCase()),
+      /^(BLOB|BINARY|VARBINARY)/i.test(row.column_type),
   )?.column_name;
   if (typeof wkb === "string") {
     return { column: wkb, isWkb: true };
   }
+
+  const base64WkbCandidates = rankedWkbCandidates
+    .filter(
+      (row) =>
+        typeof row.column_type === "string" &&
+        /^(VARCHAR|TEXT|STRING)/i.test(row.column_type),
+    )
+    .map((row) => row.column_name);
+  if (base64WkbCandidates.length > 0) {
+    return {
+      column: base64WkbCandidates[0],
+      isWkb: true,
+      isBase64Wkb: true,
+      requiresBase64WkbValidation: true,
+      base64WkbCandidates,
+    };
+  }
   return null;
+}
+
+function wkbColumnRank(name: string): number {
+  let rank = 0;
+  for (const candidate of WKB_GEOMETRY_COLUMN_NAMES) {
+    if (candidate === name.toLowerCase()) return rank;
+    rank += 1;
+  }
+  return WKB_GEOMETRY_COLUMN_NAMES.size;
 }
 
 /**
@@ -82,8 +124,15 @@ export function detectGeometryColumn(
  * column is referenced directly; a raw WKB blob is decoded with ST_GeomFromWKB.
  */
 export function geometryExpr(detected: DetectedGeometry): string {
+  if (detected.requiresBase64WkbValidation) {
+    throw new Error(
+      "Base64 WKB geometry candidates must be validated before SQL generation.",
+    );
+  }
   const column = quoteIdentifier(detected.column);
-  return detected.isWkb ? `ST_GeomFromWKB(${column})` : column;
+  if (!detected.isWkb) return column;
+  const wkb = detected.isBase64Wkb ? `from_base64(${column})` : column;
+  return `ST_GeomFromWKB(${wkb})`;
 }
 
 /**

@@ -30,6 +30,9 @@ struct NativeVectorOptions {
 struct DetectedGeometry {
     column: String,
     is_wkb: bool,
+    is_base64_wkb: bool,
+    requires_base64_wkb_validation: bool,
+    base64_wkb_candidates: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -157,7 +160,7 @@ fn load_native_vector_file_blocking(
     let conn = open_native_duckdb()?;
     let sql = source_sql(&options);
     let columns = describe_source_columns(&conn, &sql)?;
-    let detected = detect_geometry_column(&columns)?;
+    let detected = detect_geometry_column(&conn, &sql, &columns)?;
     let property_columns: Vec<String> = columns
         .iter()
         .filter(|column| column.name != detected.column)
@@ -286,8 +289,34 @@ fn describe_source_columns(conn: &Connection, sql: &str) -> Result<Vec<Described
     Ok(columns)
 }
 
-fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometry, String> {
+fn detect_geometry_column(
+    conn: &Connection,
+    source_sql: &str,
+    columns: &[DescribedColumn],
+) -> Result<DetectedGeometry, String> {
+    let detected = detect_geometry_column_from_schema(columns)?;
+    if !detected.requires_base64_wkb_validation {
+        return Ok(detected);
+    }
+    for column in &detected.base64_wkb_candidates {
+        if has_valid_base64_wkb_values(conn, source_sql, column)? {
+            return Ok(DetectedGeometry {
+                column: column.clone(),
+                is_wkb: detected.is_wkb,
+                is_base64_wkb: detected.is_base64_wkb,
+                requires_base64_wkb_validation: false,
+                base64_wkb_candidates: Vec::new(),
+            });
+        }
+    }
+    Err("DuckDB did not find a geometry column in this file.".to_string())
+}
+
+fn detect_geometry_column_from_schema(
+    columns: &[DescribedColumn],
+) -> Result<DetectedGeometry, String> {
     let mut wkb_candidate: Option<(usize, String)> = None;
+    let mut base64_wkb_candidates: Vec<(usize, String)> = Vec::new();
     for column in columns {
         if column
             .column_type
@@ -297,19 +326,24 @@ fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometr
             return Ok(DetectedGeometry {
                 column: column.name.clone(),
                 is_wkb: false,
+                is_base64_wkb: false,
+                requires_base64_wkb_validation: false,
+                base64_wkb_candidates: Vec::new(),
             });
         }
         let lower_name = column.name.to_ascii_lowercase();
         let upper_type = column.column_type.to_ascii_uppercase();
-        if (upper_type.starts_with("BLOB")
+        if !WKB_GEOMETRY_COLUMN_NAMES.contains(&lower_name.as_str()) {
+            continue;
+        }
+        let rank = WKB_GEOMETRY_COLUMN_NAMES
+            .iter()
+            .position(|candidate| *candidate == lower_name.as_str())
+            .unwrap_or(WKB_GEOMETRY_COLUMN_NAMES.len());
+        if upper_type.starts_with("BLOB")
             || upper_type.starts_with("BINARY")
-            || upper_type.starts_with("VARBINARY"))
-            && WKB_GEOMETRY_COLUMN_NAMES.contains(&lower_name.as_str())
+            || upper_type.starts_with("VARBINARY")
         {
-            let rank = WKB_GEOMETRY_COLUMN_NAMES
-                .iter()
-                .position(|candidate| *candidate == lower_name.as_str())
-                .unwrap_or(WKB_GEOMETRY_COLUMN_NAMES.len());
             if wkb_candidate
                 .as_ref()
                 .map(|(current_rank, _)| rank < *current_rank)
@@ -317,6 +351,11 @@ fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometr
             {
                 wkb_candidate = Some((rank, column.name.clone()));
             }
+        } else if upper_type.starts_with("VARCHAR")
+            || upper_type.starts_with("TEXT")
+            || upper_type.starts_with("STRING")
+        {
+            base64_wkb_candidates.push((rank, column.name.clone()));
         }
     }
 
@@ -324,10 +363,47 @@ fn detect_geometry_column(columns: &[DescribedColumn]) -> Result<DetectedGeometr
         return Ok(DetectedGeometry {
             column,
             is_wkb: true,
+            is_base64_wkb: false,
+            requires_base64_wkb_validation: false,
+            base64_wkb_candidates: Vec::new(),
+        });
+    }
+    base64_wkb_candidates.sort_by_key(|(rank, _)| *rank);
+    if let Some((_, column)) = base64_wkb_candidates.first() {
+        return Ok(DetectedGeometry {
+            column: column.clone(),
+            is_wkb: true,
+            is_base64_wkb: true,
+            requires_base64_wkb_validation: true,
+            base64_wkb_candidates: base64_wkb_candidates
+                .into_iter()
+                .map(|(_, column)| column)
+                .collect(),
         });
     }
 
     Err("DuckDB did not find a geometry column in this file.".to_string())
+}
+
+fn has_valid_base64_wkb_values(
+    conn: &Connection,
+    source_sql: &str,
+    column: &str,
+) -> Result<bool, String> {
+    let column_sql = quote_identifier(column);
+    let sample_column = quote_identifier("__geolibre_base64_wkb_sample");
+    let probe_sql = format!(
+        "SELECT count(*) AS sample_count, \
+         count(TRY(ST_GeomFromWKB(from_base64({sample_column})))) AS valid_count \
+         FROM (SELECT {column_sql} AS {sample_column} FROM ({source_sql}) AS data \
+         WHERE {column_sql} IS NOT NULL LIMIT 20) AS sample"
+    );
+    let (sample_count, valid_count): (i64, i64) = conn
+        .query_row(&probe_sql, [], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(|error| format!("Could not validate base64 WKB geometry values: {error}"))?;
+    // Require every sampled non-null value to decode as WKB so a user attribute
+    // named "geometry" or "wkb" is not promoted based on a partial match.
+    Ok(sample_count > 0 && sample_count == valid_count)
 }
 
 fn read_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<String> {
@@ -404,9 +480,18 @@ fn crs_auth_code(crs: &serde_json::Value) -> Option<String> {
 }
 
 fn geometry_expr(detected: &DetectedGeometry) -> String {
+    assert!(
+        !detected.requires_base64_wkb_validation,
+        "base64 WKB geometry must be value-validated before SQL generation"
+    );
     let column = quote_identifier(&detected.column);
     if detected.is_wkb {
-        format!("ST_GeomFromWKB({column})")
+        let wkb = if detected.is_base64_wkb {
+            format!("from_base64({column})")
+        } else {
+            column
+        };
+        format!("ST_GeomFromWKB({wkb})")
     } else {
         column
     }
@@ -610,6 +695,51 @@ mod tests {
         .expect("write GeoParquet fixture");
     }
 
+    fn create_base64_wkb_parquet(path: &str) {
+        let conn = Connection::open_in_memory().expect("open DuckDB");
+        conn.execute_batch(&format!(
+            "
+            CREATE TABLE places AS
+            SELECT
+              1 AS id,
+              'Luxembourg' AS name,
+              'AQMAAAABAAAABQAAAFCW6nIMPRdA3PVYDQjGSECxTV13Nj0XQHRYwfoLxkhA4MiF5+M8F0BWd0PCEcZIQPjdWB27PBdAIePTAA7GSEBQlupyDD0XQNz1WA0IxkhA' AS geometry;
+            COPY places TO {} (FORMAT PARQUET);
+            ",
+            quote_sql_string(path)
+        ))
+        .expect("write base64 WKB Parquet fixture");
+    }
+
+    fn create_plain_string_geometry_parquet(path: &str) {
+        let conn = Connection::open_in_memory().expect("open DuckDB");
+        conn.execute_batch(&format!(
+            "
+            CREATE TABLE places AS
+            SELECT 1 AS id, 'not WKB' AS geometry;
+            COPY places TO {} (FORMAT PARQUET);
+            ",
+            quote_sql_string(path)
+        ))
+        .expect("write plain string geometry fixture");
+    }
+
+    fn create_ranked_base64_wkb_candidates_parquet(path: &str) {
+        let conn = Connection::open_in_memory().expect("open DuckDB");
+        conn.execute_batch(&format!(
+            "
+            CREATE TABLE places AS
+            SELECT
+              1 AS id,
+              'not WKB' AS geometry,
+              'AQMAAAABAAAABQAAAFCW6nIMPRdA3PVYDQjGSECxTV13Nj0XQHRYwfoLxkhA4MiF5+M8F0BWd0PCEcZIQPjdWB27PBdAIePTAA7GSEBQlupyDD0XQNz1WA0IxkhA' AS wkb;
+            COPY places TO {} (FORMAT PARQUET);
+            ",
+            quote_sql_string(path)
+        ))
+        .expect("write ranked base64 WKB candidate fixture");
+    }
+
     fn install_spatial_extension_for_tests(conn: &Connection) -> Result<(), String> {
         conn.execute_batch("INSTALL spatial; LOAD spatial;")
             .map_err(|error| format!("Could not install/load DuckDB spatial extension: {error}"))
@@ -634,6 +764,62 @@ mod tests {
         assert_eq!(features[0]["geometry"]["type"], "Point");
         assert_eq!(features[0]["geometry"]["coordinates"][0], -122.4194);
         assert_eq!(features[0]["geometry"]["coordinates"][1], 37.7749);
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn native_loader_reads_base64_wkb_geometry_column() {
+        let path = temp_geoparquet_path();
+        create_base64_wkb_parquet(&path);
+
+        let options = native_options(path.clone(), None, None).expect("native options");
+        let collection = load_native_vector_file_blocking(options).expect("load vector file");
+        let features = collection["features"].as_array().expect("features array");
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0]["properties"]["id"], 1);
+        assert_eq!(features[0]["properties"]["name"], "Luxembourg");
+        assert_eq!(features[0]["geometry"]["type"], "Polygon");
+        assert_eq!(
+            features[0]["geometry"]["coordinates"][0][0][0],
+            5.809617801254333
+        );
+        assert_eq!(
+            features[0]["geometry"]["coordinates"][0][0][1],
+            49.54712073177117
+        );
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn native_loader_rejects_plain_string_geometry_column() {
+        let path = temp_geoparquet_path();
+        create_plain_string_geometry_parquet(&path);
+
+        let options = native_options(path.clone(), None, None).expect("native options");
+        let error = load_native_vector_file_blocking(options).expect_err("reject plain string");
+        assert!(error.contains("DuckDB did not find a geometry column"));
+
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn native_loader_tries_ranked_base64_wkb_candidates() {
+        let path = temp_geoparquet_path();
+        create_ranked_base64_wkb_candidates_parquet(&path);
+
+        let options = native_options(path.clone(), None, None).expect("native options");
+        let collection = load_native_vector_file_blocking(options).expect("load vector file");
+        let features = collection["features"].as_array().expect("features array");
+        assert_eq!(features.len(), 1);
+        assert_eq!(features[0]["properties"]["id"], 1);
+        assert_eq!(features[0]["properties"]["geometry"], "not WKB");
+        assert_eq!(features[0]["geometry"]["type"], "Polygon");
+        assert_eq!(
+            features[0]["geometry"]["coordinates"][0][0][0],
+            5.809617801254333
+        );
 
         let _ = std::fs::remove_file(path);
     }
@@ -669,7 +855,7 @@ mod tests {
 
     #[test]
     fn wkb_detection_uses_preferred_column_name() {
-        let detected = detect_geometry_column(&[
+        let detected = detect_geometry_column_from_schema(&[
             DescribedColumn {
                 name: "wkb".to_string(),
                 column_type: "BLOB".to_string(),
@@ -682,6 +868,28 @@ mod tests {
         .expect("detect WKB geometry");
         assert_eq!(detected.column, "geometry");
         assert!(detected.is_wkb);
+        assert!(!detected.is_base64_wkb);
+        assert!(!detected.requires_base64_wkb_validation);
+    }
+
+    #[test]
+    fn wkb_detection_marks_base64_string_geometry_candidates() {
+        let detected = detect_geometry_column_from_schema(&[
+            DescribedColumn {
+                name: "id".to_string(),
+                column_type: "BIGINT".to_string(),
+            },
+            DescribedColumn {
+                name: "geometry".to_string(),
+                column_type: "VARCHAR".to_string(),
+            },
+        ])
+        .expect("detect base64 WKB geometry");
+        assert_eq!(detected.column, "geometry");
+        assert!(detected.is_wkb);
+        assert!(detected.is_base64_wkb);
+        assert!(detected.requires_base64_wkb_validation);
+        assert_eq!(detected.base64_wkb_candidates, vec!["geometry".to_string()]);
     }
 
     #[test]

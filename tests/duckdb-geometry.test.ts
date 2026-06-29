@@ -82,10 +82,38 @@ describe("detectGeometryColumn", () => {
     });
   });
 
-  it("ignores a WKB-named column that is not a binary type", () => {
+  it("falls back to a base64 string WKB column (issue #984)", () => {
     const detected = detectGeometryColumn([
       describeRow("id", "BIGINT"),
       describeRow("geometry", "VARCHAR"),
+    ]);
+    assert.deepEqual(detected, {
+      column: "geometry",
+      isWkb: true,
+      isBase64Wkb: true,
+      requiresBase64WkbValidation: true,
+      base64WkbCandidates: ["geometry"],
+    });
+  });
+
+  it("ranks multiple base64 string WKB candidates by well-known name", () => {
+    const detected = detectGeometryColumn([
+      describeRow("wkb", "VARCHAR"),
+      describeRow("geometry", "VARCHAR"),
+    ]);
+    assert.deepEqual(detected, {
+      column: "geometry",
+      isWkb: true,
+      isBase64Wkb: true,
+      requiresBase64WkbValidation: true,
+      base64WkbCandidates: ["geometry", "wkb"],
+    });
+  });
+
+  it("ignores a WKB-named column that is neither binary nor string", () => {
+    const detected = detectGeometryColumn([
+      describeRow("id", "BIGINT"),
+      describeRow("geometry", "INTEGER"),
     ]);
     assert.equal(detected, null);
   });
@@ -108,6 +136,26 @@ describe("geometryExpr", () => {
     assert.equal(
       geometryExpr({ column: "geometry_wkb", isWkb: true }),
       'ST_GeomFromWKB("geometry_wkb")',
+    );
+  });
+
+  it("decodes a base64 WKB string with from_base64", () => {
+    assert.equal(
+      geometryExpr({ column: "geometry", isWkb: true, isBase64Wkb: true }),
+      'ST_GeomFromWKB(from_base64("geometry"))',
+    );
+  });
+
+  it("rejects unvalidated base64 WKB candidates", () => {
+    assert.throws(
+      () =>
+        geometryExpr({
+          column: "geometry",
+          isWkb: true,
+          isBase64Wkb: true,
+          requiresBase64WkbValidation: true,
+        }),
+      /must be validated/,
     );
   });
 

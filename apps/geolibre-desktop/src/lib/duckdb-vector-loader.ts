@@ -280,6 +280,7 @@ async function readSourceCrs(
 
 function toFeatureCollection(
   rows: Record<string, unknown>[],
+  geometryColumn?: string,
 ): FeatureCollection<Geometry | null> {
   const features = rows.map((row) => {
     const rawGeometry = row[GEOMETRY_JSON_COLUMN];
@@ -292,7 +293,13 @@ function toFeatureCollection(
     const properties: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(row)) {
-      if (key === GEOMETRY_JSON_COLUMN || value instanceof Uint8Array) continue;
+      if (
+        key === GEOMETRY_JSON_COLUMN ||
+        key === geometryColumn ||
+        value instanceof Uint8Array
+      ) {
+        continue;
+      }
       properties[key] = normalizePropertyValue(value);
     }
 
@@ -325,6 +332,56 @@ function normalizePropertyValue(value: unknown): unknown {
     );
   }
   return value;
+}
+
+async function validateDetectedGeometry(
+  connection: duckdb.AsyncDuckDBConnection,
+  source: string,
+  detected: ReturnType<typeof detectGeometryColumn>,
+): Promise<NonNullable<ReturnType<typeof detectGeometryColumn>> | null> {
+  if (!detected) return null;
+  if (!detected.requiresBase64WkbValidation) return detected;
+  const candidates = detected.base64WkbCandidates ?? [];
+  for (const column of candidates) {
+    if (await hasValidBase64WkbValues(connection, source, column)) {
+      const {
+        requiresBase64WkbValidation: _validated,
+        base64WkbCandidates: _candidates,
+        ...validated
+      } = detected;
+      return { ...validated, column };
+    }
+  }
+  return null;
+}
+
+async function hasValidBase64WkbValues(
+  connection: duckdb.AsyncDuckDBConnection,
+  source: string,
+  column: string,
+): Promise<boolean> {
+  const columnSql = quoteIdentifier(column);
+  const sampleColumn = quoteIdentifier("__geolibre_base64_wkb_sample");
+  const rows = rowsFromResult(
+    await connection.query(
+      `SELECT count(*) AS sample_count, count(TRY(ST_GeomFromWKB(from_base64(${sampleColumn})))) AS valid_count ` +
+        `FROM (SELECT ${columnSql} AS ${sampleColumn} FROM (${source}) AS data ` +
+        `WHERE ${columnSql} IS NOT NULL LIMIT 20) AS sample`,
+    ),
+  );
+  const row = rows[0] ?? {};
+  const sampleCount = numberFromCount(row.sample_count);
+  const validCount = numberFromCount(row.valid_count);
+  // Require every sampled non-null value to decode as WKB so a user attribute
+  // named "geometry" or "wkb" is not promoted based on a partial match.
+  return sampleCount > 0 && sampleCount === validCount;
+}
+
+function numberFromCount(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") return Number(value);
+  return 0;
 }
 
 /**
@@ -410,7 +467,11 @@ export async function loadDuckDbVectorFile(
     const description = rowsFromResult(
       await connection.query(`DESCRIBE ${sql}`),
     );
-    const detected = detectGeometryColumn(description);
+    const detected = await validateDetectedGeometry(
+      connection,
+      sql,
+      detectGeometryColumn(description),
+    );
 
     if (!detected) {
       throw new Error("DuckDB did not find a geometry column in this file.");
@@ -440,7 +501,10 @@ export async function loadDuckDbVectorFile(
     );
     // Features may carry a null geometry; the app's layer model treats them as
     // a regular FeatureCollection and the map ignores null geometries.
-    return toFeatureCollection(rowsFromResult(result)) as FeatureCollection;
+    return toFeatureCollection(
+      rowsFromResult(result),
+      detected.column,
+    ) as FeatureCollection;
   } finally {
     await connection.close();
   }
@@ -566,7 +630,11 @@ export async function reprojectFeatureCollectionToWgs84(
     const description = rowsFromResult(
       await connection.query(`DESCRIBE ${sql}`),
     );
-    const detected = detectGeometryColumn(description);
+    const detected = await validateDetectedGeometry(
+      connection,
+      sql,
+      detectGeometryColumn(description),
+    );
     if (!detected) {
       // No geometry to reproject; hand back the stripped collection untouched.
       return stripped as FeatureCollection;
@@ -580,7 +648,10 @@ export async function reprojectFeatureCollectionToWgs84(
         GEOMETRY_JSON_COLUMN,
       )} FROM (${sql}) AS data`,
     );
-    return toFeatureCollection(rowsFromResult(result)) as FeatureCollection;
+    return toFeatureCollection(
+      rowsFromResult(result),
+      detected.column,
+    ) as FeatureCollection;
   } finally {
     await connection.close();
     await dropFilesIfPresent(db, [sourceFile]);
@@ -702,16 +773,21 @@ export async function convertDuckDbVectorToGeoParquet(
       const description = rowsFromResult(
         await connection.query(`DESCRIBE ${sql}`),
       );
-      const detected = detectGeometryColumn(description);
+      const detected = await validateDetectedGeometry(
+        connection,
+        sql,
+        detectGeometryColumn(description),
+      );
       if (!detected) {
         throw new Error("DuckDB did not find a geometry column in this file.");
       }
       geometryColumn = detected.column;
       const geometrySql = quoteIdentifier(geometryColumn);
-      // Plain Parquet files may carry geometry as a WKB blob; rebuild it as a
-      // GEOMETRY column so ST_Hilbert and the GeoParquet writer can use it.
+      // Plain Parquet files may carry geometry as WKB bytes or base64 WKB;
+      // rebuild it as a GEOMETRY column so ST_Hilbert and the GeoParquet writer
+      // can use it.
       source = detected.isWkb
-        ? `SELECT * REPLACE (ST_GeomFromWKB(${geometrySql}) AS ${geometrySql}) FROM (${sql}) AS data`
+        ? `SELECT * REPLACE (${geometryExpr(detected)} AS ${geometrySql}) FROM (${sql}) AS data`
         : sql;
     }
 
