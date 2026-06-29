@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
+  extractDirectionsRouteMetrics,
   getDirectionsRouteMetrics,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
@@ -11,6 +12,8 @@ import {
   removeLastDirectionsWaypoint,
   subscribeDirectionsState,
 } from "../packages/plugins/src/plugins/maplibre-directions";
+
+type DirectionsResponse = Parameters<typeof extractDirectionsRouteMetrics>[0];
 
 describe("maplibreDirectionsPlugin", () => {
   it("is a Controls toggle that is off by default", () => {
@@ -58,5 +61,94 @@ describe("directions control surface (inactive)", () => {
       unsubscribe();
       unsubscribe();
     });
+  });
+});
+
+describe("directions route metrics extraction", () => {
+  it("reads route totals and leg metrics from an OSRM response", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          distance: 1234,
+          duration: 456,
+          geometry: "",
+          legs: [
+            { distance: 1000, duration: 300 },
+            { distance: 234, duration: 156 },
+          ],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.deepEqual(metrics, {
+      totalDistanceMeters: 1234,
+      totalDurationSeconds: 456,
+      legs: [
+        { distanceMeters: 1000, durationSeconds: 300 },
+        { distanceMeters: 234, durationSeconds: 156 },
+      ],
+    });
+  });
+
+  it("falls back to complete leg totals when route totals are absent", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          geometry: "",
+          legs: [
+            { distance: 1000, duration: 300 },
+            { distance: 500, duration: 120 },
+          ],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.deepEqual(metrics, {
+      totalDistanceMeters: 1500,
+      totalDurationSeconds: 420,
+      legs: [
+        { distanceMeters: 1000, durationSeconds: 300 },
+        { distanceMeters: 500, durationSeconds: 120 },
+      ],
+    });
+  });
+
+  it("rejects incomplete leg fallback totals", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          geometry: "",
+          legs: [
+            { distance: 1000, duration: 300 },
+            { distance: 500 },
+          ],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.equal(metrics, null);
+  });
+
+  it("rejects degenerate zero route totals", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          distance: 0,
+          duration: 30,
+          geometry: "",
+          legs: [{ distance: 0, duration: 30 }],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.equal(metrics, null);
   });
 });

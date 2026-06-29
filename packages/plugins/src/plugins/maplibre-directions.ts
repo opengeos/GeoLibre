@@ -214,30 +214,44 @@ function toFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function extractRouteMetrics(
-  event: { data: MapLibreGlDirectionsRoutingData },
+export function extractDirectionsRouteMetrics(
+  directions: MapLibreGlDirectionsRoutingData["directions"],
 ): DirectionsRouteMetrics | null {
-  const route = event.data.directions?.routes[0] as OsrmRoute | undefined;
+  const route = directions?.routes[0] as OsrmRoute | undefined;
   if (!route) return null;
 
-  const legs =
-    route.legs
-      ?.map((leg) => {
-        const distanceMeters = toFiniteNumber(leg.distance);
-        const durationSeconds = toFiniteNumber(leg.duration);
-        if (distanceMeters == null || durationSeconds == null) return null;
-        return { distanceMeters, durationSeconds };
-      })
-      .filter((leg): leg is DirectionsRouteLegMetric => leg != null) ?? [];
+  const rawLegs = route.legs ?? [];
+  const legs = rawLegs
+    .map((leg) => {
+      const distanceMeters = toFiniteNumber(leg.distance);
+      const durationSeconds = toFiniteNumber(leg.duration);
+      if (distanceMeters == null || durationSeconds == null) return null;
+      return { distanceMeters, durationSeconds };
+    })
+    .filter((leg): leg is DirectionsRouteLegMetric => leg != null);
 
+  const routeDistanceMeters = toFiniteNumber(route.distance);
+  const routeDurationSeconds = toFiniteNumber(route.duration);
+  const canUseLegTotals = rawLegs.length > 0 && legs.length === rawLegs.length;
   const totalDistanceMeters =
-    toFiniteNumber(route.distance) ??
-    legs.reduce((sum, leg) => sum + leg.distanceMeters, 0);
+    routeDistanceMeters ??
+    (canUseLegTotals
+      ? legs.reduce((sum, leg) => sum + leg.distanceMeters, 0)
+      : null);
   const totalDurationSeconds =
-    toFiniteNumber(route.duration) ??
-    legs.reduce((sum, leg) => sum + leg.durationSeconds, 0);
+    routeDurationSeconds ??
+    (canUseLegTotals
+      ? legs.reduce((sum, leg) => sum + leg.durationSeconds, 0)
+      : null);
 
-  if (totalDistanceMeters <= 0 && totalDurationSeconds <= 0) return null;
+  if (
+    totalDistanceMeters == null ||
+    totalDurationSeconds == null ||
+    totalDistanceMeters <= 0 ||
+    totalDurationSeconds <= 0
+  ) {
+    return null;
+  }
   return { totalDistanceMeters, totalDurationSeconds, legs };
 }
 
@@ -251,7 +265,7 @@ function handleDirectionsFetchEnd(event: {
   data: MapLibreGlDirectionsRoutingData;
 }): void {
   routeLoading = false;
-  routeMetrics = extractRouteMetrics(event);
+  routeMetrics = extractDirectionsRouteMetrics(event.data.directions);
   notifyDirectionsState();
 }
 

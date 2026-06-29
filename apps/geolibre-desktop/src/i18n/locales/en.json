@@ -943,6 +943,11 @@
       "estimatedTime": "Estimated time",
       "segment": "Segment {{index}}",
       "metricsUnavailable": "Route metrics unavailable",
+      "distanceKilometers": "{{value}} km",
+      "distanceMeters": "{{value}} m",
+      "durationMinutes": "{{value}} min",
+      "durationHours": "{{value}} hr",
+      "durationHoursMinutes": "{{hours}} hr {{minutes}} min",
       "waypointCount_zero": "No waypoints placed yet",
       "waypointCount_one": "{{count}} waypoint placed",
       "waypointCount_other": "{{count}} waypoints placed"

@@ -12,6 +12,7 @@ import {
 import type { MapController } from "@geolibre/map";
 import { Clock, MapPin, Navigation, Route, Trash2, Undo2, X } from "lucide-react";
 import { type RefObject, useSyncExternalStore } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@geolibre/ui";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
@@ -20,23 +21,44 @@ interface MapModeBannerProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
-function formatDistance(meters: number, locale: string): string {
+function formatDistance(
+  meters: number,
+  locale: string,
+  t: TFunction,
+): string {
   if (meters >= 1000) {
-    return `${new Intl.NumberFormat(locale, {
+    const value = new Intl.NumberFormat(locale, {
       maximumFractionDigits: meters >= 10000 ? 0 : 1,
-    }).format(meters / 1000)} km`;
+    }).format(meters / 1000);
+    return t("map.directionsMode.distanceKilometers", { value });
   }
-  return `${new Intl.NumberFormat(locale, {
+  const value = new Intl.NumberFormat(locale, {
     maximumFractionDigits: 0,
-  }).format(meters)} m`;
+  }).format(meters);
+  return t("map.directionsMode.distanceMeters", { value });
 }
 
-function formatDuration(seconds: number): string {
+function formatDuration(
+  seconds: number,
+  locale: string,
+  t: TFunction,
+): string {
   const minutes = Math.max(1, Math.round(seconds / 60));
-  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 60) {
+    const value = new Intl.NumberFormat(locale).format(minutes);
+    return t("map.directionsMode.durationMinutes", { value });
+  }
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  return remainder > 0 ? `${hours} hr ${remainder} min` : `${hours} hr`;
+  const formattedHours = new Intl.NumberFormat(locale).format(hours);
+  if (remainder > 0) {
+    const formattedMinutes = new Intl.NumberFormat(locale).format(remainder);
+    return t("map.directionsMode.durationHoursMinutes", {
+      hours: formattedHours,
+      minutes: formattedMinutes,
+    });
+  }
+  return t("map.directionsMode.durationHours", { value: formattedHours });
 }
 
 /**
@@ -140,6 +162,7 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
                         {formatDistance(
                           routeMetrics.totalDistanceMeters,
                           i18n.language,
+                          t,
                         )}
                       </p>
                     </div>
@@ -149,7 +172,11 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
                         {t("map.directionsMode.estimatedTime")}
                       </div>
                       <p className="truncate text-sm font-semibold">
-                        {formatDuration(routeMetrics.totalDurationSeconds)}
+                        {formatDuration(
+                          routeMetrics.totalDurationSeconds,
+                          i18n.language,
+                          t,
+                        )}
                       </p>
                     </div>
                   </div>
@@ -166,9 +193,17 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
                             })}
                           </span>
                           <span className="shrink-0 tabular-nums">
-                            {formatDistance(leg.distanceMeters, i18n.language)}
+                            {formatDistance(
+                              leg.distanceMeters,
+                              i18n.language,
+                              t,
+                            )}
                             {" / "}
-                            {formatDuration(leg.durationSeconds)}
+                            {formatDuration(
+                              leg.durationSeconds,
+                              i18n.language,
+                              t,
+                            )}
                           </span>
                         </div>
                       ))}
