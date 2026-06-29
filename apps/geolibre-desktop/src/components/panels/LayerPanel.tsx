@@ -192,9 +192,9 @@ function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
 function layerMetadataPayload(layer: GeoLibreLayer): Record<string, unknown> {
   const videoSourceUrls = sourceUrlsFromLayer(layer);
   return {
+    ...layer.metadata,
     layerName: layer.name,
     layerType: layer.type,
-    ...layer.metadata,
     ...(videoSourceUrls.length > 0
       ? {
           sourceUrl: videoSourceUrls[0],
