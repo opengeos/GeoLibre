@@ -28,7 +28,7 @@ interface PopupInternals {
   _updateOpacity?: () => void;
   getLngLat: () => unknown;
   options?: {
-    locationOccludedOpacity?: number | string;
+    locationOccludedOpacity?: number | string | null;
   };
 }
 
@@ -41,8 +41,7 @@ const hiddenPopupStyles = new WeakMap<HTMLElement, InteractiveStyles>();
 
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
   const opacity = popup.options?.locationOccludedOpacity;
-  // MapLibre accepts CSS opacity strings too; treat an explicit "0" like 0.
-  return opacity === DEFAULT_OCCLUDED_OPACITY || opacity === "0";
+  return Number(opacity) === DEFAULT_OCCLUDED_OPACITY;
 }
 
 function restoreInteractiveStyles(container: HTMLElement): void {
@@ -78,7 +77,7 @@ export function syncPopupGlobeOcclusion(popup: maplibregl.Popup): boolean {
   const transform = popupInternals._map?.transform;
   const isLocationOccluded = transform?.isLocationOccluded;
 
-  if (!container || opacity === undefined) {
+  if (!container || opacity === undefined || opacity === null) {
     if (container) setPopupOccluded(container, false);
     return false;
   }
@@ -109,7 +108,10 @@ export function installGlobePopupOcclusion(
           options.locationOccludedOpacity ?? DEFAULT_OCCLUDED_OPACITY,
       });
 
-      (this as unknown as PopupInternals)._updateOpacity = () => {
+      const popup = this as unknown as PopupInternals;
+      const updateOpacity = popup._updateOpacity;
+      popup._updateOpacity = () => {
+        if (popup.getLngLat()) updateOpacity?.call(this);
         syncPopupGlobeOcclusion(this);
       };
     }

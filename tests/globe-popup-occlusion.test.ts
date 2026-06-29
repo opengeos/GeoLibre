@@ -143,6 +143,26 @@ describe("installGlobePopupOcclusion", () => {
     );
   });
 
+  it("suppresses interaction for zero opacity strings", () => {
+    const maplibre = createMaplibreStub();
+    installGlobePopupOcclusion(maplibre);
+
+    const popup = new maplibre.Popup({
+      locationOccludedOpacity: "0.0",
+    }) as maplibregl.Popup & {
+      _container: HTMLElement;
+      _map: { transform: { isLocationOccluded: () => boolean } };
+      _updateOpacity: () => void;
+    };
+
+    popup._map.transform.isLocationOccluded = () => true;
+    popup._updateOpacity();
+
+    assert.equal(popup._container.style.opacity, "0.0");
+    assert.equal(popup._container.style.pointerEvents, "none");
+    assert.equal(popup._container.style.visibility, "hidden");
+  });
+
   it("calls isLocationOccluded with the transform receiver", () => {
     const maplibre = createMaplibreStub();
     installGlobePopupOcclusion(maplibre);

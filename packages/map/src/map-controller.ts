@@ -331,6 +331,7 @@ export class MapController {
       // Trade-off: adds one extra framebuffer copy per frame on tiled renderers.
       canvasContextAttributes: { preserveDrawingBuffer: true },
     });
+    installGlobePopupOcclusion(maplibregl);
     // The constructor options above already apply the static constraints.
     // The transform constraint is installed by the MapCanvas effect that
     // fires on mount, so calling applyMapPreferences here would only add a
@@ -761,7 +762,6 @@ export class MapController {
 
   syncLayers(layers: GeoLibreLayer[]): void {
     if (!this.isStyleReady() || !this.map) return;
-    installGlobePopupOcclusion(maplibregl);
     const map = this.map;
 
     const nextIds = layers.map((l) => l.id);
