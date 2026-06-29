@@ -188,9 +188,13 @@ export {
 // the tests import the sync helpers from the module paths directly.
 export {
   clearDirectionsWaypoints,
+  type DirectionsRouteLegMetric,
+  type DirectionsRouteMetrics,
   DIRECTIONS_PLUGIN_ID,
+  getDirectionsRouteMetrics,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
+  isDirectionsRouteLoading,
   maplibreDirectionsPlugin,
   removeLastDirectionsWaypoint,
   restoreDirections,

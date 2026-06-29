@@ -1,4 +1,5 @@
 import type MapLibreGlDirections from "@maplibre/maplibre-gl-directions";
+import type { MapLibreGlDirectionsRoutingData } from "@maplibre/maplibre-gl-directions";
 import type { IControl, Map as MapLibreMap } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
@@ -37,6 +38,31 @@ let loadToken = 0;
 // plugin stays the single owner of the directions instance.
 type DirectionsStateListener = () => void;
 const directionsStateListeners = new Set<DirectionsStateListener>();
+
+export interface DirectionsRouteLegMetric {
+  distanceMeters: number;
+  durationSeconds: number;
+}
+
+export interface DirectionsRouteMetrics {
+  totalDistanceMeters: number;
+  totalDurationSeconds: number;
+  legs: DirectionsRouteLegMetric[];
+}
+
+interface OsrmRouteLeg {
+  distance?: unknown;
+  duration?: unknown;
+}
+
+interface OsrmRoute {
+  distance?: unknown;
+  duration?: unknown;
+  legs?: OsrmRouteLeg[];
+}
+
+let routeMetrics: DirectionsRouteMetrics | null = null;
+let routeLoading = false;
 
 // True while a removeLastDirectionsWaypoint() call is mid route-refetch. Exposed
 // so the banner can disable its "remove last" button until the async call
@@ -83,6 +109,25 @@ export function subscribeDirectionsState(
  */
 export function getDirectionsWaypointCount(): number {
   return directions ? directions.waypoints.length : 0;
+}
+
+/**
+ * The latest metrics returned by the active directions session.
+ *
+ * @returns Distance/time metrics for the selected route, or null while no
+ * route has been calculated.
+ */
+export function getDirectionsRouteMetrics(): DirectionsRouteMetrics | null {
+  return routeMetrics;
+}
+
+/**
+ * Whether the current directions session is waiting on a route response.
+ *
+ * @returns True while OSRM is calculating a route.
+ */
+export function isDirectionsRouteLoading(): boolean {
+  return routeLoading;
 }
 
 /**
@@ -160,6 +205,62 @@ export function clearDirectionsWaypoints(): void {
   // Clearing supersedes any in-flight removal: drop the flag so the post-clear
   // state is consistent (the aborted removal's .finally re-runs this harmlessly).
   removalInFlight = false;
+  routeLoading = false;
+  routeMetrics = null;
+  notifyDirectionsState();
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function extractRouteMetrics(
+  event: { data: MapLibreGlDirectionsRoutingData },
+): DirectionsRouteMetrics | null {
+  const route = event.data.directions?.routes[0] as OsrmRoute | undefined;
+  if (!route) return null;
+
+  const legs =
+    route.legs
+      ?.map((leg) => {
+        const distanceMeters = toFiniteNumber(leg.distance);
+        const durationSeconds = toFiniteNumber(leg.duration);
+        if (distanceMeters == null || durationSeconds == null) return null;
+        return { distanceMeters, durationSeconds };
+      })
+      .filter((leg): leg is DirectionsRouteLegMetric => leg != null) ?? [];
+
+  const totalDistanceMeters =
+    toFiniteNumber(route.distance) ??
+    legs.reduce((sum, leg) => sum + leg.distanceMeters, 0);
+  const totalDurationSeconds =
+    toFiniteNumber(route.duration) ??
+    legs.reduce((sum, leg) => sum + leg.durationSeconds, 0);
+
+  if (totalDistanceMeters <= 0 && totalDurationSeconds <= 0) return null;
+  return { totalDistanceMeters, totalDurationSeconds, legs };
+}
+
+function handleDirectionsFetchStart(): void {
+  routeLoading = true;
+  routeMetrics = null;
+  notifyDirectionsState();
+}
+
+function handleDirectionsFetchEnd(event: {
+  data: MapLibreGlDirectionsRoutingData;
+}): void {
+  routeLoading = false;
+  routeMetrics = extractRouteMetrics(event);
+  notifyDirectionsState();
+}
+
+function handleDirectionsWaypointChange(): void {
+  const count = getDirectionsWaypointCount();
+  if (count < 2) {
+    routeLoading = false;
+    routeMetrics = null;
+  }
   notifyDirectionsState();
 }
 
@@ -184,9 +285,11 @@ function attach(app: GeoLibreAppAPI): void {
       // Mirror the live waypoint count to any subscribed UI (the mode banner).
       // These events fire after the change is drawn, so the waypoints getter
       // already reflects the new state when notifyDirectionsState reads it.
-      directions.on("addwaypoint", notifyDirectionsState);
-      directions.on("removewaypoint", notifyDirectionsState);
-      directions.on("setwaypoints", notifyDirectionsState);
+      directions.on("addwaypoint", handleDirectionsWaypointChange);
+      directions.on("removewaypoint", handleDirectionsWaypointChange);
+      directions.on("setwaypoints", handleDirectionsWaypointChange);
+      directions.on("fetchroutesstart", handleDirectionsFetchStart);
+      directions.on("fetchroutesend", handleDirectionsFetchEnd);
       loadingControl = new LoadingIndicatorControl(directions);
       app.addMapControl(loadingControl, "top-right");
       // The instance now exists; nudge subscribers so a banner that mounted
@@ -210,15 +313,19 @@ function teardown(app: GeoLibreAppAPI): void {
   }
   // Detach our listeners before destroy() so teardown is self-contained and
   // does not rely on the library's destroy() also tearing down its emitter.
-  directions?.off("addwaypoint", notifyDirectionsState);
-  directions?.off("removewaypoint", notifyDirectionsState);
-  directions?.off("setwaypoints", notifyDirectionsState);
+  directions?.off("addwaypoint", handleDirectionsWaypointChange);
+  directions?.off("removewaypoint", handleDirectionsWaypointChange);
+  directions?.off("setwaypoints", handleDirectionsWaypointChange);
+  directions?.off("fetchroutesstart", handleDirectionsFetchStart);
+  directions?.off("fetchroutesend", handleDirectionsFetchEnd);
   directions?.destroy();
   directions = null;
   directionsMap = null;
   // A removal can't be pending once the instance is gone; clear the flag so a
   // teardown mid-refetch doesn't leave the next session's button disabled.
   removalInFlight = false;
+  routeLoading = false;
+  routeMetrics = null;
   // Reset the count subscribers see to 0 now the session is gone.
   notifyDirectionsState();
 }

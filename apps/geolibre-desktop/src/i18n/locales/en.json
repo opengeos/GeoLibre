@@ -938,6 +938,11 @@
       "removeLast": "Remove last",
       "clear": "Clear",
       "exit": "Exit",
+      "calculating": "Calculating route...",
+      "totalDistance": "Distance",
+      "estimatedTime": "Estimated time",
+      "segment": "Segment {{index}}",
+      "metricsUnavailable": "Route metrics unavailable",
       "waypointCount_zero": "No waypoints placed yet",
       "waypointCount_one": "{{count}} waypoint placed",
       "waypointCount_other": "{{count}} waypoints placed"

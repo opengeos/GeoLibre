@@ -3,8 +3,10 @@ import { describe, it } from "node:test";
 import {
   clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
+  getDirectionsRouteMetrics,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
+  isDirectionsRouteLoading,
   maplibreDirectionsPlugin,
   removeLastDirectionsWaypoint,
   subscribeDirectionsState,
@@ -29,12 +31,19 @@ describe("directions control surface (inactive)", () => {
     assert.equal(getDirectionsWaypointCount(), 0);
   });
 
+  it("reports no route metrics when the tool is inactive", () => {
+    assert.equal(getDirectionsRouteMetrics(), null);
+    assert.equal(isDirectionsRouteLoading(), false);
+  });
+
   it("treats remove-last and clear as no-ops when inactive", () => {
     assert.doesNotThrow(() => removeLastDirectionsWaypoint());
     assert.doesNotThrow(() => clearDirectionsWaypoints());
     assert.equal(getDirectionsWaypointCount(), 0);
     // A no-op removal must not leave the in-flight flag stuck on.
     assert.equal(isDirectionsRemovalInFlight(), false);
+    assert.equal(getDirectionsRouteMetrics(), null);
+    assert.equal(isDirectionsRouteLoading(), false);
   });
 
   it("returns an idempotent unsubscribe from subscribeDirectionsState", () => {
