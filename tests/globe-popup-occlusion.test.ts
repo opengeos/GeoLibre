@@ -143,6 +143,7 @@ describe("installGlobePopupOcclusion", () => {
     );
   });
 
+  // Real browsers normalize " 0 " to "0"; the fake container stores it verbatim.
   for (const opacity of ["0", "0.0", " 0 "]) {
     it(`suppresses interaction for zero opacity string ${opacity}`, () => {
       const maplibre = createMaplibreStub();

@@ -42,8 +42,10 @@ const hiddenPopupStyles = new WeakMap<HTMLElement, InteractiveStyles>();
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
   const opacity = popup.options?.locationOccludedOpacity;
   if (typeof opacity === "string") {
+    const trimmedOpacity = opacity.trim();
     return (
-      opacity.trim() !== "" && Number(opacity) === DEFAULT_OCCLUDED_OPACITY
+      trimmedOpacity !== "" &&
+      Number(trimmedOpacity) === DEFAULT_OCCLUDED_OPACITY
     );
   }
   // Nullish values are filtered by the caller; use strict comparison for numbers.
