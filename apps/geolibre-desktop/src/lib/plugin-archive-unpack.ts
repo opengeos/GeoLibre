@@ -9,6 +9,7 @@ import { unzip } from "fflate";
 
 export interface ExternalPluginBundle {
   archiveName: string;
+  sourceUrl?: string;
   manifest: GeoLibreExternalPluginManifest;
   entrySource: string;
   styleSource?: string | null;

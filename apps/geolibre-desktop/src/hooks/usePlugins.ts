@@ -501,7 +501,10 @@ function ensureExternalPluginsLoadedWithSettings(
     })
     .then((result) => {
       externalPluginLoadIssues = new Map(
-        result.issues.map((issue) => [issue.archiveName, issue.message]),
+        result.issues.map((issue) => [
+          issue.sourceUrl ?? issue.archiveName,
+          issue.message,
+        ]),
       );
       notifyExternalPluginsListeners();
       if (result.loadedPluginIds.length) {

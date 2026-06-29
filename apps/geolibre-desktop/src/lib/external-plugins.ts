@@ -37,6 +37,7 @@ interface ExternalPluginBundleLoadResult {
 
 export interface ExternalPluginLoadIssue {
   archiveName: string;
+  sourceUrl?: string;
   message: string;
 }
 
@@ -109,6 +110,7 @@ export async function loadExternalPlugins(
         if (loadedFrom !== bundle.archiveName) {
           issues.push({
             archiveName: bundle.archiveName,
+            sourceUrl: bundle.sourceUrl,
             message: `Plugin id '${bundle.manifest.id}' is already loaded from '${loadedFrom}'. Restart GeoLibre to load this copy.`,
           });
         }
@@ -117,6 +119,7 @@ export async function loadExternalPlugins(
       if (registeredPluginIds.has(bundle.manifest.id)) {
         issues.push({
           archiveName: bundle.archiveName,
+          sourceUrl: bundle.sourceUrl,
           message: `Plugin id '${bundle.manifest.id}' is already registered.`,
         });
         continue;
@@ -136,6 +139,7 @@ export async function loadExternalPlugins(
     } catch (error) {
       issues.push({
         archiveName: bundle.archiveName,
+        sourceUrl: bundle.sourceUrl,
         message:
           error instanceof Error
             ? error.message
@@ -190,6 +194,7 @@ async function loadPluginUrlBundles(
     } else {
       issues.push({
         archiveName: manifestUrls[index],
+        sourceUrl: manifestUrls[index],
         message:
           result.reason instanceof Error
             ? result.reason.message
@@ -241,6 +246,7 @@ async function loadPluginUrlBundle(
 
   return {
     archiveName: manifestUrl,
+    sourceUrl: manifestUrl,
     manifest,
     entrySource,
     styleSource,
