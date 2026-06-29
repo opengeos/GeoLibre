@@ -58,6 +58,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   });
   const [deckVizStatus, setDeckVizStatus] = useState<string | null>(null);
   const [isLoadingDeckViz, setIsLoadingDeckViz] = useState(false);
+  const [closeAfterDeckVizAdd, setCloseAfterDeckVizAdd] = useState(true);
   // Scenegraph (glTF 3D model) layer-specific inputs.
   const [deckVizModelUrl, setDeckVizModelUrl] = useState(startSg?.modelUrl ?? "");
   const [deckVizModelMode, setDeckVizModelMode] = useState<"single" | "data">(
@@ -177,7 +178,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
   };
 
   // Validates format/role completeness, then writes the deck-viz store layer
-  // and fits the map. Shared by the "Use example data" and submit paths.
+  // and fits the map.
   const finalizeDeckVizLayer = (params: {
     parsed: DeckVizParsedInput;
     mapping: DeckVizFieldMapping;
@@ -257,33 +258,21 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
     } else if (bounds) {
       source.shell.mapControllerRef.current?.fitBounds(bounds);
     }
-    source.shell.closeDialog();
+    if (closeAfterDeckVizAdd) {
+      source.shell.closeDialog();
+    }
   };
 
-  const handleUseDeckVizExample = async () => {
+  const handleUseDeckVizExample = () => {
     const def = getDeckVizLayerDef(deckVizKind);
     if (!def) return;
     source.setError(null);
     setDeckVizStatus(null);
-    setIsLoadingDeckViz(true);
-    try {
-      const response = await fetch(def.example.url);
-      if (!response.ok) {
-        throw new Error(t("addData.common.requestFailed", { status: response.status }));
-      }
-      const parsed = detectAndParseDeckVizInput(await response.text());
-      finalizeDeckVizLayer({
-        parsed,
-        mapping: def.example.fieldMapping,
-        style: { ...DEFAULT_DECK_VIZ_STYLE, ...(def.example.style ?? {}) },
-        sourcePath: def.example.url,
-        scenegraph: def.example.scenegraph,
-      });
-    } catch (err) {
-      source.setError(errorMessage(err, t("addData.deckViz.errorExample")));
-    } finally {
-      setIsLoadingDeckViz(false);
-    }
+    setDeckVizMode("url");
+    setDeckVizUrl(def.example.url);
+    setDeckVizSourcePath("");
+    setDeckVizParsed(null);
+    setDeckVizMapping({});
   };
 
   const handleRetrieveDeckVizColumns = async () => {
@@ -742,6 +731,15 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
             ) : null}
           </div>
         ) : null}
+
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={closeAfterDeckVizAdd}
+            onChange={(event) => setCloseAfterDeckVizAdd(event.target.checked)}
+          />
+          {t("addData.deckViz.closeAfterAdd")}
+        </label>
       </div>
     </AddDataSourceForm>
   );

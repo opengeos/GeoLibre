@@ -444,6 +444,7 @@
       "loadData": "Load data",
       "selectRole": "— select —",
       "roleNone": "(none)",
+      "closeAfterAdd": "Close dialog after adding layer",
       "color": "Color",
       "pointSize": "Point size",
       "cellSize": "Cell size",
