@@ -143,7 +143,7 @@ describe("installGlobePopupOcclusion", () => {
     );
   });
 
-  for (const opacity of ["0", "0.0"]) {
+  for (const opacity of ["0", "0.0", " 0 "]) {
     it(`suppresses interaction for zero opacity string ${opacity}`, () => {
       const maplibre = createMaplibreStub();
       installGlobePopupOcclusion(maplibre);
@@ -170,6 +170,7 @@ describe("installGlobePopupOcclusion", () => {
   }
 
   for (const opacity of ["", " "]) {
+    // Browsers reject " " as CSS opacity; the fake container stores it verbatim.
     it(`does not suppress interaction for blank opacity ${JSON.stringify(
       opacity,
     )}`, () => {
