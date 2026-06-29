@@ -39,7 +39,10 @@ import {
   syncLayer,
   vectorTileStyleLayerIds,
 } from "./layer-sync";
+import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { ResetBearingControl } from "./reset-bearing-control";
+
+installGlobePopupOcclusion(maplibregl);
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",

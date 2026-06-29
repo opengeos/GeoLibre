@@ -1,0 +1,152 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type maplibregl from "maplibre-gl";
+import {
+  GLOBE_POPUP_OCCLUDED_CLASS,
+  installGlobePopupOcclusion,
+} from "../packages/map/src/globe-popup-occlusion";
+
+interface FakeContainer {
+  classList: DOMTokenList;
+  style: {
+    opacity: string;
+    pointerEvents: string;
+    visibility: string;
+  };
+}
+
+function createClassList(): DOMTokenList {
+  const classes = new Set<string>();
+  return {
+    add: (...tokens: string[]) => {
+      for (const token of tokens) classes.add(token);
+    },
+    remove: (...tokens: string[]) => {
+      for (const token of tokens) classes.delete(token);
+    },
+    contains: (token: string) => classes.has(token),
+    toggle: (token: string, force?: boolean) => {
+      const next = force ?? !classes.has(token);
+      if (next) classes.add(token);
+      else classes.delete(token);
+      return next;
+    },
+  } as unknown as DOMTokenList;
+}
+
+function createContainer(): HTMLElement {
+  const container: FakeContainer = {
+    classList: createClassList(),
+    style: {
+      opacity: "",
+      pointerEvents: "auto",
+      visibility: "visible",
+    },
+  };
+  return container as unknown as HTMLElement;
+}
+
+function createMaplibreStub(): typeof maplibregl {
+  class FakePopup {
+    _container = createContainer();
+    _map = {
+      transform: {
+        isLocationOccluded: () => false,
+      },
+    };
+    _updateOpacity: () => void;
+    options: maplibregl.PopupOptions;
+
+    constructor(options: maplibregl.PopupOptions = {}) {
+      this.options = options;
+      this._updateOpacity = () => {
+        if (this.options.locationOccludedOpacity === undefined) return;
+        if (this._map.transform.isLocationOccluded()) {
+          this._container.style.opacity = `${this.options.locationOccludedOpacity}`;
+        } else {
+          this._container.style.opacity = "";
+        }
+      };
+    }
+
+    getLngLat() {
+      return { lng: 0, lat: 0 };
+    }
+  }
+
+  return {
+    Popup: FakePopup,
+  } as unknown as typeof maplibregl;
+}
+
+describe("installGlobePopupOcclusion", () => {
+  it("defaults popups to hidden globe occlusion and restores interaction", () => {
+    const maplibre = createMaplibreStub();
+    installGlobePopupOcclusion(maplibre);
+
+    const popup = new maplibre.Popup() as maplibregl.Popup & {
+      _container: HTMLElement;
+      _map: { transform: { isLocationOccluded: () => boolean } };
+      _updateOpacity: () => void;
+      options: maplibregl.PopupOptions;
+    };
+    assert.equal(popup.options.locationOccludedOpacity, 0);
+
+    popup._map.transform.isLocationOccluded = () => true;
+    popup._updateOpacity();
+
+    assert.equal(popup._container.style.opacity, "0");
+    assert.equal(popup._container.style.pointerEvents, "none");
+    assert.equal(popup._container.style.visibility, "hidden");
+    assert.equal(
+      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
+      true,
+    );
+
+    popup._map.transform.isLocationOccluded = () => false;
+    popup._updateOpacity();
+
+    assert.equal(popup._container.style.opacity, "");
+    assert.equal(popup._container.style.pointerEvents, "auto");
+    assert.equal(popup._container.style.visibility, "visible");
+    assert.equal(
+      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
+      false,
+    );
+  });
+
+  it("respects explicit nonzero locationOccludedOpacity values", () => {
+    const maplibre = createMaplibreStub();
+    installGlobePopupOcclusion(maplibre);
+
+    const popup = new maplibre.Popup({
+      locationOccludedOpacity: 0.35,
+    }) as maplibregl.Popup & {
+      _container: HTMLElement;
+      _map: { transform: { isLocationOccluded: () => boolean } };
+      _updateOpacity: () => void;
+      options: maplibregl.PopupOptions;
+    };
+
+    popup._map.transform.isLocationOccluded = () => true;
+    popup._updateOpacity();
+
+    assert.equal(popup.options.locationOccludedOpacity, 0.35);
+    assert.equal(popup._container.style.opacity, "0.35");
+    assert.equal(popup._container.style.pointerEvents, "auto");
+    assert.equal(popup._container.style.visibility, "visible");
+    assert.equal(
+      popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
+      false,
+    );
+  });
+
+  it("is idempotent", () => {
+    const maplibre = createMaplibreStub();
+    installGlobePopupOcclusion(maplibre);
+    const once = maplibre.Popup;
+    installGlobePopupOcclusion(maplibre);
+
+    assert.equal(maplibre.Popup, once);
+  });
+});
