@@ -70,8 +70,8 @@ export const DEFAULT_DELIMITED_TEXT_URL =
   "https://data.source.coop/giswqs/opengeos/us_cities.csv";
 export const DEFAULT_DELIMITED_TEXT_LATITUDE_FIELD = "latitude";
 export const DEFAULT_DELIMITED_TEXT_LONGITUDE_FIELD = "longitude";
-// MapLibre's "Add a video" sample (a drone clip over San Francisco), pre-filled
-// so the dialog works out of the box. The corners are [lng, lat] pairs.
+// MapLibre's georeferenced video sample, pre-filled so the dialog works out of
+// the box. The corners are [lng, lat] pairs.
 export const DEFAULT_VIDEO_MP4_URL =
   "https://static-assets.mapbox.com/mapbox-gl-js/drone.mp4";
 export const DEFAULT_VIDEO_WEBM_URL =

@@ -179,6 +179,34 @@ function layerTypeLabel(
   return layer.type;
 }
 
+function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "video" || !Array.isArray(layer.source.urls)) {
+    return [];
+  }
+  return layer.source.urls.filter(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+}
+
+function layerMetadataPayload(layer: GeoLibreLayer): Record<string, unknown> {
+  const videoSourceUrls = sourceUrlsFromLayer(layer);
+  return {
+    layerName: layer.name,
+    layerType: layer.type,
+    ...layer.metadata,
+    ...(videoSourceUrls.length > 0
+      ? {
+          sourceUrl: videoSourceUrls[0],
+          ...(videoSourceUrls[1]
+            ? { fallbackSourceUrl: videoSourceUrls[1] }
+            : {}),
+        }
+      : {}),
+    sourcePath: layer.sourcePath,
+  };
+}
+
 interface LayerOpacitySliderProps {
   label: string;
   ariaLabel: string;
@@ -2312,14 +2340,7 @@ export function LayerPanel({
           <ScrollArea className="max-h-80">
             <pre className="whitespace-pre-wrap break-all text-xs">
               {metadataLayer &&
-                JSON.stringify(
-                  {
-                    ...metadataLayer.metadata,
-                    sourcePath: metadataLayer.sourcePath,
-                  },
-                  null,
-                  2,
-                )}
+                JSON.stringify(layerMetadataPayload(metadataLayer), null, 2)}
             </pre>
           </ScrollArea>
         </DialogContent>

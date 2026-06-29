@@ -392,7 +392,7 @@
     },
     "video": {
       "defaultName": "Video Layer",
-      "sampleLabel": "Drone over San Francisco",
+      "sampleLabel": "Coastal waves near San Francisco",
       "errorUrl": "Enter a video URL.",
       "errorHttps": "Video URLs must start with https://.",
       "cornerTopLeft": "top-left",

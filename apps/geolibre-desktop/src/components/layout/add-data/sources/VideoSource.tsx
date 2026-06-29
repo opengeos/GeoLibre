@@ -82,7 +82,12 @@ export function VideoSource() {
       { type: "video", urls, coordinates },
       // Persist the corner bbox so "Zoom to layer" works — a video source
       // exposes no bounds for fitLayer to fall back on.
-      { sourceKind: "video-url", bounds },
+      {
+        sourceKind: "video-url",
+        sourceUrl: primary,
+        ...(webm ? { fallbackSourceUrl: webm } : {}),
+        bounds,
+      },
     );
     source.shell.addLayer(layer, source.beforeLayer);
     // Skip the fit for a degenerate (zero-area) bbox, which would otherwise
