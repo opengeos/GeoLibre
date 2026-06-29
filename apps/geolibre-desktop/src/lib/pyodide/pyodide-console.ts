@@ -99,13 +99,17 @@ async function injectScript(
   label: string,
 ): Promise<void> {
   if (isReady()) return;
-  let source: string;
+  // Read as an ArrayBuffer rather than text: pyodide.asm.js is the multi-MB
+  // Emscripten runtime, and decoding it to a (UTF-16) JS string before copying
+  // it into the Blob would roughly triple its peak memory footprint. The Blob
+  // is fed straight to a <script src>, so the raw bytes are all we need.
+  let source: ArrayBuffer;
   try {
     const response = await fetch(scriptUrl);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    source = await response.text();
+    source = await response.arrayBuffer();
   } catch (cause) {
     throw new Error(
       `Failed to load the Pyodide runtime script from ${scriptUrl}.`,
@@ -169,6 +173,11 @@ function loadPyodideScript(indexURL: string): Promise<void> {
       () => typeof window.loadPyodide === "function",
       "window.loadPyodide",
     );
+    // Pyodide 0.27.x's loadPyodide() does a dynamic import() of pyodide.asm.js
+    // only when globalThis._createPyodideModule is not already a function, so
+    // pre-defining it via the blob path short-circuits that CSP-blocked import.
+    // This hinges on an Emscripten/Pyodide internal: re-verify it still holds
+    // whenever PYODIDE_VERSION in pyodide-config.ts is bumped.
     await injectScript(
       `${indexURL}pyodide.asm.js`,
       () => typeof window._createPyodideModule === "function",
