@@ -2471,10 +2471,17 @@ fn create_oauth_popup_window(
 ) -> tauri::webview::NewWindowResponse<tauri::Wry> {
     let popup_id = POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let child_app_handle = app_handle.clone();
-    let window = tauri::WebviewWindowBuilder::new(
+    let blank_url: tauri::Url = match "about:blank".parse() {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("OAuth popup: could not parse blank URL: {error}");
+            return tauri::webview::NewWindowResponse::Deny;
+        }
+    };
+    let window = match tauri::WebviewWindowBuilder::new(
         &app_handle,
         format!("oauthPopup{popup_id}"),
-        tauri::WebviewUrl::External("about:blank".parse().expect("valid blank URL")),
+        tauri::WebviewUrl::External(blank_url),
     )
     .window_features(features)
     .title(url.as_str())
@@ -2485,7 +2492,13 @@ fn create_oauth_popup_window(
         let _ = window.set_title(&title);
     })
     .build()
-    .expect("failed to create OAuth popup window");
+    {
+        Ok(window) => window,
+        Err(error) => {
+            eprintln!("OAuth popup: failed to create popup window: {error}");
+            return tauri::webview::NewWindowResponse::Deny;
+        }
+    };
 
     tauri::webview::NewWindowResponse::Create { window }
 }
