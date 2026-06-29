@@ -1,6 +1,6 @@
 import type { MapController } from "@geolibre/map";
 import consoleApiSource from "./console_api.py?raw";
-import { getPyodideIndexUrl } from "./pyodide-config";
+import { getPyodideIndexUrl, isDefaultPyodideIndexUrl } from "./pyodide-config";
 import {
   createScriptingHandlers,
   type ScriptingDeps,
@@ -76,6 +76,10 @@ function emitProgress(phase: string): void {
 
 let scriptPromise: Promise<void> | null = null;
 
+// Generous bound on each runtime-script fetch. Large enough for the multi-MB
+// pyodide.asm.js over a slow link, small enough to escape a dead mirror.
+const SCRIPT_FETCH_TIMEOUT_MS = 60_000;
+
 /**
  * Fetch a Pyodide runtime script and run it via a `blob:` URL, then confirm it
  * defined the global it is supposed to.
@@ -104,8 +108,15 @@ async function injectScript(
   // it into the Blob would roughly triple its peak memory footprint. The Blob
   // is fed straight to a <script src>, so the raw bytes are all we need.
   let source: ArrayBuffer;
+  // Bound the fetch so a hung or misconfigured mirror surfaces an error (and
+  // the caller's memo reset enables a retry) instead of an infinite spinner.
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    SCRIPT_FETCH_TIMEOUT_MS,
+  );
   try {
-    const response = await fetch(scriptUrl);
+    const response = await fetch(scriptUrl, { signal: controller.signal });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -115,6 +126,8 @@ async function injectScript(
       `Failed to load the Pyodide runtime script from ${scriptUrl}.`,
       { cause },
     );
+  } finally {
+    clearTimeout(timeout);
   }
   const blobUrl = URL.createObjectURL(
     new Blob([source], { type: "text/javascript" }),
@@ -123,25 +136,29 @@ async function injectScript(
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement("script");
       script.src = blobUrl;
+      // The script's globals persist once it has executed, so the element is
+      // dead weight afterwards; remove it on every path to keep the DOM clean
+      // (and so a retry never leaves orphan <script> tags).
       script.onload = () => {
+        script.remove();
         if (isReady()) {
           resolve();
           return;
         }
-        script.remove();
         reject(
           new Error(
             `Pyodide script loaded but ${label} is not defined; the content at ${scriptUrl} may be incorrect.`,
           ),
         );
       };
-      // The caller's `.catch` owns resetting the memo on failure; remove the
-      // dead element so a retry doesn't leave orphan <script> tags.
+      // `onerror` fires when the browser fails to load the blob resource, not
+      // when the executed script throws (those reach window.onerror); word the
+      // message as a load failure accordingly.
       script.onerror = () => {
         script.remove();
         reject(
           new Error(
-            `Failed to execute the Pyodide runtime script from ${scriptUrl}.`,
+            `Failed to load the injected Pyodide runtime script from ${scriptUrl}.`,
           ),
         );
       };
@@ -156,15 +173,17 @@ async function injectScript(
  * Load Pyodide's two entry scripts once so the runtime can initialize from any
  * `indexURL`, including a self-hosted mirror, under Tauri's CSP.
  *
- * `pyodide.js` defines `window.loadPyodide`. We then also pre-inject
- * `pyodide.asm.js` (which defines `globalThis._createPyodideModule`) because
- * `loadPyodide()` otherwise dynamically `import()`s that file from `indexURL`,
- * and that import is blocked by `script-src` for a non-whitelisted mirror.
- * Pyodide skips the import when `_createPyodideModule` is already a function, so
- * the pre-injected blob short-circuits it. Both scripts are reached via the same
- * fetch-then-blob path (see `injectScript`). Pyodide's remaining assets (wasm,
- * lockfile, wheels) load via `fetch`, allowed by `connect-src`, so passing
- * `indexURL` to `loadPyodide({ indexURL })` resolves them unchanged.
+ * `pyodide.js` defines `window.loadPyodide`. For a custom mirror we then also
+ * pre-inject `pyodide.asm.js` (which defines `globalThis._createPyodideModule`)
+ * because `loadPyodide()` otherwise dynamically `import()`s that file from
+ * `indexURL`, and that import is blocked by `script-src` for a non-whitelisted
+ * mirror. Pyodide skips the import when `_createPyodideModule` is already a
+ * function, so the pre-injected blob short-circuits it. The default jsDelivr CDN
+ * is already in `script-src`, so we skip the asm.js pre-injection there and let
+ * Pyodide's own (cache-aware, streaming) import run, keeping the common path
+ * unchanged. Pyodide's remaining assets (wasm, lockfile, wheels) load via
+ * `fetch`, allowed by `connect-src`, so passing `indexURL` to
+ * `loadPyodide({ indexURL })` resolves them unchanged.
  */
 function loadPyodideScript(indexURL: string): Promise<void> {
   scriptPromise ??= (async () => {
@@ -173,11 +192,13 @@ function loadPyodideScript(indexURL: string): Promise<void> {
       () => typeof window.loadPyodide === "function",
       "window.loadPyodide",
     );
-    // Pyodide 0.27.x's loadPyodide() does a dynamic import() of pyodide.asm.js
-    // only when globalThis._createPyodideModule is not already a function, so
-    // pre-defining it via the blob path short-circuits that CSP-blocked import.
-    // This hinges on an Emscripten/Pyodide internal: re-verify it still holds
-    // whenever PYODIDE_VERSION in pyodide-config.ts is bumped.
+    if (isDefaultPyodideIndexUrl(indexURL)) return;
+    // Custom mirror only. Pyodide 0.27.x's loadPyodide() does a dynamic
+    // import() of pyodide.asm.js solely when globalThis._createPyodideModule is
+    // not already a function, so pre-defining it via the blob path
+    // short-circuits that CSP-blocked import. This hinges on an
+    // Emscripten/Pyodide internal: re-verify it still holds whenever
+    // PYODIDE_VERSION in pyodide-config.ts is bumped.
     await injectScript(
       `${indexURL}pyodide.asm.js`,
       () => typeof window._createPyodideModule === "function",
