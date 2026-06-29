@@ -41,7 +41,7 @@ const hiddenPopupStyles = new WeakMap<HTMLElement, InteractiveStyles>();
 
 function shouldSuppressInteraction(popup: PopupInternals): boolean {
   const opacity = popup.options?.locationOccludedOpacity;
-  return Number(opacity) === DEFAULT_OCCLUDED_OPACITY;
+  return opacity !== "" && Number(opacity) === DEFAULT_OCCLUDED_OPACITY;
 }
 
 function restoreInteractiveStyles(container: HTMLElement): void {

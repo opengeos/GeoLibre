@@ -143,25 +143,31 @@ describe("installGlobePopupOcclusion", () => {
     );
   });
 
-  it("suppresses interaction for zero opacity strings", () => {
-    const maplibre = createMaplibreStub();
-    installGlobePopupOcclusion(maplibre);
+  for (const opacity of ["0", "0.0"]) {
+    it(`suppresses interaction for zero opacity string ${opacity}`, () => {
+      const maplibre = createMaplibreStub();
+      installGlobePopupOcclusion(maplibre);
 
-    const popup = new maplibre.Popup({
-      locationOccludedOpacity: "0.0",
-    }) as maplibregl.Popup & {
-      _container: HTMLElement;
-      _map: { transform: { isLocationOccluded: () => boolean } };
-      _updateOpacity: () => void;
-    };
+      const popup = new maplibre.Popup({
+        locationOccludedOpacity: opacity,
+      }) as maplibregl.Popup & {
+        _container: HTMLElement;
+        _map: { transform: { isLocationOccluded: () => boolean } };
+        _updateOpacity: () => void;
+      };
 
-    popup._map.transform.isLocationOccluded = () => true;
-    popup._updateOpacity();
+      popup._map.transform.isLocationOccluded = () => true;
+      popup._updateOpacity();
 
-    assert.equal(popup._container.style.opacity, "0.0");
-    assert.equal(popup._container.style.pointerEvents, "none");
-    assert.equal(popup._container.style.visibility, "hidden");
-  });
+      assert.equal(popup._container.style.opacity, opacity);
+      assert.equal(popup._container.style.pointerEvents, "none");
+      assert.equal(popup._container.style.visibility, "hidden");
+      assert.equal(
+        popup._container.classList.contains(GLOBE_POPUP_OCCLUDED_CLASS),
+        true,
+      );
+    });
+  }
 
   it("calls isLocationOccluded with the transform receiver", () => {
     const maplibre = createMaplibreStub();
