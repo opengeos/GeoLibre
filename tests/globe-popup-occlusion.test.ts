@@ -187,6 +187,7 @@ describe("installGlobePopupOcclusion", () => {
       popup._map.transform.isLocationOccluded = () => true;
       popup._updateOpacity();
 
+      assert.equal(popup._container.style.opacity, opacity);
       assert.equal(popup._container.style.pointerEvents, "auto");
       assert.equal(popup._container.style.visibility, "visible");
       assert.equal(

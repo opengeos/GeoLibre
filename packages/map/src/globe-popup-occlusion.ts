@@ -46,6 +46,7 @@ function shouldSuppressInteraction(popup: PopupInternals): boolean {
       opacity.trim() !== "" && Number(opacity) === DEFAULT_OCCLUDED_OPACITY
     );
   }
+  // The caller filters nullish values; the remaining non-string branch is numeric.
   return opacity === DEFAULT_OCCLUDED_OPACITY;
 }
 
