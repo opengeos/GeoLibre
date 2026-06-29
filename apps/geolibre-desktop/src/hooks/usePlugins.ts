@@ -149,11 +149,23 @@ manager.registerAll([
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
 let externalPluginsLoadKey: string | null = null;
+let externalPluginLoadIssues = new Map<string, string>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
 export function getPluginManager(): PluginManager {
   return manager;
+}
+
+export function getExternalPluginLoadIssues(): ReadonlyMap<string, string> {
+  return externalPluginLoadIssues;
+}
+
+export function subscribeToExternalPluginLoads(
+  listener: () => void,
+): () => void {
+  externalPluginsListeners.add(listener);
+  return () => externalPluginsListeners.delete(listener);
 }
 
 // Upgrade an installed external plugin in place by re-fetching its manifest URL
@@ -457,6 +469,7 @@ function ensureExternalPluginsLoadedWithSettings(
     return externalPluginsLoadPromise;
   }
 
+  externalPluginLoadIssues = new Map();
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
   // Serialize scans: loadExternalPlugins reads and writes module-level state
@@ -484,6 +497,9 @@ function ensureExternalPluginsLoadedWithSettings(
       );
     })
     .then((result) => {
+      externalPluginLoadIssues = new Map(
+        result.issues.map((issue) => [issue.archiveName, issue.message]),
+      );
       if (result.loadedPluginIds.length) {
         console.info(
           `Loaded external GeoLibre plugins from ${result.pluginSources.join(
