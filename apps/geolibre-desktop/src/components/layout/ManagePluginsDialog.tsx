@@ -32,6 +32,7 @@ import {
   useSyncExternalStore,
   type RefObject,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
   getExternalPluginLoadIssues,
@@ -93,6 +94,7 @@ export function ManagePluginsDialog({
   onOpenChange,
   mapControllerRef,
 }: ManagePluginsDialogProps) {
+  const { t } = useTranslation();
   const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
   const setDesktopSettings = useDesktopSettingsStore(
     (s) => s.setDesktopSettings,
@@ -656,7 +658,9 @@ export function ManagePluginsDialog({
                           ) : null}
                           {installed && loadIssue ? (
                             <p className="text-[11px] text-destructive">
-                              Failed to load: {loadIssue}
+                              {t("managePlugins.failedToLoad", {
+                                message: loadIssue,
+                              })}
                             </p>
                           ) : null}
                         </div>
@@ -722,7 +726,7 @@ export function ManagePluginsDialog({
                               {loadIssue ? (
                                 <span className="flex items-center gap-1 text-xs text-destructive">
                                   <AlertTriangle className="h-3.5 w-3.5" />
-                                  Failed
+                                  {t("managePlugins.failed")}
                                 </span>
                               ) : loadPending ? (
                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">

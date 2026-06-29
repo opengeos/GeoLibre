@@ -164,6 +164,8 @@ export function getExternalPluginLoadIssues(): ReadonlyMap<string, string> {
 export function subscribeToExternalPluginLoads(
   listener: () => void,
 ): () => void {
+  // Shares the ready-state listener set so marketplace rows update for both
+  // successful loads and per-plugin load issues.
   externalPluginsListeners.add(listener);
   return () => externalPluginsListeners.delete(listener);
 }
@@ -470,6 +472,7 @@ function ensureExternalPluginsLoadedWithSettings(
   }
 
   externalPluginLoadIssues = new Map();
+  notifyExternalPluginsListeners();
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
   // Serialize scans: loadExternalPlugins reads and writes module-level state
@@ -500,6 +503,7 @@ function ensureExternalPluginsLoadedWithSettings(
       externalPluginLoadIssues = new Map(
         result.issues.map((issue) => [issue.archiveName, issue.message]),
       );
+      notifyExternalPluginsListeners();
       if (result.loadedPluginIds.length) {
         console.info(
           `Loaded external GeoLibre plugins from ${result.pluginSources.join(
@@ -924,6 +928,10 @@ function isTauriRuntime(): boolean {
 function setExternalPluginsLoaded(loaded: boolean): void {
   if (externalPluginsLoaded === loaded) return;
   externalPluginsLoaded = loaded;
+  notifyExternalPluginsListeners();
+}
+
+function notifyExternalPluginsListeners(): void {
   for (const listener of externalPluginsListeners) listener();
 }
 
