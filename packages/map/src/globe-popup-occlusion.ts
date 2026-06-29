@@ -5,6 +5,7 @@ export const GLOBE_POPUP_OCCLUDED_CLASS = "geolibre-globe-popup-occluded";
 
 const PATCHED_POPUP_MARKER = "__geolibreGlobePopupOcclusionPatched";
 const DEFAULT_OCCLUDED_OPACITY = 0;
+const ZERO_OPACITY_STRING = /^[+-]?(?:0+(?:\.0*)?|\.(?:0+))$/;
 
 type PopupConstructor = new (
   options?: maplibregl.PopupOptions,
@@ -43,12 +44,9 @@ function shouldSuppressInteraction(popup: PopupInternals): boolean {
   const opacity = popup.options?.locationOccludedOpacity;
   if (typeof opacity === "string") {
     const trimmedOpacity = opacity.trim();
-    return (
-      trimmedOpacity !== "" &&
-      Number(trimmedOpacity) === DEFAULT_OCCLUDED_OPACITY
-    );
+    return ZERO_OPACITY_STRING.test(trimmedOpacity);
   }
-  // Nullish values are filtered by the caller; use strict comparison for numbers.
+  // Else branch is numeric; strict comparison avoids Number(null) === 0.
   return opacity === DEFAULT_OCCLUDED_OPACITY;
 }
 
