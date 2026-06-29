@@ -74,6 +74,11 @@ function emitProgress(phase: string): void {
   for (const listener of progressListeners) listener(phase);
 }
 
+// Both this script memo and the runtimePromise singleton below are intentionally
+// not keyed on indexURL: `getPyodideIndexUrl()` is stable for the app's lifetime,
+// so the console always resolves the same URL. Runtime mirror-switching is out of
+// scope; supporting it would mean rebuilding the whole runtime, not just rekeying
+// this promise.
 let scriptPromise: Promise<void> | null = null;
 
 // Generous bound on each runtime-script fetch. Large enough for the multi-MB
