@@ -42,6 +42,10 @@ type LoadPyodide = (options: { indexURL: string }) => Promise<PyodideAPI>;
 declare global {
   interface Window {
     loadPyodide?: LoadPyodide;
+    // Emscripten factory exposed by pyodide.asm.js. loadPyodide() dynamically
+    // `import()`s pyodide.asm.js only when this is not already a function, so
+    // pre-injecting the script (below) lets us skip that CSP-blocked import.
+    _createPyodideModule?: unknown;
   }
 }
 
@@ -73,74 +77,103 @@ function emitProgress(phase: string): void {
 let scriptPromise: Promise<void> | null = null;
 
 /**
- * Load `pyodide.js` once so `window.loadPyodide` is available.
+ * Fetch a Pyodide runtime script and run it via a `blob:` URL, then confirm it
+ * defined the global it is supposed to.
  *
- * We `fetch()` the script and inject it via a `blob:` URL instead of pointing a
- * `<script src>` straight at `indexURL`. Tauri's `script-src` CSP only allows
- * the jsDelivr CDN origins, so a custom `VITE_PYODIDE_INDEX_URL` mirror would be
- * blocked as a direct script source — but `connect-src` permits `https:`
+ * Tauri's `script-src` CSP only allows the jsDelivr CDN origins, so a custom
+ * `VITE_PYODIDE_INDEX_URL` mirror cannot be reached as a direct `<script src>`
+ * nor by Pyodide's own dynamic `import()` — but `connect-src` permits `https:`
  * fetches and `script-src` permits `blob:`, so fetch-then-blob reaches any
  * mirror. The vector-tools worker sidesteps the same CSP via `importScripts`;
- * this is the main-thread equivalent, mirroring `external-plugins.ts`. Pyodide's
- * own asset resolution is unaffected because `indexURL` is passed explicitly to
- * `loadPyodide({ indexURL })`.
+ * this is the main-thread equivalent, mirroring `external-plugins.ts`.
+ *
+ * @param scriptUrl - The absolute URL of the script to load.
+ * @param isReady - Predicate that returns true once the script's global is
+ *   present; used to reject a 200 HTML error page or corrupted payload (which
+ *   `onload` does not catch) so the `.catch` memo reset enables a clean retry.
+ * @param label - Human-readable name of the global, for the diagnostic message.
+ */
+async function injectScript(
+  scriptUrl: string,
+  isReady: () => boolean,
+  label: string,
+): Promise<void> {
+  if (isReady()) return;
+  let source: string;
+  try {
+    const response = await fetch(scriptUrl);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    source = await response.text();
+  } catch (cause) {
+    throw new Error(
+      `Failed to load the Pyodide runtime script from ${scriptUrl}.`,
+      { cause },
+    );
+  }
+  const blobUrl = URL.createObjectURL(
+    new Blob([source], { type: "text/javascript" }),
+  );
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = blobUrl;
+      script.onload = () => {
+        if (isReady()) {
+          resolve();
+          return;
+        }
+        script.remove();
+        reject(
+          new Error(
+            `Pyodide script loaded but ${label} is not defined; the content at ${scriptUrl} may be incorrect.`,
+          ),
+        );
+      };
+      // The caller's `.catch` owns resetting the memo on failure; remove the
+      // dead element so a retry doesn't leave orphan <script> tags.
+      script.onerror = () => {
+        script.remove();
+        reject(
+          new Error(
+            `Failed to execute the Pyodide runtime script from ${scriptUrl}.`,
+          ),
+        );
+      };
+      document.head.appendChild(script);
+    });
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+/**
+ * Load Pyodide's two entry scripts once so the runtime can initialize from any
+ * `indexURL`, including a self-hosted mirror, under Tauri's CSP.
+ *
+ * `pyodide.js` defines `window.loadPyodide`. We then also pre-inject
+ * `pyodide.asm.js` (which defines `globalThis._createPyodideModule`) because
+ * `loadPyodide()` otherwise dynamically `import()`s that file from `indexURL`,
+ * and that import is blocked by `script-src` for a non-whitelisted mirror.
+ * Pyodide skips the import when `_createPyodideModule` is already a function, so
+ * the pre-injected blob short-circuits it. Both scripts are reached via the same
+ * fetch-then-blob path (see `injectScript`). Pyodide's remaining assets (wasm,
+ * lockfile, wheels) load via `fetch`, allowed by `connect-src`, so passing
+ * `indexURL` to `loadPyodide({ indexURL })` resolves them unchanged.
  */
 function loadPyodideScript(indexURL: string): Promise<void> {
   scriptPromise ??= (async () => {
-    if (window.loadPyodide) return;
-    const scriptUrl = `${indexURL}pyodide.js`;
-    let source: string;
-    try {
-      const response = await fetch(scriptUrl);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      source = await response.text();
-    } catch (cause) {
-      throw new Error(
-        `Failed to load the Pyodide runtime script from ${scriptUrl}.`,
-        { cause },
-      );
-    }
-    const blobUrl = URL.createObjectURL(
-      new Blob([source], { type: "text/javascript" }),
+    await injectScript(
+      `${indexURL}pyodide.js`,
+      () => typeof window.loadPyodide === "function",
+      "window.loadPyodide",
     );
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = blobUrl;
-        // `onload` fires when the blob script is parsed and executed, which does
-        // not guarantee it actually exposed `window.loadPyodide` — a mirror can
-        // return a 200 with an HTML error page or corrupted JS. Verify the global
-        // here so a bad payload rejects (and the `.catch` clears the memo for a
-        // re-fetch) instead of resolving and wedging every later retry.
-        script.onload = () => {
-          if (window.loadPyodide) {
-            resolve();
-            return;
-          }
-          script.remove();
-          reject(
-            new Error(
-              `Pyodide script loaded but window.loadPyodide is not defined; the content at ${scriptUrl} may be incorrect.`,
-            ),
-          );
-        };
-        // The shared `.catch` below owns resetting scriptPromise on failure;
-        // remove the dead element so a retry doesn't leave orphan <script> tags.
-        script.onerror = () => {
-          script.remove();
-          reject(
-            new Error(
-              `Failed to execute the Pyodide runtime script from ${scriptUrl}.`,
-            ),
-          );
-        };
-        document.head.appendChild(script);
-      });
-    } finally {
-      URL.revokeObjectURL(blobUrl);
-    }
+    await injectScript(
+      `${indexURL}pyodide.asm.js`,
+      () => typeof window._createPyodideModule === "function",
+      "globalThis._createPyodideModule",
+    );
   })().catch((error) => {
     scriptPromise = null;
     throw error;
