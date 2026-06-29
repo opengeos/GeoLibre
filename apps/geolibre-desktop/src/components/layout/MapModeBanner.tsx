@@ -43,6 +43,9 @@ function formatDuration(
   locale: string,
   t: TFunction,
 ): string {
+  if (seconds < 30) {
+    return t("map.directionsMode.durationLessThanMinute");
+  }
   const minutes = Math.max(1, Math.round(seconds / 60));
   if (minutes < 60) {
     const value = new Intl.NumberFormat(locale).format(minutes);
@@ -144,9 +147,11 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
           {waypointCount >= 2 ? (
             <div
               className="rounded-md border bg-muted/30 p-2"
+              aria-live="polite"
+              aria-atomic="true"
               data-testid="directions-route-metrics"
             >
-              {routeLoading && !routeMetrics ? (
+              {routeLoading ? (
                 <p className="text-xs text-muted-foreground">
                   {t("map.directionsMode.calculating")}
                 </p>

@@ -63,6 +63,8 @@ interface OsrmRoute {
 
 let routeMetrics: DirectionsRouteMetrics | null = null;
 let routeLoading = false;
+let routeLoadingFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+const ROUTE_LOADING_FALLBACK_MS = 60_000;
 
 // True while a removeLastDirectionsWaypoint() call is mid route-refetch. Exposed
 // so the banner can disable its "remove last" button until the async call
@@ -205,6 +207,7 @@ export function clearDirectionsWaypoints(): void {
   // Clearing supersedes any in-flight removal: drop the flag so the post-clear
   // state is consistent (the aborted removal's .finally re-runs this harmlessly).
   removalInFlight = false;
+  clearRouteLoadingFallback();
   routeLoading = false;
   routeMetrics = null;
   notifyDirectionsState();
@@ -212,6 +215,12 @@ export function clearDirectionsWaypoints(): void {
 
 function toFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function clearRouteLoadingFallback(): void {
+  if (routeLoadingFallbackTimer == null) return;
+  clearTimeout(routeLoadingFallbackTimer);
+  routeLoadingFallbackTimer = null;
 }
 
 export function extractDirectionsRouteMetrics(
@@ -256,14 +265,22 @@ export function extractDirectionsRouteMetrics(
 }
 
 function handleDirectionsFetchStart(): void {
+  clearRouteLoadingFallback();
   routeLoading = true;
   routeMetrics = null;
+  routeLoadingFallbackTimer = setTimeout(() => {
+    routeLoadingFallbackTimer = null;
+    if (!routeLoading) return;
+    routeLoading = false;
+    notifyDirectionsState();
+  }, ROUTE_LOADING_FALLBACK_MS);
   notifyDirectionsState();
 }
 
 function handleDirectionsFetchEnd(event: {
   data: MapLibreGlDirectionsRoutingData;
 }): void {
+  clearRouteLoadingFallback();
   routeLoading = false;
   routeMetrics = extractDirectionsRouteMetrics(event.data.directions);
   notifyDirectionsState();
@@ -272,6 +289,7 @@ function handleDirectionsFetchEnd(event: {
 function handleDirectionsWaypointChange(): void {
   const count = getDirectionsWaypointCount();
   if (count < 2) {
+    clearRouteLoadingFallback();
     routeLoading = false;
     routeMetrics = null;
   }
@@ -338,6 +356,7 @@ function teardown(app: GeoLibreAppAPI): void {
   // A removal can't be pending once the instance is gone; clear the flag so a
   // teardown mid-refetch doesn't leave the next session's button disabled.
   removalInFlight = false;
+  clearRouteLoadingFallback();
   routeLoading = false;
   routeMetrics = null;
   // Reset the count subscribers see to 0 now the session is gone.

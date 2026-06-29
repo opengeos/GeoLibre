@@ -945,6 +945,7 @@
       "metricsUnavailable": "Route metrics unavailable",
       "distanceKilometers": "{{value}} km",
       "distanceMeters": "{{value}} m",
+      "durationLessThanMinute": "< 1 min",
       "durationMinutes": "{{value}} min",
       "durationHours": "{{value}} hr",
       "durationHoursMinutes": "{{hours}} hr {{minutes}} min",

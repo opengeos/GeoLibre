@@ -136,7 +136,7 @@ describe("directions route metrics extraction", () => {
   });
 
   it("rejects degenerate zero route totals", () => {
-    const metrics = extractDirectionsRouteMetrics({
+    const zeroDistance = extractDirectionsRouteMetrics({
       code: "Ok",
       routes: [
         {
@@ -149,6 +149,20 @@ describe("directions route metrics extraction", () => {
       waypoints: [],
     } as DirectionsResponse);
 
-    assert.equal(metrics, null);
+    const zeroDuration = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          distance: 30,
+          duration: 0,
+          geometry: "",
+          legs: [{ distance: 30, duration: 0 }],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.equal(zeroDistance, null);
+    assert.equal(zeroDuration, null);
   });
 });
