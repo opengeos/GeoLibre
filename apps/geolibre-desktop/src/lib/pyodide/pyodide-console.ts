@@ -122,6 +122,10 @@ async function injectScript(
   );
   try {
     const response = await fetch(scriptUrl, { signal: controller.signal });
+    // The timeout only guards against a dead/unresponsive mirror, which is
+    // disproven the moment headers arrive. Clear it here so a slow but live
+    // mirror isn't aborted partway through the multi-MB asm.js body download.
+    clearTimeout(timeout);
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
@@ -132,6 +136,7 @@ async function injectScript(
       { cause },
     );
   } finally {
+    // Idempotent; covers a fetch that rejects before the clear above.
     clearTimeout(timeout);
   }
   const blobUrl = URL.createObjectURL(

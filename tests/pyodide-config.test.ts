@@ -61,7 +61,7 @@ describe("isDefaultPyodideIndexUrl", () => {
     );
   });
 
-  it("returns false for the default CDN URL without a trailing slash", () => {
+  it("returns false for an unnormalized CDN URL (caller must pass getPyodideIndexUrl output)", () => {
     // Guard the exact-match contract: callers must pass a resolved (normalized)
     // indexURL, as getPyodideIndexUrl always appends the trailing slash.
     assert.equal(
@@ -70,5 +70,17 @@ describe("isDefaultPyodideIndexUrl", () => {
       ),
       false,
     );
+  });
+});
+
+describe("Pyodide version pin", () => {
+  it("flags a version bump for re-verifying the asm.js mirror workaround", () => {
+    // Tripwire: the Python Console's custom-mirror path (pyodide-console.ts)
+    // relies on loadPyodide() skipping its dynamic import() of pyodide.asm.js
+    // when globalThis._createPyodideModule is already defined — an Emscripten
+    // internal that is not part of Pyodide's public API. When bumping
+    // PYODIDE_VERSION, re-verify that short-circuit still holds against a
+    // self-hosted mirror under the Tauri CSP, then update this expected value.
+    assert.equal(PYODIDE_VERSION, "0.27.7");
   });
 });
