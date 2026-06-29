@@ -212,7 +212,7 @@ function loadPyodideScript(indexURL: string): Promise<void> {
     await injectScript(
       `${indexURL}pyodide.asm.js`,
       () => typeof window._createPyodideModule === "function",
-      "globalThis._createPyodideModule",
+      "window._createPyodideModule",
     );
   })().catch((error) => {
     scriptPromise = null;
