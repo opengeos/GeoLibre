@@ -88,7 +88,6 @@ export function NewProjectDialog({
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
-  const isDirty = useAppStore((s) => s.isDirty);
   const [selectedBasemapId, setSelectedBasemapId] =
     useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
@@ -120,6 +119,15 @@ export function NewProjectDialog({
   useEffect(() => {
     if (isCustomSelected) customUrlRef.current?.focus();
   }, [isCustomSelected]);
+  // Prioritize data preservation: when the dialog opens with unsaved changes,
+  // ask to save the current project before showing the new-project form (#990),
+  // matching standard desktop and web GIS conventions. With no unsaved changes,
+  // go straight to the configuration form. Read the dirty flag once on open
+  // (not as a reactive dep) so "Do not save" doesn't re-trigger the prompt while
+  // the project is still dirty.
+  useEffect(() => {
+    if (open) setShowSavePrompt(useAppStore.getState().isDirty);
+  }, [open]);
   const selectedPreset = useMemo<PresetBasemap | undefined>(
     () =>
       [...OPENFREEMAP_BASEMAPS, ...protomapsPresets].find(
@@ -178,21 +186,18 @@ export function NewProjectDialog({
 
   const handleCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canCreate) return;
-
-    if (isDirty) {
-      setShowSavePrompt(true);
-      return;
-    }
-
+    // Any unsaved changes were already resolved by the save prompt shown when
+    // the dialog opened, so creating here is safe.
     createProject();
   };
 
-  const handleSaveThenCreate = async () => {
+  const handleSaveThenContinue = async () => {
     setIsSaving(true);
     try {
       const saved = await onSaveCurrentProject();
-      if (saved) createProject();
+      // Advance to the configuration form only once the current project is
+      // safely saved; a cancelled or failed save keeps the prompt up.
+      if (saved) setShowSavePrompt(false);
     } catch (error) {
       console.error("Failed to save project", error);
     } finally {
@@ -217,7 +222,7 @@ export function NewProjectDialog({
                 type="button"
                 variant="outline"
                 disabled={isSaving}
-                onClick={() => setShowSavePrompt(false)}
+                onClick={() => handleOpenChange(false)}
               >
                 Cancel
               </Button>
@@ -225,14 +230,14 @@ export function NewProjectDialog({
                 type="button"
                 variant="secondary"
                 disabled={isSaving}
-                onClick={createProject}
+                onClick={() => setShowSavePrompt(false)}
               >
                 Do not save
               </Button>
               <Button
                 type="button"
                 disabled={isSaving}
-                onClick={handleSaveThenCreate}
+                onClick={handleSaveThenContinue}
               >
                 {isSaving ? "Saving..." : "Save"}
               </Button>
