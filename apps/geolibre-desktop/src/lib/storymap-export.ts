@@ -742,6 +742,9 @@ function renderTemplate(
 
         var scroller = scrollama();
         var cameraToken = 0;
+        // Set once the start slide is initialized synchronously on load, so the
+        // first (redundant) Scrollama enter for it is skipped (#998 review).
+        var startSlideInitialized = false;
 
         map.on('load', function () {
             // Match the in-app projection (globe by default) so the exported
@@ -766,10 +769,22 @@ ${inlineLayerScript}
                 if (insetMarker) insetMarker.getElement().style.visibility = value;
             }
 
+            // Hide/show the story title/byline/footer chrome. Slides are
+            // documented as text-free, so the persistent header and footer hide
+            // while one is active, matching the in-app presenter (the blank/black
+            // cover already hides them; this also clears them for global/adjacent).
+            function setChromeHidden(hidden) {
+                var headerEl = document.getElementById('header');
+                var footerEl = document.getElementById('footer');
+                if (headerEl) headerEl.classList.toggle('hidden', hidden);
+                if (footerEl) footerEl.classList.toggle('hidden', hidden);
+            }
+
             function enterSlide(mode, isStart) {
                 navItems.forEach(function (it) { it.classList.remove('active'); });
                 map.stop();
                 ++cameraToken;
+                setChromeHidden(true);
                 var bg = slideBg(mode);
                 if (bg) { cover.style.background = bg; cover.style.display = 'block'; return; }
                 cover.style.display = 'none';
@@ -798,10 +813,18 @@ ${inlineLayerScript}
                     var id = response.element.id;
                     response.element.classList.add('active');
                     if (id === '__story_start__' || id === '__story_end__') {
+                        // Skip the redundant first enter for the start slide that
+                        // was already initialized synchronously on load, so
+                        // global/adjacent modes don't fly the camera twice.
+                        if (id === '__story_start__' && startSlideInitialized) {
+                            startSlideInitialized = false;
+                            return;
+                        }
                         enterSlide(id === '__story_start__' ? config.startSlide : config.endSlide, id === '__story_start__');
                         return;
                     }
                     cover.style.display = 'none';
+                    setChromeHidden(false);
                     var idx = config.chapters.findIndex(function (c) { return c.id === id; });
                     var chapter = config.chapters[idx];
                     if (!chapter) return;
@@ -832,8 +855,14 @@ ${inlineLayerScript}
                 });
 
             // Set the start slide's camera deterministically on load, mirroring
-            // the in-app presenter's first step (#998).
-            if (config.startSlide && config.startSlide !== 'none') enterSlide(config.startSlide, true);
+            // the in-app presenter's first step (#998). This runs synchronously
+            // before Scrollama's first (async) onStepEnter fires for the in-view
+            // start slide, so the flag below skips that redundant second enter
+            // (which would otherwise fly the camera twice for global/adjacent).
+            if (config.startSlide && config.startSlide !== 'none') {
+                enterSlide(config.startSlide, true);
+                startSlideInitialized = true;
+            }
         });
 
         window.addEventListener('resize', scroller.resize);

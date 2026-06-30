@@ -379,9 +379,12 @@ function drawChapterPage(
   pdf.setFontSize(footerSize);
   pdf.setTextColor(130, 130, 130);
   if (byline) {
-    // Left-aligned in the footer band, mirroring the right-aligned page number,
-    // and bounded so it cannot run into the centered footer text.
-    const bylineMaxWidth = Math.max(20, widthMm / 2 - MARGIN_MM - PAGE_NUM_SLOT_MM);
+    // Left-aligned in the footer band, occupying the left slot that mirrors the
+    // page-number slot on the right. The centered footer text is kept clear of
+    // both slots (see footerMaxWidth below), so bounding the byline to
+    // PAGE_NUM_SLOT_MM guarantees it never runs into the footer. The first
+    // wrapped line is kept; a very long byline is truncated to this slot.
+    const bylineMaxWidth = Math.max(20, PAGE_NUM_SLOT_MM);
     const [line] = pdf.splitTextToSize(byline, bylineMaxWidth) as string[];
     pdf.text(line, MARGIN_MM, footerY);
   }

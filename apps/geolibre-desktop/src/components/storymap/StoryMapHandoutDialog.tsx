@@ -8,7 +8,11 @@ import {
 } from "react";
 import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
-import type { StoryChapter, StoryMap, StorySlideMode } from "@geolibre/core";
+import type {
+  StoryActiveSlideMode,
+  StoryChapter,
+  StoryMap,
+} from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -49,9 +53,6 @@ interface StoryMapHandoutDialogProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
-/** A non-`"none"` start/closing slide mode. */
-type SlideMode = Exclude<StorySlideMode, "none">;
-
 const STORY_START_ID = "__story_start__";
 const STORY_END_ID = "__story_end__";
 
@@ -62,7 +63,7 @@ type HandoutScreen =
       id: string;
       kind: "slide";
       position: "start" | "end";
-      mode: SlideMode;
+      mode: StoryActiveSlideMode;
     };
 
 /**

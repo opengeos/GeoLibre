@@ -13,9 +13,9 @@ import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import {
   useAppStore,
+  type StoryActiveSlideMode,
   type StoryChapter,
   type StoryMap,
-  type StorySlideMode,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, cn } from "@geolibre/ui";
@@ -31,9 +31,6 @@ interface StoryMapPresenterProps {
   mapControllerRef: RefObject<MapController | null>;
 }
 
-/** A non-`"none"` start/closing slide mode. */
-type PresenterSlideMode = Exclude<StorySlideMode, "none">;
-
 /** One scroll step in the presentation: a chapter card or an intro/outro slide. */
 type PresenterStep =
   | { key: string; kind: "chapter"; chapter: StoryChapter; chapterIndex: number }
@@ -41,7 +38,7 @@ type PresenterStep =
       key: string;
       kind: "slide";
       position: "start" | "end";
-      mode: PresenterSlideMode;
+      mode: StoryActiveSlideMode;
     };
 
 /**
@@ -409,10 +406,11 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       // straight from the start slide to chapter N), which replays 0..N-1 so the
       // skipped chapters' fades still run.
       if (previous !== index) {
+        // Chapter indices are always >= 0: a `previous` of -1 means "before
+        // chapter 0", so the loop starts at i = 0 and only moves toward `index`.
         const dir = previous < index ? 1 : -1;
         if (previous >= 0) applyEffects(chapters[previous]?.onChapterExit ?? []);
         for (let i = previous + dir; i !== index; i += dir) {
-          if (i < 0) continue;
           applyEffects(chapters[i]?.onChapterEnter ?? []);
           applyEffects(chapters[i]?.onChapterExit ?? []);
         }
@@ -434,8 +432,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         step.mode === "global"
           ? STORY_GLOBAL_VIEW
           : step.position === "start"
-            ? chapters[0].location
-            : chapters[chapters.length - 1].location;
+            ? (chapters[0]?.location ?? STORY_GLOBAL_VIEW)
+            : (chapters[chapters.length - 1]?.location ?? STORY_GLOBAL_VIEW);
       controller.applyStoryChapterCamera(location, "flyTo", false);
       // The global overview shows no marker; the adjacent preview keeps the
       // chapter's marker and moves it to that chapter.

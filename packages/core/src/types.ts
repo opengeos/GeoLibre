@@ -871,6 +871,9 @@ export type StoryInsetPosition =
  */
 export type StorySlideMode = "none" | "blank" | "black" | "global" | "adjacent";
 
+/** A start/closing slide that is actually shown (every mode except `"none"`). */
+export type StoryActiveSlideMode = Exclude<StorySlideMode, "none">;
+
 /** Scroll-driven story map authored on top of a GeoLibre project. */
 export interface StoryMap {
   title: string;
