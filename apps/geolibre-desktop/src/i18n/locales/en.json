@@ -79,7 +79,11 @@
     "sectionOpenFreeMap": "OpenFreeMap",
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Other",
-    "customUrlButton": "Custom URL"
+    "customUrlButton": "Custom URL",
+    "savePromptTitle": "Save current project?",
+    "savePromptDescription": "The current project has unsaved changes. Save them before creating a new project?",
+    "doNotSave": "Do not save",
+    "saving": "Saving..."
   },
   "basemapPicker": {
     "title": "Change basemap",

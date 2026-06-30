@@ -23,7 +23,13 @@ import {
   Label,
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 const DEFAULT_BASEMAP_ID = "liberty";
@@ -124,8 +130,9 @@ export function NewProjectDialog({
   // matching standard desktop and web GIS conventions. With no unsaved changes,
   // go straight to the configuration form. Read the dirty flag once on open
   // (not as a reactive dep) so "Do not save" doesn't re-trigger the prompt while
-  // the project is still dirty.
-  useEffect(() => {
+  // the project is still dirty. useLayoutEffect (not useEffect) commits this
+  // before paint, so a dirty open never flashes the config form first.
+  useLayoutEffect(() => {
     if (open) setShowSavePrompt(useAppStore.getState().isDirty);
   }, [open]);
   const selectedPreset = useMemo<PresetBasemap | undefined>(
@@ -187,7 +194,8 @@ export function NewProjectDialog({
   const handleCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     // Any unsaved changes were already resolved by the save prompt shown when
-    // the dialog opened, so creating here is safe.
+    // the dialog opened, so creating here is safe. createProject() still guards
+    // on canCreate internally, so the removed call-site check is not a regression.
     createProject();
   };
 
@@ -211,10 +219,9 @@ export function NewProjectDialog({
         {showSavePrompt ? (
           <>
             <DialogHeader>
-              <DialogTitle>Save current project?</DialogTitle>
+              <DialogTitle>{t("newProject.savePromptTitle")}</DialogTitle>
               <DialogDescription>
-                The current project has unsaved changes. Save them before
-                creating a new project?
+                {t("newProject.savePromptDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-2">
@@ -224,7 +231,7 @@ export function NewProjectDialog({
                 disabled={isSaving}
                 onClick={() => handleOpenChange(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -232,14 +239,14 @@ export function NewProjectDialog({
                 disabled={isSaving}
                 onClick={() => setShowSavePrompt(false)}
               >
-                Do not save
+                {t("newProject.doNotSave")}
               </Button>
               <Button
                 type="button"
                 disabled={isSaving}
                 onClick={handleSaveThenContinue}
               >
-                {isSaving ? "Saving..." : "Save"}
+                {isSaving ? t("newProject.saving") : t("common.save")}
               </Button>
             </div>
           </>
