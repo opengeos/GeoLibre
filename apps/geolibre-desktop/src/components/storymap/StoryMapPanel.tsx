@@ -23,6 +23,7 @@ import {
   type StoryInsetPosition,
   type StoryLayerOpacityChange,
   type StoryMap,
+  type StorySlideMode,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
@@ -768,7 +769,84 @@ function StorySettings({
             </option>
           </Select>
         ) : null}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={story.hideChapterNav}
+            onChange={(e) => onChange({ hideChapterNav: e.target.checked })}
+          />
+          {t("storymap.field.hideChapterNav")}
+        </label>
       </div>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <SlideControl
+          position="start"
+          label={t("storymap.field.startView")}
+          value={story.startSlide}
+          onChange={(startSlide) => onChange({ startSlide })}
+          t={t}
+        />
+        <SlideControl
+          position="end"
+          label={t("storymap.field.closingSlide")}
+          value={story.endSlide}
+          onChange={(endSlide) => onChange({ endSlide })}
+          t={t}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Checkbox + mode dropdown for a story's start or closing slide (#998).
+ *
+ * Unchecking sets the slide to `"none"`; checking defaults to `"blank"` and
+ * reveals the dropdown so the author can pick the screen treatment. The
+ * "adjacent" mode reads as "preview of the first chapter" at the start and
+ * "hold on the last chapter" at the end, so its label depends on `position`.
+ */
+function SlideControl({
+  position,
+  label,
+  value,
+  onChange,
+  t,
+}: {
+  position: "start" | "end";
+  label: string;
+  value: StorySlideMode;
+  onChange: (mode: StorySlideMode) => void;
+  t: TFn;
+}) {
+  const enabled = value !== "none";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <label className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onChange(e.target.checked ? "blank" : "none")}
+        />
+        {label}
+      </label>
+      {enabled ? (
+        <Select
+          className="w-48"
+          aria-label={label}
+          value={value}
+          onChange={(e) => onChange(e.target.value as StorySlideMode)}
+        >
+          <option value="blank">{t("storymap.slide.blank")}</option>
+          <option value="black">{t("storymap.slide.black")}</option>
+          <option value="global">{t("storymap.slide.global")}</option>
+          <option value="adjacent">
+            {position === "start"
+              ? t("storymap.slide.startAdjacent")
+              : t("storymap.slide.endAdjacent")}
+          </option>
+        </Select>
+      ) : null}
     </div>
   );
 }

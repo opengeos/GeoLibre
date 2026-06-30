@@ -8,7 +8,7 @@ import {
   type StoryMap,
 } from "@geolibre/core";
 import { sanitizeStoryHtml } from "./sanitize-html";
-import { STORY_INSET_STYLE_URL } from "./storymap-constants";
+import { STORY_GLOBAL_VIEW, STORY_INSET_STYLE_URL } from "./storymap-constants";
 
 export interface StoryMapExportOptions {
   storymap: StoryMap;
@@ -159,6 +159,12 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     insetZoom: 1,
     theme: storymap.theme,
     auto: false,
+    // Start the chapter list collapsed and reveal chapters one at a time (#995).
+    hideChapterNav: storymap.hideChapterNav,
+    // Optional intro/outro slides shown before/after the chapters (#998).
+    startSlide: storymap.startSlide,
+    endSlide: storymap.endSlide,
+    globalView: STORY_GLOBAL_VIEW,
     title: storymap.title,
     subtitle: storymap.subtitle,
     byline: storymap.byline,
@@ -477,6 +483,11 @@ function renderTemplate(
         .dark { color: #fafafa; background-color: #444; }
         .step { padding-bottom: 50vh; opacity: 0.25; transition: opacity 0.3s; }
         .step.active { opacity: 0.95; }
+        /* Start/closing slides are empty full-height scroll targets (#998). */
+        .sm-slide-step { min-height: 90vh; padding-bottom: 0; }
+        /* Solid cover painted over the map for a blank/black slide; below the
+           nav, and pointer-events:none so the page still scrolls. */
+        #slide-cover { position: fixed; inset: 0; z-index: 15; display: none; pointer-events: none; }
         .sm-card { position: relative; display: flex; flex-direction: column; max-height: 70vh; line-height: 22px; font-size: 14px; border-radius: 6px; box-shadow: 0 6px 20px rgba(0,0,0,0.25); overflow: hidden; }
         .sm-bar { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: move; user-select: none; touch-action: none; font-weight: 600; font-size: 13px; border-bottom: 1px solid rgba(127,127,127,0.25); }
         .sm-grip { opacity: 0.5; flex-shrink: 0; }
@@ -486,16 +497,21 @@ function renderTemplate(
         .sm-body img { width: 100%; max-height: 38vh; object-fit: cover; border-radius: 2px; }
         .sm-resize { position: absolute; right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; touch-action: none; }
         .sm-resize::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; opacity: 0.5; }
-        #nav { position: fixed; left: 12px; top: 12px; max-height: calc(100vh - 24px); width: 220px; overflow-y: auto; z-index: 20; border-radius: 6px; padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-size: 13px; }
+        #nav { position: fixed; left: 12px; top: 52px; max-height: calc(100vh - 64px); width: 220px; overflow-y: auto; z-index: 20; border-radius: 6px; padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); font-size: 13px; }
         #nav.dark { background: rgba(40,40,40,0.85); color: #fafafa; }
         #nav.light { background: rgba(250,250,250,0.92); color: #444; }
+        #nav.hidden-nav { display: none; }
+        /* Toggle button for the chapter list (#995). */
+        #nav-toggle { position: fixed; left: 12px; top: 12px; z-index: 21; width: 32px; height: 32px; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.3); }
+        #nav-toggle.dark { background: rgba(40,40,40,0.85); color: #fafafa; }
+        #nav-toggle.light { background: rgba(250,250,250,0.92); color: #444; }
         .nav-item { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 4px; cursor: pointer; }
         .nav-item:hover { background: rgba(127,127,127,0.18); }
         .nav-item.active { background: rgba(63,177,206,0.22); font-weight: 600; }
         .nav-num { width: 20px; height: 20px; border-radius: 50%; background: rgba(127,127,127,0.3); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
         .nav-item.active .nav-num { background: #3fb1ce; color: #fff; }
         .nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav { display: none; } }
+        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav, #nav-toggle { display: none; } }
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: unset; }
         #inset-map { position: fixed; width: 180px; height: 180px; border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); z-index: 10; }
@@ -571,6 +587,16 @@ function renderTemplate(
             });
         }
 
+        // Optional intro/outro slides are empty full-height scroll targets;
+        // their treatment (cover or camera) is applied on enter (#998).
+        function makeSlideStep(id) {
+            var s = document.createElement('div');
+            s.className = 'step sm-slide-step';
+            s.setAttribute('id', id);
+            return s;
+        }
+        if (config.startSlide && config.startSlide !== 'none') features.appendChild(makeSlideStep('__story_start__'));
+
         config.chapters.forEach(function (record, idx) {
             var container = document.createElement('div');
             container.setAttribute('id', record.id);
@@ -603,6 +629,7 @@ function renderTemplate(
             container.appendChild(card);
             features.appendChild(container);
         });
+        if (config.endSlide && config.endSlide !== 'none') features.appendChild(makeSlideStep('__story_end__'));
         story.appendChild(features);
 
         // Navigation pane: list chapters and jump to one on click.
@@ -625,6 +652,35 @@ function renderTemplate(
         });
         document.body.appendChild(nav);
         var navItems = nav.querySelectorAll('.nav-item');
+
+        // Toggle button so the chapter list can be opened/closed; it starts
+        // collapsed for a "discoverable chapters" story (#995).
+        var navToggle = document.createElement('button');
+        navToggle.id = 'nav-toggle';
+        navToggle.className = config.theme;
+        navToggle.type = 'button';
+        navToggle.title = 'Toggle chapter list';
+        navToggle.setAttribute('aria-label', 'Toggle chapter list');
+        navToggle.textContent = '☰';
+        navToggle.addEventListener('click', function () { nav.classList.toggle('hidden-nav'); });
+        document.body.appendChild(navToggle);
+        if (config.hideChapterNav) nav.classList.add('hidden-nav');
+
+        // Solid cover for a blank/black start or closing slide (#998).
+        var cover = document.createElement('div');
+        cover.id = 'slide-cover';
+        document.body.appendChild(cover);
+        function slideBg(mode) {
+            if (mode === 'black') return '#000000';
+            if (mode === 'blank') return config.theme === 'light' ? '#fafafa' : '#444444';
+            return null;
+        }
+        // Paint the cover up front for a blank/black start slide so the first
+        // frame is the slide, not a flash of the map (#998).
+        if (config.startSlide && config.startSlide !== 'none') {
+            var startBg = slideBg(config.startSlide);
+            if (startBg) { cover.style.background = startBg; cover.style.display = 'block'; }
+        }
 
         var footer = document.createElement('div');
         if (config.footer) { var f = document.createElement('p'); f.innerHTML = config.footer; footer.appendChild(f); }
@@ -683,13 +739,40 @@ function renderTemplate(
             }
 ${inlineLayerScript}
 
+            // Drive a start/closing slide (#998): blank/black paint a solid
+            // cover over the map; global zooms out; "adjacent" previews the
+            // first chapter (start) or holds the last chapter (end) with the
+            // text hidden.
+            function enterSlide(mode, isStart) {
+                navItems.forEach(function (it) { it.classList.remove('active'); });
+                map.stop();
+                ++cameraToken;
+                var bg = slideBg(mode);
+                if (bg) { cover.style.background = bg; cover.style.display = 'block'; return; }
+                cover.style.display = 'none';
+                var loc = mode === 'global'
+                    ? config.globalView
+                    : (isStart
+                        ? config.chapters[0].location
+                        : config.chapters[config.chapters.length - 1].location);
+                map.flyTo(loc);
+                if (config.showMarkers && marker) marker.setLngLat(loc.center);
+                if (insetMap && insetMarker) { insetMap.setCenter(loc.center); insetMarker.setLngLat(loc.center); }
+            }
+
             scroller.setup({ step: '.step', offset: 0.5 })
                 .onStepEnter(function (response) {
-                    var idx = config.chapters.findIndex(function (c) { return c.id === response.element.id; });
+                    var id = response.element.id;
+                    response.element.classList.add('active');
+                    if (id === '__story_start__' || id === '__story_end__') {
+                        enterSlide(id === '__story_start__' ? config.startSlide : config.endSlide, id === '__story_start__');
+                        return;
+                    }
+                    cover.style.display = 'none';
+                    var idx = config.chapters.findIndex(function (c) { return c.id === id; });
                     var chapter = config.chapters[idx];
                     if (!chapter) return;
-                    response.element.classList.add('active');
-                    navItems.forEach(function (it) { it.classList.toggle('active', it.getAttribute('data-id') === response.element.id); });
+                    navItems.forEach(function (it) { it.classList.toggle('active', it.getAttribute('data-id') === id); });
                     // Cancel any in-progress move (e.g. a prior chapter's rotation)
                     // and bump the token so its pending moveend handler is ignored.
                     map.stop();
@@ -707,11 +790,15 @@ ${inlineLayerScript}
                     }
                 })
                 .onStepExit(function (response) {
+                    response.element.classList.remove('active');
                     var chapter = config.chapters.find(function (c) { return c.id === response.element.id; });
                     if (!chapter) return;
-                    response.element.classList.remove('active');
                     if (chapter.onChapterExit.length > 0) chapter.onChapterExit.forEach(setLayerOpacity);
                 });
+
+            // Set the start slide's camera deterministically on load, mirroring
+            // the in-app presenter's first step (#998).
+            if (config.startSlide && config.startSlide !== 'none') enterSlide(config.startSlide, true);
         });
 
         window.addEventListener('resize', scroller.resize);

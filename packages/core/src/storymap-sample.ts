@@ -23,6 +23,9 @@ export function createSampleStoryMap(): StoryMap {
     markerColor: "#3fb1ce",
     inset: true,
     insetPosition: "bottom-left",
+    hideChapterNav: false,
+    startSlide: "none",
+    endSlide: "none",
     chapters: [
       {
         id: "sample-san-francisco",

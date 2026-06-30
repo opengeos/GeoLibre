@@ -859,6 +859,18 @@ export type StoryInsetPosition =
   | "bottom-left"
   | "bottom-right";
 
+/**
+ * A non-chapter intro/outro slide shown before the first or after the last
+ * chapter (#998). `"none"` disables it. The remaining modes are:
+ * - `"blank"` a solid screen in the panel theme color,
+ * - `"black"` a solid black screen,
+ * - `"global"` a zoomed-out global view of the map with no text,
+ * - `"adjacent"` the camera of the neighboring chapter (the first chapter for
+ *   the start slide, the last chapter for the closing slide) with all text and
+ *   media hidden, so the presenter can zoom into the full content next.
+ */
+export type StorySlideMode = "none" | "blank" | "black" | "global" | "adjacent";
+
 /** Scroll-driven story map authored on top of a GeoLibre project. */
 export interface StoryMap {
   title: string;
@@ -870,6 +882,16 @@ export interface StoryMap {
   markerColor: string;
   inset: boolean;
   insetPosition: StoryInsetPosition;
+  /**
+   * Start the presentation with the chapter itinerary/navigation panel hidden,
+   * revealing chapters one at a time instead of listing every upcoming location
+   * up front (#995). The presenter still offers a toggle to open the list.
+   */
+  hideChapterNav: boolean;
+  /** Optional intro slide shown before the first chapter (#998). */
+  startSlide: StorySlideMode;
+  /** Optional closing slide shown after the last chapter (#998). */
+  endSlide: StorySlideMode;
   chapters: StoryChapter[];
 }
 
@@ -883,6 +905,9 @@ export const DEFAULT_STORY_MAP: StoryMap = {
   markerColor: "#3fb1ce",
   inset: false,
   insetPosition: "bottom-left",
+  hideChapterNav: false,
+  startSlide: "none",
+  endSlide: "none",
   chapters: [],
 };
 

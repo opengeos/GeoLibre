@@ -8,7 +8,7 @@ import {
 } from "react";
 import maplibregl from "maplibre-gl";
 import { useTranslation } from "react-i18next";
-import type { StoryMap } from "@geolibre/core";
+import type { StoryChapter, StoryMap, StorySlideMode } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   Button,
@@ -37,12 +37,94 @@ import {
 } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
+import { STORY_GLOBAL_VIEW } from "../../lib/storymap-constants";
 
 interface StoryMapHandoutDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   story: StoryMap;
   mapControllerRef: RefObject<MapController | null>;
+}
+
+/** A non-`"none"` start/closing slide mode. */
+type SlideMode = Exclude<StorySlideMode, "none">;
+
+const STORY_START_ID = "__story_start__";
+const STORY_END_ID = "__story_end__";
+
+/** One exportable screen: a chapter or an intro/outro slide. */
+type HandoutScreen =
+  | { id: string; kind: "chapter"; chapter: StoryChapter; index: number }
+  | {
+      id: string;
+      kind: "slide";
+      position: "start" | "end";
+      mode: SlideMode;
+    };
+
+/**
+ * Build the ordered list of exportable screens: the optional start slide, the
+ * chapters, then the optional closing slide (#998).
+ */
+function buildScreens(story: StoryMap): HandoutScreen[] {
+  const screens: HandoutScreen[] = [];
+  if (story.startSlide !== "none") {
+    screens.push({
+      id: STORY_START_ID,
+      kind: "slide",
+      position: "start",
+      mode: story.startSlide,
+    });
+  }
+  story.chapters.forEach((chapter, index) =>
+    screens.push({ id: chapter.id, kind: "chapter", chapter, index }),
+  );
+  if (story.endSlide !== "none") {
+    screens.push({
+      id: STORY_END_ID,
+      kind: "slide",
+      position: "end",
+      mode: story.endSlide,
+    });
+  }
+  return screens;
+}
+
+/**
+ * Render a solid-color page-sized canvas for a blank/black slide page, so the
+ * PDF has a real screen rather than an empty page.
+ */
+function solidColorCanvas(color: string): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 900;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  return canvas;
+}
+
+/** The solid background a blank/black slide paints, or null for a map view. */
+function slideCoverColor(
+  mode: SlideMode,
+  theme: "light" | "dark",
+): string | null {
+  if (mode === "black") return "#000000";
+  if (mode === "blank") return theme === "light" ? "#fafafa" : "#444444";
+  return null;
+}
+
+/** The camera a global/adjacent slide captures. */
+function slideLocation(
+  screen: Extract<HandoutScreen, { kind: "slide" }>,
+  chapters: StoryChapter[],
+): StoryChapter["location"] {
+  if (screen.mode === "global") return STORY_GLOBAL_VIEW;
+  return screen.position === "start"
+    ? chapters[0].location
+    : chapters[chapters.length - 1].location;
 }
 
 /** Maximum time to wait for the map to settle (tiles loaded) per chapter. */
@@ -186,11 +268,15 @@ export function StoryMapHandoutDialog({
 }: StoryMapHandoutDialogProps) {
   const { t } = useTranslation();
   const chapters = story.chapters;
+  // Chapters plus the optional start/closing slides, in export order.
+  const screens = useMemo(() => buildScreens(story), [story]);
 
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [paperSize, setPaperSize] = useState<PaperSizeId>("a4");
   const [orientation, setOrientation] = useState<Orientation>("landscape");
   const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [byline, setByline] = useState("");
   const [footer, setFooter] = useState("");
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(
@@ -203,34 +289,37 @@ export function StoryMapHandoutDialog({
   // the running loop sees the latest value without being re-created.
   const abortRef = useRef(false);
 
-  // Seed the selection (all chapters) and the title/footer from the story each
-  // time the dialog opens, so it reflects the latest story without clobbering
-  // edits made while it is open.
+  // Seed the selection (all screens) and the title/subtitle/byline/footer from
+  // the story each time the dialog opens, so it reflects the latest story
+  // without clobbering edits made while it is open. The subtitle and byline
+  // mirror the main Story Map settings so the export matches the screen (#996).
   useEffect(() => {
     if (!open) return;
-    setSelected(Object.fromEntries(chapters.map((c) => [c.id, true])));
-    // Strip any HTML the story title/footer carry (the sample footer has links)
-    // so the fields show readable text instead of raw markup.
+    setSelected(Object.fromEntries(screens.map((s) => [s.id, true])));
+    // Strip any HTML the story fields carry (the sample footer has links) so the
+    // inputs show readable text instead of raw markup.
     setTitle(singleLine(story.title));
+    setSubtitle(singleLine(story.subtitle));
+    setByline(singleLine(story.byline));
     setFooter(singleLine(story.footer));
     setError(null);
     setNotice(null);
     setProgress(null);
-    // Only re-seed on open; chapters/story are read at that moment.
+    // Only re-seed on open; screens/story are read at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const selectedCount = useMemo(
-    () => chapters.filter((c) => selected[c.id]).length,
-    [chapters, selected],
+    () => screens.filter((s) => selected[s.id]).length,
+    [screens, selected],
   );
 
-  const allSelected = selectedCount === chapters.length && chapters.length > 0;
+  const allSelected = selectedCount === screens.length && screens.length > 0;
 
   const toggleAll = useCallback(() => {
     const next = !allSelected;
-    setSelected(Object.fromEntries(chapters.map((c) => [c.id, next])));
-  }, [allSelected, chapters]);
+    setSelected(Object.fromEntries(screens.map((s) => [s.id, next])));
+  }, [allSelected, screens]);
 
   const handleGenerate = useCallback(async () => {
     setError(null);
@@ -240,7 +329,7 @@ export function StoryMapHandoutDialog({
       setError(t("storymap.handout.noMap"));
       return;
     }
-    const chosen = chapters.filter((c) => selected[c.id]);
+    const chosen = screens.filter((s) => selected[s.id]);
     if (chosen.length === 0) {
       setError(t("storymap.handout.noneSelected"));
       return;
@@ -262,8 +351,43 @@ export function StoryMapHandoutDialog({
       const captures: HandoutChapter[] = [];
       for (let i = 0; i < chosen.length; i++) {
         if (abortRef.current) break;
-        const chapter = chosen[i];
+        const screen = chosen[i];
         setProgress({ current: i + 1, total: chosen.length });
+
+        if (screen.kind === "slide") {
+          // Blank/black slides need no map capture: paint a solid full-page
+          // color. Global/adjacent slides capture the map at the slide camera
+          // with no title or text overlay (#998).
+          const color = slideCoverColor(screen.mode, story.theme);
+          if (color) {
+            const canvas = solidColorCanvas(color);
+            captures.push({
+              title: "",
+              map: { data: canvas, width: canvas.width, height: canvas.height },
+              fullBleed: true,
+            });
+            continue;
+          }
+          await jumpAndWaitIdle(
+            map,
+            slideLocation(screen, chapters),
+            () => abortRef.current,
+          );
+          if (abortRef.current) break;
+          const slideShot = captureMapImage(map);
+          captures.push({
+            title: "",
+            map: {
+              data: slideShot.image,
+              width: slideShot.width,
+              height: slideShot.height,
+            },
+            fullBleed: true,
+          });
+          continue;
+        }
+
+        const chapter = screen.chapter;
         await jumpAndWaitIdle(map, chapter.location, () => abortRef.current);
         if (abortRef.current) break;
         const shot = captureMapImage(map);
@@ -289,6 +413,8 @@ export function StoryMapHandoutDialog({
         paperSize,
         orientation,
         title,
+        subtitle,
+        byline,
         footer,
       });
       const saved = await saveBinaryFileWithFallback(bytes, {
@@ -320,12 +446,16 @@ export function StoryMapHandoutDialog({
     }
   }, [
     chapters,
+    screens,
     selected,
     paperSize,
     orientation,
     title,
+    subtitle,
+    byline,
     footer,
     story.title,
+    story.theme,
     mapControllerRef,
     onOpenChange,
     t,
@@ -354,7 +484,7 @@ export function StoryMapHandoutDialog({
                 <h3 className="text-sm font-semibold">
                   {t("storymap.handout.screens", {
                     count: selectedCount,
-                    total: chapters.length,
+                    total: screens.length,
                   })}
                 </h3>
                 <Button
@@ -369,29 +499,45 @@ export function StoryMapHandoutDialog({
                 </Button>
               </div>
               <div className="space-y-1 rounded-md border p-2">
-                {chapters.map((chapter, index) => (
-                  <label
-                    key={chapter.id}
-                    className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected[chapter.id] ?? false}
-                      onChange={(e) =>
-                        setSelected((prev) => ({
-                          ...prev,
-                          [chapter.id]: e.target.checked,
-                        }))
-                      }
-                    />
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-xs">
-                      {index + 1}
-                    </span>
-                    <span className="truncate">
-                      {chapter.title || t("storymap.untitledChapter")}
-                    </span>
-                  </label>
-                ))}
+                {screens.map((screen) => {
+                  const isSlide = screen.kind === "slide";
+                  const label = isSlide
+                    ? screen.position === "start"
+                      ? t("storymap.handout.startSlide")
+                      : t("storymap.handout.endSlide")
+                    : screen.chapter.title || t("storymap.untitledChapter");
+                  return (
+                    <label
+                      key={screen.id}
+                      className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected[screen.id] ?? false}
+                        onChange={(e) =>
+                          setSelected((prev) => ({
+                            ...prev,
+                            [screen.id]: e.target.checked,
+                          }))
+                        }
+                      />
+                      <span
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-xs ${
+                          isSlide
+                            ? "bg-primary/15 text-primary"
+                            : "bg-muted"
+                        }`}
+                      >
+                        {isSlide
+                          ? screen.position === "start"
+                            ? "▶"
+                            : "■"
+                          : screen.index + 1}
+                      </span>
+                      <span className="truncate">{label}</span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
@@ -446,6 +592,28 @@ export function StoryMapHandoutDialog({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder={t("storymap.handout.documentTitlePlaceholder")}
+              />
+            </Field>
+            <Field
+              label={t("storymap.handout.subtitle")}
+              htmlFor="storymap-handout-subtitle"
+            >
+              <Input
+                id="storymap-handout-subtitle"
+                value={subtitle}
+                onChange={(e) => setSubtitle(e.target.value)}
+                placeholder={t("storymap.handout.subtitlePlaceholder")}
+              />
+            </Field>
+            <Field
+              label={t("storymap.handout.byline")}
+              htmlFor="storymap-handout-byline"
+            >
+              <Input
+                id="storymap-handout-byline"
+                value={byline}
+                onChange={(e) => setByline(e.target.value)}
+                placeholder={t("storymap.handout.bylinePlaceholder")}
               />
             </Field>
             <Field

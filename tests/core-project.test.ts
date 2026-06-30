@@ -755,6 +755,44 @@ describe("story maps", () => {
     assert.equal(settingsOnly.storymap?.chapters.length, 0);
   });
 
+  it("normalizes hideChapterNav and start/closing slide settings", () => {
+    const base = {
+      version: "0.1.0",
+      name: "Story",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+    };
+    // Valid values round-trip; an invalid slide mode falls back to "none".
+    const project = parseProject(
+      JSON.stringify({
+        ...base,
+        storymap: {
+          hideChapterNav: true,
+          startSlide: "global",
+          endSlide: "warp",
+          chapters: [chapter()],
+        },
+      }),
+    );
+    assert.ok(project.storymap);
+    assert.equal(project.storymap.hideChapterNav, true);
+    assert.equal(project.storymap.startSlide, "global");
+    assert.equal(project.storymap.endSlide, "none");
+
+    // Defaults when omitted.
+    const defaults = parseProject(
+      JSON.stringify({ ...base, storymap: { chapters: [chapter()] } }),
+    );
+    assert.equal(defaults.storymap?.hideChapterNav, false);
+    assert.equal(defaults.storymap?.startSlide, "none");
+    assert.equal(defaults.storymap?.endSlide, "none");
+
+    // A settings-only story is kept when it only sets a non-default slide.
+    const settingsOnly = parseProject(
+      JSON.stringify({ ...base, storymap: { startSlide: "black", chapters: [] } }),
+    );
+    assert.equal(settingsOnly.storymap?.startSlide, "black");
+  });
+
   it("round-trips a story map through the store and back to a project", () => {
     const store = useAppStore.getState();
     store.addStoryChapter(chapter() as never);

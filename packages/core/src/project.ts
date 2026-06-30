@@ -34,6 +34,7 @@ import {
   type StoryInsetPosition,
   type StoryLayerOpacityChange,
   type StoryMap,
+  type StorySlideMode,
 } from "./types";
 import {
   DEFAULT_LAYER_GROUP_OPACITY,
@@ -259,6 +260,13 @@ export function normalizeStoryMap(storymap: unknown): StoryMap | null {
     )
       ? (candidate.insetPosition as StoryInsetPosition)
       : DEFAULT_STORY_MAP.insetPosition,
+    hideChapterNav: normalizeBoolean(candidate.hideChapterNav, false),
+    startSlide: STORY_SLIDE_MODES.has(candidate.startSlide as StorySlideMode)
+      ? (candidate.startSlide as StorySlideMode)
+      : DEFAULT_STORY_MAP.startSlide,
+    endSlide: STORY_SLIDE_MODES.has(candidate.endSlide as StorySlideMode)
+      ? (candidate.endSlide as StorySlideMode)
+      : DEFAULT_STORY_MAP.endSlide,
     chapters,
   };
 
@@ -280,7 +288,10 @@ export function storyMapHasContent(story: StoryMap): boolean {
     story.showMarkers !== DEFAULT_STORY_MAP.showMarkers ||
     story.markerColor !== DEFAULT_STORY_MAP.markerColor ||
     story.inset !== DEFAULT_STORY_MAP.inset ||
-    story.insetPosition !== DEFAULT_STORY_MAP.insetPosition
+    story.insetPosition !== DEFAULT_STORY_MAP.insetPosition ||
+    story.hideChapterNav !== DEFAULT_STORY_MAP.hideChapterNav ||
+    story.startSlide !== DEFAULT_STORY_MAP.startSlide ||
+    story.endSlide !== DEFAULT_STORY_MAP.endSlide
   );
 }
 
@@ -302,6 +313,14 @@ const STORY_INSET_POSITIONS = new Set<StoryInsetPosition>([
   "top-right",
   "bottom-left",
   "bottom-right",
+]);
+
+const STORY_SLIDE_MODES = new Set<StorySlideMode>([
+  "none",
+  "blank",
+  "black",
+  "global",
+  "adjacent",
 ]);
 
 function normalizeStoryChapter(chapter: unknown): StoryChapter | null {
