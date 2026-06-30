@@ -52,6 +52,20 @@ describe("shouldSuppressOnboarding", () => {
     assert.equal(shouldSuppressOnboarding(), false);
   });
 
+  it("suppresses the wizard for an embed page", () => {
+    for (const value of ["1", "true", "TRUE", " 1 "]) {
+      withSearch(`?embed=${encodeURIComponent(value)}`);
+      assert.equal(shouldSuppressOnboarding(), true, `embed=${value}`);
+    }
+  });
+
+  it("keeps the wizard for non-embed or empty embed values", () => {
+    for (const search of ["?embed=0", "?embed=false", "?embed=", "?embed"]) {
+      withSearch(search);
+      assert.equal(shouldSuppressOnboarding(), false, search);
+    }
+  });
+
   it("suppresses the wizard for falsy welcome values", () => {
     for (const value of ["0", "false", "off", "no", "FALSE", " off "]) {
       withSearch(`?welcome=${encodeURIComponent(value)}`);

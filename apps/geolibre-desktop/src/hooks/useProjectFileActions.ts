@@ -58,11 +58,21 @@ export interface EmbedVectorDataPrompt {
 }
 
 /**
- * A pending "name this project file" prompt, shown when Save As (or a first
- * Save) runs in a browser that can only download under a fixed name.
+ * A pending "name this file" prompt, shown when a save runs in a browser that
+ * can only download under a fixed name. Used by Save As (or a first Save) and by
+ * Export as Interactive HTML; the dialog copy is carried on the prompt so the
+ * same component serves both.
  */
 export interface SaveNamePrompt {
   resolve: (name: string | null) => void;
+  /** Dialog title. */
+  title: string;
+  /** Dialog description, explaining the browser-download behaviour. */
+  description: string;
+  /** Label for the file-name input. */
+  label: string;
+  /** Placeholder for the file-name input. */
+  placeholder: string;
 }
 
 /**
@@ -79,6 +89,21 @@ function ensureProjectFileName(name: string): string {
   return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed)
     ? trimmed
     : `${trimmed}.geolibre.json`;
+}
+
+/**
+ * Ensure an exported HTML file name carries an `.html`/`.htm` extension,
+ * defaulting to a slug-based name when blank so the browser download opens as a
+ * web page rather than an unknown file type.
+ *
+ * @param name - The raw file name the user typed.
+ * @param fallbackSlug - The project-derived slug used when the name is blank.
+ * @returns A sanitized file name ending in `.html` (or the user's `.htm`).
+ */
+function ensureHtmlFileName(name: string, fallbackSlug: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return `${fallbackSlug}.html`;
+  return /\.html?$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
 
 /**
@@ -519,13 +544,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     return buildCurrentProject(nameOverride, layers);
   };
 
-  // Ask the user to name the project file. Used only when saving falls back to
-  // a browser download (no File System Access picker), where the name is the
-  // only thing the user can control. Resolves with the name, or null if cancelled.
-  const askSaveName = (defaultName: string) =>
+  // Ask the user to name the file. Used only when saving falls back to a browser
+  // download (no File System Access picker), where the name is the only thing
+  // the user can control. The caller supplies the dialog copy so the same prompt
+  // serves both project saves and HTML exports. Resolves with the name, or null
+  // if cancelled.
+  const askSaveName = (
+    defaultName: string,
+    labels: Omit<SaveNamePrompt, "resolve">,
+  ) =>
     new Promise<string | null>((resolve) => {
       setSaveNameInput(defaultName);
-      setSaveNamePrompt({ resolve });
+      setSaveNamePrompt({ resolve, ...labels });
     });
 
   const submitSaveNamePrompt = (event?: FormEvent<HTMLFormElement>) => {
@@ -579,7 +609,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       browserSaveFallsBackToDownload() &&
       (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {
-      const chosen = await askSaveName(saveName);
+      const chosen = await askSaveName(saveName, {
+        title: t("toolbar.item.saveProjectAsTitle"),
+        description: t("toolbar.item.saveProjectAsDesc"),
+        label: t("toolbar.item.saveProjectFileName"),
+        placeholder: t("toolbar.item.saveProjectFileNamePlaceholder"),
+      });
       if (chosen === null) return false;
       saveName = ensureProjectFileName(chosen);
     }
@@ -650,10 +685,26 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "") || "geolibre-map";
+      // Browsers without the File System Access save picker (Firefox, Safari)
+      // would otherwise download immediately under the generated name, with no
+      // chance to rename the file (issue #991). Prompt for the name first;
+      // desktop and Chromium hosts get a native save dialog from
+      // saveTextFileWithFallback below instead.
+      let defaultName = `${slug}.html`;
+      if (browserSaveFallsBackToDownload()) {
+        const chosen = await askSaveName(defaultName, {
+          title: t("toolbar.item.exportHtmlAsTitle"),
+          description: t("toolbar.item.exportHtmlAsDesc"),
+          label: t("toolbar.item.exportHtmlFileName"),
+          placeholder: t("toolbar.item.exportHtmlFileNamePlaceholder"),
+        });
+        if (chosen === null) return false;
+        defaultName = ensureHtmlFileName(chosen, slug);
+      }
       // Returns null when the user cancels the save dialog; report that as a
       // no-op rather than a successful export.
       const savedPath = await saveTextFileWithFallback(html, {
-        defaultName: `${slug}.html`,
+        defaultName,
         filters: [{ name: t("toolbar.item.htmlFile"), extensions: ["html"] }],
         browserTypes: [
           {

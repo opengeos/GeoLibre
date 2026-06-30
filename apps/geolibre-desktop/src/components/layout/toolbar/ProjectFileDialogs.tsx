@@ -93,9 +93,9 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("toolbar.item.saveProjectAsTitle")}</DialogTitle>
+            <DialogTitle>{projectFiles.saveNamePrompt?.title}</DialogTitle>
             <DialogDescription>
-              {t("toolbar.item.saveProjectAsDesc")}
+              {projectFiles.saveNamePrompt?.description}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -104,12 +104,12 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
           >
             <div className="space-y-2">
               <Label htmlFor="save-project-name">
-                {t("toolbar.item.saveProjectFileName")}
+                {projectFiles.saveNamePrompt?.label}
               </Label>
               <Input
                 id="save-project-name"
                 autoFocus
-                placeholder={t("toolbar.item.saveProjectFileNamePlaceholder")}
+                placeholder={projectFiles.saveNamePrompt?.placeholder}
                 value={projectFiles.saveNameInput}
                 onChange={(event) =>
                   projectFiles.setSaveNameInput(event.target.value)
