@@ -639,19 +639,14 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (isSavingRef.current) return false;
     isSavingRef.current = true;
     try {
-      // Embed local vector data (self-contained, like Share), then strip env
-      // vars: secrets that serve no purpose in a static, shareable viewer.
-      const { project, defaultProjectName } = await buildEmbeddedProject();
-      const safeProject = {
-        ...project,
-        preferences: { ...project.preferences, environmentVariables: [] },
-      };
-      const html = buildProjectHtml({
-        project: safeProject,
-        title: defaultProjectName,
-      });
+      // Derive the default file name from the project name in the store first,
+      // without materializing embedded data, so the prompt can appear right away
+      // and a cancel discards no work. buildEmbeddedProject below computes the
+      // same default name (no override), so the slug and the HTML title agree.
+      const projectName =
+        useAppStore.getState().projectName.trim() || DEFAULT_PROJECT_NAME;
       const slug =
-        defaultProjectName
+        projectName
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "") || "geolibre-map";
@@ -671,6 +666,19 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         if (chosen === null) return false;
         defaultName = ensureHtmlFileName(chosen, slug);
       }
+      // Only now embed local vector data (self-contained, like Share) and strip
+      // env vars (secrets serve no purpose in a static viewer): this can be
+      // costly on a project with many local layers, so it runs after the user
+      // has committed to the export rather than before the prompt.
+      const { project, defaultProjectName } = await buildEmbeddedProject();
+      const safeProject = {
+        ...project,
+        preferences: { ...project.preferences, environmentVariables: [] },
+      };
+      const html = buildProjectHtml({
+        project: safeProject,
+        title: defaultProjectName,
+      });
       // Returns null when the user cancels the save dialog; report that as a
       // no-op rather than a successful export.
       const savedPath = await saveTextFileWithFallback(html, {

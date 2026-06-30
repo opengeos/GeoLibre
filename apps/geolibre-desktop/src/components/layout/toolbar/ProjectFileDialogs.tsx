@@ -24,7 +24,7 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   // before the dialog's exit animation finishes. Keep the last non-null copy so
   // its title/label text stays put through the close transition instead of
   // flashing blank.
-  const lastSaveNamePrompt = useRef(projectFiles.saveNamePrompt);
+  const lastSaveNamePrompt = useRef<typeof projectFiles.saveNamePrompt>(null);
   if (projectFiles.saveNamePrompt) {
     lastSaveNamePrompt.current = projectFiles.saveNamePrompt;
   }

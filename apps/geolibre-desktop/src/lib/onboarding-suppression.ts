@@ -54,7 +54,9 @@ function hasProjectDeepLinkIntent(): boolean {
 function embeddedByParam(): boolean {
   if (typeof window === "undefined") return false;
   const value = new URLSearchParams(window.location.search).get("embed");
-  return value !== null && EMBED_ENABLED_VALUES.has(value.trim().toLowerCase());
+  // Match embedHost.ts's isEmbedded() exactly (no trim/case-folding) so a value
+  // that suppresses onboarding here also activates the postMessage bridge there.
+  return value !== null && EMBED_ENABLED_VALUES.has(value);
 }
 
 /**
