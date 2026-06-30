@@ -757,6 +757,15 @@ ${inlineLayerScript}
             // cover over the map; global zooms out; "adjacent" previews the
             // first chapter (start) or holds the last chapter (end) with the
             // text hidden.
+            // Hide/show the map (and inset) markers. The "global" overview slide
+            // is a clean world view, so its marker is hidden; chapters and the
+            // adjacent preview keep theirs.
+            function setMarkersVisible(visible) {
+                var value = visible ? '' : 'hidden';
+                if (marker) marker.getElement().style.visibility = value;
+                if (insetMarker) insetMarker.getElement().style.visibility = value;
+            }
+
             function enterSlide(mode, isStart) {
                 navItems.forEach(function (it) { it.classList.remove('active'); });
                 map.stop();
@@ -774,8 +783,14 @@ ${inlineLayerScript}
                     ? config.globalView
                     : ((adjacent && adjacent.location) || config.globalView);
                 map.flyTo(loc);
-                if (config.showMarkers && marker) marker.setLngLat(loc.center);
-                if (insetMap && insetMarker) { insetMap.setCenter(loc.center); insetMarker.setLngLat(loc.center); }
+                // Global overview shows no marker; adjacent preview keeps it.
+                if (mode === 'global') {
+                    setMarkersVisible(false);
+                } else {
+                    setMarkersVisible(true);
+                    if (config.showMarkers && marker) marker.setLngLat(loc.center);
+                    if (insetMap && insetMarker) { insetMap.setCenter(loc.center); insetMarker.setLngLat(loc.center); }
+                }
             }
 
             scroller.setup({ step: '.step', offset: 0.5 })
@@ -796,6 +811,8 @@ ${inlineLayerScript}
                     map.stop();
                     var token = ++cameraToken;
                     map[chapter.mapAnimation || 'flyTo'](chapter.location);
+                    // Re-show the marker in case a preceding global slide hid it.
+                    setMarkersVisible(true);
                     if (config.showMarkers && marker) marker.setLngLat(chapter.location.center);
                     if (insetMap && insetMarker) { insetMap.setCenter(chapter.location.center); insetMarker.setLngLat(chapter.location.center); }
                     if (chapter.onChapterEnter.length > 0) chapter.onChapterEnter.forEach(setLayerOpacity);

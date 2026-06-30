@@ -373,6 +373,17 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       }
     };
 
+    // Hide or show the map (and inset) markers. The "global" overview slide is a
+    // clean world view, so its marker is hidden; chapters and the adjacent
+    // preview keep theirs.
+    const setMarkersVisible = (visible: boolean) => {
+      const value = visible ? "" : "hidden";
+      const marker = markerRef.current?.getElement();
+      if (marker) marker.style.visibility = value;
+      const insetMarker = insetMarkerRef.current?.getElement();
+      if (insetMarker) insetMarker.style.visibility = value;
+    };
+
     const enterChapter = (chapter: StoryChapter, index: number) => {
       const previous = activeChapterRef.current;
       activeChapterRef.current = index;
@@ -386,6 +397,8 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
         chapter.mapAnimation || "flyTo",
         chapter.rotateAnimation,
       );
+      // Re-show the marker in case it was hidden by a preceding global slide.
+      setMarkersVisible(true);
       moveCameraTo(chapter.location);
 
       // Replay the chapters between the old and new position as if scrolled
@@ -424,7 +437,14 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
             ? chapters[0].location
             : chapters[chapters.length - 1].location;
       controller.applyStoryChapterCamera(location, "flyTo", false);
-      moveCameraTo(location);
+      // The global overview shows no marker; the adjacent preview keeps the
+      // chapter's marker and moves it to that chapter.
+      if (step.mode === "global") {
+        setMarkersVisible(false);
+      } else {
+        setMarkersVisible(true);
+        moveCameraTo(location);
+      }
     };
 
     const enterStep = (index: number) => {
