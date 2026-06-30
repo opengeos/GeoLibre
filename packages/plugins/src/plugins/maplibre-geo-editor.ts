@@ -903,9 +903,30 @@ function applySketchesMapDisplay(): void {
   setSketchesMapLayerSuppressed(false);
 }
 
+// Coalesce flags so a burst of store updates (e.g. an opacity slider dragged on
+// any layer while a geometry-edit session is active, each of which re-runs
+// MapController.syncLayers and can disturb the overlay ordering) collapses to a
+// single apply per phase instead of one apply per update. The two phases are
+// kept: a microtask pass and a macrotask pass, so the display is re-applied both
+// before and after the layer sync that the same update triggers.
+let applyMicrotaskPending = false;
+let applyMacrotaskPending = false;
+
 function scheduleApplySketchesMapDisplay(): void {
-  queueMicrotask(() => applySketchesMapDisplay());
-  window.setTimeout(() => applySketchesMapDisplay(), 0);
+  if (!applyMicrotaskPending) {
+    applyMicrotaskPending = true;
+    queueMicrotask(() => {
+      applyMicrotaskPending = false;
+      applySketchesMapDisplay();
+    });
+  }
+  if (!applyMacrotaskPending) {
+    applyMacrotaskPending = true;
+    window.setTimeout(() => {
+      applyMacrotaskPending = false;
+      applySketchesMapDisplay();
+    }, 0);
+  }
 }
 
 function scheduleShowGeomanDisplayLayersOnStyleData(): void {
@@ -1001,10 +1022,13 @@ function geoEditorTargetAnchorLayerIds(
   layer: GeoLibreLayer,
 ): string[] {
   const nativeLayerIds = layer.metadata.nativeLayerIds;
+  // Filter to strings first, then fall back: a non-empty `nativeLayerIds` that
+  // holds only non-string entries must still fall back to the conventional ids.
+  const stringIds = Array.isArray(nativeLayerIds)
+    ? nativeLayerIds.filter((id): id is string => typeof id === "string")
+    : [];
   const candidates =
-    Array.isArray(nativeLayerIds) && nativeLayerIds.length > 0
-      ? nativeLayerIds.filter((id): id is string => typeof id === "string")
-      : sketchesMapLayerIds(layer.id);
+    stringIds.length > 0 ? stringIds : sketchesMapLayerIds(layer.id);
   return candidates.filter((id) => map.getLayer(id));
 }
 
@@ -1149,8 +1173,15 @@ function setGeomanPaintProperty(
 /**
  * Every map layer that belongs to the editor overlay and must be kept above the
  * edited layer: Geoman's `gm_*` display layers plus the GeoEditor's own
- * selection layers (`geo-editor-*`). Used only for z-ordering, so it is broader
- * than `isGeomanDisplayLayer` (which drives show/hide of the Geoman layers).
+ * selection layers. Used only for z-ordering, so it is broader than
+ * `isGeomanDisplayLayer` (which drives show/hide of the Geoman layers).
+ *
+ * The `geo-editor` prefix matches the layers `maplibre-gl-geo-editor` adds for
+ * its selection highlight (observed ids `geo-editor-selection-{fill,line,
+ * circle}-layer` on the `geo-editor-selection-source` source). The library does
+ * not export those ids, so this stays a prefix heuristic; if a future version
+ * renames them the overlay would simply not be re-stacked (a safe degradation,
+ * no error). The Geoman `gm_*` layers are matched by `isGeomanDisplayLayer`.
  */
 function isGeoEditorOverlayLayer(layer: maplibregl.LayerSpecification): boolean {
   if (isGeomanDisplayLayer(layer)) return true;
