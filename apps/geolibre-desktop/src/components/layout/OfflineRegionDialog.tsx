@@ -565,7 +565,7 @@ export function OfflineRegionDialog({
             </span>
           </div>
 
-          {overLimit && (
+          {overLimit && !isComplete && (
             <div className="space-y-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
               <p>
                 {t("offline.tooManyTiles", {
@@ -598,7 +598,9 @@ export function OfflineRegionDialog({
               {isComplete ? (
                 <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  {t("offline.complete")}
+                  {t("offline.complete", {
+                    count: progress.done - progress.failed,
+                  })}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground tabular-nums">

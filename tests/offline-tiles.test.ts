@@ -265,8 +265,12 @@ describe("countStyleAssets / count consistency (#992)", () => {
     const tiles = await countOfflineTiles(map, bbox, minZoom, maxZoom);
     const assets = countStyleAssets(map);
     const { urls } = await collectOfflineUrls(map, bbox, minZoom, maxZoom);
-    // The "Tiles to download" estimate must mirror the "Downloading N / M"
-    // progress total exactly, with no asset-overhead drift.
+    // The "Resources to download" estimate must mirror the "Downloading N / M"
+    // progress total exactly, with no asset-overhead drift. This identity
+    // assumes tile URLs and style-asset URLs are disjoint (tiles and sprite/glyph
+    // assets are served from different paths) — `collectOfflineUrls` would
+    // otherwise de-duplicate an overlap into one URL while `tiles + assets`
+    // counts it twice. The fixture uses separate hosts, mirroring real styles.
     assert.equal(tiles + assets, urls.length);
   });
 
