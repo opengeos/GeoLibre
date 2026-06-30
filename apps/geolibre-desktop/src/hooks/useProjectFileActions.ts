@@ -24,6 +24,7 @@ import {
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { buildProjectHtml } from "../lib/html-export";
+import { ensureHtmlFileName, ensureProjectFileName } from "../lib/file-names";
 import { mergeStringLists } from "../lib/string-lists";
 import { fetchProjectFromUrl } from "../lib/project-url";
 import { resolveShareBaseUrl } from "../lib/share-geolibre";
@@ -73,37 +74,6 @@ export interface SaveNamePrompt {
   label: string;
   /** Placeholder for the file-name input. */
   placeholder: string;
-}
-
-/**
- * Ensure a user-entered project file name carries a recognized extension,
- * defaulting to `.geolibre.json` when none is present so the downloaded file
- * opens cleanly again later. Falls back to the default project name when blank.
- *
- * @param name - The raw file name the user typed.
- * @returns A sanitized file name ending in a project extension.
- */
-function ensureProjectFileName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return `${DEFAULT_PROJECT_NAME}.geolibre.json`;
-  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed)
-    ? trimmed
-    : `${trimmed}.geolibre.json`;
-}
-
-/**
- * Ensure an exported HTML file name carries an `.html`/`.htm` extension,
- * defaulting to a slug-based name when blank so the browser download opens as a
- * web page rather than an unknown file type.
- *
- * @param name - The raw file name the user typed.
- * @param fallbackSlug - The project-derived slug used when the name is blank.
- * @returns A sanitized file name ending in `.html` (or the user's `.htm`).
- */
-function ensureHtmlFileName(name: string, fallbackSlug: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return `${fallbackSlug}.html`;
-  return /\.html?$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }
 
 /**
