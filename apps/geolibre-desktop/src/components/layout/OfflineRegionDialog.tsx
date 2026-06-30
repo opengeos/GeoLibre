@@ -364,11 +364,14 @@ export function OfflineRegionDialog({
         signal: controller.signal,
         onProgress: setProgress,
       });
-      // Reframe to the whole region: of `regionTotal` resources, `result.failed`
-      // are still outstanding (those just retried but failed again), the rest are
-      // cached. `failedUrls` carries the remaining failures for another retry.
+      // Reframe to the whole region while keeping the WarmProgress convention
+      // (`done` = all settled, successes + failures): all `regionTotal` resources
+      // are now settled, `result.failed` of them are still outstanding (retried
+      // but failed again), and the completion templates derive the saved count as
+      // `done - failed`. `failedUrls` carries the remaining failures for another
+      // retry.
       setProgress({
-        done: regionTotal - result.failed,
+        done: regionTotal,
         total: regionTotal,
         failed: result.failed,
         failedUrls: result.failedUrls,
