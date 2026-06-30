@@ -17,6 +17,12 @@
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 
+/** The active style object, as returned by MapLibre's `map.getStyle()`. */
+type StyleLike = ReturnType<MapLibreMap["getStyle"]>;
+
+/** Default glyph ranges warmed per fontstack (the common Latin coverage). */
+const DEFAULT_GLYPH_RANGES = ["0-255", "256-511"];
+
 /** [west, south, east, north] in degrees. */
 export type Bbox = [number, number, number, number];
 
@@ -397,7 +403,7 @@ export async function collectOfflineUrls(
   maxZoom: number,
   options: { glyphRanges?: string[]; signal?: AbortSignal } = {},
 ): Promise<{ urls: string[]; tileUrls: string[] }> {
-  const { glyphRanges = ["0-255", "256-511"], signal } = options;
+  const { glyphRanges = DEFAULT_GLYPH_RANGES, signal } = options;
   const style = map.getStyle();
   const urls = new Set<string>();
   const tileUrls = new Set<string>();
@@ -414,6 +420,29 @@ export async function collectOfflineUrls(
       tileUrls.add(url);
     }
   }
+
+  // Shared style assets (sprite + glyphs) are warmed too, but tracked only in
+  // `urls` (not `tileUrls`): they are common to every region and must not be
+  // deleted when one region is removed.
+  for (const url of collectStyleAssetUrls(style, glyphRanges)) {
+    urls.add(url);
+  }
+
+  return { urls: [...urls], tileUrls: [...tileUrls] };
+}
+
+/**
+ * Enumerate the shared, non-tile style asset URLs that an offline download warms
+ * alongside the tiles: the sprite (json + png at 1x and 2x) and one glyph PBF per
+ * (fontstack, range) the style actually uses. Kept as the single source of truth
+ * for these URLs so the download (`collectOfflineUrls`) and the size preview
+ * (`countStyleAssets`) can never disagree about how many there are (#992).
+ */
+function collectStyleAssetUrls(
+  style: StyleLike,
+  glyphRanges: string[],
+): string[] {
+  const urls = new Set<string>();
 
   // Sprite (icons): json + png at 1x and 2x. MapLibre allows `sprite` to be a
   // string or an array of { id, url } objects (multi-sprite styles).
@@ -458,7 +487,28 @@ export async function collectOfflineUrls(
     }
   }
 
-  return { urls: [...urls], tileUrls: [...tileUrls] };
+  return [...urls];
+}
+
+/**
+ * Count the shared style asset URLs (sprite + glyphs) an offline download warms
+ * in addition to its tiles. Adding this to {@link countOfflineTiles} makes the
+ * dialog's size preview equal the live download total, which counts every URL
+ * (tiles + assets), so the estimate and the progress bar agree (#992).
+ *
+ * Args:
+ *   map: The live MapLibre map.
+ *   glyphRanges: Unicode glyph ranges warmed per fontstack; must match the value
+ *     passed to {@link collectOfflineUrls} (both default to the same ranges).
+ *
+ * Returns:
+ *   The number of distinct sprite/glyph URLs the download will fetch.
+ */
+export function countStyleAssets(
+  map: MapLibreMap,
+  glyphRanges: string[] = DEFAULT_GLYPH_RANGES,
+): number {
+  return collectStyleAssetUrls(map.getStyle(), glyphRanges).length;
 }
 
 export interface WarmProgress {

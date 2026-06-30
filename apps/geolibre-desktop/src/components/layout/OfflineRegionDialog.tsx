@@ -14,6 +14,7 @@ import {
   Slider,
 } from "@geolibre/ui";
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -24,6 +25,7 @@ import {
   type Bbox,
   collectOfflineUrls,
   countOfflineTiles,
+  countStyleAssets,
   hasActiveServiceWorker,
   planOfflineZoom,
   warmUrls,
@@ -97,6 +99,10 @@ export function OfflineRegionDialog({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [concurrency, setConcurrency] = useState(DEFAULT_CONCURRENCY);
   const [timeoutSec, setTimeoutSec] = useState(0);
+  // When the planned download exceeds the cache cap, the user must explicitly
+  // acknowledge that older tiles may be evicted before the download is allowed
+  // (#994): the warning alone no longer leaves the action freely clickable.
+  const [acknowledgeEviction, setAcknowledgeEviction] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<WarmProgress>({
     done: 0,
@@ -140,15 +146,18 @@ export function OfflineRegionDialog({
   );
   const bbox = (view?.bbox ?? null) as Bbox | null;
 
-  // Tile count is resolved asynchronously: it clamps each source to its own
-  // maxzoom (the vector source's bound lives in a TileJSON we have to fetch), so
-  // the estimate matches what actually downloads instead of counting tiles past
-  // a source's maxzoom that would 404.
-  const [tileCount, setTileCount] = useState(0);
+  // Resource count is resolved asynchronously: it clamps each tile source to its
+  // own maxzoom (the vector source's bound lives in a TileJSON we have to fetch),
+  // so the estimate matches what actually downloads instead of counting tiles
+  // past a source's maxzoom that would 404. It includes the shared style assets
+  // (sprite + glyphs) the download also fetches, so this preview equals the live
+  // progress total of "Downloading N / M" rather than undercounting by the asset
+  // overhead (#992).
+  const [resourceCount, setResourceCount] = useState(0);
   useEffect(() => {
     const map = mapControllerRef.current?.getMap();
     if (!open || !bbox || !map) {
-      setTileCount(0);
+      setResourceCount(0);
       return;
     }
     const controller = new AbortController();
@@ -157,7 +166,7 @@ export function OfflineRegionDialog({
       signal: controller.signal,
     })
       .then((count) => {
-        if (active) setTileCount(count);
+        if (active) setResourceCount(count + countStyleAssets(map));
       })
       .catch(() => {
         // Discovery failed (e.g. aborted); leave the last known count.
@@ -209,10 +218,23 @@ export function OfflineRegionDialog({
       setShowAdvanced(false);
       setConcurrency(DEFAULT_CONCURRENCY);
       setTimeoutSec(0);
+      setAcknowledgeEviction(false);
     } else {
       abortRef.current?.abort();
     }
   }, [open]);
+
+  // Re-scoping the area (a different zoom range) invalidates the previous run's
+  // outcome, so clear the completed/progress state and the eviction
+  // acknowledgement. Without this, a stale "Saved N of N" count and a checked
+  // acknowledgement would linger over the new settings (#994). The download
+  // controls are disabled while running, so baseZoom/maxZoom can only change when
+  // idle or done — never mid-run.
+  useEffect(() => {
+    setPhase((current) => (current === "running" ? current : "idle"));
+    setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
+    setAcknowledgeEviction(false);
+  }, [baseZoom, maxZoom]);
 
   // Abort any in-flight download if the dialog unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -343,10 +365,22 @@ export function OfflineRegionDialog({
   // After a partial download the primary action becomes "Retry all tiles" (a
   // full re-warm from scratch), shown alongside the targeted "Retry failed".
   const hasFailures = phase === "done" && progress.failed > 0;
+  // A fully successful run: every requested resource was cached. This drives the
+  // success confirmation and the "Done" footer that replaces the re-enabled
+  // Download button (#993).
+  const isComplete = phase === "done" && progress.failed === 0;
+  // The plan exceeds the service-worker cache cap, so older tiles would be
+  // evicted as new ones arrive — the user must acknowledge before downloading
+  // (#994).
+  const overLimit = resourceCount > MAX_CACHE_ENTRIES;
   // Gate every download control while a run is in flight, and also when there is
   // no service worker to retain the tiles — without it the dialog would invite
   // the user to configure a download this build can never persist (see #608).
   const controlsDisabled = phase === "running" || !swActive;
+  // Block the download itself when there is nothing to fetch or when the plan
+  // exceeds the cache cap and eviction hasn't been acknowledged.
+  const downloadDisabled =
+    controlsDisabled || resourceCount === 0 || (overLimit && !acknowledgeEviction);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -499,17 +533,31 @@ export function OfflineRegionDialog({
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">{t("offline.tiles")}</span>
             <span className="tabular-nums">
-              {tileCount.toLocaleString()} (~
-              {formatBytes(tileCount * AVG_TILE_BYTES)})
+              {resourceCount.toLocaleString()} (~
+              {formatBytes(resourceCount * AVG_TILE_BYTES)})
             </span>
           </div>
 
-          {tileCount > MAX_CACHE_ENTRIES && (
-            <p className="rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
-              {t("offline.tooManyTiles", {
-                max: MAX_CACHE_ENTRIES.toLocaleString(),
-              })}
-            </p>
+          {overLimit && (
+            <div className="space-y-2 rounded-md bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
+              <p>
+                {t("offline.tooManyTiles", {
+                  max: MAX_CACHE_ENTRIES.toLocaleString(),
+                })}
+              </p>
+              <label className="flex items-center gap-2 font-medium">
+                <input
+                  className="h-4 w-4"
+                  type="checkbox"
+                  checked={acknowledgeEviction}
+                  disabled={controlsDisabled}
+                  onChange={(event) =>
+                    setAcknowledgeEviction(event.target.checked)
+                  }
+                />
+                {t("offline.acknowledgeEviction")}
+              </label>
+            </div>
           )}
 
           {phase !== "idle" && (
@@ -520,67 +568,85 @@ export function OfflineRegionDialog({
                   style={{ width: `${percent}%` }}
                 />
               </div>
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {phase === "done"
-                  ? t(
-                      progress.failed > 0
-                        ? "offline.completeWithFailures"
-                        : "offline.complete",
-                      {
+              {isComplete ? (
+                <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  {t("offline.complete", {
+                    done: progress.done - progress.failed,
+                    total: progress.total,
+                  })}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {phase === "done"
+                    ? t("offline.completeWithFailures", {
                         done: progress.done - progress.failed,
                         total: progress.total,
                         failed: progress.failed,
-                      },
-                    )
-                  : t("offline.progress", {
-                      done: progress.done,
-                      total: progress.total,
-                    })}
-              </p>
+                      })
+                    : t("offline.progress", {
+                        done: progress.done,
+                        total: progress.total,
+                      })}
+                </p>
+              )}
             </div>
           )}
         </div>
 
         <div className="flex flex-wrap justify-end gap-2">
-          {phase === "running" ? (
-            <Button variant="outline" onClick={handleCancel}>
-              {t("offline.cancel")}
+          {isComplete ? (
+            // A successful download ends in a single "Done" action that closes
+            // the dialog, rather than re-enabling a blue "Download" button that
+            // reads as "nothing happened" and invites a duplicate run (#993).
+            <Button onClick={() => onOpenChange(false)}>
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              {t("offline.done")}
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              {t("common.close")}
-            </Button>
+            <>
+              {phase === "running" ? (
+                <Button variant="outline" onClick={handleCancel}>
+                  {t("offline.cancel")}
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                  {t("common.close")}
+                </Button>
+              )}
+              {hasFailures && (
+                <Button
+                  variant="outline"
+                  onClick={handleRetry}
+                  // Mirrors the primary button's guard for consistency. In
+                  // practice only the `phase === "running"` half bites here (this
+                  // button renders only when phase is "done"), but reusing
+                  // controlsDisabled keeps the gate correct if either condition
+                  // later changes.
+                  disabled={controlsDisabled}
+                >
+                  <RotateCw className="mr-2 h-4 w-4" />
+                  {t("offline.retryFailed", { count: progress.failed })}
+                </Button>
+              )}
+              <Button
+                // "Retry all" and "Download" share this handler (a full re-warm);
+                // handleDownload aborts any in-flight run first, so it is safe to
+                // keep enabled even while failures are outstanding.
+                onClick={handleDownload}
+                disabled={downloadDisabled}
+              >
+                {phase === "running" ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : hasFailures ? (
+                  <RotateCw className="mr-2 h-4 w-4" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                {hasFailures ? t("offline.retryAll") : t("offline.download")}
+              </Button>
+            </>
           )}
-          {hasFailures && (
-            <Button
-              variant="outline"
-              onClick={handleRetry}
-              // Mirrors the primary button's guard for consistency. In practice
-              // only the `phase === "running"` half bites here (this button
-              // renders only when phase is "done"), but reusing controlsDisabled
-              // keeps the gate correct if either condition later changes.
-              disabled={controlsDisabled}
-            >
-              <RotateCw className="mr-2 h-4 w-4" />
-              {t("offline.retryFailed", { count: progress.failed })}
-            </Button>
-          )}
-          <Button
-            // "Retry all" and "Download" share this handler (a full re-warm);
-            // handleDownload aborts any in-flight run first, so it is safe to
-            // keep enabled even while failures are outstanding.
-            onClick={handleDownload}
-            disabled={controlsDisabled || tileCount === 0}
-          >
-            {phase === "running" ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : hasFailures ? (
-              <RotateCw className="mr-2 h-4 w-4" />
-            ) : (
-              <Download className="mr-2 h-4 w-4" />
-            )}
-            {hasFailures ? t("offline.retryAll") : t("offline.download")}
-          </Button>
         </div>
       </DialogContent>
     </Dialog>
