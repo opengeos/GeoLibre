@@ -641,8 +641,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       // Derive the default file name from the project name in the store first,
       // without materializing embedded data, so the prompt can appear right away
-      // and a cancel discards no work. buildEmbeddedProject below computes the
-      // same default name (no override), so the slug and the HTML title agree.
+      // and a cancel discards no work. This snapshot is passed to
+      // buildEmbeddedProject as the name override below, so the file-name slug
+      // and the HTML title stay consistent even if the project is renamed while
+      // the name prompt is open.
       const projectName =
         useAppStore.getState().projectName.trim() || DEFAULT_PROJECT_NAME;
       const slug =
@@ -669,8 +671,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       // Only now embed local vector data (self-contained, like Share) and strip
       // env vars (secrets serve no purpose in a static viewer): this can be
       // costly on a project with many local layers, so it runs after the user
-      // has committed to the export rather than before the prompt.
-      const { project, defaultProjectName } = await buildEmbeddedProject();
+      // has committed to the export rather than before the prompt. Reuse the
+      // name snapshot so the title matches the slug computed above.
+      const { project, defaultProjectName } =
+        await buildEmbeddedProject(projectName);
       const safeProject = {
         ...project,
         preferences: { ...project.preferences, environmentVariables: [] },

@@ -31,6 +31,8 @@ export function ensureProjectFileName(name: string): string {
  */
 export function ensureHtmlFileName(name: string, fallbackSlug: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return `${fallbackSlug}.html`;
+  // A blank name, or one that is only dots (which would otherwise yield e.g.
+  // "..html"), has no usable base, so fall back to the slug-derived name.
+  if (!trimmed || /^\.+$/.test(trimmed)) return `${fallbackSlug}.html`;
   return /\.html?$/i.test(trimmed) ? trimmed : `${trimmed}.html`;
 }

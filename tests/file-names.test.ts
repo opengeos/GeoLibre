@@ -11,6 +11,12 @@ describe("ensureHtmlFileName", () => {
     assert.equal(ensureHtmlFileName("   ", "my-map"), "my-map.html");
   });
 
+  it("falls back to the slug-based name for a dots-only name", () => {
+    // A bare "." would otherwise become "..html"; treat it as no usable base.
+    assert.equal(ensureHtmlFileName(".", "my-map"), "my-map.html");
+    assert.equal(ensureHtmlFileName("..", "my-map"), "my-map.html");
+  });
+
   it("appends .html when no HTML extension is present", () => {
     assert.equal(ensureHtmlFileName("report", "map"), "report.html");
     assert.equal(ensureHtmlFileName("  report  ", "map"), "report.html");
