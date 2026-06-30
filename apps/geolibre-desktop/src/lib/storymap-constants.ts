@@ -5,6 +5,13 @@ export const STORY_INSET_STYLE_URL =
   "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 
 /**
+ * Synthetic step ids for the optional start/closing slides (#998). Shared by the
+ * presenter, the HTML export template, and the handout so the three stay in sync.
+ */
+export const STORY_START_STEP_ID = "__story_start__";
+export const STORY_END_STEP_ID = "__story_end__";
+
+/**
  * The solid background a blank/black start/closing slide paints over the map, or
  * null when the slide keeps the map visible (global/adjacent). Blank matches the
  * panel theme background (`.glsm-light`/`.glsm-dark`). Shared by the in-app

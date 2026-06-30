@@ -42,7 +42,9 @@ import {
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
 import {
+  STORY_END_STEP_ID,
   STORY_GLOBAL_VIEW,
+  STORY_START_STEP_ID,
   storySlideCoverColor,
 } from "../../lib/storymap-constants";
 
@@ -52,9 +54,6 @@ interface StoryMapHandoutDialogProps {
   story: StoryMap;
   mapControllerRef: RefObject<MapController | null>;
 }
-
-const STORY_START_ID = "__story_start__";
-const STORY_END_ID = "__story_end__";
 
 /** One exportable screen: a chapter or an intro/outro slide. */
 type HandoutScreen =
@@ -74,7 +73,7 @@ function buildScreens(story: StoryMap): HandoutScreen[] {
   const screens: HandoutScreen[] = [];
   if (story.startSlide !== "none") {
     screens.push({
-      id: STORY_START_ID,
+      id: STORY_START_STEP_ID,
       kind: "slide",
       position: "start",
       mode: story.startSlide,
@@ -85,7 +84,7 @@ function buildScreens(story: StoryMap): HandoutScreen[] {
   );
   if (story.endSlide !== "none") {
     screens.push({
-      id: STORY_END_ID,
+      id: STORY_END_STEP_ID,
       kind: "slide",
       position: "end",
       mode: story.endSlide,
@@ -103,10 +102,15 @@ function solidColorCanvas(color: string): HTMLCanvasElement {
   canvas.width = 1200;
   canvas.height = 900;
   const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // A null context (e.g. the browser hit its canvas-context limit) would leave
+  // the canvas transparent and silently emit a blank slide page; throw instead
+  // so the export's catch surfaces it. solidColorCanvas only runs on a
+  // user-initiated export, so throwing is safe here.
+  if (!ctx) {
+    throw new Error("Could not get a 2D canvas context for the slide page.");
   }
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   return canvas;
 }
 

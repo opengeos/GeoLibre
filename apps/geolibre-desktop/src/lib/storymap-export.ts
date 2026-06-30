@@ -8,7 +8,12 @@ import {
   type StoryMap,
 } from "@geolibre/core";
 import { sanitizeStoryHtml } from "./sanitize-html";
-import { STORY_GLOBAL_VIEW, STORY_INSET_STYLE_URL } from "./storymap-constants";
+import {
+  STORY_END_STEP_ID,
+  STORY_GLOBAL_VIEW,
+  STORY_INSET_STYLE_URL,
+  STORY_START_STEP_ID,
+} from "./storymap-constants";
 
 export interface StoryMapExportOptions {
   storymap: StoryMap;
@@ -176,6 +181,8 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     startSlide: storymap.startSlide,
     endSlide: storymap.endSlide,
     globalView: STORY_GLOBAL_VIEW,
+    startStepId: STORY_START_STEP_ID,
+    endStepId: STORY_END_STEP_ID,
     navToggleLabel,
     title: storymap.title,
     subtitle: storymap.subtitle,
@@ -609,7 +616,7 @@ function renderTemplate(
             s.setAttribute('id', id);
             return s;
         }
-        if (config.startSlide && config.startSlide !== 'none') features.appendChild(makeSlideStep('__story_start__'));
+        if (config.startSlide && config.startSlide !== 'none') features.appendChild(makeSlideStep(config.startStepId));
 
         config.chapters.forEach(function (record, idx) {
             var container = document.createElement('div');
@@ -645,7 +652,7 @@ function renderTemplate(
             container.appendChild(card);
             features.appendChild(container);
         });
-        if (config.endSlide && config.endSlide !== 'none') features.appendChild(makeSlideStep('__story_end__'));
+        if (config.endSlide && config.endSlide !== 'none') features.appendChild(makeSlideStep(config.endStepId));
         story.appendChild(features);
 
         // Navigation pane: list chapters and jump to one on click.
@@ -754,7 +761,7 @@ function renderTemplate(
         // first (redundant) Scrollama enter for it is skipped (#998 review).
         var startSlideInitialized = false;
 
-        map.on('load', function () {
+        map.once('load', function () {
             // Match the in-app projection (globe by default) so the exported
             // story does not silently fall back to 2D Mercator (#917).
             try {
@@ -820,15 +827,15 @@ ${inlineLayerScript}
                 .onStepEnter(function (response) {
                     var id = response.element.id;
                     response.element.classList.add('active');
-                    if (id === '__story_start__' || id === '__story_end__') {
+                    if (id === config.startStepId || id === config.endStepId) {
                         // Skip the redundant first enter for the start slide that
                         // was already initialized synchronously on load, so
                         // global/adjacent modes don't fly the camera twice.
-                        if (id === '__story_start__' && startSlideInitialized) {
+                        if (id === config.startStepId && startSlideInitialized) {
                             startSlideInitialized = false;
                             return;
                         }
-                        enterSlide(id === '__story_start__' ? config.startSlide : config.endSlide, id === '__story_start__');
+                        enterSlide(id === config.startStepId ? config.startSlide : config.endSlide, id === config.startStepId);
                         return;
                     }
                     cover.style.display = 'none';

@@ -22,8 +22,10 @@ import { Button, cn } from "@geolibre/ui";
 import { GripVertical, List, X } from "lucide-react";
 import { sanitizeStoryHtml } from "../../lib/sanitize-html";
 import {
+  STORY_END_STEP_ID,
   STORY_GLOBAL_VIEW,
   STORY_INSET_STYLE_URL,
+  STORY_START_STEP_ID,
   storySlideCoverColor,
 } from "../../lib/storymap-constants";
 
@@ -49,7 +51,7 @@ function buildPresenterSteps(story: StoryMap): PresenterStep[] {
   const steps: PresenterStep[] = [];
   if (story.startSlide !== "none") {
     steps.push({
-      key: "__story_start__",
+      key: STORY_START_STEP_ID,
       kind: "slide",
       position: "start",
       mode: story.startSlide,
@@ -60,7 +62,7 @@ function buildPresenterSteps(story: StoryMap): PresenterStep[] {
   );
   if (story.endSlide !== "none") {
     steps.push({
-      key: "__story_end__",
+      key: STORY_END_STEP_ID,
       kind: "slide",
       position: "end",
       mode: story.endSlide,
@@ -499,9 +501,9 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
       insetMapRef.current = null;
       activeStepRef.current = -1;
       activeChapterRef.current = -1;
-      // Reset nav highlight, slide cover, and any card drag/resize so the next
-      // presentation starts clean.
-      setActiveChapter(0);
+      // Reset nav highlight (mirroring activeChapterRef = -1), slide cover, and
+      // any card drag/resize so the next presentation starts clean.
+      setActiveChapter(-1);
       setCoverColor(null);
       setCardLayouts({});
       // Undo any direct opacity changes made during playback.
