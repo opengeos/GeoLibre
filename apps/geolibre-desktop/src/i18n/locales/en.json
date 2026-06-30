@@ -475,7 +475,7 @@
     "done": "Done",
     "cancel": "Cancel",
     "progress": "Downloading {{done}} / {{total}}…",
-    "complete": "Offline area saved. {{done}} tiles are available offline.",
+    "complete": "Offline area saved and available offline.",
     "completeWithFailures": "Saved {{done}} of {{total}} tiles ({{failed}} failed).",
     "retryFailed_one": "Retry {{count}} failed tile",
     "retryFailed_other": "Retry {{count}} failed tiles",

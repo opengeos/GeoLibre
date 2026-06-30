@@ -270,17 +270,19 @@ export function OfflineRegionDialog({
       if (!controller.signal.aborted) {
         setPhase("done");
         // Record the download in the offline manifest so the Offline Manager can
-        // list, re-warm, and delete it later. Skip if every tile failed — there
-        // is nothing cached to manage.
-        if (result.done - result.failed > 0) {
+        // list, re-warm, and delete it later. Gate on cached *tiles*, not total
+        // successes: `urls` includes shared sprite/glyph assets, so a run where
+        // every tile failed but an asset succeeded must not persist an empty
+        // region.
+        const failedSet = new Set(result.failedUrls);
+        // tileCount reflects tiles actually cached, not attempted, so a
+        // partial download's count matches what the manager can measure.
+        const cachedTileCount = tileUrls.filter(
+          (u) => !failedSet.has(u),
+        ).length;
+        if (cachedTileCount > 0) {
           const tileSet = new Set(tileUrls);
           const assetUrls = urls.filter((u) => !tileSet.has(u));
-          // tileCount reflects tiles actually cached, not attempted, so a
-          // partial download's count matches what the manager can measure.
-          const failedSet = new Set(result.failedUrls);
-          const cachedTileCount = tileUrls.filter(
-            (u) => !failedSet.has(u),
-          ).length;
           const now = Date.now();
           const region: OfflineRegion = {
             id: regionId(bbox, baseZoom, maxZoom),
@@ -365,10 +367,13 @@ export function OfflineRegionDialog({
   // After a partial download the primary action becomes "Retry all tiles" (a
   // full re-warm from scratch), shown alongside the targeted "Retry failed".
   const hasFailures = phase === "done" && progress.failed > 0;
-  // A fully successful run: every requested resource was cached. This drives the
-  // success confirmation and the "Done" footer that replaces the re-enabled
-  // Download button (#993).
-  const isComplete = phase === "done" && progress.failed === 0;
+  // A fully successful run: every requested resource was cached and at least one
+  // was fetched. The `done > 0` guard avoids a false "saved" banner if the URL
+  // set ever resolves empty (e.g. the style loses its sources mid-dialog). This
+  // drives the success confirmation and the "Done" footer that replaces the
+  // re-enabled Download button (#993).
+  const isComplete =
+    phase === "done" && progress.failed === 0 && progress.done > 0;
   // The plan exceeds the service-worker cache cap, so older tiles would be
   // evicted as new ones arrive — the user must acknowledge before downloading
   // (#994).
@@ -571,10 +576,7 @@ export function OfflineRegionDialog({
               {isComplete ? (
                 <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  {t("offline.complete", {
-                    done: progress.done - progress.failed,
-                    total: progress.total,
-                  })}
+                  {t("offline.complete")}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground tabular-nums">

@@ -269,6 +269,49 @@ describe("countStyleAssets / count consistency (#992)", () => {
     // progress total exactly, with no asset-overhead drift.
     assert.equal(tiles + assets, urls.length);
   });
+
+  // A map with two sources sharing one tile template (overlapping zoom range).
+  // The download de-duplicates these into a single URL; the estimate must do the
+  // same, or it would over-count and drift from the live total again.
+  function twoSourceFakeMap(): MapLibreMap {
+    const style = {
+      sources: {
+        a: {
+          type: "raster",
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          minzoom: 0,
+          maxzoom: 19,
+        },
+        b: {
+          type: "raster",
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      },
+      sprite: "https://style.example.com/sprite",
+      glyphs: "https://style.example.com/glyphs/{fontstack}/{range}.pbf",
+      layers: [
+        {
+          id: "labels",
+          type: "symbol",
+          layout: { "text-font": ["Noto Sans Regular"] },
+        },
+      ],
+    };
+    return { getStyle: () => style } as unknown as MapLibreMap;
+  }
+
+  it("de-duplicates tiles across sources so the estimate still matches", async () => {
+    const map = twoSourceFakeMap();
+    const bbox: Bbox = [-122.5, 37.7, -122.3, 37.9];
+    const minZoom = 8;
+    const maxZoom = 11;
+    const tiles = await countOfflineTiles(map, bbox, minZoom, maxZoom);
+    const assets = countStyleAssets(map);
+    const { urls } = await collectOfflineUrls(map, bbox, minZoom, maxZoom);
+    assert.equal(tiles + assets, urls.length);
+  });
 });
 
 describe("planOfflineZoom", () => {

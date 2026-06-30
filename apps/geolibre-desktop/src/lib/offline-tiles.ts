@@ -347,11 +347,38 @@ async function resolveTileSources(
 }
 
 /**
+ * Enumerate the distinct, absolute tile URLs an offline download would warm for
+ * `bbox` across `[minZoom, maxZoom]`, per source and clamped to each source's
+ * coverage. The result is de-duplicated across sources (two sources sharing a
+ * tile template collapse to one URL), so it is the single source of truth for
+ * both the size preview and the actual download — counting a separate per-source
+ * sum could double-count shared URLs and drift from what really downloads (#992).
+ */
+async function collectTileUrls(
+  map: MapLibreMap,
+  bbox: Bbox,
+  minZoom: number,
+  maxZoom: number,
+  signal?: AbortSignal,
+): Promise<Set<string>> {
+  const urls = new Set<string>();
+  for (const src of await resolveTileSources(map, signal)) {
+    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
+    if (!range) continue;
+    for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
+      urls.add(absolute(expandTileUrl(src.template, tile, src.subdomains)));
+    }
+  }
+  return urls;
+}
+
+/**
  * Count the tiles an offline download would actually warm for `bbox` across
- * `[minZoom, maxZoom]`, per source and clamped to each source's coverage. This
- * is the preview-accurate count: it matches the tiles `collectOfflineUrls`
- * produces (so the dialog's estimate agrees with the final "Saved N of N"),
- * unlike a naive `countTiles` that ignores source maxzoom and over-counts.
+ * `[minZoom, maxZoom]`, clamped to each source's coverage and de-duplicated
+ * across sources. This is the preview-accurate count: it counts exactly the tile
+ * URLs `collectOfflineUrls` produces (so the dialog's estimate agrees with the
+ * download total), unlike a naive `countTiles` that ignores source maxzoom and
+ * over-counts.
  */
 export async function countOfflineTiles(
   map: MapLibreMap,
@@ -360,13 +387,8 @@ export async function countOfflineTiles(
   maxZoom: number,
   options: { signal?: AbortSignal } = {},
 ): Promise<number> {
-  let total = 0;
-  for (const src of await resolveTileSources(map, options.signal)) {
-    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
-    if (!range) continue;
-    total += countTiles(bbox, range.minZoom, range.maxZoom);
-  }
-  return total;
+  return (await collectTileUrls(map, bbox, minZoom, maxZoom, options.signal))
+    .size;
 }
 
 /**
@@ -405,25 +427,15 @@ export async function collectOfflineUrls(
 ): Promise<{ urls: string[]; tileUrls: string[] }> {
   const { glyphRanges = DEFAULT_GLYPH_RANGES, signal } = options;
   const style = map.getStyle();
-  const urls = new Set<string>();
-  const tileUrls = new Set<string>();
 
-  // Tile sources: enumerate each one only within its own coverage so we never
-  // request tiles past a source's maxzoom (those 404 and would fail the whole
-  // download — see clampZoomRange).
-  for (const src of await resolveTileSources(map, signal)) {
-    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
-    if (!range) continue;
-    for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
-      const url = absolute(expandTileUrl(src.template, tile, src.subdomains));
-      urls.add(url);
-      tileUrls.add(url);
-    }
-  }
+  // Tiles: enumerated (and de-duplicated) by the same helper the size preview
+  // uses, so the estimate and the download can never disagree on the tile count.
+  const tileUrls = await collectTileUrls(map, bbox, minZoom, maxZoom, signal);
 
   // Shared style assets (sprite + glyphs) are warmed too, but tracked only in
   // `urls` (not `tileUrls`): they are common to every region and must not be
   // deleted when one region is removed.
+  const urls = new Set(tileUrls);
   for (const url of collectStyleAssetUrls(style, glyphRanges)) {
     urls.add(url);
   }
