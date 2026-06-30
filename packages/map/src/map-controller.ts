@@ -354,10 +354,15 @@ export class MapController {
     this.map.once("idle", () => this.enforceProjection());
     // Plugins can add native style layers directly (outside the layer store);
     // refresh the layer control on style changes so internal-flagged layers are
-    // excluded reactively. Debounced because styledata fires frequently, and
-    // refreshLayerControl no-ops when the computed signature is unchanged.
+    // excluded reactively. Debounced (trailing edge) because styledata fires
+    // frequently, and refreshLayerControl no-ops when the computed signature is
+    // unchanged. Resetting the timer on each event waits until the burst of
+    // style updates quiets so the control never rebuilds against a half-built
+    // style.
     this.map.on("styledata", () => {
-      if (this.layerControlStyleRefreshTimer !== null) return;
+      if (this.layerControlStyleRefreshTimer !== null) {
+        clearTimeout(this.layerControlStyleRefreshTimer);
+      }
       this.layerControlStyleRefreshTimer = setTimeout(() => {
         this.layerControlStyleRefreshTimer = null;
         this.refreshLayerControl(this.syncedLayers);
@@ -680,6 +685,10 @@ export class MapController {
     this.removeAttributionControl();
     this.removeLogoControl();
     this.removeLayerControl();
+    if (this.layerControlStyleRefreshTimer !== null) {
+      clearTimeout(this.layerControlStyleRefreshTimer);
+      this.layerControlStyleRefreshTimer = null;
+    }
     this.map?.remove();
     this.map = null;
     this.styleReady = false;
@@ -1500,12 +1509,18 @@ export class MapController {
           ],
         ),
       )
-      .map((styleLayer) => styleLayer.id);
-    const excludeLayers = [
-      ...LAYER_CONTROL_EXCLUDED_LAYERS,
-      ...nativeStyleLayerIds,
-      ...internalStyleLayerIds,
-    ];
+      .map((styleLayer) => styleLayer.id)
+      // Sort so a plugin reordering an already-hidden internal layer (which
+      // shuffles live style order) doesn't change the exclusion signature and
+      // force an unnecessary control rebuild.
+      .sort();
+    const excludeLayers = Array.from(
+      new Set([
+        ...LAYER_CONTROL_EXCLUDED_LAYERS,
+        ...nativeStyleLayerIds,
+        ...internalStyleLayerIds,
+      ]),
+    );
     const controllableLayers = layers.filter(
       (layer) =>
         this.getNativeLayerIds(layer).length > 0 ||
