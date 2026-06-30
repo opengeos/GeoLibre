@@ -764,11 +764,15 @@ ${inlineLayerScript}
                 var bg = slideBg(mode);
                 if (bg) { cover.style.background = bg; cover.style.display = 'block'; return; }
                 cover.style.display = 'none';
+                // The export never ships with zero chapters (buildStoryMapHtml
+                // throws first), but fall back to the global view defensively so
+                // an "adjacent" slide can never read an undefined location.
+                var adjacent = isStart
+                    ? config.chapters[0]
+                    : config.chapters[config.chapters.length - 1];
                 var loc = mode === 'global'
                     ? config.globalView
-                    : (isStart
-                        ? config.chapters[0].location
-                        : config.chapters[config.chapters.length - 1].location);
+                    : ((adjacent && adjacent.location) || config.globalView);
                 map.flyTo(loc);
                 if (config.showMarkers && marker) marker.setLngLat(loc.center);
                 if (insetMap && insetMarker) { insetMap.setCenter(loc.center); insetMarker.setLngLat(loc.center); }
