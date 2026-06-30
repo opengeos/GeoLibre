@@ -15,16 +15,17 @@ const PROJECT = {
 } as unknown as GeoLibreProject;
 
 describe("buildProjectHtml", () => {
-  it("frames the viewer with embed=1 and inlines the project", () => {
+  it("frames the viewer with embed=1 and welcome=0 and inlines the project", () => {
     const html = buildProjectHtml({
       project: PROJECT,
       title: "My Map",
       appUrl: "https://web.geolibre.app/",
     });
     assert.match(html, /<title>My Map<\/title>/);
+    // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
     assert.match(
       html,
-      /<iframe id="geolibre-frame" src="https:\/\/web\.geolibre\.app\/\?embed=1"/,
+      /<iframe id="geolibre-frame" src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/,
     );
     // The project rides in a JSON <script> block and is replayed over the bridge.
     assert.match(html, /id="geolibre-project"/);
@@ -42,7 +43,7 @@ describe("buildProjectHtml", () => {
 
   it("defaults the app URL to the hosted viewer", () => {
     const html = buildProjectHtml({ project: PROJECT, title: "T" });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1"/);
+    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
   });
 
   it("escapes '<' in the inlined JSON so a value cannot break out", () => {
@@ -66,14 +67,17 @@ describe("buildProjectHtml", () => {
     assert.ok(!html.includes("<b>hi</b>"));
   });
 
-  it("uses & to append embed=1 when the app URL already has a query", () => {
+  it("uses & to append the flags when the app URL already has a query", () => {
     const html = buildProjectHtml({
       project: PROJECT,
       title: "T",
       appUrl: "https://example.com/app?lang=fr",
     });
     // "&" is HTML-escaped to "&amp;" in the attribute (decoded back by browsers).
-    assert.match(html, /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1"/);
+    assert.match(
+      html,
+      /src="https:\/\/example\.com\/app\?lang=fr&amp;embed=1&amp;welcome=0"/,
+    );
   });
 
   it("falls back to the default viewer for an unsafe appUrl", () => {
@@ -84,7 +88,7 @@ describe("buildProjectHtml", () => {
       appUrl: "javascript:alert(1)",
     });
     assert.ok(!html.includes("javascript:alert(1)"));
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1"/);
+    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
   });
 
   it("does not append embed=1 twice when the app URL already has it", () => {
@@ -93,8 +97,18 @@ describe("buildProjectHtml", () => {
       title: "T",
       appUrl: "https://web.geolibre.app/?embed=1",
     });
-    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1"/);
+    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?embed=1&amp;welcome=0"/);
     assert.ok(!html.includes("embed=1&amp;embed=1"));
+  });
+
+  it("does not append welcome=0 twice when the app URL already opts out", () => {
+    const html = buildProjectHtml({
+      project: PROJECT,
+      title: "T",
+      appUrl: "https://web.geolibre.app/?welcome=off",
+    });
+    assert.match(html, /src="https:\/\/web\.geolibre\.app\/\?welcome=off&amp;embed=1"/);
+    assert.ok(!html.includes("welcome=off&amp;welcome=0"));
   });
 
   it("leaves a standalone '>' in the inlined JSON unescaped", () => {
@@ -107,13 +121,16 @@ describe("buildProjectHtml", () => {
     assert.match(html, /"name":"a > b"/);
   });
 
-  it("inserts embed=1 before a URL fragment", () => {
+  it("inserts the flags before a URL fragment", () => {
     const html = buildProjectHtml({
       project: PROJECT,
       title: "T",
       appUrl: "https://example.com/app#/view",
     });
-    assert.match(html, /src="https:\/\/example\.com\/app\?embed=1#\/view"/);
+    assert.match(
+      html,
+      /src="https:\/\/example\.com\/app\?embed=1&amp;welcome=0#\/view"/,
+    );
   });
 
   it("accepts calc() dimensions with division", () => {
