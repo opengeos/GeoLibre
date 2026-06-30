@@ -343,6 +343,26 @@ export interface GeoLibreAppAPI {
    */
   getDeckGL?: () => Promise<GeoLibreDeckGL>;
   /**
+   * Resolve GeoLibre's own `maplibre-gl-raster` module so an external plugin can
+   * render Cloud-Optimized GeoTIFFs through the host's instance instead of
+   * bundling its own. maplibre-gl-raster pulls in deck.gl and luma.gl, which
+   * throw on a second copy (luma.gl: "already initialized"); a bundled plugin
+   * copy therefore fails to activate. GeoLibre already ships maplibre-gl-raster
+   * (the built-in raster layer uses it), so it hands plugins the same instance.
+   * Always present on the GeoLibre desktop and web hosts; typed optional for
+   * forward-compatibility, so plugins should call it with optional chaining.
+   */
+  getMaplibreGlRaster?: () => Promise<typeof import("maplibre-gl-raster")>;
+  /**
+   * Set the map projection preference (persisted in app state, so the host's
+   * projection enforcement keeps it). deck.gl-backed plugins call this with
+   * `"mercator"` because deck.gl's tiled rendering does not support globe view;
+   * a raw `map.setProjection` is reverted on the next idle by the host.
+   */
+  setMapProjection?: (projection: "globe" | "mercator") => void;
+  /** Current map projection preference. */
+  getMapProjection?: () => "globe" | "mercator";
+  /**
    * Register a plugin-owned right-sidebar panel that docks beside the built-in
    * Style panel and behaves like a first-class part of the workspace. Returns
    * an unregister function (call it from `deactivate`). The panel is not shown

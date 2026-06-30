@@ -46,7 +46,7 @@
     "maplibre-gl-national-map": "^0.1.1",
     "maplibre-gl-overture-maps": "^0.3.1",
     "maplibre-gl-planetary-computer": "^0.3.0",
-    "maplibre-gl-raster": "^0.6.4",
+    "maplibre-gl-raster": "^0.7.0",
     "maplibre-gl-streetview": "^0.7.0",
     "maplibre-gl-swipe": "^0.10.1",
     "maplibre-gl-time-slider": "^1.1.0",
