@@ -11,7 +11,10 @@
   "trustedDependencies": [
     "@google/genai",
     "core-js",
-    "protobufjs"
+    "esbuild",
+    "protobufjs",
+    "sharp",
+    "workerd"
   ],
   "scripts": {
     "dev": "npm run dev -w geolibre-desktop",
