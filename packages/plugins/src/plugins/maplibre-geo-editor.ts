@@ -119,7 +119,7 @@ const GEOMAN_EDIT_SYNC_EVENTS = [
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-geo-editor",
   name: "GeoEditor",
-  version: "0.8.0",
+  version: "0.9.0",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     appApi = app;
