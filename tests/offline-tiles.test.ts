@@ -302,6 +302,23 @@ describe("countStyleAssets / count consistency (#992)", () => {
     return { getStyle: () => style } as unknown as MapLibreMap;
   }
 
+  it("counts sprite URLs for a multi-sprite (array) style", () => {
+    const map = {
+      getStyle: () => ({
+        sources: {},
+        sprite: [
+          { id: "icons", url: "https://style.example.com/icons" },
+          { id: "extra", url: "https://style.example.com/extra" },
+        ],
+        glyphs: "https://style.example.com/glyphs/{fontstack}/{range}.pbf",
+        layers: [],
+      }),
+    } as unknown as MapLibreMap;
+    // 2 sprites × 4 URLs each (json/png at 1x/2x) = 8; no labelled layers → 0
+    // glyph URLs.
+    assert.equal(countStyleAssets(map), 8);
+  });
+
   it("de-duplicates tiles across sources so the estimate still matches", async () => {
     const map = twoSourceFakeMap();
     const bbox: Bbox = [-122.5, 37.7, -122.3, 37.9];

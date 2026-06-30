@@ -54,6 +54,13 @@ const CACHED_TILE_HOST = /(?:^|\.)(?:openfreemap\.org|cartocdn\.com)$/;
 /** Rough average bytes per tile, for a ballpark download-size preview. */
 const AVG_TILE_BYTES = 30 * 1024;
 
+/**
+ * Rough average bytes per shared style asset (sprite JSON/PNG, glyph PBF). These
+ * are much smaller than map tiles, so they get their own average rather than
+ * being sized with `AVG_TILE_BYTES`, which would overstate their contribution.
+ */
+const AVG_ASSET_BYTES = 10 * 1024;
+
 const MAX_EXTRA_LEVELS = 5;
 
 /**
@@ -146,18 +153,22 @@ export function OfflineRegionDialog({
   );
   const bbox = (view?.bbox ?? null) as Bbox | null;
 
-  // Resource count is resolved asynchronously: it clamps each tile source to its
-  // own maxzoom (the vector source's bound lives in a TileJSON we have to fetch),
-  // so the estimate matches what actually downloads instead of counting tiles
-  // past a source's maxzoom that would 404. It includes the shared style assets
-  // (sprite + glyphs) the download also fetches, so this preview equals the live
-  // progress total of "Downloading N / M" rather than undercounting by the asset
-  // overhead (#992).
-  const [resourceCount, setResourceCount] = useState(0);
+  // Counts are resolved asynchronously: countOfflineTiles clamps each tile source
+  // to its own maxzoom (the vector source's bound lives in a TileJSON we have to
+  // fetch), so the estimate matches what actually downloads instead of counting
+  // tiles past a source's maxzoom that would 404. Tiles and shared style assets
+  // (sprite + glyphs) are tracked separately so the size estimate can price them
+  // differently, but their sum (`resourceCount`) is what the download fetches —
+  // so the preview equals the live "Downloading N / M" total rather than
+  // undercounting by the asset overhead (#992).
+  const [tileCount, setTileCount] = useState(0);
+  const [assetCount, setAssetCount] = useState(0);
+  const resourceCount = tileCount + assetCount;
   useEffect(() => {
     const map = mapControllerRef.current?.getMap();
     if (!open || !bbox || !map) {
-      setResourceCount(0);
+      setTileCount(0);
+      setAssetCount(0);
       return;
     }
     const controller = new AbortController();
@@ -166,7 +177,10 @@ export function OfflineRegionDialog({
       signal: controller.signal,
     })
       .then((count) => {
-        if (active) setResourceCount(count + countStyleAssets(map));
+        if (active) {
+          setTileCount(count);
+          setAssetCount(countStyleAssets(map));
+        }
       })
       .catch(() => {
         // Discovery failed (e.g. aborted); leave the last known count.
@@ -234,6 +248,11 @@ export function OfflineRegionDialog({
     setPhase((current) => (current === "running" ? current : "idle"));
     setProgress({ done: 0, total: 0, failed: 0, failedUrls: [] });
     setAcknowledgeEviction(false);
+    // Zero the counts synchronously so the over-limit warning/checkbox don't
+    // briefly flash with the previous range's count before the async recount
+    // resolves.
+    setTileCount(0);
+    setAssetCount(0);
   }, [baseZoom, maxZoom]);
 
   // Abort any in-flight download if the dialog unmounts.
@@ -539,7 +558,10 @@ export function OfflineRegionDialog({
             <span className="text-muted-foreground">{t("offline.tiles")}</span>
             <span className="tabular-nums">
               {resourceCount.toLocaleString()} (~
-              {formatBytes(resourceCount * AVG_TILE_BYTES)})
+              {formatBytes(
+                tileCount * AVG_TILE_BYTES + assetCount * AVG_ASSET_BYTES,
+              )}
+              )
             </span>
           </div>
 
