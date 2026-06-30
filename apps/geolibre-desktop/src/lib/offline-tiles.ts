@@ -442,8 +442,11 @@ export async function collectOfflineUrls(
   const urls = new Set(tileUrls);
   for (const url of collectStyleAssetUrls(style, glyphRanges)) {
     if (tileUrls.has(url)) {
+      // `urls` still de-duplicates the collision, so the actual download count
+      // (urls.length) stays correct; only the dialog's `tiles + assets` size
+      // preview would over-count this URL by one asset.
       console.warn(
-        `[GeoLibre] offline asset URL collides with a tile URL; size preview may overstate the download: ${url}`,
+        `[GeoLibre] offline asset URL collides with a tile URL; the size preview over-counts it by one asset (the download itself is unaffected): ${url}`,
       );
     }
     urls.add(url);

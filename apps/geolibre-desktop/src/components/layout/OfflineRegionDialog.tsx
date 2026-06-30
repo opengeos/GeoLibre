@@ -611,9 +611,9 @@ export function OfflineRegionDialog({
               {isComplete ? (
                 <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                   <CheckCircle2 className="h-4 w-4 shrink-0" />
-                  {t("offline.complete", {
-                    count: progress.done - progress.failed,
-                  })}
+                  {/* isComplete guarantees progress.failed === 0 here, so done is
+                      the full cached count. */}
+                  {t("offline.complete", { count: progress.done })}
                 </p>
               ) : (
                 <p className="text-xs text-muted-foreground tabular-nums">
@@ -657,12 +657,12 @@ export function OfflineRegionDialog({
                 <Button
                   variant="outline"
                   onClick={handleRetry}
-                  // Mirrors the primary button's guard for consistency. In
-                  // practice only the `phase === "running"` half bites here (this
-                  // button renders only when phase is "done"), but reusing
-                  // controlsDisabled keeps the gate correct if either condition
-                  // later changes.
-                  disabled={controlsDisabled}
+                  // Mirror the primary action's full guard: a retry re-warms tiles
+                  // into the same cache, so when the area is over the limit it must
+                  // be blocked until eviction is acknowledged too — otherwise the
+                  // user could uncheck the acknowledgement in the partial-failure
+                  // state and bypass the gate via "Retry failed".
+                  disabled={downloadDisabled}
                 >
                   <RotateCw className="mr-2 h-4 w-4" />
                   {t("offline.retryFailed", { count: progress.failed })}
