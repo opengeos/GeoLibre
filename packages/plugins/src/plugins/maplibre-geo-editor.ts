@@ -11,6 +11,7 @@ import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
   SKETCHES_SOURCE_KIND,
   canEditLayerGeometry,
+  planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
 } from "./geo-editor-geometry";
@@ -791,17 +792,18 @@ function bindSketchesStoreSync(): void {
       const previousTarget = previous.layers.find(
         (layer) => layer.id === editTargetLayerId,
       );
-      if (
-        previousTarget &&
-        (target.visible !== previousTarget.visible ||
-          target.opacity !== previousTarget.opacity ||
-          target.style !== previousTarget.style)
-      ) {
-        // If the user toggled the target layer back on while editing, re-hide it
-        // so its stale normal rendering does not double-draw over Geoman.
-        if (target.visible && !previousTarget.visible) {
-          setEditTargetStoreVisible(editTargetLayerId, false);
-        }
+      // If the user toggled the target layer back on while editing, re-hide it
+      // so its stale normal rendering does not double-draw over Geoman.
+      if (target.visible && previousTarget && !previousTarget.visible) {
+        setEditTargetStoreVisible(editTargetLayerId, false);
+      }
+      // Any change to the layers array (this layer's visibility/opacity/style, or
+      // another layer being added, removed, reordered, or toggled) re-runs
+      // MapController.syncLayers, which reorders the map's style layers and can
+      // push the editor's overlay below a layer stacked above the edited one
+      // (issue #1015). Re-apply the edit display so the overlay returns to the
+      // edited layer's slot in the stack.
+      if (state.layers !== previous.layers) {
         scheduleApplySketchesMapDisplay();
       }
       return;
@@ -884,12 +886,14 @@ function applySketchesMapDisplay(): void {
   // visibility for the target is unnecessary and would race the layer sync.
   if (editTargetLayerId) {
     showGeomanDisplayLayers();
+    positionGeoEditorOverlayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
     return;
   }
 
   if (isGeoEditorInteractionMode()) {
     showGeomanDisplayLayers();
+    positionGeoEditorOverlayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
     setSketchesMapLayerSuppressed(true);
     return;
@@ -912,6 +916,7 @@ function scheduleShowGeomanDisplayLayersOnStyleData(): void {
     pendingStyleDataListener = null;
     if (editTargetLayerId || isGeoEditorInteractionMode()) {
       showGeomanDisplayLayers();
+      positionGeoEditorOverlayLayers();
     }
   };
   map.once("styledata", pendingStyleDataListener);
@@ -983,6 +988,69 @@ function hideGeomanDisplayLayers(): void {
 
 function showGeomanDisplayLayers(): void {
   setGeomanDisplayLayersVisibility("visible");
+}
+
+/**
+ * The edited layer's own map layers, used as the z-anchor for the editor
+ * overlay. Add-Vector-Layer layers carry their layer ids in
+ * `metadata.nativeLayerIds`; plain geojson layers use the conventional
+ * `layer-<id>-*` ids. Only ids that actually exist on the map are returned.
+ */
+function geoEditorTargetAnchorLayerIds(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+): string[] {
+  const nativeLayerIds = layer.metadata.nativeLayerIds;
+  const candidates =
+    Array.isArray(nativeLayerIds) && nativeLayerIds.length > 0
+      ? nativeLayerIds.filter((id): id is string => typeof id === "string")
+      : sketchesMapLayerIds(layer.id);
+  return candidates.filter((id) => map.getLayer(id));
+}
+
+/**
+ * Move the editor's overlay layers (Geoman's `gm_*` display layers and the
+ * GeoEditor selection layers) to sit immediately above the edited layer's own
+ * (hidden) map layers, so the features being edited render at that layer's
+ * position in the tree.
+ *
+ * `MapController.syncLayers` reorders the store's layers on every layers change
+ * and has no knowledge of the overlay, so without this the overlay drifts below
+ * any layer stacked above the edited one and the edit features disappear behind
+ * it (issue #1015). Idempotent: `planGeoEditorOverlayOrder` returns `null` when
+ * the overlay is already in place, so the `styledata` that `moveLayer` triggers
+ * does not loop.
+ */
+function positionGeoEditorOverlayLayers(): void {
+  const map = appApi?.getMap?.();
+  if (!map) return;
+  const styleLayers = map.getStyle()?.layers;
+  if (!styleLayers || styleLayers.length === 0) return;
+
+  const target = activeEditableLayer(useAppStore.getState().layers);
+  if (!target) return;
+  const anchorIds = new Set(geoEditorTargetAnchorLayerIds(map, target));
+  // Without the edited layer on the map there is no anchor; leave the overlay
+  // where Geoman placed it (on top) rather than guessing a position.
+  if (anchorIds.size === 0) return;
+
+  const plan = planGeoEditorOverlayOrder(
+    styleLayers.map((layer) => ({
+      id: layer.id,
+      isOverlay: isGeoEditorOverlayLayer(layer),
+      isAnchor: anchorIds.has(layer.id),
+    })),
+  );
+  if (!plan) return;
+
+  // Moving each id before the same anchor preserves the overlay's draw order.
+  for (const id of plan.overlayIds) {
+    try {
+      map.moveLayer(id, plan.beforeId);
+    } catch {
+      // A layer may have been removed by a concurrent style change.
+    }
+  }
 }
 
 function applyGeomanSketchesStyle(
@@ -1076,6 +1144,21 @@ function setGeomanPaintProperty(
   } catch {
     // Geoman layers are rebuilt often and may not support every paint property.
   }
+}
+
+/**
+ * Every map layer that belongs to the editor overlay and must be kept above the
+ * edited layer: Geoman's `gm_*` display layers plus the GeoEditor's own
+ * selection layers (`geo-editor-*`). Used only for z-ordering, so it is broader
+ * than `isGeomanDisplayLayer` (which drives show/hide of the Geoman layers).
+ */
+function isGeoEditorOverlayLayer(layer: maplibregl.LayerSpecification): boolean {
+  if (isGeomanDisplayLayer(layer)) return true;
+  const id = layer.id.toLowerCase();
+  if (id.startsWith("geo-editor")) return true;
+  if (!("source" in layer)) return false;
+  const source = layer.source;
+  return typeof source === "string" && source.startsWith("geo-editor");
 }
 
 function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {
