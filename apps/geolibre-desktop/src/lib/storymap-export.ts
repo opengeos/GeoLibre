@@ -616,7 +616,9 @@ function renderTemplate(
             container.setAttribute('id', record.id);
             container.classList.add('step');
             container.classList.add(alignments[record.alignment] || 'centered');
-            if (idx === 0) container.classList.add('active');
+            // Don't pre-activate chapter 1 when a start slide opens the story, so
+            // its active state isn't shown during the intro slide (#998 review).
+            if (idx === 0 && !(config.startSlide && config.startSlide !== 'none')) container.classList.add('active');
             if (record.hidden) container.classList.add('hidden');
 
             var card = document.createElement('div');
@@ -652,7 +654,7 @@ function renderTemplate(
         nav.className = config.theme;
         config.chapters.forEach(function (record, idx) {
             var item = document.createElement('div');
-            item.className = 'nav-item' + (idx === 0 ? ' active' : '');
+            item.className = 'nav-item' + ((idx === 0 && !(config.startSlide && config.startSlide !== 'none')) ? ' active' : '');
             item.setAttribute('data-id', record.id);
             var num = document.createElement('span'); num.className = 'nav-num'; num.innerText = (idx + 1);
             var t = document.createElement('span'); t.className = 'nav-title'; t.innerText = record.title || ('Chapter ' + (idx + 1));
@@ -689,16 +691,22 @@ function renderTemplate(
             if (mode === 'blank') return config.theme === 'light' ? '#fafafa' : '#444444';
             return null;
         }
-        // Paint the cover up front for a blank/black start slide so the first
-        // frame is the slide, not a flash of the map (#998).
-        if (config.startSlide && config.startSlide !== 'none') {
-            var startBg = slideBg(config.startSlide);
-            if (startBg) { cover.style.background = startBg; cover.style.display = 'block'; }
-        }
 
         var footer = document.createElement('div');
         if (config.footer) { var f = document.createElement('p'); f.innerHTML = config.footer; footer.appendChild(f); }
         if (footer.children.length > 0) { footer.classList.add(config.theme); footer.setAttribute('id', 'footer'); story.appendChild(footer); }
+
+        // Apply the start slide's initial state during DOM construction (before
+        // map load) so a slow style/tile load can't flash the story header/footer
+        // or an uncovered map on a supposedly text-free start slide (#998 review).
+        if (config.startSlide && config.startSlide !== 'none') {
+            var startHeaderEl = document.getElementById('header');
+            if (startHeaderEl) startHeaderEl.classList.add('hidden');
+            var startFooterEl = document.getElementById('footer');
+            if (startFooterEl) startFooterEl.classList.add('hidden');
+            var startBg = slideBg(config.startSlide);
+            if (startBg) { cover.style.background = startBg; cover.style.display = 'block'; }
+        }
 
         // Shape right-to-left scripts (Arabic, Hebrew, Persian, …) correctly so
         // basemap labels are not rendered reversed. Lazy-loaded, so it only
