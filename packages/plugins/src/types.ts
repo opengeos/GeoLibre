@@ -362,7 +362,16 @@ export interface GeoLibreAppAPI {
    * There is no automatic rollback: a plugin that forces a projection on
    * activate should save the user's choice with {@link getMapProjection} first
    * and restore it on `deactivate`, otherwise the user is left in the forced
-   * projection after the plugin is turned off.
+   * projection after the plugin is turned off. Fall back when the getter is
+   * absent on an older host so `deactivate` never passes `undefined` (the
+   * runtime guard ignores it, stranding the user in the forced projection):
+   *
+   * ```ts
+   * const saved = app.getMapProjection?.() ?? "globe";
+   * app.setMapProjection?.("mercator");
+   * // on deactivate:
+   * app.setMapProjection?.(saved);
+   * ```
    */
   setMapProjection?: (projection: "globe" | "mercator") => void;
   /** Current map projection preference. */

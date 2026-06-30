@@ -807,7 +807,13 @@ export function createAppAPI(
     // repeated calls reuse one resolved module.
     getMaplibreGlRaster: (() => {
       let cached: Promise<typeof import("maplibre-gl-raster")> | undefined;
-      return () => (cached ??= import("maplibre-gl-raster"));
+      return () =>
+        (cached ??= import("maplibre-gl-raster").catch((error) => {
+          // Don't memoize a rejection: a transient chunk-load failure would
+          // otherwise poison getMaplibreGlRaster() for the whole session.
+          cached = undefined;
+          throw error;
+        }));
     })(),
     // Set the persisted projection preference so the host's projection
     // enforcement keeps it (a raw map.setProjection is reverted on idle).
@@ -817,7 +823,12 @@ export function createAppAPI(
       // enforce the union, so reject anything else. An invalid value would be
       // persisted and make enforceProjection throw and reschedule on every idle
       // forever.
-      if (projection !== "globe" && projection !== "mercator") return;
+      if (projection !== "globe" && projection !== "mercator") {
+        console.warn(
+          `[GeoLibre] setMapProjection: ignoring unknown projection "${String(projection)}" (expected "globe" or "mercator").`,
+        );
+        return;
+      }
       const store = useAppStore.getState();
       const { map } = store.preferences;
       if (map.projection === projection) return;
@@ -826,7 +837,10 @@ export function createAppAPI(
         map: { ...map, projection },
       });
     },
-    getMapProjection: () => useAppStore.getState().preferences.map.projection,
+    getMapProjection: () =>
+      // Legacy projects may not carry a projection preference; default to globe
+      // like MapController.enforceProjection so the declared return type holds.
+      useAppStore.getState().preferences.map.projection ?? "globe",
     registerRightPanel,
     unregisterRightPanel,
     openRightPanel,
