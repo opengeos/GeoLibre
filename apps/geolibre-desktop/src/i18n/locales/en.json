@@ -2030,7 +2030,7 @@
       "documentTitle": "Document title",
       "documentTitlePlaceholder": "Title shown at the top of each page",
       "subtitle": "Subtitle",
-      "subtitlePlaceholder": "Subtitle shown under the title on the first page",
+      "subtitlePlaceholder": "Subtitle shown under the title on each page",
       "byline": "Byline",
       "bylinePlaceholder": "Author or credit line",
       "footerText": "Footer text",

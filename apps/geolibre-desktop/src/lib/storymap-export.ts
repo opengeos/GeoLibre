@@ -22,6 +22,11 @@ export interface StoryMapExportOptions {
    * Defaults to globe when omitted, matching the app default.
    */
   projection?: MapProjection;
+  /**
+   * Localized label for the chapter-list toggle button (title + aria-label).
+   * Defaults to English when omitted so the export still works standalone.
+   */
+  navToggleLabel?: string;
 }
 
 interface InlineLayerExport {
@@ -71,7 +76,13 @@ const BLANK_EXPORT_STYLE: Record<string, unknown> = {
  * @returns A complete HTML document as a string.
  */
 export function buildStoryMapHtml(options: StoryMapExportOptions): string {
-  const { storymap, basemapStyleUrl, layers, projection = "globe" } = options;
+  const {
+    storymap,
+    basemapStyleUrl,
+    layers,
+    projection = "globe",
+    navToggleLabel = "Toggle chapter list",
+  } = options;
 
   // The template reads chapters[0] for the initial camera, so an empty story
   // cannot produce a working page. Callers gate this behind a chapter count,
@@ -165,6 +176,7 @@ export function buildStoryMapHtml(options: StoryMapExportOptions): string {
     startSlide: storymap.startSlide,
     endSlide: storymap.endSlide,
     globalView: STORY_GLOBAL_VIEW,
+    navToggleLabel,
     title: storymap.title,
     subtitle: storymap.subtitle,
     byline: storymap.byline,
@@ -511,7 +523,9 @@ function renderTemplate(
         .nav-num { width: 20px; height: 20px; border-radius: 50%; background: rgba(127,127,127,0.3); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
         .nav-item.active .nav-num { background: #3fb1ce; color: #fff; }
         .nav-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav, #nav-toggle { display: none; } }
+        /* Keep the nav toggle reachable on small screens so the chapter list
+           stays discoverable; only cap the pane width to the viewport. */
+        @media (max-width: 750px) { .centered, .lefty, .righty, .fully { width: 90vw; margin: 0 auto; } #nav { width: auto; max-width: calc(100vw - 24px); } }
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
         .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas { touch-action: unset; }
         #inset-map { position: fixed; width: 180px; height: 180px; border: 2px solid rgba(255, 255, 255, 0.8); border-radius: 4px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3); z-index: 10; }
@@ -659,8 +673,8 @@ function renderTemplate(
         navToggle.id = 'nav-toggle';
         navToggle.className = config.theme;
         navToggle.type = 'button';
-        navToggle.title = 'Toggle chapter list';
-        navToggle.setAttribute('aria-label', 'Toggle chapter list');
+        navToggle.title = config.navToggleLabel;
+        navToggle.setAttribute('aria-label', config.navToggleLabel);
         navToggle.textContent = '☰';
         navToggle.addEventListener('click', function () { nav.classList.toggle('hidden-nav'); });
         document.body.appendChild(navToggle);

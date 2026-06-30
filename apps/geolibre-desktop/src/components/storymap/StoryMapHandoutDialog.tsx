@@ -37,7 +37,10 @@ import {
 } from "../../lib/storymap-pdf";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { promptDownloadNameIfNeeded } from "../../hooks/useFileNamePrompt";
-import { STORY_GLOBAL_VIEW } from "../../lib/storymap-constants";
+import {
+  STORY_GLOBAL_VIEW,
+  storySlideCoverColor,
+} from "../../lib/storymap-constants";
 
 interface StoryMapHandoutDialogProps {
   open: boolean;
@@ -106,25 +109,17 @@ function solidColorCanvas(color: string): HTMLCanvasElement {
   return canvas;
 }
 
-/** The solid background a blank/black slide paints, or null for a map view. */
-function slideCoverColor(
-  mode: SlideMode,
-  theme: "light" | "dark",
-): string | null {
-  if (mode === "black") return "#000000";
-  if (mode === "blank") return theme === "light" ? "#fafafa" : "#444444";
-  return null;
-}
-
 /** The camera a global/adjacent slide captures. */
 function slideLocation(
   screen: Extract<HandoutScreen, { kind: "slide" }>,
   chapters: StoryChapter[],
 ): StoryChapter["location"] {
   if (screen.mode === "global") return STORY_GLOBAL_VIEW;
-  return screen.position === "start"
-    ? chapters[0].location
-    : chapters[chapters.length - 1].location;
+  // Fall back to the global view when the story has no chapters (an adjacent
+  // slide configured before any chapter exists), so the export never reads an
+  // undefined chapter location.
+  const index = screen.position === "start" ? 0 : chapters.length - 1;
+  return chapters[index]?.location ?? STORY_GLOBAL_VIEW;
 }
 
 /** Maximum time to wait for the map to settle (tiles loaded) per chapter. */
@@ -358,7 +353,7 @@ export function StoryMapHandoutDialog({
           // Blank/black slides need no map capture: paint a solid full-page
           // color. Global/adjacent slides capture the map at the slide camera
           // with no title or text overlay (#998).
-          const color = slideCoverColor(screen.mode, story.theme);
+          const color = storySlideCoverColor(screen.mode, story.theme);
           if (color) {
             const canvas = solidColorCanvas(color);
             captures.push({

@@ -342,6 +342,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
         basemapStyleUrl,
         layers: layersForExport,
         projection,
+        navToggleLabel: t("storymap.toggleNav"),
       });
       const slug =
         (story.title || "story-map")

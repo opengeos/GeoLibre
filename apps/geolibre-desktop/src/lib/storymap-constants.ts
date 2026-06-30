@@ -1,6 +1,23 @@
+import type { StorySlideMode } from "@geolibre/core";
+
 /** Basemap style for the story-map inset minimap (in-app and export). */
 export const STORY_INSET_STYLE_URL =
   "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+
+/**
+ * The solid background a blank/black start/closing slide paints over the map, or
+ * null when the slide keeps the map visible (global/adjacent). Blank matches the
+ * panel theme background (`.glsm-light`/`.glsm-dark`). Shared by the in-app
+ * presenter and the PDF handout so the slide treatment stays consistent (#998).
+ */
+export function storySlideCoverColor(
+  mode: StorySlideMode,
+  theme: "light" | "dark",
+): string | null {
+  if (mode === "black") return "#000000";
+  if (mode === "blank") return theme === "light" ? "#fafafa" : "#444444";
+  return null;
+}
 
 /**
  * Camera used by the `"global"` start/closing slide mode (#998): a zoomed-out,
