@@ -417,10 +417,14 @@ export function OfflineRegionDialog({
   // no service worker to retain the tiles — without it the dialog would invite
   // the user to configure a download this build can never persist (see #608).
   const controlsDisabled = phase === "running" || !swActive;
-  // Block the download itself when there is nothing to fetch or when the plan
-  // exceeds the cache cap and eviction hasn't been acknowledged.
-  const downloadDisabled =
-    controlsDisabled || resourceCount === 0 || (overLimit && !acknowledgeEviction);
+  // The shared eviction gate: block while running / without a SW, and when the
+  // plan exceeds the cache cap without an acknowledgement.
+  const evictionBlocked =
+    controlsDisabled || (overLimit && !acknowledgeEviction);
+  // A fresh download additionally needs something to fetch. A retry doesn't —
+  // its viability comes from its own failedUrls list, not resourceCount — so it
+  // uses evictionBlocked alone.
+  const downloadDisabled = evictionBlocked || resourceCount === 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -660,12 +664,12 @@ export function OfflineRegionDialog({
                 <Button
                   variant="outline"
                   onClick={handleRetry}
-                  // Mirror the primary action's full guard: a retry re-warms tiles
-                  // into the same cache, so when the area is over the limit it must
-                  // be blocked until eviction is acknowledged too — otherwise the
-                  // user could uncheck the acknowledgement in the partial-failure
-                  // state and bypass the gate via "Retry failed".
-                  disabled={downloadDisabled}
+                  // Share the eviction gate so an over-limit retry is blocked
+                  // until acknowledged (otherwise the user could uncheck the
+                  // acknowledgement in the partial-failure state and bypass it via
+                  // "Retry failed"). A retry doesn't depend on resourceCount, so
+                  // it uses evictionBlocked rather than the full downloadDisabled.
+                  disabled={evictionBlocked}
                 >
                   <RotateCw className="mr-2 h-4 w-4" />
                   {t("offline.retryFailed", { count: progress.failed })}
