@@ -358,6 +358,11 @@ export interface GeoLibreAppAPI {
    * projection enforcement keeps it). deck.gl-backed plugins call this with
    * `"mercator"` because deck.gl's tiled rendering does not support globe view;
    * a raw `map.setProjection` is reverted on the next idle by the host.
+   *
+   * There is no automatic rollback: a plugin that forces a projection on
+   * activate should save the user's choice with {@link getMapProjection} first
+   * and restore it on `deactivate`, otherwise the user is left in the forced
+   * projection after the plugin is turned off.
    */
   setMapProjection?: (projection: "globe" | "mercator") => void;
   /** Current map projection preference. */

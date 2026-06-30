@@ -813,6 +813,11 @@ export function createAppAPI(
     // enforcement keeps it (a raw map.setProjection is reverted on idle).
     // deck.gl-backed plugins need mercator; globe breaks deck tile traversal.
     setMapProjection: (projection: "globe" | "mercator") => {
+      // External plugins call through a JS boundary where TypeScript can't
+      // enforce the union, so reject anything else. An invalid value would be
+      // persisted and make enforceProjection throw and reschedule on every idle
+      // forever.
+      if (projection !== "globe" && projection !== "mercator") return;
       const store = useAppStore.getState();
       const { map } = store.preferences;
       if (map.projection === projection) return;
