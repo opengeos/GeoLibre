@@ -684,8 +684,14 @@ function renderTemplate(
         navToggle.type = 'button';
         navToggle.title = config.navToggleLabel;
         navToggle.setAttribute('aria-label', config.navToggleLabel);
+        // aria-pressed mirrors the in-app presenter so assistive tech announces
+        // whether the chapter list is open (#995). It is true when the nav shows.
+        navToggle.setAttribute('aria-pressed', config.hideChapterNav ? 'false' : 'true');
         navToggle.textContent = '☰';
-        navToggle.addEventListener('click', function () { nav.classList.toggle('hidden-nav'); });
+        navToggle.addEventListener('click', function () {
+            var nowHidden = nav.classList.toggle('hidden-nav');
+            navToggle.setAttribute('aria-pressed', nowHidden ? 'false' : 'true');
+        });
         document.body.appendChild(navToggle);
         if (config.hideChapterNav) nav.classList.add('hidden-nav');
 
@@ -727,13 +733,18 @@ function renderTemplate(
             maplibregl.setRTLTextPlugin('https://unpkg.com/@mapbox/mapbox-gl-rtl-text@0.4.0/dist/mapbox-gl-rtl-text.js', true).catch(function (e) { console.error('[GeoLibre] RTL plugin failed', e); });
         }
 
+        // For a global start slide, open the map (and inset/markers) at the
+        // global view rather than chapter 0, so a slow style/tile load doesn't
+        // flash chapter 0's view before the load handler flies out (#998 review).
+        var openLocation = config.startSlide === 'global' ? config.globalView : config.chapters[0].location;
+
         var map = new maplibregl.Map({
             container: 'map',
             style: config.style,
-            center: config.chapters[0].location.center,
-            zoom: config.chapters[0].location.zoom,
-            bearing: config.chapters[0].location.bearing,
-            pitch: config.chapters[0].location.pitch,
+            center: openLocation.center,
+            zoom: openLocation.zoom,
+            bearing: openLocation.bearing,
+            pitch: openLocation.pitch,
             interactive: false
         });
 
@@ -743,16 +754,19 @@ function renderTemplate(
             insetContainer.id = 'inset-map';
             insetContainer.classList.add(config.insetPosition || 'bottom-left');
             document.body.appendChild(insetContainer);
-            insetMap = new maplibregl.Map({ container: 'inset-map', style: config.insetStyle, center: config.chapters[0].location.center, zoom: config.insetZoom || 1, interactive: false, attributionControl: false });
+            insetMap = new maplibregl.Map({ container: 'inset-map', style: config.insetStyle, center: openLocation.center, zoom: config.insetZoom || 1, interactive: false, attributionControl: false });
             var markerEl = document.createElement('div');
             markerEl.className = 'inset-marker';
-            insetMarker = new maplibregl.Marker({ element: markerEl }).setLngLat(config.chapters[0].location.center).addTo(insetMap);
+            insetMarker = new maplibregl.Marker({ element: markerEl }).setLngLat(openLocation.center).addTo(insetMap);
+            // The global overview shows no marker; hide it immediately.
+            if (config.startSlide === 'global') insetMarker.getElement().style.visibility = 'hidden';
         }
 
         var marker = null;
         if (config.showMarkers) {
             marker = new maplibregl.Marker({ color: config.markerColor });
-            marker.setLngLat(config.chapters[0].location.center).addTo(map);
+            marker.setLngLat(openLocation.center).addTo(map);
+            if (config.startSlide === 'global') marker.getElement().style.visibility = 'hidden';
         }
 
         var scroller = scrollama();

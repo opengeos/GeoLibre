@@ -300,6 +300,9 @@ function drawChapterPage(
 
   if (subtitle) {
     const size = 8.5;
+    // Add the leading gap a title would have provided, so a standalone subtitle
+    // is not flush against the top margin.
+    if (!docTitle) y += 3;
     pdf.setFont("helvetica", "italic");
     pdf.setFontSize(size);
     pdf.setTextColor(140, 140, 140);

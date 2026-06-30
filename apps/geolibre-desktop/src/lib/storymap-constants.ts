@@ -1,4 +1,4 @@
-import type { StorySlideMode } from "@geolibre/core";
+import type { StoryActiveSlideMode } from "@geolibre/core";
 
 /** Basemap style for the story-map inset minimap (in-app and export). */
 export const STORY_INSET_STYLE_URL =
@@ -18,7 +18,7 @@ export const STORY_END_STEP_ID = "__story_end__";
  * presenter and the PDF handout so the slide treatment stays consistent (#998).
  */
 export function storySlideCoverColor(
-  mode: StorySlideMode,
+  mode: StoryActiveSlideMode,
   theme: "light" | "dark",
 ): string | null {
   if (mode === "black") return "#000000";
