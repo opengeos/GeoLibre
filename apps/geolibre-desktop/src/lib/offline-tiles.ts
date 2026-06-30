@@ -434,9 +434,18 @@ export async function collectOfflineUrls(
 
   // Shared style assets (sprite + glyphs) are warmed too, but tracked only in
   // `urls` (not `tileUrls`): they are common to every region and must not be
-  // deleted when one region is removed.
+  // deleted when one region is removed. Tiles and assets are served from
+  // distinct paths, so the two URL sets are disjoint and the dialog's
+  // `tiles + assets` preview equals `urls.length`. Warn if a style ever violates
+  // that (an asset URL colliding with a tile URL) — the Set would silently
+  // de-duplicate it and the preview would drift above the real download total.
   const urls = new Set(tileUrls);
   for (const url of collectStyleAssetUrls(style, glyphRanges)) {
+    if (tileUrls.has(url)) {
+      console.warn(
+        `[GeoLibre] offline asset URL collides with a tile URL; size preview may overstate the download: ${url}`,
+      );
+    }
     urls.add(url);
   }
 

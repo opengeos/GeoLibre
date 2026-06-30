@@ -337,10 +337,15 @@ export function OfflineRegionDialog({
 
   // Re-warm only the URLs that failed, so the user can recover a partial
   // download (e.g. after a transient network blip) without re-fetching the
-  // whole region. The failure message then reflects this retry batch.
+  // whole region. The live bar tracks this retry batch, but the final count is
+  // reframed to the whole region (below) so the completion message reports the
+  // full area, not just the handful that were retried.
   const handleRetry = useCallback(async () => {
     const failedUrls = progressRef.current.failedUrls;
     if (failedUrls.length === 0) return;
+    // The total from the prior (full) run; the completion message is reframed to
+    // this so a successful retry reads "N resources cached" for the whole region.
+    const regionTotal = progressRef.current.total;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -359,7 +364,15 @@ export function OfflineRegionDialog({
         signal: controller.signal,
         onProgress: setProgress,
       });
-      setProgress(result);
+      // Reframe to the whole region: of `regionTotal` resources, `result.failed`
+      // are still outstanding (those just retried but failed again), the rest are
+      // cached. `failedUrls` carries the remaining failures for another retry.
+      setProgress({
+        done: regionTotal - result.failed,
+        total: regionTotal,
+        failed: result.failed,
+        failedUrls: result.failedUrls,
+      });
       if (!controller.signal.aborted) {
         setPhase("done");
         // Bump the manifest's updatedAt so the Offline Manager reflects this
@@ -627,7 +640,7 @@ export function OfflineRegionDialog({
             // reads as "nothing happened" and invites a duplicate run (#993).
             <Button onClick={() => onOpenChange(false)}>
               <CheckCircle2 className="mr-2 h-4 w-4" />
-              {t("offline.done")}
+              {t("common.done")}
             </Button>
           ) : (
             <>
