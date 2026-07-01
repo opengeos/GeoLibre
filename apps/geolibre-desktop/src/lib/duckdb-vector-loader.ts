@@ -70,16 +70,34 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
  * over HTTP (failing with "stoi: no conversion") on an instance that ran
  * `LOAD spatial` before its first successful remote Parquet read, and that state
  * cannot be undone in place. A fresh instance re-runs the pre-spatial warm-up.
+ *
+ * Because the instance is shared app-wide, `poisoned` scopes the teardown: the
+ * reset is a no-op unless the current instance is exactly that poisoned one, so
+ * a fresh instance a concurrent caller has already rebuilt is never terminated.
+ * A poisoned instance's remote-read path is already broken for every consumer,
+ * so replacing it is the correct recovery for all of them.
+ *
+ * @param poisoned - The instance to replace; only reset if it is still current.
  */
-export async function resetDatabase(): Promise<void> {
+export async function resetDatabase(
+  poisoned: duckdb.AsyncDuckDB,
+): Promise<void> {
   const previous = dbPromise;
+  if (!previous) return;
+  let current: duckdb.AsyncDuckDB | null = null;
+  try {
+    current = await previous;
+  } catch {
+    current = null;
+  }
+  // Another query may have already rebuilt the DB after this one was poisoned;
+  // do not tear that fresh instance down.
+  if (current !== poisoned) return;
   dbPromise = null;
   spatialExtensionPromise = null;
   h3ExtensionPromise = null;
-  if (!previous) return;
   try {
-    const db = await previous;
-    await db.terminate();
+    await poisoned.terminate();
   } catch {
     // Best-effort teardown: the instance is already being discarded.
   }

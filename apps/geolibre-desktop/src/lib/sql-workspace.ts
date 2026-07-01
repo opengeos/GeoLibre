@@ -715,32 +715,45 @@ export async function runSqlQuery(
   // convenient `SELECT * FROM https://…/x.parquet` form runs.
   const rewritten = rewriteBareSources(withCloudUrls);
 
+  // Only a query that actually reads a remote source can hit the poisoned-
+  // instance path, so gate the recovery on a real remote reader call (not an
+  // http URL that merely appears in a string literal or WHERE clause).
+  const hasRemoteReader = statementHasRemoteReader(rewritten);
+
+  const db = await getDatabase();
   try {
-    return await runSqlStatementOnce(rewritten, layers);
+    return await runSqlStatementOnce(rewritten, layers, db);
   } catch (error) {
     // Recover from a poisoned WASM instance: duckdb-wasm 1.33.1-dev45 breaks
     // remote read_parquet with "stoi: no conversion" on an instance that ran
     // LOAD spatial before its first successful remote read (e.g. after an
     // earlier query's warm-up failed). That state cannot be undone in place, so
     // rebuild the instance — which re-runs the pre-spatial warm-up — and retry
-    // once. Only for remote queries, so a genuine local error is not retried.
-    if (isPoisonedRemoteReadError(error, rewritten)) {
-      await resetDatabase();
-      return await runSqlStatementOnce(rewritten, layers);
+    // once. Scope the reset to `db` so a fresh instance is never torn down.
+    if (hasRemoteReader && isStoiConversionError(error)) {
+      await resetDatabase(db);
+      return await runSqlStatementOnce(rewritten, layers, await getDatabase());
     }
     throw error;
   }
 }
 
-/**
- * True when an error is the duckdb-wasm poisoned-instance symptom on a query
- * that reads a remote source: the "stoi: no conversion" failure combined with
- * an HTTP(S) URL in the (already rewritten) statement.
- */
-function isPoisonedRemoteReadError(error: unknown, statement: string): boolean {
+/** True when an error is the duckdb-wasm poisoned-instance "stoi" symptom. */
+function isStoiConversionError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return (
-    /stoi:\s*no conversion/i.test(message) && /https?:\/\//i.test(statement)
+  return /stoi:\s*no conversion/i.test(message);
+}
+
+/**
+ * True when the statement contains a real remote-reader call (a native reader
+ * with an http(s) URL argument). Uses the same literal masking as
+ * {@link registerRemoteSources}, so an http URL inside a string literal or
+ * comment is ignored.
+ */
+function statementHasRemoteReader(statement: string): boolean {
+  const masked = maskSqlLiterals(statement);
+  return [...statement.matchAll(REMOTE_READER_ARG_PATTERN)].some(
+    (match) => masked[match.index ?? 0] !== " ",
   );
 }
 
@@ -752,8 +765,8 @@ function isPoisonedRemoteReadError(error: unknown, statement: string): boolean {
 async function runSqlStatementOnce(
   rewritten: string,
   layers: GeoLibreLayer[],
+  db: AsyncDuckDB,
 ): Promise<SqlQueryResult> {
-  const db = await getDatabase();
   const connection = await db.connect();
   // Per-run prefix so concurrent queries on the shared database do not register
   // or drop one another's VFS files. Populated by registerLayerTables and
