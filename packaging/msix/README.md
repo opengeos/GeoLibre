@@ -38,7 +38,7 @@ pwsh ./packaging/msix/build-msix.ps1 `
 | --- | --- | --- |
 | `-Name` | Tauri identifier (`org.geolibre.desktop`) | Must be the reserved `Package/Identity/Name` |
 | `-Publisher` | `CN=GeoLibre` | Must be your seller `CN=<GUID>` |
-| `-PublisherDisplayName` | `GeoLibre` | Must match your publisher display name |
+| `-PublisherDisplayName` | `Open Geospatial Solutions` | Must match your publisher display name exactly; the Store does not remap it |
 | `-DisplayName` | Tauri `productName` (`GeoLibre Desktop`) | `Properties/DisplayName` must be a **reserved** name |
 | `-Language` | `en-us` | Every MSIX must declare a language |
 

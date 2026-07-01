@@ -4,7 +4,11 @@ param(
   [ValidateSet("x64", "x86", "arm64", "arm", "neutral")]
   [string] $Architecture = "x64",
   [string] $Publisher = "CN=GeoLibre",
-  [string] $PublisherDisplayName = "GeoLibre",
+  # Properties/PublisherDisplayName. The Microsoft Store validates this strictly
+  # against the registered publisher display name, so it must match Partner
+  # Center exactly ("Open Geospatial Solutions"). Unlike Identity Name/Publisher,
+  # the Store does not remap it on ingestion.
+  [string] $PublisherDisplayName = "Open Geospatial Solutions",
   # Identity Name. Defaults to the Tauri identifier; override with the reserved
   # package name from Partner Center (Product Identity) for a Microsoft Store
   # submission.
