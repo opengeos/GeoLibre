@@ -19,19 +19,61 @@ import {
 } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
+/**
+ * Retains the WMS form input across dialog close/reopen (in memory, for the
+ * session) so a user can add several layers from the same service without
+ * re-entering the URL or re-retrieving its layer list each time.
+ */
+interface WmsFormCache {
+  endpoint: string;
+  layers: string;
+  styles: string;
+  format: string;
+  transparent: boolean;
+  tileSize: string;
+  options: WmsLayerOption[];
+}
+let wmsFormCache: WmsFormCache | null = null;
+
 export function WmsSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wms.defaultName"));
-  const [wmsEndpoint, setWmsEndpoint] = useState("");
-  const [wmsLayers, setWmsLayers] = useState("");
-  const [wmsStyles, setWmsStyles] = useState("");
-  const [wmsFormat, setWmsFormat] = useState("image/png");
-  const [wmsTransparent, setWmsTransparent] = useState(true);
-  const [wmsTileSize, setWmsTileSize] = useState("256");
-  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>([]);
+  const [wmsEndpoint, setWmsEndpoint] = useState(wmsFormCache?.endpoint ?? "");
+  const [wmsLayers, setWmsLayers] = useState(wmsFormCache?.layers ?? "");
+  const [wmsStyles, setWmsStyles] = useState(wmsFormCache?.styles ?? "");
+  const [wmsFormat, setWmsFormat] = useState(wmsFormCache?.format ?? "image/png");
+  const [wmsTransparent, setWmsTransparent] = useState(
+    wmsFormCache?.transparent ?? true,
+  );
+  const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
+  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(
+    wmsFormCache?.options ?? [],
+  );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const layerListId = useId();
+
+  // Persist the form input so reopening the dialog restores the URL, the fields,
+  // and the retrieved layer list.
+  useEffect(() => {
+    wmsFormCache = {
+      endpoint: wmsEndpoint,
+      layers: wmsLayers,
+      styles: wmsStyles,
+      format: wmsFormat,
+      transparent: wmsTransparent,
+      tileSize: wmsTileSize,
+      options: layerOptions,
+    };
+  }, [
+    wmsEndpoint,
+    wmsLayers,
+    wmsStyles,
+    wmsFormat,
+    wmsTransparent,
+    wmsTileSize,
+    layerOptions,
+  ]);
   // Guards against a stale in-flight retrieval overwriting the form after the
   // user has moved on: a monotonic token identifies the latest request, and the
   // AbortController cancels the previous one when a new request or an endpoint

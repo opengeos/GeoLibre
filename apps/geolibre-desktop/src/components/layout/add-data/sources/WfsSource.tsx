@@ -21,19 +21,65 @@ import {
 } from "../service-library";
 import { AddDataSourceForm, SampleDataSelect, useAddDataSource } from "../shared";
 
+/**
+ * Retains the WFS form input across dialog close/reopen (in memory, for the
+ * session) so a user can add several feature types from the same service
+ * without re-entering the URL or re-retrieving its type list each time.
+ */
+interface WfsFormCache {
+  endpoint: string;
+  typeName: string;
+  version: string;
+  outputFormat: string;
+  srsName: string;
+  maxFeatures: string;
+  options: WfsFeatureTypeOption[];
+}
+let wfsFormCache: WfsFormCache | null = null;
+
 export function WfsSource() {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.wfs.defaultName"));
-  const [wfsEndpoint, setWfsEndpoint] = useState("");
-  const [wfsTypeName, setWfsTypeName] = useState("");
-  const [wfsVersion, setWfsVersion] = useState("2.0.0");
-  const [wfsOutputFormat, setWfsOutputFormat] = useState("application/json");
-  const [wfsSrsName, setWfsSrsName] = useState("EPSG:4326");
-  const [wfsMaxFeatures, setWfsMaxFeatures] = useState("1000");
-  const [typeOptions, setTypeOptions] = useState<WfsFeatureTypeOption[]>([]);
+  const [wfsEndpoint, setWfsEndpoint] = useState(wfsFormCache?.endpoint ?? "");
+  const [wfsTypeName, setWfsTypeName] = useState(wfsFormCache?.typeName ?? "");
+  const [wfsVersion, setWfsVersion] = useState(wfsFormCache?.version ?? "2.0.0");
+  const [wfsOutputFormat, setWfsOutputFormat] = useState(
+    wfsFormCache?.outputFormat ?? "application/json",
+  );
+  const [wfsSrsName, setWfsSrsName] = useState(
+    wfsFormCache?.srsName ?? "EPSG:4326",
+  );
+  const [wfsMaxFeatures, setWfsMaxFeatures] = useState(
+    wfsFormCache?.maxFeatures ?? "1000",
+  );
+  const [typeOptions, setTypeOptions] = useState<WfsFeatureTypeOption[]>(
+    wfsFormCache?.options ?? [],
+  );
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
   const typeListId = useId();
+
+  // Persist the form input so reopening the dialog restores the URL, the fields,
+  // and the retrieved feature-type list.
+  useEffect(() => {
+    wfsFormCache = {
+      endpoint: wfsEndpoint,
+      typeName: wfsTypeName,
+      version: wfsVersion,
+      outputFormat: wfsOutputFormat,
+      srsName: wfsSrsName,
+      maxFeatures: wfsMaxFeatures,
+      options: typeOptions,
+    };
+  }, [
+    wfsEndpoint,
+    wfsTypeName,
+    wfsVersion,
+    wfsOutputFormat,
+    wfsSrsName,
+    wfsMaxFeatures,
+    typeOptions,
+  ]);
   // See WmsSource: guards a stale in-flight retrieval from overwriting the form.
   const retrieveTokenRef = useRef(0);
   const retrieveAbortRef = useRef<AbortController | null>(null);
