@@ -1,7 +1,7 @@
 {
   "name": "geolibre",
   "private": true,
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "GeoLibre: a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private",
   "workspaces": [
     "apps/*",

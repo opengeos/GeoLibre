@@ -255,7 +255,7 @@
 - [x] On-canvas collaboration session-status badge and roster (a pulsing live dot, connected-participant count, and an expandable client list that announces joins and leaves), plus a clear "Go to map and collaborate" button so the host has a non-destructive way back to the map
 - [x] Welcome wizard is suppressed for embeds: project deep links (`?url=`) skip onboarding automatically, and a new `?welcome=0` parameter lets any embed opt out
 
-## v1.8: Camera tours, live story maps, standalone HTML export, and map annotations (current)
+## v1.8: Camera tours, live story maps, standalone HTML export, and map annotations
 
 - [x] Record an animated camera tour to video straight from the Controls menu, with a clearer keyframe layout, per-keyframe recapture, a two-step save, and the ability to save and reload the entire tour setup as a JSON file
 - [x] Story Map plugin can now compose its chapters directly on the live map instead of a separate editor, and generates a printable PDF handout of the finished story
@@ -278,6 +278,19 @@
 - [x] Raster paint controls gain a greyscale toggle, a reset action, and numeric inputs, plus info icons explaining layer zoom-visibility controls
 - [x] Inline numeric opacity input in the layer control, with a fixed-name notice on the Background layer
 - [x] Windows portable zip build, so the desktop app can run without installation
+
+## v1.9: CAD import, smarter service discovery, and a docked SQL workspace (current)
+
+- [x] Add CAD drawings (DXF/DWG) as a layer, with a layer picker for choosing which drawing layers to load and a CRS selector for placing the geometry correctly on the map
+- [x] WMS and WFS panels now read the service's GetCapabilities document to list the available layers and feature types, so you pick from a populated dropdown instead of typing layer names by hand
+- [x] Generic Vector to Vector conversion tool that converts between any supported vector formats by file extension, alongside the existing targeted converters
+- [x] SQL Workspace docks as a resizable panel beside the map (rather than a floating window) and gains editor autocomplete for tables, columns, and SQL keywords
+- [x] Camera tours gain per-keyframe hold and transition duration controls for finer pacing, plus the ability to save and reload a named tour setup
+- [x] Story Map plugin adds a hide-itinerary toggle, subtitle and byline fields on the printable handout, and dedicated start and closing slides for a more polished presentation
+- [x] Transparent fill and outline option in the color picker, so features can be styled with no fill or no stroke without leaving the picker
+- [x] Plugins can now use the maplibre-gl-raster stack and the projection control, expanding what external plugins can render and configure (see [Plugin API](plugin-api.md))
+- [x] Legend populates automatically from a paletted raster's embedded color table, matching the map colors without manual entry
+- [x] Website and GitHub links added to the Help menu for quick access to the project home and source
 
 ## Plugin marketplace and registry (design)
 
