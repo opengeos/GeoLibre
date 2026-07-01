@@ -76,6 +76,7 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   KerchunkReferenceStore,
   loadKerchunkReference,
@@ -221,15 +222,9 @@ const COMPONENTS_OPTIONS = {
   collapsed: false,
   columns: 5,
   defaultControls: COMPONENT_CONTROL_NAMES,
-  excludeLayers: [
-    "usgs-lidar-*",
-    "lidar-*",
-    "mapbox-gl-draw-*",
-    "gl-draw-*",
-    "gm_*",
-    "inspect-highlight-*",
-    "measure-*",
-  ],
+  // Shared with Layer Swipe (and any other layer-list control) so the hidden
+  // "chrome" layer set stays consistent; see INTERNAL_HELPER_LAYER_PATTERNS.
+  excludeLayers: [...INTERNAL_HELPER_LAYER_PATTERNS],
   gap: 2,
   rows: 5,
   showRowColumnControls: true,

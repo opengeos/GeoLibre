@@ -8,6 +8,7 @@ import type {
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
+import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 
 /**
  * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
@@ -119,16 +120,12 @@ function getSwipeControlOptions(
     selectVisibleByDefault: previousState === undefined,
     basemapStyle: app.getActiveBasemap(),
     // Hide plugin chrome layers (drawing/measure helpers, selection footprints,
-    // highlight outlines) so they don't clutter the swipe layer list. The
-    // patterns match the layer ids each plugin uses for its internal helpers;
-    // these globs are re-applied on every live refresh, so layers added after
-    // the control mounts (e.g. Vantor footprints on search) are excluded too.
-    excludeLayers: [
-      "gl-draw-*",
-      "measure-*",
-      "geolibre-highlight-*",
-      "vantor-*",
-    ],
+    // highlight outlines, Vantor footprints) so they don't clutter the swipe
+    // layer list. Shared with the Components control grid via
+    // INTERNAL_HELPER_LAYER_PATTERNS so the excluded set stays consistent. These
+    // globs are re-applied on every live refresh, so layers added after the
+    // control mounts (e.g. Vantor footprints on search) are excluded too.
+    excludeLayers: [...INTERNAL_HELPER_LAYER_PATTERNS],
     // List only currently visible layers (plus any already selected), kept in sync live (#843).
     visibleLayersOnly: true,
   };
