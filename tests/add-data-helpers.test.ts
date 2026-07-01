@@ -7,6 +7,7 @@ import {
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
   fileNameFromPath,
+  stripOgcOperationParams,
   geoJsonToPointRows,
   inferDelimitedTextField,
   layerNameFromPath,
@@ -164,6 +165,35 @@ describe("createWfsGetCapabilitiesUrl", () => {
   it("omits VERSION when not provided", () => {
     const url = new URL(createWfsGetCapabilitiesUrl("https://x.test/wfs"));
     assert.equal(url.searchParams.get("VERSION"), null);
+  });
+});
+
+describe("stripOgcOperationParams", () => {
+  it("removes a pasted GetCapabilities query, leaving the base endpoint", () => {
+    assert.equal(
+      stripOgcOperationParams(
+        "https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetCapabilities",
+        "WFS",
+      ),
+      "https://wms.ign.gob.ar/geoserver/ows",
+    );
+  });
+
+  it("keeps non-operation params like an auth token", () => {
+    assert.equal(
+      stripOgcOperationParams(
+        "https://x.test/wms?REQUEST=GetMap&LAYERS=a&token=abc",
+        "WMS",
+      ),
+      "https://x.test/wms?token=abc",
+    );
+  });
+
+  it("leaves an already-clean endpoint untouched", () => {
+    assert.equal(
+      stripOgcOperationParams("https://x.test/geoserver/wms", "WMS"),
+      "https://x.test/geoserver/wms",
+    );
   });
 });
 

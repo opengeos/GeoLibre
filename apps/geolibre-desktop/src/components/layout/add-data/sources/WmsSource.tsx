@@ -8,6 +8,7 @@ import {
   createWmsTileUrl,
   errorMessage,
   fetchWmsLayers,
+  stripOgcOperationParams,
   type WmsLayerOption,
 } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
@@ -120,8 +121,11 @@ export function WmsSource() {
       throw new Error(t("addData.wms.errorLayers"));
     }
     const tileSize = Number(wmsTileSize) || 256;
+    // Strip any leftover operation params (a pasted GetCapabilities URL) so the
+    // GetMap request is not built with a conflicting duplicate REQUEST.
+    const endpoint = stripOgcOperationParams(wmsEndpoint.trim(), "WMS");
     const tileUrl = createWmsTileUrl({
-      endpoint: wmsEndpoint.trim(),
+      endpoint,
       layers: wmsLayers.trim(),
       styles: wmsStyles.trim(),
       format: wmsFormat,
@@ -136,7 +140,7 @@ export function WmsSource() {
           type: "raster",
           tiles: [tileUrl],
           tileSize,
-          url: wmsEndpoint.trim(),
+          url: endpoint,
           layers: wmsLayers.trim(),
           styles: wmsStyles.trim(),
           format: wmsFormat,

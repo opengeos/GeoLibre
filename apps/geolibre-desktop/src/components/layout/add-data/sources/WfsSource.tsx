@@ -11,6 +11,7 @@ import {
   createBaseLayer,
   errorMessage,
   fetchWfsFeatureTypes,
+  stripOgcOperationParams,
   type WfsFeatureTypeOption,
 } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
@@ -128,8 +129,11 @@ export function WfsSource() {
       throw new Error(t("addData.wfs.errorMaxFeaturesNumeric"));
     }
 
+    // Strip any leftover operation params (a pasted GetCapabilities URL) so the
+    // GetFeature request is not built with a conflicting duplicate REQUEST,
+    // which would make the server return capabilities XML instead of features.
     const featureUrl = createWfsGetFeatureUrl({
-      endpoint: wfsEndpoint.trim(),
+      endpoint: stripOgcOperationParams(wfsEndpoint.trim(), "WFS"),
       typeName: wfsTypeName.trim(),
       version: wfsVersion,
       outputFormat: wfsOutputFormat.trim(),

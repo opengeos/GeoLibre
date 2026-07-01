@@ -322,18 +322,15 @@ function charsetFromContentType(contentType: string | null): string | undefined 
 }
 
 /**
- * Builds an OGC `GetCapabilities` request URL, stripping any operation
- * parameters already on the endpoint (e.g. a copied `REQUEST=GetMap`) so they
- * cannot collide with the ones added here. Only the query string is rewritten,
- * so the endpoint's path form is preserved exactly — absolute, root-relative,
+ * Rewrites an endpoint's query string: removes the given operation parameters
+ * and sets `extra`, leaving the path form untouched — absolute, root-relative,
  * route-relative (`geoserver/wms`), and protocol-relative (`//host/wms`) all
- * round-trip unchanged.
+ * round-trip unchanged. Drops the `?` entirely when nothing remains.
  */
-function buildCapabilitiesUrl(
+function rewriteEndpointQuery(
   endpoint: string,
-  service: "WMS" | "WFS",
   operationParams: ReadonlySet<string>,
-  version?: string,
+  extra: Array<[string, string]>,
 ): string {
   const hashIndex = endpoint.indexOf("#");
   const withoutHash = hashIndex === -1 ? endpoint : endpoint.slice(0, hashIndex);
@@ -346,10 +343,49 @@ function buildCapabilitiesUrl(
   for (const key of Array.from(params.keys())) {
     if (operationParams.has(key.toLowerCase())) params.delete(key);
   }
-  params.set("SERVICE", service);
-  params.set("REQUEST", "GetCapabilities");
-  if (version) params.set("VERSION", version);
-  return `${path}?${params.toString()}${hash}`;
+  for (const [key, value] of extra) params.set(key, value);
+  const query = params.toString();
+  return query ? `${path}?${query}${hash}` : `${path}${hash}`;
+}
+
+/**
+ * Builds an OGC `GetCapabilities` request URL, stripping any operation
+ * parameters already on the endpoint (e.g. a copied `REQUEST=GetMap`) so they
+ * cannot collide with the ones added here.
+ */
+function buildCapabilitiesUrl(
+  endpoint: string,
+  service: "WMS" | "WFS",
+  operationParams: ReadonlySet<string>,
+  version?: string,
+): string {
+  const extra: Array<[string, string]> = [
+    ["SERVICE", service],
+    ["REQUEST", "GetCapabilities"],
+  ];
+  if (version) extra.push(["VERSION", version]);
+  return rewriteEndpointQuery(endpoint, operationParams, extra);
+}
+
+/**
+ * Strips the OGC operation parameters (SERVICE / REQUEST / VERSION / LAYERS /
+ * typeName / outputFormat / BBOX / …) from a service endpoint, leaving a clean
+ * base URL. A user commonly pastes a full `…?REQUEST=GetCapabilities` URL; these
+ * leftover params must be removed before a GetMap / GetFeature URL is built on
+ * top, or the duplicated (and conflicting) `REQUEST` makes the server answer the
+ * wrong operation (e.g. returning capabilities XML instead of features).
+ *
+ * @param endpoint - The service endpoint as entered by the user.
+ * @param service - Which operation-parameter set to strip.
+ * @returns The endpoint with its OGC operation parameters removed.
+ */
+export function stripOgcOperationParams(
+  endpoint: string,
+  service: "WMS" | "WFS",
+): string {
+  const operationParams =
+    service === "WMS" ? WMS_OPERATION_PARAMS : WFS_OPERATION_PARAMS;
+  return rewriteEndpointQuery(endpoint, operationParams, []);
 }
 
 /** A single requestable (named) layer advertised by a WMS GetCapabilities. */
