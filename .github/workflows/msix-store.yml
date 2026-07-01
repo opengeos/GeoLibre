@@ -7,11 +7,6 @@ name: Build Store MSIX
 
 on:
   workflow_dispatch:
-  # Temporary: lets this build run from the feature branch before the workflow
-  # lands on the default branch (workflow_dispatch requires the default branch).
-  # Removed before merge so main only exposes the manual trigger.
-  push:
-    branches: [fix/msix-store-identity]
 
 permissions:
   contents: read
