@@ -10,6 +10,7 @@ import {
   GPX_PROXY_PATH,
   MAX_SAVED_POSTGRES_CONNECTIONS,
   POSTGRES_CONNECTIONS_STORAGE_KEY,
+  WMS_PROXY_PATH,
 } from "./constants";
 import type { DelimitedTextDelimiter } from "./types";
 
@@ -199,6 +200,155 @@ export function proxyFeedRequestUrl(url: string): string {
   return isViteDevServer()
     ? `${GPX_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
+}
+
+/**
+ * Routes a WMS request through the dev-server CORS proxy when running under
+ * Vite, so a `fetch()` for a service's GetCapabilities document is not blocked
+ * by the WMS host's missing CORS headers. In production builds (Tauri / nginx)
+ * the URL is returned unchanged and the fetch relies on the service's own CORS.
+ */
+export function proxyWmsRequestUrl(url: string): string {
+  return isViteDevServer()
+    ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}`
+    : url;
+}
+
+/** A single requestable (named) layer advertised by a WMS GetCapabilities. */
+export interface WmsLayerOption {
+  /** The layer's `<Name>` — the value passed as the WMS `LAYERS` parameter. */
+  name: string;
+  /** The layer's human-readable `<Title>`; falls back to the name if absent. */
+  title: string;
+}
+
+/**
+ * Builds a WMS `GetCapabilities` request URL from a service endpoint. Any WMS
+ * operation parameters already present on the endpoint (e.g. a `REQUEST=GetMap`
+ * left over from a copied GetMap URL) are stripped first so they cannot collide
+ * with the `SERVICE`/`REQUEST` parameters this adds.
+ *
+ * @param endpoint - The WMS service base URL, with or without a query string.
+ * @returns The GetCapabilities request URL.
+ */
+export function createWmsGetCapabilitiesUrl(endpoint: string): string {
+  const operationParams = new Set([
+    "service",
+    "request",
+    "version",
+    "layers",
+    "styles",
+    "format",
+    "transparent",
+    "bbox",
+    "width",
+    "height",
+    "srs",
+    "crs",
+  ]);
+  try {
+    const url = new URL(endpoint);
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (operationParams.has(key.toLowerCase())) url.searchParams.delete(key);
+    }
+    url.searchParams.set("SERVICE", "WMS");
+    url.searchParams.set("REQUEST", "GetCapabilities");
+    return url.toString();
+  } catch {
+    // Relative or otherwise unparseable endpoint: fall back to a plain append.
+    return appendQuery(endpoint, [
+      ["SERVICE", "WMS"],
+      ["REQUEST", "GetCapabilities"],
+    ]);
+  }
+}
+
+/**
+ * Extracts the requestable (named) layers from a WMS GetCapabilities document.
+ * Only `<Layer>` elements that carry their own `<Name>` are requestable; the
+ * container layers that merely group others (a `<Title>` but no `<Name>`) are
+ * skipped. Traversal is namespace-agnostic so it handles both WMS 1.1.1
+ * (`WMT_MS_Capabilities`) and 1.3.0 (`WMS_Capabilities`, default namespace).
+ *
+ * @param xmlText - The raw GetCapabilities XML response body.
+ * @returns The named layers in document order, deduplicated by name.
+ */
+export function parseWmsCapabilitiesLayers(xmlText: string): WmsLayerOption[] {
+  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+  if (doc.querySelector("parsererror")) {
+    throw new Error("Could not parse the WMS capabilities document.");
+  }
+  const root = doc.documentElement;
+  if (!root || root.localName === "ServiceExceptionReport") {
+    const message = root?.textContent?.trim();
+    throw new Error(message || "The WMS service returned an error.");
+  }
+
+  const layers: WmsLayerOption[] = [];
+  const seen = new Set<string>();
+  // Every <Layer> in the document, at any nesting depth. Reading each one's own
+  // direct <Name>/<Title> and deduplicating by name means the container layers
+  // (which have no <Name>) are skipped without tracking the tree ourselves. The
+  // "*" namespace wildcard covers both WMS 1.1.1 (no namespace) and 1.3.0
+  // (default `http://www.opengis.net/wms` namespace).
+  const layerElements = root.getElementsByTagNameNS("*", "Layer");
+  for (let i = 0; i < layerElements.length; i += 1) {
+    const layer = layerElements[i];
+    const name = directChildText(layer, "Name");
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    layers.push({ name, title: directChildText(layer, "Title") || name });
+  }
+  return layers;
+}
+
+/**
+ * Reads the direct-child element with the given local name and returns its
+ * trimmed text. Restricting to direct children keeps a `<Layer>`'s own `<Name>`
+ * / `<Title>` from being confused with those nested inside its `<Style>` or
+ * child `<Layer>` elements.
+ */
+function directChildText(element: Element, localName: string): string {
+  for (const child of Array.from(element.children)) {
+    if (child.localName === localName) return (child.textContent ?? "").trim();
+  }
+  return "";
+}
+
+/**
+ * Fetches a WMS service's GetCapabilities document and returns its requestable
+ * layers. Routes through the dev-server CORS proxy under Vite; in production it
+ * relies on the service's own CORS headers.
+ *
+ * @param endpoint - The WMS service base URL.
+ * @param options - Optional abort signal.
+ * @returns The named layers advertised by the service.
+ */
+export async function fetchWmsLayers(
+  endpoint: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<WmsLayerOption[]> {
+  const requestUrl = createWmsGetCapabilitiesUrl(endpoint.trim());
+  let response: Response;
+  try {
+    response = await fetch(proxyWmsRequestUrl(requestUrl), {
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error("The request timed out.");
+    }
+    throw error;
+  }
+  const text = await response.text();
+  // A well-formed error body is still XML, so only treat a non-2xx as fatal
+  // when the payload is not XML we can parse for a ServiceException message.
+  if (!response.ok && !/^\s*</.test(text)) {
+    throw new Error(`Request failed with status ${response.status}`);
+  }
+  return parseWmsCapabilitiesLayers(text);
 }
 
 export function resolveDelimitedTextDelimiter(

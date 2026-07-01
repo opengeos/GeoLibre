@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import {
   appendQuery,
+  createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
   fileNameFromPath,
   geoJsonToPointRows,
@@ -80,6 +81,34 @@ describe("createWmsTileUrl", () => {
     });
     assert.ok(url.includes("TRANSPARENT=FALSE"));
     assert.ok(url.includes("HEIGHT=512"));
+  });
+});
+
+describe("createWmsGetCapabilitiesUrl", () => {
+  it("appends SERVICE and REQUEST to a bare endpoint", () => {
+    const url = new URL(createWmsGetCapabilitiesUrl("https://x.test/wms"));
+    assert.equal(url.searchParams.get("SERVICE"), "WMS");
+    assert.equal(url.searchParams.get("REQUEST"), "GetCapabilities");
+  });
+
+  it("strips leftover GetMap operation params so they cannot collide", () => {
+    const url = new URL(
+      createWmsGetCapabilitiesUrl(
+        "https://x.test/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=a&BBOX=0,0,1,1&token=abc",
+      ),
+    );
+    assert.equal(url.searchParams.get("REQUEST"), "GetCapabilities");
+    assert.equal(url.searchParams.get("LAYERS"), null);
+    assert.equal(url.searchParams.get("BBOX"), null);
+    // Non-operation params (e.g. an auth token) are preserved.
+    assert.equal(url.searchParams.get("token"), "abc");
+  });
+
+  it("falls back to a plain append for a relative endpoint", () => {
+    assert.equal(
+      createWmsGetCapabilitiesUrl("/geoserver/wms"),
+      "/geoserver/wms?SERVICE=WMS&REQUEST=GetCapabilities",
+    );
   });
 });
 

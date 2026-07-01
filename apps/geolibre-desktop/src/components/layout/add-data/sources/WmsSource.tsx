@@ -1,8 +1,15 @@
-import { Input, Label, Select } from "@geolibre/ui";
+import { Button, Input, Label, Select } from "@geolibre/ui";
+import { Loader2, ListTree } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_WMS_ENDPOINT, DEFAULT_WMS_LAYERS } from "../constants";
-import { createBaseLayer, createWmsTileUrl } from "../helpers";
+import {
+  createBaseLayer,
+  createWmsTileUrl,
+  errorMessage,
+  fetchWmsLayers,
+  type WmsLayerOption,
+} from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldBoolean,
@@ -20,6 +27,36 @@ export function WmsSource() {
   const [wmsFormat, setWmsFormat] = useState("image/png");
   const [wmsTransparent, setWmsTransparent] = useState(true);
   const [wmsTileSize, setWmsTileSize] = useState("256");
+  const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>([]);
+  const [isRetrieving, setIsRetrieving] = useState(false);
+  const [retrieveError, setRetrieveError] = useState<string | null>(null);
+
+  const handleRetrieveLayers = async () => {
+    const endpoint = wmsEndpoint.trim();
+    if (!endpoint) {
+      setRetrieveError(t("addData.wms.errorUrl"));
+      return;
+    }
+    setIsRetrieving(true);
+    setRetrieveError(null);
+    try {
+      const options = await fetchWmsLayers(endpoint);
+      if (options.length === 0) {
+        setLayerOptions([]);
+        setRetrieveError(t("addData.wms.noLayersFound"));
+        return;
+      }
+      setLayerOptions(options);
+      // Preselect the first layer when the field is empty so a single click
+      // leaves the form ready to submit.
+      if (!wmsLayers.trim()) setWmsLayers(options[0].name);
+    } catch (error) {
+      setLayerOptions([]);
+      setRetrieveError(errorMessage(error, t("addData.wms.retrieveError")));
+    } finally {
+      setIsRetrieving(false);
+    }
+  };
 
   const getFields = (): ServiceFields => ({
     endpoint: wmsEndpoint,
@@ -37,6 +74,9 @@ export function WmsSource() {
     setWmsFormat(serviceFieldString(fields, "format", "image/png"));
     setWmsTransparent(serviceFieldBoolean(fields, "transparent", true));
     setWmsTileSize(serviceFieldString(fields, "tileSize", "256"));
+    // The new endpoint's layers must be re-retrieved, so drop the old list.
+    setLayerOptions([]);
+    setRetrieveError(null);
   };
 
   const handleSubmit = source.runSubmit(() => {
@@ -96,22 +136,68 @@ export function WmsSource() {
         />
         <div className="space-y-1.5">
           <Label htmlFor="wms-endpoint">{t("addData.common.serviceUrl")}</Label>
-          <Input
-            id="wms-endpoint"
-            placeholder={t("addData.wms.urlPlaceholder")}
-            value={wmsEndpoint}
-            onChange={(event) => setWmsEndpoint(event.target.value)}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="wms-endpoint"
+              placeholder={t("addData.wms.urlPlaceholder")}
+              value={wmsEndpoint}
+              onChange={(event) => {
+                setWmsEndpoint(event.target.value);
+                // Layers belong to the previous endpoint; clear them so the
+                // dropdown never offers stale options for a different service.
+                if (layerOptions.length > 0) setLayerOptions([]);
+                if (retrieveError) setRetrieveError(null);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleRetrieveLayers}
+              disabled={isRetrieving || !wmsEndpoint.trim()}
+              className="shrink-0"
+            >
+              {isRetrieving ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ListTree className="mr-2 h-3.5 w-3.5" />
+              )}
+              {isRetrieving
+                ? t("addData.wms.retrieving")
+                : t("addData.wms.retrieveLayers")}
+            </Button>
+          </div>
+          {retrieveError ? (
+            <p className="text-xs text-destructive">{retrieveError}</p>
+          ) : null}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wms-layers">{t("addData.wms.layers")}</Label>
-            <Input
-              id="wms-layers"
-              placeholder={t("addData.common.workspaceLayerPlaceholder")}
-              value={wmsLayers}
-              onChange={(event) => setWmsLayers(event.target.value)}
-            />
+            {layerOptions.length > 0 ? (
+              <Select
+                id="wms-layers"
+                value={wmsLayers}
+                onChange={(event) => setWmsLayers(event.target.value)}
+              >
+                <option value="" disabled>
+                  {t("addData.wms.selectLayer")}
+                </option>
+                {layerOptions.map((option) => (
+                  <option key={option.name} value={option.name}>
+                    {option.title === option.name
+                      ? option.name
+                      : `${option.title} (${option.name})`}
+                  </option>
+                ))}
+              </Select>
+            ) : (
+              <Input
+                id="wms-layers"
+                placeholder={t("addData.common.workspaceLayerPlaceholder")}
+                value={wmsLayers}
+                onChange={(event) => setWmsLayers(event.target.value)}
+              />
+            )}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wms-styles">{t("addData.wms.styles")}</Label>

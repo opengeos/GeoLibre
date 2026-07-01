@@ -232,7 +232,12 @@
       "urlPlaceholder": "https://example.com/geoserver/wms",
       "layers": "Layers",
       "styles": "Styles",
-      "transparent": "Transparent background"
+      "transparent": "Transparent background",
+      "retrieveLayers": "Retrieve layers",
+      "retrieving": "Retrieving...",
+      "selectLayer": "Select a layer",
+      "noLayersFound": "No layers were found for this service.",
+      "retrieveError": "Could not retrieve layers from this service."
     },
     "wfs": {
       "defaultName": "WFS Layer",
