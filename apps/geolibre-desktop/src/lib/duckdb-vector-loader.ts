@@ -74,19 +74,64 @@ export function getSqlDatabase(): Promise<duckdb.AsyncDuckDB> {
   return sqlDbPromise;
 }
 
+// Count of SQL queries currently using each SQL instance, so a poisoned one is
+// terminated only once no query is still on it (see resetSqlDatabase). Instances
+// flagged here are pending teardown once their in-flight count drains to zero.
+const sqlDbInFlight = new WeakMap<duckdb.AsyncDuckDB, number>();
+const sqlDbTerminateWhenIdle = new WeakSet<duckdb.AsyncDuckDB>();
+
+async function terminateSqlDatabase(db: duckdb.AsyncDuckDB): Promise<void> {
+  sqlDbTerminateWhenIdle.delete(db);
+  try {
+    await db.terminate();
+  } catch {
+    // Best-effort teardown: the instance is already being discarded.
+  }
+}
+
+/**
+ * Marks a query as in flight on a SQL instance. Pair every call with a
+ * {@link releaseSqlDatabase} in a `finally` so the count cannot leak.
+ */
+export function acquireSqlDatabase(db: duckdb.AsyncDuckDB): void {
+  sqlDbInFlight.set(db, (sqlDbInFlight.get(db) ?? 0) + 1);
+}
+
+/**
+ * Marks a query as finished on a SQL instance. If the instance was flagged for
+ * teardown by {@link resetSqlDatabase} and this was the last in-flight query, it
+ * is terminated now.
+ */
+export async function releaseSqlDatabase(
+  db: duckdb.AsyncDuckDB,
+): Promise<void> {
+  const next = (sqlDbInFlight.get(db) ?? 1) - 1;
+  if (next > 0) {
+    sqlDbInFlight.set(db, next);
+    return;
+  }
+  sqlDbInFlight.delete(db);
+  if (sqlDbTerminateWhenIdle.has(db)) await terminateSqlDatabase(db);
+}
+
 /**
  * Rebuilds the SQL Workspace's DuckDB instance to recover from a poisoned remote
  * read path — duckdb-wasm 1.33.1-dev45 permanently breaks `read_parquet` over
  * HTTP (failing with "stoi: no conversion") on an instance that ran
  * `LOAD spatial` before its first successful remote Parquet read, and that state
- * cannot be undone in place. The old worker is terminated (safe: nothing else
- * uses this instance) and the next {@link getSqlDatabase} builds a fresh one
- * that re-runs the pre-spatial warm-up.
+ * cannot be undone in place. Stops handing the instance out so the next
+ * {@link getSqlDatabase} builds a fresh one that re-runs the pre-spatial warm-up.
  *
  * `poisoned` scopes the swap: it is a no-op unless that instance is still the
  * current one, so a fresh instance a concurrent caller has already rebuilt is
- * never terminated. The identity is re-checked after the await to close the
+ * never discarded. The identity is re-checked after the await to close the
  * window where another reset ran while this one was suspended.
+ *
+ * The old worker is terminated to free its WASM heap, but only once no query is
+ * still using it: if another SQL query is in flight on the same instance, the
+ * teardown is deferred to {@link releaseSqlDatabase} so that query is not
+ * stranded. Nothing outside the SQL Workspace uses this instance, so the shared
+ * DB's consumers are unaffected either way.
  *
  * @param poisoned - The instance to replace; only reset if it is still current.
  */
@@ -106,10 +151,11 @@ export async function resetSqlDatabase(
   if (current !== poisoned || sqlDbPromise !== previous) return;
   sqlDbPromise = null;
   spatialExtensionByDb.delete(poisoned);
-  try {
-    await poisoned.terminate();
-  } catch {
-    // Best-effort teardown: the instance is already being discarded.
+  // Terminate now if idle; otherwise let the last in-flight query's release do it.
+  if ((sqlDbInFlight.get(poisoned) ?? 0) > 0) {
+    sqlDbTerminateWhenIdle.add(poisoned);
+  } else {
+    await terminateSqlDatabase(poisoned);
   }
 }
 
@@ -175,7 +221,9 @@ export async function ensureSpatialExtension(
   try {
     await promise;
   } catch (error) {
-    spatialExtensionByDb.delete(db);
+    // Only clear the memo if it still points at this failed load: a concurrent
+    // caller may have already installed a retry, which must not be wiped out.
+    if (spatialExtensionByDb.get(db) === promise) spatialExtensionByDb.delete(db);
     throw error;
   }
 }

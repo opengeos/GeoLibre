@@ -6,11 +6,13 @@ import {
   type AsyncDuckDBConnection,
 } from "@duckdb/duckdb-wasm";
 import {
+  acquireSqlDatabase,
   ensureSpatialExtension,
   getSqlDatabase,
   isGeometryColumnType,
   quoteIdentifier,
   quoteSqlString,
+  releaseSqlDatabase,
   resetSqlDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
@@ -713,20 +715,31 @@ export async function runSqlQuery(
   // http URL that merely appears in a string literal or WHERE clause).
   const hasRemoteReader = statementHasRemoteReader(rewritten);
 
+  // Run one attempt, ref-counting the instance so a poison recovery can defer
+  // terminating it until no query is still using it.
+  const attempt = async (db: AsyncDuckDB): Promise<SqlQueryResult> => {
+    acquireSqlDatabase(db);
+    try {
+      return await runSqlStatementOnce(rewritten, layers, db);
+    } finally {
+      await releaseSqlDatabase(db);
+    }
+  };
+
   const db = await getSqlDatabase();
   try {
-    return await runSqlStatementOnce(rewritten, layers, db);
+    return await attempt(db);
   } catch (error) {
     // Recover from a poisoned WASM instance: duckdb-wasm 1.33.1-dev45 breaks
     // remote read_parquet with "stoi: no conversion" on an instance that ran
     // LOAD spatial before its first successful remote read (e.g. after an
     // earlier query's warm-up failed). That state cannot be undone in place, so
     // rebuild the SQL Workspace's dedicated instance — which re-runs the
-    // pre-spatial warm-up — and retry once. Scope the reset to `db` so a fresh
-    // instance is never torn down.
+    // pre-spatial warm-up — and retry once. `attempt` has already released `db`,
+    // so resetSqlDatabase tears it down now unless another query is still on it.
     if (hasRemoteReader && isStoiConversionError(error)) {
       await resetSqlDatabase(db);
-      return await runSqlStatementOnce(rewritten, layers, await getSqlDatabase());
+      return await attempt(await getSqlDatabase());
     }
     throw error;
   }
