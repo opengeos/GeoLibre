@@ -34,16 +34,20 @@ pwsh ./packaging/msix/build-msix.ps1 `
   -DisplayName "GeoLibre"                            # a name reserved in Partner Center
 ```
 
-| Parameter | Default | Why override for the Store |
+The defaults are the opengeos Partner Center identity, so a bare
+`./build-msix.ps1` produces a Store-ready package. Override them for a
+self-signed sideload build or a different publisher.
+
+| Parameter | Default (Store identity) | Notes |
 | --- | --- | --- |
-| `-Name` | Tauri identifier (`org.geolibre.desktop`) | Must be the reserved `Package/Identity/Name` |
-| `-Publisher` | `CN=GeoLibre` | Must be your seller `CN=<GUID>` |
+| `-Name` | `OpenGeospatialSolutions.GeoLibre` | Reserved `Package/Identity/Name`; the Store rejects the Tauri identifier. Pass `""` to fall back to `org.geolibre.desktop` for a non-Store build |
+| `-Publisher` | `CN=E6AE8172-DC4F-4F79-844B-9D84204BF95A` | Seller `CN=<GUID>` from Partner Center; must match the account publisher ID |
 | `-PublisherDisplayName` | `Open Geospatial Solutions` | Must match your publisher display name exactly; the Store does not remap it |
-| `-DisplayName` | Tauri `productName` (`GeoLibre Desktop`) | `Properties/DisplayName` must be a **reserved** name |
+| `-DisplayName` | `GeoLibre` | Reserved `Properties/DisplayName`; differs from the Tauri `productName` (`GeoLibre Desktop`). Pass `""` to fall back to the productName |
 | `-Language` | `en-us` | Every MSIX must declare a language |
 
 The package family name is derived automatically from `-Name` + `-Publisher`, so
-it will match once those are correct.
+it matches (`OpenGeospatialSolutions.GeoLibre_wby2ff7ejknn4`) once those are correct.
 
 `-DisplayName` sets only the package display name (`Properties/DisplayName`, used
 for the Store listing). The Start-menu / taskbar name

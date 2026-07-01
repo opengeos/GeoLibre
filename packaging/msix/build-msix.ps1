@@ -3,20 +3,26 @@ param(
   [string] $Configuration = "release",
   [ValidateSet("x64", "x86", "arm64", "arm", "neutral")]
   [string] $Architecture = "x64",
-  [string] $Publisher = "CN=GeoLibre",
+  # Identity/Publisher. The Microsoft Store validates this against the account's
+  # publisher ID, so it must be the seller CN=<GUID> from Partner Center
+  # (Product Identity), not a friendly name. Override for a self-signed sideload
+  # build.
+  [string] $Publisher = "CN=E6AE8172-DC4F-4F79-844B-9D84204BF95A",
   # Properties/PublisherDisplayName. The Microsoft Store validates this strictly
   # against the registered publisher display name, so it must match Partner
   # Center exactly ("Open Geospatial Solutions"). Unlike Identity Name/Publisher,
   # the Store does not remap it on ingestion.
   [string] $PublisherDisplayName = "Open Geospatial Solutions",
-  # Identity Name. Defaults to the Tauri identifier; override with the reserved
-  # package name from Partner Center (Product Identity) for a Microsoft Store
-  # submission.
-  [string] $Name = "",
-  # Package display name (Properties/DisplayName). Defaults to the Tauri
-  # productName; for a Microsoft Store submission it must be a name you reserved
-  # in Partner Center (e.g. "GeoLibre"), which may differ from the product name.
-  [string] $DisplayName = "",
+  # Identity Name. Must be the reserved package name from Partner Center
+  # (Product Identity) for a Microsoft Store submission; the Store rejects the
+  # Tauri identifier. Pass "" to fall back to the Tauri identifier for a
+  # non-Store build.
+  [string] $Name = "OpenGeospatialSolutions.GeoLibre",
+  # Package display name (Properties/DisplayName). For a Microsoft Store
+  # submission it must be a name you reserved in Partner Center ("GeoLibre"),
+  # which differs from the Tauri productName ("GeoLibre Desktop"). Pass "" to
+  # fall back to the productName for a non-Store build.
+  [string] $DisplayName = "GeoLibre",
   # Default package language. Required by the Store; every MSIX must declare one.
   [ValidatePattern('^[a-zA-Z]{2,3}(-[a-zA-Z0-9]{1,8})*$')]
   [string] $Language = "en-us"
