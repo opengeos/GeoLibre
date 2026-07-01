@@ -60,32 +60,40 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
   return dbPromise;
 }
 
+// The SQL Workspace runs on its own DuckDB instance, separate from the shared
+// one every other consumer uses. It is the only feature that reads remote
+// Parquet over HTTP, which is the operation duckdb-wasm 1.33.1-dev45 can poison
+// (see resetSqlDatabase). Isolating it means the poison-recovery rebuild can
+// safely terminate and replace the instance without disturbing in-flight vector
+// loads, exports, reprojection, or processing on the shared instance.
+let sqlDbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
+
+/** The DuckDB instance dedicated to the SQL Workspace. */
+export function getSqlDatabase(): Promise<duckdb.AsyncDuckDB> {
+  sqlDbPromise ??= createDatabase();
+  return sqlDbPromise;
+}
+
 /**
- * Stops handing out the memoized DuckDB instance (and its extension load state)
- * so the next {@link getDatabase} builds a fresh one, without terminating the
- * old worker.
- *
- * This is the recovery path for a WASM instance whose remote HTTP read path has
- * been poisoned — duckdb-wasm 1.33.1-dev45 permanently breaks `read_parquet`
- * over HTTP (failing with "stoi: no conversion") on an instance that ran
+ * Rebuilds the SQL Workspace's DuckDB instance to recover from a poisoned remote
+ * read path — duckdb-wasm 1.33.1-dev45 permanently breaks `read_parquet` over
+ * HTTP (failing with "stoi: no conversion") on an instance that ran
  * `LOAD spatial` before its first successful remote Parquet read, and that state
- * cannot be undone in place. A fresh instance re-runs the pre-spatial warm-up.
+ * cannot be undone in place. The old worker is terminated (safe: nothing else
+ * uses this instance) and the next {@link getSqlDatabase} builds a fresh one
+ * that re-runs the pre-spatial warm-up.
  *
- * The instance is shared app-wide, so this deliberately does NOT `terminate()`
- * it: any consumer with an in-flight query (vector loads, exports, reprojection,
- * processing) keeps using the old instance uninterrupted, and it is garbage-
- * collected once no one references it. Only remote reads are poisoned, and only
- * the SQL Workspace issues those, so the other consumers are unaffected either
- * way. `poisoned` scopes the swap: it is a no-op unless the current instance is
- * exactly that poisoned one, so a fresh instance a concurrent caller has already
- * rebuilt is never discarded.
+ * `poisoned` scopes the swap: it is a no-op unless that instance is still the
+ * current one, so a fresh instance a concurrent caller has already rebuilt is
+ * never terminated. The identity is re-checked after the await to close the
+ * window where another reset ran while this one was suspended.
  *
  * @param poisoned - The instance to replace; only reset if it is still current.
  */
-export async function resetDatabase(
+export async function resetSqlDatabase(
   poisoned: duckdb.AsyncDuckDB,
 ): Promise<void> {
-  const previous = dbPromise;
+  const previous = sqlDbPromise;
   if (!previous) return;
   let current: duckdb.AsyncDuckDB | null = null;
   try {
@@ -93,66 +101,81 @@ export async function resetDatabase(
   } catch {
     current = null;
   }
-  // Another query may have already rebuilt the DB after this one was poisoned;
-  // do not discard that fresh instance.
-  if (current !== poisoned) return;
-  dbPromise = null;
-  spatialExtensionPromise = null;
-  h3ExtensionPromise = null;
+  // Another query may have rebuilt the instance while we awaited; only discard
+  // the still-current poisoned one.
+  if (current !== poisoned || sqlDbPromise !== previous) return;
+  sqlDbPromise = null;
+  spatialExtensionByDb.delete(poisoned);
+  try {
+    await poisoned.terminate();
+  } catch {
+    // Best-effort teardown: the instance is already being discarded.
+  }
 }
 
-let spatialExtensionPromise: Promise<void> | null = null;
+// Spatial extension load state, keyed per instance so the shared DB and the SQL
+// Workspace DB each track their own load (and a rebuilt SQL instance starts
+// fresh). Memoized as a promise so concurrent callers share one INSTALL/LOAD.
+const spatialExtensionByDb = new WeakMap<
+  duckdb.AsyncDuckDB,
+  Promise<void>
+>();
 
 /**
  * Install and load the DuckDB spatial extension once per database instance.
- * `getDatabase` returns a memoized singleton, so the extension persists across
- * connections and the redundant INSTALL/LOAD queries are skipped on reuse.
- *
- * The load is memoized as a promise rather than a boolean so concurrent callers
- * (the function is exported and reused) share a single INSTALL/LOAD instead of
- * each racing to run it. On failure the memo is cleared so a later call retries.
+ * Redundant INSTALL/LOAD queries are skipped on reuse; on failure the memo is
+ * cleared so a later call retries.
  *
  * When `VITE_DUCKDB_SPATIAL_EXTENSION_PATH` is set, INSTALL is skipped and
  * the extension is loaded from the provided local path (useful for offline or
  * sandboxed environments where the remote extension repository is unreachable).
+ *
+ * @param db - The instance the extension is loaded on (keys the memo).
+ * @param connection - A connection to that instance to run the load on.
+ * @param beforeLoad - Optional pre-load warm-up (a remote read before LOAD).
  */
 export async function ensureSpatialExtension(
+  db: duckdb.AsyncDuckDB,
   connection: duckdb.AsyncDuckDBConnection,
   beforeLoad?: () => Promise<void>,
 ): Promise<void> {
-  spatialExtensionPromise ??= (async () => {
-    // duckdb-wasm 1.33.1-dev45 breaks read_parquet on any connection that runs
-    // LOAD spatial itself before it has read a Parquet file. `beforeLoad` lets
-    // the caller warm up that path (a pre-spatial read) before any LOAD,
-    // including the custom-path branch below, which is the only thing that
-    // initialises it. Runs before the branch split so a custom extension path
-    // (VITE_DUCKDB_SPATIAL_EXTENSION_PATH) gets the same warm-up.
-    if (beforeLoad) {
-      try {
-        await beforeLoad();
-      } catch (error) {
-        // Warm-up is best-effort; a failure here must not block spatial
-        // loading. Warn (not debug, which DevTools hides by default) so a
-        // genuinely corrupt/mislabelled file surfaces its real cause here
-        // instead of only as a later "stoi: no conversion" on DESCRIBE.
-        console.warn("[GeoLibre] spatial warm-up failed (ignored)", error);
+  let promise = spatialExtensionByDb.get(db);
+  if (!promise) {
+    promise = (async () => {
+      // duckdb-wasm 1.33.1-dev45 breaks read_parquet on any connection that runs
+      // LOAD spatial itself before it has read a Parquet file. `beforeLoad` lets
+      // the caller warm up that path (a pre-spatial read) before any LOAD,
+      // including the custom-path branch below, which is the only thing that
+      // initialises it. Runs before the branch split so a custom extension path
+      // (VITE_DUCKDB_SPATIAL_EXTENSION_PATH) gets the same warm-up.
+      if (beforeLoad) {
+        try {
+          await beforeLoad();
+        } catch (error) {
+          // Warm-up is best-effort; a failure here must not block spatial
+          // loading. Warn (not debug, which DevTools hides by default) so a
+          // genuinely corrupt/mislabelled file surfaces its real cause here
+          // instead of only as a later "stoi: no conversion" on DESCRIBE.
+          console.warn("[GeoLibre] spatial warm-up failed (ignored)", error);
+        }
       }
-    }
 
-    const customPath = getSpatialExtensionPath();
-    if (customPath) {
-      const normalizedPath = customPath.replace(/\\/g, "/");
-      await connection.query(`LOAD ${quoteSqlString(normalizedPath)}`);
-      return;
-    }
+      const customPath = getSpatialExtensionPath();
+      if (customPath) {
+        const normalizedPath = customPath.replace(/\\/g, "/");
+        await connection.query(`LOAD ${quoteSqlString(normalizedPath)}`);
+        return;
+      }
 
-    await connection.query("INSTALL spatial");
-    await connection.query("LOAD spatial");
-  })();
+      await connection.query("INSTALL spatial");
+      await connection.query("LOAD spatial");
+    })();
+    spatialExtensionByDb.set(db, promise);
+  }
   try {
-    await spatialExtensionPromise;
+    await promise;
   } catch (error) {
-    spatialExtensionPromise = null;
+    spatialExtensionByDb.delete(db);
     throw error;
   }
 }
@@ -500,6 +523,7 @@ export async function loadDuckDbVectorFile(
   try {
     await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(
+      db,
       connection,
       parquetWarmUp(connection, file.extension, file.name),
     );
@@ -579,7 +603,7 @@ export async function readCadLayers(
   const connection = await db.connect();
   try {
     await registerVectorFileBuffers(db, file);
-    await ensureSpatialExtension(connection);
+    await ensureSpatialExtension(db, connection);
     const rows = rowsFromResult(
       await connection.query(
         `SELECT
@@ -665,7 +689,7 @@ export async function reprojectFeatureCollectionToWgs84(
   const sourceFile = `geolibre-reproject-${(reprojectionSeq += 1)}.geojson`;
   try {
     await db.registerFileText(sourceFile, JSON.stringify(fc));
-    await ensureSpatialExtension(connection);
+    await ensureSpatialExtension(db, connection);
 
     const sql = `SELECT * FROM ST_Read(${quoteSqlString(sourceFile)})`;
     const description = rowsFromResult(
@@ -794,6 +818,7 @@ export async function convertDuckDbVectorToGeoParquet(
     // neither affected by the bug; `parquetWarmUp` returns undefined for both,
     // and the `options.csv` guard short-circuits the CSV branch before calling it.
     await ensureSpatialExtension(
+      db,
       connection,
       options.csv ? undefined : parquetWarmUp(connection, file.extension, file.name),
     );
@@ -867,7 +892,7 @@ export async function exportDuckDbGeoParquet(
 
   try {
     await registerGeoJsonExportSource(db, geojson, sourceFile);
-    await ensureSpatialExtension(connection);
+    await ensureSpatialExtension(db, connection);
     await connection.query(
       `COPY (SELECT * FROM ST_Read(${quoteSqlString(
         sourceFile,

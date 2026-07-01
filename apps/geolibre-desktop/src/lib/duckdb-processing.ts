@@ -26,7 +26,8 @@ export function createDuckDbCapability(): DuckDbCapability {
       const db = await getDatabase();
       const connection = await db.connect();
       try {
-        if (names.includes("spatial")) await ensureSpatialExtension(connection);
+        if (names.includes("spatial"))
+          await ensureSpatialExtension(db, connection);
         if (names.includes("h3")) await ensureH3Extension(connection);
       } finally {
         await connection.close();

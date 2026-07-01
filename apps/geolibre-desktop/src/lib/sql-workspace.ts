@@ -7,11 +7,11 @@ import {
 } from "@duckdb/duckdb-wasm";
 import {
   ensureSpatialExtension,
-  getDatabase,
+  getSqlDatabase,
   isGeometryColumnType,
   quoteIdentifier,
   quoteSqlString,
-  resetDatabase,
+  resetSqlDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
 import { GDAL_AUTO_FID_COLUMN, stripAutoFidColumn } from "./duckdb-geometry";
@@ -589,14 +589,7 @@ async function registerRemoteSources(
   statement: string,
   registeredFiles: string[],
 ): Promise<{ statement: string; readerCalls: string[] }> {
-  // Match against the masked SQL so a reader call that appears inside a string
-  // literal or comment is ignored: a match whose start is blanked in the mask is
-  // not real code. Match indices are valid against the original string, and the
-  // reader keyword and URL the pattern captures are code (never masked).
-  const masked = maskSqlLiterals(statement);
-  const matches = [...statement.matchAll(REMOTE_READER_ARG_PATTERN)].filter(
-    (match) => masked[match.index ?? 0] !== " ",
-  );
+  const matches = matchRemoteReaderCalls(statement);
 
   // Collect each distinct URL that is a native reader's argument, keeping the
   // first reader function it appears with (used to warm up the HTTP path).
@@ -720,7 +713,7 @@ export async function runSqlQuery(
   // http URL that merely appears in a string literal or WHERE clause).
   const hasRemoteReader = statementHasRemoteReader(rewritten);
 
-  const db = await getDatabase();
+  const db = await getSqlDatabase();
   try {
     return await runSqlStatementOnce(rewritten, layers, db);
   } catch (error) {
@@ -728,11 +721,12 @@ export async function runSqlQuery(
     // remote read_parquet with "stoi: no conversion" on an instance that ran
     // LOAD spatial before its first successful remote read (e.g. after an
     // earlier query's warm-up failed). That state cannot be undone in place, so
-    // rebuild the instance — which re-runs the pre-spatial warm-up — and retry
-    // once. Scope the reset to `db` so a fresh instance is never torn down.
+    // rebuild the SQL Workspace's dedicated instance — which re-runs the
+    // pre-spatial warm-up — and retry once. Scope the reset to `db` so a fresh
+    // instance is never torn down.
     if (hasRemoteReader && isStoiConversionError(error)) {
-      await resetDatabase(db);
-      return await runSqlStatementOnce(rewritten, layers, await getDatabase());
+      await resetSqlDatabase(db);
+      return await runSqlStatementOnce(rewritten, layers, await getSqlDatabase());
     }
     throw error;
   }
@@ -745,16 +739,25 @@ function isStoiConversionError(error: unknown): boolean {
 }
 
 /**
- * True when the statement contains a real remote-reader call (a native reader
- * with an http(s) URL argument). Uses the same literal masking as
- * {@link registerRemoteSources}, so an http URL inside a string literal or
- * comment is ignored.
+ * The native reader calls with an http(s) URL argument in a statement, ignoring
+ * any that appear inside a string literal or comment. Matches against the masked
+ * SQL (a match whose start is blanked in the mask is not real code); the match
+ * indices are valid against the original string, and the reader keyword and URL
+ * the pattern captures are code (never masked).
  */
-function statementHasRemoteReader(statement: string): boolean {
+function matchRemoteReaderCalls(statement: string): RegExpMatchArray[] {
   const masked = maskSqlLiterals(statement);
-  return [...statement.matchAll(REMOTE_READER_ARG_PATTERN)].some(
+  return [...statement.matchAll(REMOTE_READER_ARG_PATTERN)].filter(
     (match) => masked[match.index ?? 0] !== " ",
   );
+}
+
+/**
+ * True when the statement contains a real remote-reader call (a native reader
+ * with an http(s) URL argument), ignoring URLs inside string literals.
+ */
+function statementHasRemoteReader(statement: string): boolean {
+  return matchRemoteReaderCalls(statement).length > 0;
 }
 
 /**
@@ -804,7 +807,7 @@ async function runSqlStatementOnce(
     ) {
       warmups.push(`read_parquet(${quoteSqlString(SAMPLE_DATASET_URL)})`);
     }
-    await ensureSpatialExtension(connection, async () => {
+    await ensureSpatialExtension(db, connection, async () => {
       for (const readerCall of warmups) {
         await connection.query(`SELECT 1 FROM ${readerCall} LIMIT 0`);
       }
