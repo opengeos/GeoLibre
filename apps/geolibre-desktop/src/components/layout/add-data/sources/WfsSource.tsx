@@ -42,8 +42,15 @@ export function WfsSource() {
     retrieveAbortRef.current = null;
   };
 
-  // Abort an in-flight retrieval if the dialog closes mid-request.
-  useEffect(() => () => retrieveAbortRef.current?.abort(), []);
+  // Abort an in-flight retrieval if the dialog closes mid-request, and advance
+  // the token so its finally block cannot set state after unmount.
+  useEffect(
+    () => () => {
+      retrieveTokenRef.current += 1;
+      retrieveAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const handleRetrieveTypes = async () => {
     const endpoint = wfsEndpoint.trim();
@@ -267,7 +274,18 @@ export function WfsSource() {
             <Select
               id="wfs-version"
               value={wfsVersion}
-              onChange={(event) => setWfsVersion(event.target.value)}
+              onChange={(event) => {
+                setWfsVersion(event.target.value);
+                // Capabilities are fetched per version, so a version change can
+                // stale the retrieved list; drop it (and cancel any retrieval in
+                // flight) so it is re-fetched for the newly chosen version.
+                if (typeOptions.length > 0 || isRetrieving) {
+                  cancelRetrieve();
+                  setTypeOptions([]);
+                  setIsRetrieving(false);
+                }
+                if (retrieveError) setRetrieveError(null);
+              }}
             >
               <option value="2.0.0">2.0.0</option>
               <option value="1.1.0">1.1.0</option>

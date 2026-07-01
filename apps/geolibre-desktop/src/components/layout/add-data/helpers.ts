@@ -458,7 +458,9 @@ function capabilitiesRootError(
     rootName === "ServiceException" ||
     rootName === "ExceptionReport";
   if (isException) {
-    const message = root?.textContent?.replace(/\s+/g, " ").trim();
+    // Cap the length: a service's exception body is rendered straight into the
+    // error paragraph, and a misbehaving one could return a huge payload.
+    const message = root?.textContent?.replace(/\s+/g, " ").trim().slice(0, 500);
     return message || `The ${service} service returned an error.`;
   }
   return `The response is not a ${service} capabilities document.`;

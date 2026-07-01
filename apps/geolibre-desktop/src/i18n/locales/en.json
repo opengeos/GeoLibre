@@ -236,7 +236,8 @@
       "retrieveLayers": "Retrieve layers",
       "retrieving": "Retrieving...",
       "retrievedLayers": "Retrieved layers",
-      "selectLayer": "Select from {{count}} layers",
+      "selectLayer_one": "Select from {{count}} layer",
+      "selectLayer_other": "Select from {{count}} layers",
       "noLayersFound": "No layers were found for this service.",
       "retrieveError": "Could not retrieve layers from this service."
     },
@@ -256,7 +257,8 @@
       "retrieveTypes": "Retrieve types",
       "retrieving": "Retrieving...",
       "retrievedTypes": "Retrieved feature types",
-      "selectType": "Select from {{count}} feature types",
+      "selectType_one": "Select from {{count}} feature type",
+      "selectType_other": "Select from {{count}} feature types",
       "noTypesFound": "No feature types were found for this service.",
       "retrieveError": "Could not retrieve feature types from this service."
     },

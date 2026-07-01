@@ -43,8 +43,15 @@ export function WmsSource() {
     retrieveAbortRef.current = null;
   };
 
-  // Abort an in-flight retrieval if the dialog closes mid-request.
-  useEffect(() => () => retrieveAbortRef.current?.abort(), []);
+  // Abort an in-flight retrieval if the dialog closes mid-request, and advance
+  // the token so its finally block cannot set state after unmount.
+  useEffect(
+    () => () => {
+      retrieveTokenRef.current += 1;
+      retrieveAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const handleRetrieveLayers = async () => {
     const endpoint = wmsEndpoint.trim();
