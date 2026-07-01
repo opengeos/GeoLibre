@@ -61,9 +61,9 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
 }
 
 /**
- * Discards the memoized DuckDB instance (and its extension load state) so the
- * next {@link getDatabase} builds a fresh one. The old worker is terminated
- * best-effort.
+ * Stops handing out the memoized DuckDB instance (and its extension load state)
+ * so the next {@link getDatabase} builds a fresh one, without terminating the
+ * old worker.
  *
  * This is the recovery path for a WASM instance whose remote HTTP read path has
  * been poisoned — duckdb-wasm 1.33.1-dev45 permanently breaks `read_parquet`
@@ -71,11 +71,14 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
  * `LOAD spatial` before its first successful remote Parquet read, and that state
  * cannot be undone in place. A fresh instance re-runs the pre-spatial warm-up.
  *
- * Because the instance is shared app-wide, `poisoned` scopes the teardown: the
- * reset is a no-op unless the current instance is exactly that poisoned one, so
- * a fresh instance a concurrent caller has already rebuilt is never terminated.
- * A poisoned instance's remote-read path is already broken for every consumer,
- * so replacing it is the correct recovery for all of them.
+ * The instance is shared app-wide, so this deliberately does NOT `terminate()`
+ * it: any consumer with an in-flight query (vector loads, exports, reprojection,
+ * processing) keeps using the old instance uninterrupted, and it is garbage-
+ * collected once no one references it. Only remote reads are poisoned, and only
+ * the SQL Workspace issues those, so the other consumers are unaffected either
+ * way. `poisoned` scopes the swap: it is a no-op unless the current instance is
+ * exactly that poisoned one, so a fresh instance a concurrent caller has already
+ * rebuilt is never discarded.
  *
  * @param poisoned - The instance to replace; only reset if it is still current.
  */
@@ -91,16 +94,11 @@ export async function resetDatabase(
     current = null;
   }
   // Another query may have already rebuilt the DB after this one was poisoned;
-  // do not tear that fresh instance down.
+  // do not discard that fresh instance.
   if (current !== poisoned) return;
   dbPromise = null;
   spatialExtensionPromise = null;
   h3ExtensionPromise = null;
-  try {
-    await poisoned.terminate();
-  } catch {
-    // Best-effort teardown: the instance is already being discarded.
-  }
 }
 
 let spatialExtensionPromise: Promise<void> | null = null;
