@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createWfsGetFeatureUrl,
@@ -32,6 +32,15 @@ export function WfsSource() {
   const [typeOptions, setTypeOptions] = useState<WfsFeatureTypeOption[]>([]);
   const [isRetrieving, setIsRetrieving] = useState(false);
   const [retrieveError, setRetrieveError] = useState<string | null>(null);
+  const typeListId = useId();
+  // See WmsSource: guards a stale in-flight retrieval from overwriting the form.
+  const retrieveTokenRef = useRef(0);
+  const retrieveAbortRef = useRef<AbortController | null>(null);
+
+  const cancelRetrieve = () => {
+    retrieveAbortRef.current?.abort();
+    retrieveAbortRef.current = null;
+  };
 
   const handleRetrieveTypes = async () => {
     const endpoint = wfsEndpoint.trim();
@@ -39,12 +48,20 @@ export function WfsSource() {
       setRetrieveError(t("addData.wfs.errorUrl"));
       return;
     }
+    retrieveAbortRef.current?.abort();
+    const controller = new AbortController();
+    retrieveAbortRef.current = controller;
+    const token = ++retrieveTokenRef.current;
+    const isStale = () =>
+      token !== retrieveTokenRef.current || controller.signal.aborted;
     setIsRetrieving(true);
     setRetrieveError(null);
     try {
       const options = await fetchWfsFeatureTypes(endpoint, {
         version: wfsVersion,
+        signal: controller.signal,
       });
+      if (isStale()) return;
       if (options.length === 0) {
         setTypeOptions([]);
         setRetrieveError(t("addData.wfs.noTypesFound"));
@@ -55,10 +72,11 @@ export function WfsSource() {
       // leaves the form ready to submit.
       if (!wfsTypeName.trim()) setWfsTypeName(options[0].name);
     } catch (error) {
+      if (isStale()) return;
       setTypeOptions([]);
       setRetrieveError(errorMessage(error, t("addData.wfs.retrieveError")));
     } finally {
-      setIsRetrieving(false);
+      if (token === retrieveTokenRef.current) setIsRetrieving(false);
     }
   };
 
@@ -80,7 +98,9 @@ export function WfsSource() {
     );
     setWfsSrsName(serviceFieldString(fields, "srsName", "EPSG:4326"));
     setWfsMaxFeatures(serviceFieldString(fields, "maxFeatures", "1000"));
-    // The new endpoint's feature types must be re-retrieved, so drop the list.
+    // The new endpoint's feature types must be re-retrieved, so drop the list
+    // and cancel any retrieval still in flight for the previous endpoint.
+    cancelRetrieve();
     setTypeOptions([]);
     setRetrieveError(null);
   };
@@ -167,9 +187,14 @@ export function WfsSource() {
               value={wfsEndpoint}
               onChange={(event) => {
                 setWfsEndpoint(event.target.value);
-                // Feature types belong to the previous endpoint; clear them so
-                // the dropdown never offers stale options for another service.
-                if (typeOptions.length > 0) setTypeOptions([]);
+                // Feature types belong to the previous endpoint; clear them (and
+                // cancel any in-flight retrieval) so the list never reflects a
+                // different service.
+                if (typeOptions.length > 0 || isRetrieving) {
+                  cancelRetrieve();
+                  setTypeOptions([]);
+                  setIsRetrieving(false);
+                }
                 if (retrieveError) setRetrieveError(null);
               }}
             />
@@ -197,15 +222,18 @@ export function WfsSource() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wfs-type-name">{t("addData.wfs.featureType")}</Label>
+            {/* Text input backed by a <datalist> of retrieved types: dropdown
+                suggestions for the common pick, free text preserved for manual
+                entry when a service blocks GetCapabilities. */}
+            <Input
+              id="wfs-type-name"
+              list={typeOptions.length > 0 ? typeListId : undefined}
+              placeholder={t("addData.common.workspaceLayerPlaceholder")}
+              value={wfsTypeName}
+              onChange={(event) => setWfsTypeName(event.target.value)}
+            />
             {typeOptions.length > 0 ? (
-              <Select
-                id="wfs-type-name"
-                value={wfsTypeName}
-                onChange={(event) => setWfsTypeName(event.target.value)}
-              >
-                <option value="" disabled>
-                  {t("addData.wfs.selectType")}
-                </option>
+              <datalist id={typeListId}>
                 {typeOptions.map((option) => (
                   <option key={option.name} value={option.name}>
                     {option.title === option.name
@@ -213,15 +241,8 @@ export function WfsSource() {
                       : `${option.title} (${option.name})`}
                   </option>
                 ))}
-              </Select>
-            ) : (
-              <Input
-                id="wfs-type-name"
-                placeholder={t("addData.common.workspaceLayerPlaceholder")}
-                value={wfsTypeName}
-                onChange={(event) => setWfsTypeName(event.target.value)}
-              />
-            )}
+              </datalist>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wfs-version">{t("addData.wfs.version")}</Label>

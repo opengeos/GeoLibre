@@ -105,11 +105,23 @@ describe("createWmsGetCapabilitiesUrl", () => {
     assert.equal(url.searchParams.get("token"), "abc");
   });
 
-  it("falls back to a plain append for a relative endpoint", () => {
+  it("handles a relative endpoint", () => {
     assert.equal(
       createWmsGetCapabilitiesUrl("/geoserver/wms"),
       "/geoserver/wms?SERVICE=WMS&REQUEST=GetCapabilities",
     );
+  });
+
+  it("strips stale operation params on a relative endpoint too", () => {
+    const url = createWmsGetCapabilitiesUrl(
+      "/geoserver/wms?REQUEST=GetMap&LAYERS=a&token=abc",
+    );
+    // Relative form is preserved (no scheme/host injected).
+    assert.ok(url.startsWith("/geoserver/wms?"));
+    const params = new URLSearchParams(url.slice(url.indexOf("?")));
+    assert.equal(params.get("REQUEST"), "GetCapabilities");
+    assert.equal(params.get("LAYERS"), null);
+    assert.equal(params.get("token"), "abc");
   });
 });
 

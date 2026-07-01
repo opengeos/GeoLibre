@@ -231,7 +231,7 @@ async function fetchCapabilitiesText(
       url: requestUrl,
     });
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    return { ok: true, status: 200, text: new TextDecoder().decode(array) };
+    return { ok: true, status: 200, text: decodeXmlBytes(array) };
   }
   const fetchUrl = isViteDevServer()
     ? `${devProxyPath}?url=${encodeURIComponent(requestUrl)}`
@@ -259,6 +259,62 @@ async function fetchCapabilitiesText(
   return { ok: response.ok, status: response.status, text: await response.text() };
 }
 
+/**
+ * Decodes capabilities bytes to text, honoring a non-UTF-8 charset declared in
+ * the XML prolog (`<?xml … encoding="ISO-8859-1"?>`). The browser fetch path
+ * gets this for free via `response.text()`, but the Tauri byte path must do it
+ * by hand or a legacy Latin-1 service would render mojibake.
+ */
+function decodeXmlBytes(bytes: Uint8Array): string {
+  // The prolog is ASCII, so decode a short head to read the declared charset.
+  const head = new TextDecoder("ascii").decode(bytes.subarray(0, 256));
+  const label = head.match(/encoding=["']([\w-]+)["']/i)?.[1] ?? "utf-8";
+  try {
+    return new TextDecoder(label).decode(bytes);
+  } catch {
+    return new TextDecoder("utf-8").decode(bytes);
+  }
+}
+
+/**
+ * Builds an OGC `GetCapabilities` request URL, stripping any operation
+ * parameters already on the endpoint (e.g. a copied `REQUEST=GetMap`) so they
+ * cannot collide with the ones added here. Handles both absolute and relative
+ * endpoints; the stripping applies to relative endpoints too.
+ */
+function buildCapabilitiesUrl(
+  endpoint: string,
+  service: "WMS" | "WFS",
+  operationParams: ReadonlySet<string>,
+  version?: string,
+): string {
+  const DUMMY_BASE = "http://geolibre.invalid";
+  let url: URL;
+  let relative = false;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    try {
+      url = new URL(endpoint, DUMMY_BASE);
+      relative = true;
+    } catch {
+      const params: Array<[string, string]> = [
+        ["SERVICE", service],
+        ["REQUEST", "GetCapabilities"],
+      ];
+      if (version) params.push(["VERSION", version]);
+      return appendQuery(endpoint, params);
+    }
+  }
+  for (const key of Array.from(url.searchParams.keys())) {
+    if (operationParams.has(key.toLowerCase())) url.searchParams.delete(key);
+  }
+  url.searchParams.set("SERVICE", service);
+  url.searchParams.set("REQUEST", "GetCapabilities");
+  if (version) url.searchParams.set("VERSION", version);
+  return relative ? `${url.pathname}${url.search}` : url.toString();
+}
+
 /** A single requestable (named) layer advertised by a WMS GetCapabilities. */
 export interface WmsLayerOption {
   /** The layer's `<Name>` — the value passed as the WMS `LAYERS` parameter. */
@@ -276,36 +332,23 @@ export interface WmsLayerOption {
  * @param endpoint - The WMS service base URL, with or without a query string.
  * @returns The GetCapabilities request URL.
  */
+const WMS_OPERATION_PARAMS: ReadonlySet<string> = new Set([
+  "service",
+  "request",
+  "version",
+  "layers",
+  "styles",
+  "format",
+  "transparent",
+  "bbox",
+  "width",
+  "height",
+  "srs",
+  "crs",
+]);
+
 export function createWmsGetCapabilitiesUrl(endpoint: string): string {
-  const operationParams = new Set([
-    "service",
-    "request",
-    "version",
-    "layers",
-    "styles",
-    "format",
-    "transparent",
-    "bbox",
-    "width",
-    "height",
-    "srs",
-    "crs",
-  ]);
-  try {
-    const url = new URL(endpoint);
-    for (const key of Array.from(url.searchParams.keys())) {
-      if (operationParams.has(key.toLowerCase())) url.searchParams.delete(key);
-    }
-    url.searchParams.set("SERVICE", "WMS");
-    url.searchParams.set("REQUEST", "GetCapabilities");
-    return url.toString();
-  } catch {
-    // Relative or otherwise unparseable endpoint: fall back to a plain append.
-    return appendQuery(endpoint, [
-      ["SERVICE", "WMS"],
-      ["REQUEST", "GetCapabilities"],
-    ]);
-  }
+  return buildCapabilitiesUrl(endpoint, "WMS", WMS_OPERATION_PARAMS);
 }
 
 /**
@@ -323,10 +366,13 @@ export function parseWmsCapabilitiesLayers(xmlText: string): WmsLayerOption[] {
   if (doc.querySelector("parsererror")) {
     throw new Error("Could not parse the WMS capabilities document.");
   }
+  // Validate the root element rather than trusting any XML that parses: an OWS
+  // ServiceException or an HTML/proxy error page also parses, and returning its
+  // (empty) layer list would mislead the UI into "No layers were found".
   const root = doc.documentElement;
-  if (!root || root.localName === "ServiceExceptionReport") {
-    const message = root?.textContent?.trim();
-    throw new Error(message || "The WMS service returned an error.");
+  const rootName = root?.localName;
+  if (rootName !== "WMS_Capabilities" && rootName !== "WMT_MS_Capabilities") {
+    throw new Error(capabilitiesRootError(root, "WMS"));
   }
 
   const layers: WmsLayerOption[] = [];
@@ -358,6 +404,27 @@ function directChildText(element: Element, localName: string): string {
     if (child.localName === localName) return (child.textContent ?? "").trim();
   }
   return "";
+}
+
+/**
+ * Builds an error message for a capabilities document whose root is not the
+ * expected element. An OWS/OGC exception root carries a human-readable reason,
+ * so surface it; anything else (e.g. an HTML error page) gets a generic note.
+ */
+function capabilitiesRootError(
+  root: Element | null,
+  service: "WMS" | "WFS",
+): string {
+  const rootName = root?.localName;
+  const isException =
+    rootName === "ServiceExceptionReport" ||
+    rootName === "ServiceException" ||
+    rootName === "ExceptionReport";
+  if (isException) {
+    const message = root?.textContent?.replace(/\s+/g, " ").trim();
+    return message || `The ${service} service returned an error.`;
+  }
+  return `The response is not a ${service} capabilities document.`;
 }
 
 /**
@@ -405,40 +472,25 @@ export interface WfsFeatureTypeOption {
  * @param version - Optional WFS version to request (e.g. "2.0.0").
  * @returns The GetCapabilities request URL.
  */
+const WFS_OPERATION_PARAMS: ReadonlySet<string> = new Set([
+  "service",
+  "request",
+  "version",
+  "typename",
+  "typenames",
+  "outputformat",
+  "srsname",
+  "bbox",
+  "count",
+  "maxfeatures",
+  "resulttype",
+]);
+
 export function createWfsGetCapabilitiesUrl(
   endpoint: string,
   version?: string,
 ): string {
-  const operationParams = new Set([
-    "service",
-    "request",
-    "version",
-    "typename",
-    "typenames",
-    "outputformat",
-    "srsname",
-    "bbox",
-    "count",
-    "maxfeatures",
-    "resulttype",
-  ]);
-  try {
-    const url = new URL(endpoint);
-    for (const key of Array.from(url.searchParams.keys())) {
-      if (operationParams.has(key.toLowerCase())) url.searchParams.delete(key);
-    }
-    url.searchParams.set("SERVICE", "WFS");
-    url.searchParams.set("REQUEST", "GetCapabilities");
-    if (version) url.searchParams.set("VERSION", version);
-    return url.toString();
-  } catch {
-    const params: Array<[string, string]> = [
-      ["SERVICE", "WFS"],
-      ["REQUEST", "GetCapabilities"],
-    ];
-    if (version) params.push(["VERSION", version]);
-    return appendQuery(endpoint, params);
-  }
+  return buildCapabilitiesUrl(endpoint, "WFS", WFS_OPERATION_PARAMS, version);
 }
 
 /**
@@ -456,14 +508,11 @@ export function parseWfsCapabilitiesFeatureTypes(
   if (doc.querySelector("parsererror")) {
     throw new Error("Could not parse the WFS capabilities document.");
   }
+  // Validate the root element (see parseWmsCapabilitiesLayers) so an exception
+  // or HTML error page surfaces an error instead of an empty type list.
   const root = doc.documentElement;
-  if (
-    !root ||
-    root.localName === "ServiceExceptionReport" ||
-    root.localName === "ExceptionReport"
-  ) {
-    const message = root?.textContent?.trim();
-    throw new Error(message || "The WFS service returned an error.");
+  if (root?.localName !== "WFS_Capabilities") {
+    throw new Error(capabilitiesRootError(root, "WFS"));
   }
 
   const featureTypes: WfsFeatureTypeOption[] = [];
