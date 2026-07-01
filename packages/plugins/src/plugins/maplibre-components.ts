@@ -971,10 +971,18 @@ function constrainGuiPanelToViewport(panelSelector: string): void {
     const panel = document.querySelector<HTMLElement>(panelSelector);
     if (!panel) return;
     const rect = panel.getBoundingClientRect();
-    const mapBottom =
-      panel.closest<HTMLElement>(".maplibregl-map")?.getBoundingClientRect()
-        .bottom ?? window.innerHeight;
-    const key = `${Math.round(rect.top)}:${Math.round(mapBottom)}`;
+    const mapRect = panel
+      .closest<HTMLElement>(".maplibregl-map")
+      ?.getBoundingClientRect();
+    // apply() constrains width as well as height, so the settle key tracks both
+    // axes: the panel's top-left corner and the map's bottom-right edge. A shift
+    // on either axis re-caps.
+    const key = [
+      Math.round(rect.top),
+      Math.round(rect.left),
+      Math.round(mapRect?.bottom ?? window.innerHeight),
+      Math.round(mapRect?.right ?? window.innerWidth),
+    ].join(":");
     if (key !== previousKey) {
       previousKey = key;
       apply();
@@ -1875,6 +1883,9 @@ export function openLegendPanel(app: GeoLibreAppAPI): void {
  *   Defaults to the control's current position (or bottom-left). The editor
  *   panel itself always docks top-left, so pass a right/other corner to keep
  *   the on-map legend from overlapping it.
+ * @param options.signal - Abort signal checked just before the mutation. If the
+ *   caller supersedes this call (e.g. the user switches layers) the shared
+ *   Legend control is left untouched, not populated with stale data.
  * @returns Whether the control was opened and populated.
  */
 export async function openLegendPanelWithItems(
@@ -1883,6 +1894,7 @@ export async function openLegendPanelWithItems(
     title: string;
     items: ComponentLegendItem[];
     legendPosition?: GeoLibreMapControlPosition;
+    signal?: AbortSignal;
   },
 ): Promise<boolean> {
   const opened = await openStandaloneLegendControl(app);
@@ -1893,6 +1905,14 @@ export async function openLegendPanelWithItems(
   return await new Promise<boolean>((resolve) => {
     setTimeout(() => {
       if (!legendControl) {
+        resolve(false);
+        return;
+      }
+      // A superseded call (the caller aborted after switching away) must not
+      // populate the shared control with the previous layer's data. Checked
+      // here, inside the deferred timer, because that is the first point after
+      // the caller could have aborted.
+      if (options.signal?.aborted) {
         resolve(false);
         return;
       }

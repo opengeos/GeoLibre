@@ -407,14 +407,14 @@ export function RasterSymbologySection({
       setLegendStatus("error");
       return;
     }
-    // Supersede any prior read, then guard every resolution against a layer
-    // switch (or this read being aborted) so a stale result can't overwrite the
-    // new layer's status.
+    // Supersede any prior read. The layer-switch guard is the abort itself: the
+    // [layer.id] effect's cleanup aborts this controller, so a resolution after
+    // a switch is skipped via signal.aborted (this closure's `layer` binding
+    // can't change, so comparing ids here would be dead code).
     legendAbortRef.current?.abort();
     const controller = new AbortController();
     legendAbortRef.current = controller;
-    const requestedLayerId = layer.id;
-    const stale = () => controller.signal.aborted || requestedLayerId !== layer.id;
+    const stale = () => controller.signal.aborted;
     setLegendStatus("pending");
     try {
       const entries = await getPaletteLegend(
@@ -439,6 +439,8 @@ export function RasterSymbologySection({
           // Dock the on-map legend opposite the editor panel (top-left) so the
           // two don't overlap.
           legendPosition: "bottom-right",
+          // Skip the mutation entirely if this call was superseded mid-flight.
+          signal: controller.signal,
         },
       );
       if (stale()) return;

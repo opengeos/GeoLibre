@@ -177,6 +177,8 @@ export {
   getRasterBandStats,
 } from "./plugins/raster-symbology-texture";
 export {
+  disposeAllPaletteLegends,
+  disposePaletteLegend,
   extractPaletteLegend,
   getPaletteLegend,
   type PaletteLegendEntry,

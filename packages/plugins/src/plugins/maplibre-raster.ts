@@ -20,6 +20,10 @@ import {
   disposeAllRasterClassification,
   disposeRasterClassification,
 } from "./raster-symbology-texture";
+import {
+  disposeAllPaletteLegends,
+  disposePaletteLegend,
+} from "./raster-palette";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -509,6 +513,7 @@ function createRasterControl(
   control.on("rasterremove", (event) => {
     if (!event.layerId) return;
     disposeRasterClassification(event.layerId);
+    disposePaletteLegend(event.layerId);
   });
   // A striped (non-tiled) GeoTIFF cannot be streamed as tiles, so the upstream
   // fails the layer with a "not tiled" error. Offer the registered host handler
@@ -716,6 +721,7 @@ function patchRasterControlOnRemove(
     }
     unwireRasterStoreSync();
     disposeAllRasterClassification();
+    disposeAllPaletteLegends();
     // A control torn down mid-restore must not leave its successor
     // permanently suppressing store sync events.
     resetRasterStoreSyncSuspension();

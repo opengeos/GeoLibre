@@ -91,8 +91,36 @@ export async function extractPaletteLegend(
   signal?: AbortSignal,
 ): Promise<PaletteLegendEntry[] | null> {
   const tiff = (await loadGeoTIFF(url)) as unknown as LoadedTiff;
+  return await buildPaletteLegend(tiff, signal);
+}
+
+/**
+ * The color-table decode + present-value scan behind {@link extractPaletteLegend},
+ * split out from the `loadGeoTIFF` fetch so the parsing is unit-testable with a
+ * synthetic tiff. Not part of the package's public API.
+ *
+ * @param tiff - A loaded GeoTIFF (maplibre-gl-raster's internal shape).
+ * @param signal - Optional abort signal for the tile reads.
+ * @returns See {@link extractPaletteLegend}.
+ * @internal
+ */
+export async function buildPaletteLegend(
+  tiff: LoadedTiff,
+  signal?: AbortSignal,
+): Promise<PaletteLegendEntry[] | null> {
   const cmap = tiff.cachedTags?.colorMap;
   if (!cmap || cmap.length < 3) return null;
+
+  // The reads below reach into maplibre-gl-raster's internal GeoTIFF shape via a
+  // structural cast (see LoadedTiff). Guard the fields the scan needs so a
+  // future upstream rename fails loudly here instead of silently yielding an
+  // empty legend.
+  if (!Array.isArray(tiff.overviews) || typeof tiff.fetchTile !== "function") {
+    throw new Error(
+      "maplibre-gl-raster loadGeoTIFF returned an unexpected shape; " +
+        "the palette reader needs updating for this version.",
+    );
+  }
 
   // The ColorMap tag stores 16-bit R, then G, then B, each `entries` long.
   const entries = Math.floor(cmap.length / 3);
@@ -158,8 +186,12 @@ export async function extractPaletteLegend(
 // One palette read per layer is enough (a layer id maps to a fixed source), so
 // cache the result. Both the symbology panel's ramp preview and the
 // "Create legend from palette" action share it, and a band/re-render doesn't
-// re-scan the file.
-const legendCache = new Map<string, PaletteLegendEntry[]>();
+// re-scan the file. The in-flight promise is cached too, so concurrent callers
+// (preview effect + button) join one read instead of racing two scans.
+const legendCache = new Map<
+  string,
+  PaletteLegendEntry[] | Promise<PaletteLegendEntry[] | null>
+>();
 
 /**
  * Cached wrapper around {@link extractPaletteLegend}, keyed by layer id, so the
@@ -177,8 +209,34 @@ export async function getPaletteLegend(
   signal?: AbortSignal,
 ): Promise<PaletteLegendEntry[] | null> {
   const cached = legendCache.get(layerId);
-  if (cached) return cached;
-  const entries = await extractPaletteLegend(url, signal);
-  if (entries) legendCache.set(layerId, entries);
-  return entries;
+  if (cached) return await cached;
+  const read = extractPaletteLegend(url, signal)
+    .then((entries) => {
+      // Replace the in-flight promise with the resolved entries; drop the cache
+      // slot when there is no palette so a later attempt can retry.
+      if (entries) legendCache.set(layerId, entries);
+      else legendCache.delete(layerId);
+      return entries;
+    })
+    .catch((error) => {
+      legendCache.delete(layerId);
+      throw error;
+    });
+  legendCache.set(layerId, read);
+  return await read;
+}
+
+/**
+ * Drops a single layer's cached palette (on raster removal), mirroring
+ * {@link disposeRasterClassification}.
+ *
+ * @param layerId - The layer id to evict.
+ */
+export function disposePaletteLegend(layerId: string): void {
+  legendCache.delete(layerId);
+}
+
+/** Drops every cached palette (on raster control teardown). */
+export function disposeAllPaletteLegends(): void {
+  legendCache.clear();
 }
