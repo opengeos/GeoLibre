@@ -226,12 +226,26 @@ async function fetchCapabilitiesText(
 ): Promise<{ ok: boolean; status: number; text: string }> {
   if (isTauri()) {
     // `fetch_url_bytes` rejects on a non-2xx status, so a resolved value is OK.
+    // The Rust command has its own timeout and cannot be cancelled mid-flight,
+    // but race it against the caller's abort + a 30s cap so this call still
+    // returns promptly (matching the browser fetch branch below) rather than
+    // hanging on a slow host or a superseded request.
     const { invoke } = await import("@tauri-apps/api/core");
-    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-      url: requestUrl,
-    });
-    const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    return { ok: true, status: 200, text: decodeXmlBytes(array) };
+    const timeout = AbortSignal.timeout(30_000);
+    const abort = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    try {
+      const bytes = await Promise.race([
+        invoke<number[] | Uint8Array>("fetch_url_bytes", { url: requestUrl }),
+        rejectOnAbort(abort),
+      ]);
+      const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      return { ok: true, status: 200, text: decodeXmlBytes(array) };
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        throw new Error("The request timed out.");
+      }
+      throw error;
+    }
   }
   const fetchUrl = isViteDevServer()
     ? `${devProxyPath}?url=${encodeURIComponent(requestUrl)}`
@@ -257,6 +271,23 @@ async function fetchCapabilitiesText(
     throw error;
   }
   return { ok: response.ok, status: response.status, text: await response.text() };
+}
+
+/**
+ * A promise that never resolves and rejects when the signal aborts (with its
+ * abort reason, e.g. a `TimeoutError`). Used to race an uncancellable call
+ * against a caller abort / timeout.
+ */
+function rejectOnAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener("abort", () => reject(signal.reason), {
+      once: true,
+    });
+  });
 }
 
 /**
@@ -312,7 +343,11 @@ function buildCapabilitiesUrl(
   url.searchParams.set("SERVICE", service);
   url.searchParams.set("REQUEST", "GetCapabilities");
   if (version) url.searchParams.set("VERSION", version);
-  return relative ? `${url.pathname}${url.search}` : url.toString();
+  if (!relative) return url.toString();
+  // A protocol-relative endpoint (`//host/path`) carries its own host through
+  // the dummy-base parse; keep it rather than dropping the origin.
+  if (endpoint.startsWith("//")) return `//${url.host}${url.pathname}${url.search}`;
+  return `${url.pathname}${url.search}`;
 }
 
 /** A single requestable (named) layer advertised by a WMS GetCapabilities. */

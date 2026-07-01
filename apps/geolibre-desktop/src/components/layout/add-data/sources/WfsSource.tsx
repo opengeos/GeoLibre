@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   createWfsGetFeatureUrl,
@@ -41,6 +41,9 @@ export function WfsSource() {
     retrieveAbortRef.current?.abort();
     retrieveAbortRef.current = null;
   };
+
+  // Abort an in-flight retrieval if the dialog closes mid-request.
+  useEffect(() => () => retrieveAbortRef.current?.abort(), []);
 
   const handleRetrieveTypes = async () => {
     const endpoint = wfsEndpoint.trim();

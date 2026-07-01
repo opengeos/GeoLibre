@@ -1,6 +1,6 @@
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_WMS_ENDPOINT, DEFAULT_WMS_LAYERS } from "../constants";
 import {
@@ -42,6 +42,9 @@ export function WmsSource() {
     retrieveAbortRef.current?.abort();
     retrieveAbortRef.current = null;
   };
+
+  // Abort an in-flight retrieval if the dialog closes mid-request.
+  useEffect(() => () => retrieveAbortRef.current?.abort(), []);
 
   const handleRetrieveLayers = async () => {
     const endpoint = wmsEndpoint.trim();

@@ -112,6 +112,14 @@ describe("createWmsGetCapabilitiesUrl", () => {
     );
   });
 
+  it("keeps the host of a protocol-relative endpoint", () => {
+    const url = createWmsGetCapabilitiesUrl("//example.com/geoserver/wms");
+    assert.ok(url.startsWith("//example.com/geoserver/wms?"));
+    const params = new URLSearchParams(url.slice(url.indexOf("?")));
+    assert.equal(params.get("SERVICE"), "WMS");
+    assert.equal(params.get("REQUEST"), "GetCapabilities");
+  });
+
   it("strips stale operation params on a relative endpoint too", () => {
     const url = createWmsGetCapabilitiesUrl(
       "/geoserver/wms?REQUEST=GetMap&LAYERS=a&token=abc",
