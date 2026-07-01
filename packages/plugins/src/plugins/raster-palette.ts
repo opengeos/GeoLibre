@@ -81,7 +81,8 @@ function firstBandValues(array: TileArray): ArrayLike<number> {
  * overviews categorical COGs ship with — preserves the class set.
  *
  * @param url - A URL (remote COG or session blob) for the GeoTIFF to inspect.
- * @param signal - Optional abort signal for the tile reads.
+ * @param signal - Optional abort signal for the tile reads; an abort rejects the
+ *   returned promise (it never resolves to `null`).
  * @returns Sorted legend entries, an empty array when the raster has a color
  *   table but no non-nodata pixels, or `null` when it carries no color table.
  */
@@ -112,11 +113,18 @@ export async function extractPaletteLegend(
       : tiff;
 
   const present = new Set<number>();
+  const totalTiles = level.tileCount.x * level.tileCount.y;
   let tilesRead = 0;
+  let truncated = false;
   outer: for (let ty = 0; ty < level.tileCount.y; ty++) {
     for (let tx = 0; tx < level.tileCount.x; tx++) {
-      if (signal?.aborted) return null;
-      if (tilesRead >= MAX_SCAN_TILES) break outer;
+      // Abort surfaces as a thrown error (the standard AbortSignal contract) so
+      // it is never confused with the `null` "no color table" return.
+      signal?.throwIfAborted();
+      if (tilesRead >= MAX_SCAN_TILES) {
+        truncated = true;
+        break outer;
+      }
       const { array } = await level.fetchTile(tx, ty, { signal });
       const values = firstBandValues(array);
       const { mask } = array;
@@ -128,6 +136,15 @@ export async function extractPaletteLegend(
       }
       tilesRead++;
     }
+  }
+  if (truncated) {
+    // Don't silently ship a partial class set: a raster with no overview
+    // pyramid (so the full image is scanned) could exceed the cap and drop
+    // rare classes. Warn so an incomplete legend is at least traceable.
+    console.warn(
+      `[GeoLibre] Palette legend scan capped at ${MAX_SCAN_TILES}/${totalTiles} tiles; ` +
+        "the legend may omit rare classes.",
+    );
   }
 
   const legend: PaletteLegendEntry[] = [];

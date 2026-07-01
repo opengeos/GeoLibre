@@ -1844,38 +1844,50 @@ export async function openLegendPanelWithItems(
         resolve(false);
         return;
       }
-      const control = legendControl as RestorableLegendGuiControl;
-      const current = legendControl.getState() as unknown as ComponentLegendGuiState;
-      const index =
-        Number.isInteger(current.selectedLegendIndex) &&
-        current.selectedLegendIndex >= 0
-          ? current.selectedLegendIndex
-          : 0;
-      const entry: ComponentLegendGuiEntryState = {
-        title: options.title,
-        items: options.items,
-        legendPosition: current.legendPosition ?? "bottom-left",
-      };
-      // Mirror the replacement onto both the top-level fields and the selected
-      // slot of the `legends` array so the control's single- and multi-legend
-      // views stay consistent (matches how project restore round-trips state).
-      const legends =
-        Array.isArray(current.legends) && current.legends.length > 0
-          ? current.legends.map((existing, i) => (i === index ? entry : existing))
-          : [entry];
-      restoreGuiControlState(control, {
-        ...current,
-        title: entry.title,
-        items: entry.items,
-        legendPosition: entry.legendPosition,
-        hasLegend: true,
-        selectedLegendIndex: index,
-        legends,
-      });
-      control.expand();
-      control.show();
-      setLegendPanelVisible(true);
-      resolve(true);
+      // Guard the whole mutation: if the vendor control throws in getState /
+      // setState / expand / show, resolve(false) instead of leaving the promise
+      // (and the caller's "pending" UI) hanging forever.
+      try {
+        const control = legendControl as RestorableLegendGuiControl;
+        const current =
+          legendControl.getState() as unknown as ComponentLegendGuiState;
+        const entry: ComponentLegendGuiEntryState = {
+          title: options.title,
+          items: options.items,
+          legendPosition: current.legendPosition ?? "bottom-left",
+        };
+        // Mirror the replacement onto both the top-level fields and the selected
+        // slot of the `legends` array so the control's single- and multi-legend
+        // views stay consistent (matches how project restore round-trips state).
+        // `selectedIndex` clamps a stale index into range so the written-back
+        // `selectedLegendIndex` can never point past the array it indexes.
+        const baseLegends =
+          Array.isArray(current.legends) && current.legends.length > 0
+            ? current.legends
+            : [entry];
+        const index = Math.max(
+          0,
+          selectedIndex(current.selectedLegendIndex, baseLegends.length),
+        );
+        const legends = baseLegends.map((existing, i) =>
+          i === index ? entry : existing,
+        );
+        restoreGuiControlState(control, {
+          ...current,
+          title: entry.title,
+          items: entry.items,
+          legendPosition: entry.legendPosition,
+          hasLegend: true,
+          selectedLegendIndex: index,
+          legends,
+        });
+        control.expand();
+        control.show();
+        setLegendPanelVisible(true);
+        resolve(true);
+      } catch {
+        resolve(false);
+      }
     }, 0);
   });
 }

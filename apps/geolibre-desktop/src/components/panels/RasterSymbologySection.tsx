@@ -178,6 +178,20 @@ export function RasterSymbologySection({
   const [legendStatus, setLegendStatus] = useState<
     "idle" | "pending" | "empty" | "error"
   >("idle");
+  // Aborts an in-flight palette read so its result can't land on a layer the
+  // user has since switched away from.
+  const legendAbortRef = useRef<AbortController | null>(null);
+
+  // Clear the action state when the selected layer changes (like `stats`
+  // above), and cancel any in-flight palette read so a late resolution never
+  // attributes its outcome to the newly-selected layer.
+  useEffect(() => {
+    setLegendStatus("idle");
+    return () => {
+      legendAbortRef.current?.abort();
+      legendAbortRef.current = null;
+    };
+  }, [layer.id]);
 
   // Fetch band statistics lazily once the user is classifying (equal-interval
   // and quantile both need a data range / histogram). Aborts implicitly via
@@ -361,9 +375,18 @@ export function RasterSymbologySection({
       setLegendStatus("error");
       return;
     }
+    // Supersede any prior read, then guard every resolution against a layer
+    // switch (or this read being aborted) so a stale result can't overwrite the
+    // new layer's status.
+    legendAbortRef.current?.abort();
+    const controller = new AbortController();
+    legendAbortRef.current = controller;
+    const requestedLayerId = layer.id;
+    const stale = () => controller.signal.aborted || requestedLayerId !== layer.id;
     setLegendStatus("pending");
     try {
-      const entries = await extractPaletteLegend(url);
+      const entries = await extractPaletteLegend(url, controller.signal);
+      if (stale()) return;
       if (!entries || entries.length === 0) {
         setLegendStatus("empty");
         return;
@@ -379,8 +402,10 @@ export function RasterSymbologySection({
           })),
         },
       );
+      if (stale()) return;
       setLegendStatus(opened ? "idle" : "error");
     } catch {
+      if (stale()) return;
       setLegendStatus("error");
     }
   }
