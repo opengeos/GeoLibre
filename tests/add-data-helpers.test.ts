@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
 import {
   appendQuery,
+  createWfsGetCapabilitiesUrl,
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
   fileNameFromPath,
@@ -109,6 +110,33 @@ describe("createWmsGetCapabilitiesUrl", () => {
       createWmsGetCapabilitiesUrl("/geoserver/wms"),
       "/geoserver/wms?SERVICE=WMS&REQUEST=GetCapabilities",
     );
+  });
+});
+
+describe("createWfsGetCapabilitiesUrl", () => {
+  it("appends SERVICE, REQUEST, and the version when given", () => {
+    const url = new URL(
+      createWfsGetCapabilitiesUrl("https://x.test/wfs", "2.0.0"),
+    );
+    assert.equal(url.searchParams.get("SERVICE"), "WFS");
+    assert.equal(url.searchParams.get("REQUEST"), "GetCapabilities");
+    assert.equal(url.searchParams.get("VERSION"), "2.0.0");
+  });
+
+  it("strips leftover GetFeature operation params", () => {
+    const url = new URL(
+      createWfsGetCapabilitiesUrl(
+        "https://x.test/ows?service=WFS&version=1.1.0&request=GetFeature&typeName=a&token=abc",
+      ),
+    );
+    assert.equal(url.searchParams.get("REQUEST"), "GetCapabilities");
+    assert.equal(url.searchParams.get("typeName"), null);
+    assert.equal(url.searchParams.get("token"), "abc");
+  });
+
+  it("omits VERSION when not provided", () => {
+    const url = new URL(createWfsGetCapabilitiesUrl("https://x.test/wfs"));
+    assert.equal(url.searchParams.get("VERSION"), null);
   });
 });
 

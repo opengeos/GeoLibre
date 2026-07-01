@@ -5,11 +5,13 @@
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import { isTauri } from "../../../lib/is-tauri";
 import {
   DELIMITED_TEXT_DELIMITERS,
   GPX_PROXY_PATH,
   MAX_SAVED_POSTGRES_CONNECTIONS,
   POSTGRES_CONNECTIONS_STORAGE_KEY,
+  WFS_PROXY_PATH,
   WMS_PROXY_PATH,
 } from "./constants";
 import type { DelimitedTextDelimiter } from "./types";
@@ -203,15 +205,58 @@ export function proxyFeedRequestUrl(url: string): string {
 }
 
 /**
- * Routes a WMS request through the dev-server CORS proxy when running under
- * Vite, so a `fetch()` for a service's GetCapabilities document is not blocked
- * by the WMS host's missing CORS headers. In production builds (Tauri / nginx)
- * the URL is returned unchanged and the fetch relies on the service's own CORS.
+ * Fetches an OGC service capabilities document as text, working around the
+ * cross-origin restrictions that block a plain browser fetch of a WMS/WFS host
+ * that omits CORS headers:
+ * - Desktop (Tauri): fetched natively through the `fetch_url_bytes` command,
+ *   which runs in Rust and is not subject to browser CORS, so any service works.
+ * - Dev server (Vite): routed through the same-origin dev proxy.
+ * - Hosted web build: a direct fetch, which only succeeds when the service
+ *   sends `Access-Control-Allow-Origin`.
+ *
+ * @param requestUrl - The absolute GetCapabilities request URL.
+ * @param devProxyPath - The dev-server proxy path to use under Vite.
+ * @param signal - Optional abort signal.
+ * @returns The response ok flag, status, and body text.
  */
-export function proxyWmsRequestUrl(url: string): string {
-  return isViteDevServer()
-    ? `${WMS_PROXY_PATH}?url=${encodeURIComponent(url)}`
-    : url;
+async function fetchCapabilitiesText(
+  requestUrl: string,
+  devProxyPath: string,
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; status: number; text: string }> {
+  if (isTauri()) {
+    // `fetch_url_bytes` rejects on a non-2xx status, so a resolved value is OK.
+    const { invoke } = await import("@tauri-apps/api/core");
+    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
+      url: requestUrl,
+    });
+    const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    return { ok: true, status: 200, text: new TextDecoder().decode(array) };
+  }
+  const fetchUrl = isViteDevServer()
+    ? `${devProxyPath}?url=${encodeURIComponent(requestUrl)}`
+    : requestUrl;
+  let response: Response;
+  try {
+    response = await fetch(fetchUrl, {
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error("The request timed out.");
+    }
+    // A CORS rejection surfaces as a bare TypeError with no status. Point the
+    // user at the workarounds instead of a cryptic "Failed to fetch".
+    if (error instanceof TypeError) {
+      throw new Error(
+        "Could not reach the service. It may not allow cross-origin requests from the browser; try the desktop app or enter the layer name manually.",
+      );
+    }
+    throw error;
+  }
+  return { ok: response.ok, status: response.status, text: await response.text() };
 }
 
 /** A single requestable (named) layer advertised by a WMS GetCapabilities. */
@@ -317,8 +362,8 @@ function directChildText(element: Element, localName: string): string {
 
 /**
  * Fetches a WMS service's GetCapabilities document and returns its requestable
- * layers. Routes through the dev-server CORS proxy under Vite; in production it
- * relies on the service's own CORS headers.
+ * layers. Works cross-origin in the desktop app and dev server; in the hosted
+ * web build it relies on the service's own CORS headers.
  *
  * @param endpoint - The WMS service base URL.
  * @param options - Optional abort signal.
@@ -329,26 +374,134 @@ export async function fetchWmsLayers(
   options: { signal?: AbortSignal } = {},
 ): Promise<WmsLayerOption[]> {
   const requestUrl = createWmsGetCapabilitiesUrl(endpoint.trim());
-  let response: Response;
-  try {
-    response = await fetch(proxyWmsRequestUrl(requestUrl), {
-      signal: options.signal
-        ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)])
-        : AbortSignal.timeout(30_000),
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "TimeoutError") {
-      throw new Error("The request timed out.");
-    }
-    throw error;
-  }
-  const text = await response.text();
+  const { ok, status, text } = await fetchCapabilitiesText(
+    requestUrl,
+    WMS_PROXY_PATH,
+    options.signal,
+  );
   // A well-formed error body is still XML, so only treat a non-2xx as fatal
   // when the payload is not XML we can parse for a ServiceException message.
-  if (!response.ok && !/^\s*</.test(text)) {
-    throw new Error(`Request failed with status ${response.status}`);
+  if (!ok && !/^\s*</.test(text)) {
+    throw new Error(`Request failed with status ${status}`);
   }
   return parseWmsCapabilitiesLayers(text);
+}
+
+/** A single feature type advertised by a WFS GetCapabilities. */
+export interface WfsFeatureTypeOption {
+  /** The type's `<Name>` — the value passed as the WFS `typeName(s)` param. */
+  name: string;
+  /** The type's human-readable `<Title>`; falls back to the name if absent. */
+  title: string;
+}
+
+/**
+ * Builds a WFS `GetCapabilities` request URL from a service endpoint. Any WFS
+ * operation parameters already present on the endpoint (e.g. a leftover
+ * `REQUEST=GetFeature`) are stripped first so they cannot collide with the
+ * `SERVICE`/`REQUEST` parameters this adds.
+ *
+ * @param endpoint - The WFS service base URL, with or without a query string.
+ * @param version - Optional WFS version to request (e.g. "2.0.0").
+ * @returns The GetCapabilities request URL.
+ */
+export function createWfsGetCapabilitiesUrl(
+  endpoint: string,
+  version?: string,
+): string {
+  const operationParams = new Set([
+    "service",
+    "request",
+    "version",
+    "typename",
+    "typenames",
+    "outputformat",
+    "srsname",
+    "bbox",
+    "count",
+    "maxfeatures",
+    "resulttype",
+  ]);
+  try {
+    const url = new URL(endpoint);
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (operationParams.has(key.toLowerCase())) url.searchParams.delete(key);
+    }
+    url.searchParams.set("SERVICE", "WFS");
+    url.searchParams.set("REQUEST", "GetCapabilities");
+    if (version) url.searchParams.set("VERSION", version);
+    return url.toString();
+  } catch {
+    const params: Array<[string, string]> = [
+      ["SERVICE", "WFS"],
+      ["REQUEST", "GetCapabilities"],
+    ];
+    if (version) params.push(["VERSION", version]);
+    return appendQuery(endpoint, params);
+  }
+}
+
+/**
+ * Extracts the advertised feature types from a WFS GetCapabilities document.
+ * Reads each `<FeatureType>`'s own `<Name>`/`<Title>`. Traversal is
+ * namespace-agnostic so WFS 1.0.0/1.1.0/2.0.0 all work.
+ *
+ * @param xmlText - The raw GetCapabilities XML response body.
+ * @returns The feature types in document order, deduplicated by name.
+ */
+export function parseWfsCapabilitiesFeatureTypes(
+  xmlText: string,
+): WfsFeatureTypeOption[] {
+  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+  if (doc.querySelector("parsererror")) {
+    throw new Error("Could not parse the WFS capabilities document.");
+  }
+  const root = doc.documentElement;
+  if (
+    !root ||
+    root.localName === "ServiceExceptionReport" ||
+    root.localName === "ExceptionReport"
+  ) {
+    const message = root?.textContent?.trim();
+    throw new Error(message || "The WFS service returned an error.");
+  }
+
+  const featureTypes: WfsFeatureTypeOption[] = [];
+  const seen = new Set<string>();
+  const elements = root.getElementsByTagNameNS("*", "FeatureType");
+  for (let i = 0; i < elements.length; i += 1) {
+    const element = elements[i];
+    const name = directChildText(element, "Name");
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    featureTypes.push({ name, title: directChildText(element, "Title") || name });
+  }
+  return featureTypes;
+}
+
+/**
+ * Fetches a WFS service's GetCapabilities document and returns its feature
+ * types. Works cross-origin in the desktop app and dev server; in the hosted
+ * web build it relies on the service's own CORS headers.
+ *
+ * @param endpoint - The WFS service base URL.
+ * @param options - Optional WFS version and abort signal.
+ * @returns The feature types advertised by the service.
+ */
+export async function fetchWfsFeatureTypes(
+  endpoint: string,
+  options: { version?: string; signal?: AbortSignal } = {},
+): Promise<WfsFeatureTypeOption[]> {
+  const requestUrl = createWfsGetCapabilitiesUrl(endpoint.trim(), options.version);
+  const { ok, status, text } = await fetchCapabilitiesText(
+    requestUrl,
+    WFS_PROXY_PATH,
+    options.signal,
+  );
+  if (!ok && !/^\s*</.test(text)) {
+    throw new Error(`Request failed with status ${status}`);
+  }
+  return parseWfsCapabilitiesFeatureTypes(text);
 }
 
 export function resolveDelimitedTextDelimiter(

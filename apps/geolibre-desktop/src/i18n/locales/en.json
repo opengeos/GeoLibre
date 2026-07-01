@@ -251,7 +251,12 @@
       "outputFormat": "Output format",
       "srsName": "SRS name",
       "maxFeatures": "Max features",
-      "errorMaxFeaturesNumeric": "Enter a numeric max features value."
+      "errorMaxFeaturesNumeric": "Enter a numeric max features value.",
+      "retrieveTypes": "Retrieve types",
+      "retrieving": "Retrieving...",
+      "selectType": "Select a feature type",
+      "noTypesFound": "No feature types were found for this service.",
+      "retrieveError": "Could not retrieve feature types from this service."
     },
     "wmts": {
       "defaultName": "WMTS Layer",
