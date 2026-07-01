@@ -180,6 +180,10 @@ const SPLATTING_SAMPLE_URL =
   "https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const GUI_PANEL_VIEWPORT_MARGIN = 16;
+// Poll interval / cap for re-measuring a just-expanded GUI panel while its
+// layout settles (see constrainGuiPanelToViewport).
+const GUI_PANEL_SETTLE_INTERVAL_MS = 100;
+const GUI_PANEL_SETTLE_MAX_TICKS = 20;
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -915,9 +919,7 @@ const DEFAULT_HTML_GUI_ENTRY: ComponentHtmlGuiEntryState = {
 };
 
 function constrainGuiPanelToViewport(panelSelector: string): void {
-  // Defer measurement until after the expanded panel has been laid out so
-  // getBoundingClientRect() reflects the fully expanded dimensions.
-  requestAnimationFrame(() => {
+  const apply = () => {
     const panel = document.querySelector<HTMLElement>(panelSelector);
     if (!panel) return;
 
@@ -927,20 +929,62 @@ function constrainGuiPanelToViewport(panelSelector: string): void {
     panel.style.maxWidth = "";
 
     const rect = panel.getBoundingClientRect();
+    // Constrain to the map container, not the window: the status bar is a
+    // sibling below the map, so the map's bottom edge already excludes it.
+    // Measuring against window.innerHeight would let a tall panel (e.g. a
+    // many-class legend) run under the status bar. Fall back to the window if
+    // the panel isn't inside a map for some reason.
+    const mapEl = panel.closest<HTMLElement>(".maplibregl-map");
+    const mapRect = mapEl?.getBoundingClientRect();
+    const viewportBottom = mapRect ? mapRect.bottom : window.innerHeight;
+    const viewportRight = mapRect ? mapRect.right : window.innerWidth;
+
     const availableHeight = Math.floor(
-      window.innerHeight - rect.top - GUI_PANEL_VIEWPORT_MARGIN
+      viewportBottom - rect.top - GUI_PANEL_VIEWPORT_MARGIN
     );
-    if (availableHeight > 160 && rect.bottom > window.innerHeight) {
+    if (availableHeight > 160 && rect.bottom > viewportBottom) {
       panel.style.maxHeight = `${availableHeight}px`;
     }
 
     const availableWidth = Math.floor(
-      window.innerWidth - rect.left - GUI_PANEL_VIEWPORT_MARGIN
+      viewportRight - rect.left - GUI_PANEL_VIEWPORT_MARGIN
     );
-    if (availableWidth > 220 && rect.right > window.innerWidth) {
+    if (availableWidth > 220 && rect.right > viewportRight) {
       panel.style.maxWidth = `${availableWidth}px`;
     }
-  });
+  };
+
+  // Opening + populating + expanding a control in the same tick (as the "Create
+  // legend from palette" flow does) leaves both the map container's bottom and
+  // the panel's own top offset shifting for a few hundred ms -- the map sits at
+  // the full window height and the panel starts higher until the status bar row
+  // and control stack claim their space, sometimes plateauing at an
+  // intermediate value before the final one. Measuring only on the first frame
+  // would cap the panel too tall and let it slip under the status bar. Poll the
+  // input geometry (panel top + map bottom) over a bounded window and re-cap
+  // each time it actually changes, so the last change -- the real settle --
+  // lands the cap on the final layout. Applying only on change keeps it from
+  // flickering the scroll position while idle.
+  let previousKey = "";
+  let ticks = 0;
+  const settle = () => {
+    const panel = document.querySelector<HTMLElement>(panelSelector);
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const mapBottom =
+      panel.closest<HTMLElement>(".maplibregl-map")?.getBoundingClientRect()
+        .bottom ?? window.innerHeight;
+    const key = `${Math.round(rect.top)}:${Math.round(mapBottom)}`;
+    if (key !== previousKey) {
+      previousKey = key;
+      apply();
+    }
+    ticks += 1;
+    if (ticks < GUI_PANEL_SETTLE_MAX_TICKS) {
+      setTimeout(settle, GUI_PANEL_SETTLE_INTERVAL_MS);
+    }
+  };
+  requestAnimationFrame(settle);
 }
 
 export interface CogRasterLayerOptions {
@@ -1827,11 +1871,19 @@ export function openLegendPanel(app: GeoLibreAppAPI): void {
  * @param app - The live app API used to mount the control.
  * @param options.title - Legend title (typically the raster layer name).
  * @param options.items - Legend items (color swatch + label) to show.
+ * @param options.legendPosition - Map corner for the rendered on-map legend.
+ *   Defaults to the control's current position (or bottom-left). The editor
+ *   panel itself always docks top-left, so pass a right/other corner to keep
+ *   the on-map legend from overlapping it.
  * @returns Whether the control was opened and populated.
  */
 export async function openLegendPanelWithItems(
   app: GeoLibreAppAPI,
-  options: { title: string; items: ComponentLegendItem[] },
+  options: {
+    title: string;
+    items: ComponentLegendItem[];
+    legendPosition?: GeoLibreMapControlPosition;
+  },
 ): Promise<boolean> {
   const opened = await openStandaloneLegendControl(app);
   if (!opened) return false;
@@ -1854,7 +1906,8 @@ export async function openLegendPanelWithItems(
         const entry: ComponentLegendGuiEntryState = {
           title: options.title,
           items: options.items,
-          legendPosition: current.legendPosition ?? "bottom-left",
+          legendPosition:
+            options.legendPosition ?? current.legendPosition ?? "bottom-left",
         };
         // Mirror the replacement onto both the top-level fields and the selected
         // slot of the `legends` array so the control's single- and multi-legend
@@ -1884,6 +1937,14 @@ export async function openLegendPanelWithItems(
         control.expand();
         control.show();
         setLegendPanelVisible(true);
+        // The control was already expanded by openStandaloneLegendControl, so
+        // the expand() above is a no-op and its "expand" handler (which fits the
+        // panel to the viewport) never re-fires for this now-taller, populated
+        // panel. Run the constraint directly so a many-class legend doesn't
+        // overflow under the status bar.
+        constrainGuiPanelToViewport(
+          ".geolibre-legend-control .legend-gui-panel",
+        );
         resolve(true);
       } catch {
         resolve(false);

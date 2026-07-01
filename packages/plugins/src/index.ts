@@ -178,6 +178,7 @@ export {
 } from "./plugins/raster-symbology-texture";
 export {
   extractPaletteLegend,
+  getPaletteLegend,
   type PaletteLegendEntry,
 } from "./plugins/raster-palette";
 export { colormapColors, warmColormapColors } from "./plugins/colormap-colors";

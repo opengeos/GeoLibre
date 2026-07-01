@@ -2364,6 +2364,7 @@
     "customColors": "Custom colors",
     "customColorsValid": "{{count}} colors, low to high. Use Reverse to flip.",
     "customColorsHint": "Enter at least two hex codes, separated by commas or spaces.",
+    "imagePalette": "Image palette",
     "createLegend": "Create legend from palette",
     "createLegendHint": "Adds a legend with one item per pixel value, using the raster's palette colors. Rename items to class names afterward.",
     "createLegendPending": "Reading palette…",

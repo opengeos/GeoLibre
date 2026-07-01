@@ -154,3 +154,31 @@ export async function extractPaletteLegend(
   }
   return legend;
 }
+
+// One palette read per layer is enough (a layer id maps to a fixed source), so
+// cache the result. Both the symbology panel's ramp preview and the
+// "Create legend from palette" action share it, and a band/re-render doesn't
+// re-scan the file.
+const legendCache = new Map<string, PaletteLegendEntry[]>();
+
+/**
+ * Cached wrapper around {@link extractPaletteLegend}, keyed by layer id, so the
+ * palette is read from the file only once per layer.
+ *
+ * @param layerId - The store layer id, used as the cache key.
+ * @param url - A URL (remote COG or session blob) for the GeoTIFF.
+ * @param signal - Optional abort signal, forwarded on a cache miss.
+ * @returns The cached or freshly-read legend entries, or `null` when the raster
+ *   carries no color table.
+ */
+export async function getPaletteLegend(
+  layerId: string,
+  url: string,
+  signal?: AbortSignal,
+): Promise<PaletteLegendEntry[] | null> {
+  const cached = legendCache.get(layerId);
+  if (cached) return cached;
+  const entries = await extractPaletteLegend(url, signal);
+  if (entries) legendCache.set(layerId, entries);
+  return entries;
+}

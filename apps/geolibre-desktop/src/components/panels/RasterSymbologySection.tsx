@@ -12,9 +12,10 @@ import {
   type RasterSymbology,
   colormapColors,
   computeRasterBreaks,
-  extractPaletteLegend,
+  getPaletteLegend,
   getRasterBandStats,
   openLegendPanelWithItems,
+  type PaletteLegendEntry,
   savedRasterSymbology,
   warmColormapColors,
 } from "@geolibre/plugins";
@@ -182,6 +183,12 @@ export function RasterSymbologySection({
   // user has since switched away from.
   const legendAbortRef = useRef<AbortController | null>(null);
 
+  // The embedded palette's class colors, loaded (and cached) for palette
+  // rasters so the color-ramp preview shows the real colors instead of the gray
+  // fallback the "palette" sentinel resolves to.
+  const [paletteEntries, setPaletteEntries] =
+    useState<PaletteLegendEntry[] | null>(null);
+
   // Clear the action state when the selected layer changes (like `stats`
   // above), and cancel any in-flight palette read so a late resolution never
   // attributes its outcome to the newly-selected layer.
@@ -204,6 +211,34 @@ export function RasterSymbologySection({
     typeof layer.metadata?.localBytesUrl === "string"
       ? layer.metadata.localBytesUrl
       : null;
+  // Source URL used by both the palette read and the legend action: the
+  // control's URL for a remote COG, or the session blob for a file-backed one.
+  const rasterUrl =
+    (typeof layer.source?.url === "string" ? layer.source.url : null) ??
+    localBytesUrl;
+  // A single-band raster rendered through its embedded color table.
+  const isPaletteRaster =
+    state.mode === "single" && state.colormap === "palette";
+
+  // Load the embedded palette colors for a palette raster (cached per layer),
+  // so the ramp preview reflects the actual classes. Cleared first on a layer
+  // switch so a stale preview isn't shown.
+  useEffect(() => {
+    setPaletteEntries(null);
+    if (!isPaletteRaster || !rasterUrl) return;
+    let cancelled = false;
+    void getPaletteLegend(layer.id, rasterUrl)
+      .then((entries) => {
+        if (!cancelled) setPaletteEntries(entries);
+      })
+      .catch(() => {
+        // A failed palette read just leaves the preview on its gray fallback.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [layer.id, isPaletteRaster, rasterUrl]);
+
   useEffect(() => {
     setStats(null);
     let cancelled = false;
@@ -368,10 +403,7 @@ export function RasterSymbologySection({
   // for the user to rename). Resolves the source the same way stats do: the
   // control's URL, or the session blob for a file-backed raster.
   async function createLegendFromPalette(): Promise<void> {
-    const sourceUrl =
-      typeof layer.source?.url === "string" ? layer.source.url : null;
-    const url = sourceUrl ?? localBytesUrl;
-    if (!url) {
+    if (!rasterUrl) {
       setLegendStatus("error");
       return;
     }
@@ -385,7 +417,11 @@ export function RasterSymbologySection({
     const stale = () => controller.signal.aborted || requestedLayerId !== layer.id;
     setLegendStatus("pending");
     try {
-      const entries = await extractPaletteLegend(url, controller.signal);
+      const entries = await getPaletteLegend(
+        layer.id,
+        rasterUrl,
+        controller.signal,
+      );
       if (stale()) return;
       if (!entries || entries.length === 0) {
         setLegendStatus("empty");
@@ -400,6 +436,9 @@ export function RasterSymbologySection({
             color: entry.color,
             shape: "square" as const,
           })),
+          // Dock the on-map legend opposite the editor panel (top-left) so the
+          // two don't overlap.
+          legendPosition: "bottom-right",
         },
       );
       if (stale()) return;
@@ -412,8 +451,7 @@ export function RasterSymbologySection({
 
   // The image palette only feeds a legend in single-band palette mode; other
   // colormaps are continuous and have no per-value classes to enumerate.
-  const canCreateLegend =
-    state.mode === "single" && state.colormap === "palette";
+  const canCreateLegend = isPaletteRaster;
 
   const paletteLegendControl = canCreateLegend ? (
     <div className="space-y-1">
@@ -572,13 +610,22 @@ export function RasterSymbologySection({
   // control's "palette" default); surface it so the picker reflects what is
   // actually rendered instead of silently showing the first.
   if (!isCustom && !COLORMAP_OPTIONS.some((o) => o.name === ramp)) {
+    // The "palette" sentinel isn't a real ramp: label it clearly and preview it
+    // with the embedded palette's own class colors (once loaded) rather than the
+    // misleading gray fallback the name would otherwise resolve to.
+    const isImagePalette = ramp === "palette";
+    const paletteColors =
+      paletteEntries?.map((entry) => entry.color) ?? [];
     rampOptions.push({
       value: ramp,
-      label: ramp,
+      label: isImagePalette ? t("rasterSymbology.imagePalette") : ramp,
       // rampColors only warms names in SORTED_COLORMAPS, so for an
       // out-of-catalog ramp rampColors[ramp] is always undefined; rampPreview
       // (seeded by the previewRamp effect above) is the real source here.
-      colors: rampColors[ramp] ?? rampPreview,
+      colors:
+        isImagePalette && paletteColors.length > 0
+          ? paletteColors
+          : (rampColors[ramp] ?? rampPreview),
     });
   }
   for (const colormap of SORTED_COLORMAPS) {
