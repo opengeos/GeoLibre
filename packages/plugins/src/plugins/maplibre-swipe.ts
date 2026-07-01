@@ -118,7 +118,17 @@ function getSwipeControlOptions(
     // True only on first activation; restoring saved/project state keeps the user's selection.
     selectVisibleByDefault: previousState === undefined,
     basemapStyle: app.getActiveBasemap(),
-    excludeLayers: ["gl-draw-*", "measure-*", "geolibre-highlight-*"],
+    // Hide plugin chrome layers (drawing/measure helpers, selection footprints,
+    // highlight outlines) so they don't clutter the swipe layer list. The
+    // patterns match the layer ids each plugin uses for its internal helpers;
+    // these globs are re-applied on every live refresh, so layers added after
+    // the control mounts (e.g. Vantor footprints on search) are excluded too.
+    excludeLayers: [
+      "gl-draw-*",
+      "measure-*",
+      "geolibre-highlight-*",
+      "vantor-*",
+    ],
     // List only currently visible layers (plus any already selected), kept in sync live (#843).
     visibleLayersOnly: true,
   };
