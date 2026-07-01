@@ -85,6 +85,7 @@ export {
   openColorbarPanel,
   openHtmlPanel,
   openLegendPanel,
+  openLegendPanelWithItems,
   openLidarLayerPanel,
   restoreLidarLayers,
   openMeasurePanel,
@@ -175,6 +176,10 @@ export {
   RASTER_SOURCE_KIND,
   getRasterBandStats,
 } from "./plugins/raster-symbology-texture";
+export {
+  extractPaletteLegend,
+  type PaletteLegendEntry,
+} from "./plugins/raster-palette";
 export { colormapColors, warmColormapColors } from "./plugins/colormap-colors";
 export {
   closeVectorLayerPanel,

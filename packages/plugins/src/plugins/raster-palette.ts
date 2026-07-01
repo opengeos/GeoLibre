@@ -1,0 +1,139 @@
+import { loadGeoTIFF } from "maplibre-gl-raster";
+
+/**
+ * One legend entry derived from a paletted raster: the raw pixel value and the
+ * hex color the embedded color table assigns it. The label is intentionally the
+ * bare value so the user can rename it to a class name (e.g. "Tree cover").
+ */
+export type PaletteLegendEntry = {
+  /** The raw (stored) pixel value this palette entry colors. */
+  value: number;
+  /** The entry's color as a `#rrggbb` hex string. */
+  color: string;
+};
+
+/**
+ * A raster resolution level (the full image or an overview) reduced to the
+ * tile-read surface this module needs. Mirrors the shape of `@developmentseed/
+ * geotiff`'s `GeoTIFF` / `Overview` without importing the (transitive) package.
+ */
+type RasterLevel = {
+  tileCount: { x: number; y: number };
+  fetchTile: (
+    x: number,
+    y: number,
+    options?: { signal?: AbortSignal },
+  ) => Promise<{ array: TileArray }>;
+};
+
+/** Decoded tile data, either pixel-interleaved or one array per band. */
+type TileArray = {
+  width: number;
+  height: number;
+  /** Non-zero = valid pixel, 0 = nodata; null when the image carries no mask. */
+  mask: Uint8Array | null;
+  /** Samples per pixel. */
+  count: number;
+} & (
+  | { layout: "pixel-interleaved"; data: ArrayLike<number> }
+  | { layout: "band-separate"; bands: ArrayLike<number>[] }
+);
+
+/** The loaded GeoTIFF reduced to the members this module reads. */
+type LoadedTiff = RasterLevel & {
+  cachedTags?: { colorMap?: ArrayLike<number>; nodata?: number | null };
+  nodata: number | null;
+  overviews: RasterLevel[];
+};
+
+/**
+ * Backstop on how many tiles the value scan reads. A categorical COG's coarsest
+ * overview is only a handful of tiles, so this never trips in practice; it just
+ * bounds the work for an oddly-tiled or non-pyramided raster.
+ */
+const MAX_SCAN_TILES = 512;
+
+/** Two-digit lowercase hex for a 0-255 channel. */
+function hex2(value: number): string {
+  return Math.max(0, Math.min(255, value)).toString(16).padStart(2, "0");
+}
+
+/** First-band values of a decoded tile, regardless of interleave layout. */
+function firstBandValues(array: TileArray): ArrayLike<number> {
+  if (array.layout === "band-separate") return array.bands[0];
+  if (array.count <= 1) return array.data;
+  // Pixel-interleaved with multiple bands: band 0 sits at stride `count`.
+  const pixels = array.width * array.height;
+  const out = new Float64Array(pixels);
+  for (let i = 0; i < pixels; i++) out[i] = array.data[i * array.count];
+  return out;
+}
+
+/**
+ * Reads a paletted raster's embedded color table and returns a legend entry for
+ * every pixel value that actually occurs in the data (nodata excluded), each
+ * paired with the color the palette assigns it.
+ *
+ * Filler entries a color table leaves at a placeholder color are skipped by
+ * construction: only values present in the raster are returned, so a land-cover
+ * palette with 256 slots but 8 real classes yields exactly those 8. Present
+ * values are read from the coarsest overview, which — for the nearest-neighbor
+ * overviews categorical COGs ship with — preserves the class set.
+ *
+ * @param url - A URL (remote COG or session blob) for the GeoTIFF to inspect.
+ * @param signal - Optional abort signal for the tile reads.
+ * @returns Sorted legend entries, an empty array when the raster has a color
+ *   table but no non-nodata pixels, or `null` when it carries no color table.
+ */
+export async function extractPaletteLegend(
+  url: string,
+  signal?: AbortSignal,
+): Promise<PaletteLegendEntry[] | null> {
+  const tiff = (await loadGeoTIFF(url)) as unknown as LoadedTiff;
+  const cmap = tiff.cachedTags?.colorMap;
+  if (!cmap || cmap.length < 3) return null;
+
+  // The ColorMap tag stores 16-bit R, then G, then B, each `entries` long.
+  const entries = Math.floor(cmap.length / 3);
+  const colorFor = (value: number): string | null => {
+    if (!Number.isInteger(value) || value < 0 || value >= entries) return null;
+    const r = Number(cmap[value]) >> 8;
+    const g = Number(cmap[entries + value]) >> 8;
+    const b = Number(cmap[2 * entries + value]) >> 8;
+    return `#${hex2(r)}${hex2(g)}${hex2(b)}`;
+  };
+
+  const nodata = tiff.cachedTags?.nodata ?? tiff.nodata ?? null;
+  // The coarsest overview is the cheapest full-coverage read; fall back to the
+  // full-resolution image for a raster with no overview pyramid.
+  const level: RasterLevel =
+    tiff.overviews.length > 0
+      ? tiff.overviews[tiff.overviews.length - 1]
+      : tiff;
+
+  const present = new Set<number>();
+  let tilesRead = 0;
+  outer: for (let ty = 0; ty < level.tileCount.y; ty++) {
+    for (let tx = 0; tx < level.tileCount.x; tx++) {
+      if (signal?.aborted) return null;
+      if (tilesRead >= MAX_SCAN_TILES) break outer;
+      const { array } = await level.fetchTile(tx, ty, { signal });
+      const values = firstBandValues(array);
+      const { mask } = array;
+      for (let i = 0; i < values.length; i++) {
+        if (mask && mask[i] === 0) continue;
+        const value = values[i];
+        if (nodata !== null && value === nodata) continue;
+        present.add(value);
+      }
+      tilesRead++;
+    }
+  }
+
+  const legend: PaletteLegendEntry[] = [];
+  for (const value of [...present].sort((a, b) => a - b)) {
+    const color = colorFor(value);
+    if (color) legend.push({ value, color });
+  }
+  return legend;
+}

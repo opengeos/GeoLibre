@@ -1818,6 +1818,68 @@ export function openLegendPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLegendControl(app);
 }
 
+/**
+ * Opens the Legend control (creating and mounting it if needed) and fills the
+ * currently-selected legend entry with the given title and items, replacing
+ * whatever it held (the default placeholder entry on first open). Used to
+ * populate a legend from a paletted raster's color table.
+ *
+ * @param app - The live app API used to mount the control.
+ * @param options.title - Legend title (typically the raster layer name).
+ * @param options.items - Legend items (color swatch + label) to show.
+ * @returns Whether the control was opened and populated.
+ */
+export async function openLegendPanelWithItems(
+  app: GeoLibreAppAPI,
+  options: { title: string; items: ComponentLegendItem[] },
+): Promise<boolean> {
+  const opened = await openStandaloneLegendControl(app);
+  if (!opened) return false;
+  // openStandaloneLegendControl shows/expands on a 0ms timer; defer past it so
+  // the state we set is not clobbered by that deferred show, and so getState()
+  // reflects the freshly-created control.
+  return await new Promise<boolean>((resolve) => {
+    setTimeout(() => {
+      if (!legendControl) {
+        resolve(false);
+        return;
+      }
+      const control = legendControl as RestorableLegendGuiControl;
+      const current = legendControl.getState() as unknown as ComponentLegendGuiState;
+      const index =
+        Number.isInteger(current.selectedLegendIndex) &&
+        current.selectedLegendIndex >= 0
+          ? current.selectedLegendIndex
+          : 0;
+      const entry: ComponentLegendGuiEntryState = {
+        title: options.title,
+        items: options.items,
+        legendPosition: current.legendPosition ?? "bottom-left",
+      };
+      // Mirror the replacement onto both the top-level fields and the selected
+      // slot of the `legends` array so the control's single- and multi-legend
+      // views stay consistent (matches how project restore round-trips state).
+      const legends =
+        Array.isArray(current.legends) && current.legends.length > 0
+          ? current.legends.map((existing, i) => (i === index ? entry : existing))
+          : [entry];
+      restoreGuiControlState(control, {
+        ...current,
+        title: entry.title,
+        items: entry.items,
+        legendPosition: entry.legendPosition,
+        hasLegend: true,
+        selectedLegendIndex: index,
+        legends,
+      });
+      control.expand();
+      control.show();
+      setLegendPanelVisible(true);
+      resolve(true);
+    }, 0);
+  });
+}
+
 export function closeLegendPanel(app: GeoLibreAppAPI): void {
   teardownLegendControl(app);
 }

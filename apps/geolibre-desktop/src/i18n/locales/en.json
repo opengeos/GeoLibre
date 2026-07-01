@@ -2363,7 +2363,12 @@
     "customRamp": "Custom…",
     "customColors": "Custom colors",
     "customColorsValid": "{{count}} colors, low to high. Use Reverse to flip.",
-    "customColorsHint": "Enter at least two hex codes, separated by commas or spaces."
+    "customColorsHint": "Enter at least two hex codes, separated by commas or spaces.",
+    "createLegend": "Create legend from palette",
+    "createLegendHint": "Adds a legend with one item per pixel value, using the raster's palette colors. Rename items to class names afterward.",
+    "createLegendPending": "Reading palette…",
+    "createLegendEmpty": "No palette colors found for this raster.",
+    "createLegendError": "Could not read the raster palette."
   },
   "raster": {
     "cogConvertConfirm": "\"{{name}}\" is a plain (striped) GeoTIFF, which cannot be displayed directly. Convert it to a Cloud-Optimized GeoTIFF now and load that?",

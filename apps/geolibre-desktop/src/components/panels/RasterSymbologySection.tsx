@@ -12,11 +12,15 @@ import {
   type RasterSymbology,
   colormapColors,
   computeRasterBreaks,
+  extractPaletteLegend,
   getRasterBandStats,
+  openLegendPanelWithItems,
   savedRasterSymbology,
   warmColormapColors,
 } from "@geolibre/plugins";
+import type { MapController } from "@geolibre/map";
 import {
+  Button,
   type ColorRampOption,
   ColorRampSelect,
   Input,
@@ -26,8 +30,9 @@ import {
   Textarea,
 } from "@geolibre/ui";
 import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { createAppAPI } from "../../hooks/usePlugins";
 
 type RasterStateRecord = {
   mode: "single" | "rgb";
@@ -147,8 +152,16 @@ function rangeFromBreaks(breaks: number[]): [number, number][] {
  * render injection).
  *
  * @param props.layer - The selected raster store layer.
+ * @param props.mapControllerRef - Live map controller, used to open and
+ *   populate the Legend control from the raster's embedded palette.
  */
-export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
+export function RasterSymbologySection({
+  layer,
+  mapControllerRef,
+}: {
+  layer: GeoLibreLayer;
+  mapControllerRef: RefObject<MapController | null>;
+}) {
   const { t } = useTranslation();
   const updateLayer = useAppStore((s) => s.updateLayer);
   const state = readRasterState(layer);
@@ -159,6 +172,12 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
 
   const [stats, setStats] = useState<RasterBandStats | null>(null);
   const lastStatsRef = useRef<RasterBandStats | null>(null);
+
+  // Status of the "Create legend from palette" action: idle, in-flight, or a
+  // message key (empty palette / read error) shown beneath the button.
+  const [legendStatus, setLegendStatus] = useState<
+    "idle" | "pending" | "empty" | "error"
+  >("idle");
 
   // Fetch band statistics lazily once the user is classifying (equal-interval
   // and quantile both need a data range / histogram). Aborts implicitly via
@@ -329,6 +348,79 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
       },
     });
   }
+
+  // Reads the raster's embedded color table and opens the Legend control with
+  // one item per pixel value present in the data (labelled with the bare value
+  // for the user to rename). Resolves the source the same way stats do: the
+  // control's URL, or the session blob for a file-backed raster.
+  async function createLegendFromPalette(): Promise<void> {
+    const sourceUrl =
+      typeof layer.source?.url === "string" ? layer.source.url : null;
+    const url = sourceUrl ?? localBytesUrl;
+    if (!url) {
+      setLegendStatus("error");
+      return;
+    }
+    setLegendStatus("pending");
+    try {
+      const entries = await extractPaletteLegend(url);
+      if (!entries || entries.length === 0) {
+        setLegendStatus("empty");
+        return;
+      }
+      const opened = await openLegendPanelWithItems(
+        createAppAPI(mapControllerRef),
+        {
+          title: layer.name,
+          items: entries.map((entry) => ({
+            label: String(entry.value),
+            color: entry.color,
+            shape: "square" as const,
+          })),
+        },
+      );
+      setLegendStatus(opened ? "idle" : "error");
+    } catch {
+      setLegendStatus("error");
+    }
+  }
+
+  // The image palette only feeds a legend in single-band palette mode; other
+  // colormaps are continuous and have no per-value classes to enumerate.
+  const canCreateLegend =
+    state.mode === "single" && state.colormap === "palette";
+
+  const paletteLegendControl = canCreateLegend ? (
+    <div className="space-y-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        disabled={legendStatus === "pending"}
+        onClick={() => void createLegendFromPalette()}
+      >
+        {legendStatus === "pending"
+          ? t("rasterSymbology.createLegendPending")
+          : t("rasterSymbology.createLegend")}
+      </Button>
+      {legendStatus === "empty" && (
+        <p className="text-[10px] text-muted-foreground">
+          {t("rasterSymbology.createLegendEmpty")}
+        </p>
+      )}
+      {legendStatus === "error" && (
+        <p className="text-[10px] text-destructive">
+          {t("rasterSymbology.createLegendError")}
+        </p>
+      )}
+      {legendStatus !== "empty" && legendStatus !== "error" && (
+        <p className="text-[10px] text-muted-foreground">
+          {t("rasterSymbology.createLegendHint")}
+        </p>
+      )}
+    </div>
+  ) : null;
 
   // --- Mode ---
   const modeControl = (
@@ -548,6 +640,8 @@ export function RasterSymbologySection({ layer }: { layer: GeoLibreLayer }) {
         />
         {t("rasterSymbology.reverseRamp")}
       </label>
+
+      {paletteLegendControl}
 
       <label className="flex items-center gap-2 text-xs">
         <input
