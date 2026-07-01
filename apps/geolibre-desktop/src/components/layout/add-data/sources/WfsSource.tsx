@@ -221,22 +221,24 @@ export function WfsSource() {
           {retrieveError ? (
             <p className="text-xs text-destructive">{retrieveError}</p>
           ) : null}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="wfs-type-name">{t("addData.wfs.featureType")}</Label>
-            {/* Text input backed by a <datalist> of retrieved types: dropdown
-                suggestions for the common pick, free text preserved for manual
-                entry when a service blocks GetCapabilities. */}
-            <Input
-              id="wfs-type-name"
-              list={typeOptions.length > 0 ? typeListId : undefined}
-              placeholder={t("addData.common.workspaceLayerPlaceholder")}
-              value={wfsTypeName}
-              onChange={(event) => setWfsTypeName(event.target.value)}
-            />
-            {typeOptions.length > 0 ? (
-              <datalist id={typeListId}>
+          {typeOptions.length > 0 ? (
+            <div className="space-y-1.5">
+              <Label htmlFor={typeListId}>
+                {t("addData.wfs.retrievedTypes")}
+              </Label>
+              {/* Picker listing every retrieved feature type; fills the field
+                  below on select. Value stays empty (action menu), so it always
+                  shows the full list and can never mismatch the free-text field. */}
+              <Select
+                id={typeListId}
+                value=""
+                onChange={(event) => {
+                  if (event.target.value) setWfsTypeName(event.target.value);
+                }}
+              >
+                <option value="" disabled>
+                  {t("addData.wfs.selectType", { count: typeOptions.length })}
+                </option>
                 {typeOptions.map((option) => (
                   <option key={option.name} value={option.name}>
                     {option.title === option.name
@@ -244,8 +246,21 @@ export function WfsSource() {
                       : `${option.title} (${option.name})`}
                   </option>
                 ))}
-              </datalist>
-            ) : null}
+              </Select>
+            </div>
+          ) : null}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="wfs-type-name">{t("addData.wfs.featureType")}</Label>
+            {/* Plain free-text field: holds the submitted typeName and stays
+                editable for manual entry. The picker above fills it. */}
+            <Input
+              id="wfs-type-name"
+              placeholder={t("addData.common.workspaceLayerPlaceholder")}
+              value={wfsTypeName}
+              onChange={(event) => setWfsTypeName(event.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wfs-version">{t("addData.wfs.version")}</Label>

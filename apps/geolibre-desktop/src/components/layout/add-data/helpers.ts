@@ -270,7 +270,13 @@ async function fetchCapabilitiesText(
     }
     throw error;
   }
-  return { ok: response.ok, status: response.status, text: await response.text() };
+  const buffer = new Uint8Array(await response.arrayBuffer());
+  const charset = charsetFromContentType(response.headers.get("content-type"));
+  return {
+    ok: response.ok,
+    status: response.status,
+    text: decodeXmlBytes(buffer, charset),
+  };
 }
 
 /**
@@ -291,15 +297,18 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
 }
 
 /**
- * Decodes capabilities bytes to text, honoring a non-UTF-8 charset declared in
- * the XML prolog (`<?xml … encoding="ISO-8859-1"?>`). The browser fetch path
- * gets this for free via `response.text()`, but the Tauri byte path must do it
- * by hand or a legacy Latin-1 service would render mojibake.
+ * Decodes capabilities bytes to text, honoring a non-UTF-8 charset. The HTTP
+ * `Content-Type` charset (when present) wins; otherwise the charset declared in
+ * the XML prolog (`<?xml … encoding="ISO-8859-1"?>`) is used, defaulting to
+ * UTF-8. `Response.text()` only honors the HTTP header, so both the browser and
+ * the Tauri byte paths run through this to avoid mojibake from a legacy Latin-1
+ * service that declares its charset only in the prolog.
  */
-function decodeXmlBytes(bytes: Uint8Array): string {
+function decodeXmlBytes(bytes: Uint8Array, httpCharset?: string): string {
   // The prolog is ASCII, so decode a short head to read the declared charset.
   const head = new TextDecoder("ascii").decode(bytes.subarray(0, 256));
-  const label = head.match(/encoding=["']([\w-]+)["']/i)?.[1] ?? "utf-8";
+  const prologCharset = head.match(/encoding=["']([\w-]+)["']/i)?.[1];
+  const label = httpCharset || prologCharset || "utf-8";
   try {
     return new TextDecoder(label).decode(bytes);
   } catch {
@@ -307,11 +316,18 @@ function decodeXmlBytes(bytes: Uint8Array): string {
   }
 }
 
+/** Extracts the `charset` from a `Content-Type` header value, if any. */
+function charsetFromContentType(contentType: string | null): string | undefined {
+  return contentType?.match(/charset=["']?([\w-]+)/i)?.[1];
+}
+
 /**
  * Builds an OGC `GetCapabilities` request URL, stripping any operation
  * parameters already on the endpoint (e.g. a copied `REQUEST=GetMap`) so they
- * cannot collide with the ones added here. Handles both absolute and relative
- * endpoints; the stripping applies to relative endpoints too.
+ * cannot collide with the ones added here. Only the query string is rewritten,
+ * so the endpoint's path form is preserved exactly — absolute, root-relative,
+ * route-relative (`geoserver/wms`), and protocol-relative (`//host/wms`) all
+ * round-trip unchanged.
  */
 function buildCapabilitiesUrl(
   endpoint: string,
@@ -319,35 +335,21 @@ function buildCapabilitiesUrl(
   operationParams: ReadonlySet<string>,
   version?: string,
 ): string {
-  const DUMMY_BASE = "http://geolibre.invalid";
-  let url: URL;
-  let relative = false;
-  try {
-    url = new URL(endpoint);
-  } catch {
-    try {
-      url = new URL(endpoint, DUMMY_BASE);
-      relative = true;
-    } catch {
-      const params: Array<[string, string]> = [
-        ["SERVICE", service],
-        ["REQUEST", "GetCapabilities"],
-      ];
-      if (version) params.push(["VERSION", version]);
-      return appendQuery(endpoint, params);
-    }
+  const hashIndex = endpoint.indexOf("#");
+  const withoutHash = hashIndex === -1 ? endpoint : endpoint.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : endpoint.slice(hashIndex);
+  const queryIndex = withoutHash.indexOf("?");
+  const path = queryIndex === -1 ? withoutHash : withoutHash.slice(0, queryIndex);
+  const rawQuery = queryIndex === -1 ? "" : withoutHash.slice(queryIndex + 1);
+
+  const params = new URLSearchParams(rawQuery);
+  for (const key of Array.from(params.keys())) {
+    if (operationParams.has(key.toLowerCase())) params.delete(key);
   }
-  for (const key of Array.from(url.searchParams.keys())) {
-    if (operationParams.has(key.toLowerCase())) url.searchParams.delete(key);
-  }
-  url.searchParams.set("SERVICE", service);
-  url.searchParams.set("REQUEST", "GetCapabilities");
-  if (version) url.searchParams.set("VERSION", version);
-  if (!relative) return url.toString();
-  // A protocol-relative endpoint (`//host/path`) carries its own host through
-  // the dummy-base parse; keep it rather than dropping the origin.
-  if (endpoint.startsWith("//")) return `//${url.host}${url.pathname}${url.search}`;
-  return `${url.pathname}${url.search}`;
+  params.set("SERVICE", service);
+  params.set("REQUEST", "GetCapabilities");
+  if (version) params.set("VERSION", version);
+  return `${path}?${params.toString()}${hash}`;
 }
 
 /** A single requestable (named) layer advertised by a WMS GetCapabilities. */

@@ -235,6 +235,8 @@
       "transparent": "Transparent background",
       "retrieveLayers": "Retrieve layers",
       "retrieving": "Retrieving...",
+      "retrievedLayers": "Retrieved layers",
+      "selectLayer": "Select from {{count}} layers",
       "noLayersFound": "No layers were found for this service.",
       "retrieveError": "Could not retrieve layers from this service."
     },
@@ -253,6 +255,8 @@
       "errorMaxFeaturesNumeric": "Enter a numeric max features value.",
       "retrieveTypes": "Retrieve types",
       "retrieving": "Retrieving...",
+      "retrievedTypes": "Retrieved feature types",
+      "selectType": "Select from {{count}} feature types",
       "noTypesFound": "No feature types were found for this service.",
       "retrieveError": "Could not retrieve feature types from this service."
     },

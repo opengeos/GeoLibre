@@ -201,23 +201,25 @@ export function WmsSource() {
           {retrieveError ? (
             <p className="text-xs text-destructive">{retrieveError}</p>
           ) : null}
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="wms-layers">{t("addData.wms.layers")}</Label>
-            {/* A text input backed by a <datalist> of the retrieved layers: the
-                dropdown suggestions cover the common single-layer pick, while
-                free text still allows a comma-separated composite LAYERS value
-                or manual entry when a service blocks GetCapabilities. */}
-            <Input
-              id="wms-layers"
-              list={layerOptions.length > 0 ? layerListId : undefined}
-              placeholder={t("addData.common.workspaceLayerPlaceholder")}
-              value={wmsLayers}
-              onChange={(event) => setWmsLayers(event.target.value)}
-            />
-            {layerOptions.length > 0 ? (
-              <datalist id={layerListId}>
+          {layerOptions.length > 0 ? (
+            <div className="space-y-1.5">
+              <Label htmlFor={layerListId}>
+                {t("addData.wms.retrievedLayers")}
+              </Label>
+              {/* A picker that lists every retrieved layer and fills the Layers
+                  field below on select. Its own value stays empty (an action
+                  menu, like Load sample data), so it always shows the full list
+                  and can never mismatch the free-text field. */}
+              <Select
+                id={layerListId}
+                value=""
+                onChange={(event) => {
+                  if (event.target.value) setWmsLayers(event.target.value);
+                }}
+              >
+                <option value="" disabled>
+                  {t("addData.wms.selectLayer", { count: layerOptions.length })}
+                </option>
                 {layerOptions.map((option) => (
                   <option key={option.name} value={option.name}>
                     {option.title === option.name
@@ -225,8 +227,22 @@ export function WmsSource() {
                       : `${option.title} (${option.name})`}
                   </option>
                 ))}
-              </datalist>
-            ) : null}
+              </Select>
+            </div>
+          ) : null}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="wms-layers">{t("addData.wms.layers")}</Label>
+            {/* Plain free-text field: holds the submitted LAYERS value and stays
+                editable for a comma-separated composite value or manual entry.
+                The retrieved-layers picker above fills it. */}
+            <Input
+              id="wms-layers"
+              placeholder={t("addData.common.workspaceLayerPlaceholder")}
+              value={wmsLayers}
+              onChange={(event) => setWmsLayers(event.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wms-styles">{t("addData.wms.styles")}</Label>

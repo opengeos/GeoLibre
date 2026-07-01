@@ -112,6 +112,13 @@ describe("createWmsGetCapabilitiesUrl", () => {
     );
   });
 
+  it("preserves a route-relative endpoint's path form", () => {
+    assert.equal(
+      createWmsGetCapabilitiesUrl("geoserver/wms"),
+      "geoserver/wms?SERVICE=WMS&REQUEST=GetCapabilities",
+    );
+  });
+
   it("keeps the host of a protocol-relative endpoint", () => {
     const url = createWmsGetCapabilitiesUrl("//example.com/geoserver/wms");
     assert.ok(url.startsWith("//example.com/geoserver/wms?"));
