@@ -60,6 +60,31 @@ export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
   return dbPromise;
 }
 
+/**
+ * Discards the memoized DuckDB instance (and its extension load state) so the
+ * next {@link getDatabase} builds a fresh one. The old worker is terminated
+ * best-effort.
+ *
+ * This is the recovery path for a WASM instance whose remote HTTP read path has
+ * been poisoned — duckdb-wasm 1.33.1-dev45 permanently breaks `read_parquet`
+ * over HTTP (failing with "stoi: no conversion") on an instance that ran
+ * `LOAD spatial` before its first successful remote Parquet read, and that state
+ * cannot be undone in place. A fresh instance re-runs the pre-spatial warm-up.
+ */
+export async function resetDatabase(): Promise<void> {
+  const previous = dbPromise;
+  dbPromise = null;
+  spatialExtensionPromise = null;
+  h3ExtensionPromise = null;
+  if (!previous) return;
+  try {
+    const db = await previous;
+    await db.terminate();
+  } catch {
+    // Best-effort teardown: the instance is already being discarded.
+  }
+}
+
 let spatialExtensionPromise: Promise<void> | null = null;
 
 /**

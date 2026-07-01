@@ -11,6 +11,7 @@ import {
   isGeometryColumnType,
   quoteIdentifier,
   quoteSqlString,
+  resetDatabase,
   rowsFromResult,
 } from "./duckdb-vector-loader";
 import { GDAL_AUTO_FID_COLUMN, stripAutoFidColumn } from "./duckdb-geometry";
@@ -714,6 +715,44 @@ export async function runSqlQuery(
   // convenient `SELECT * FROM https://…/x.parquet` form runs.
   const rewritten = rewriteBareSources(withCloudUrls);
 
+  try {
+    return await runSqlStatementOnce(rewritten, layers);
+  } catch (error) {
+    // Recover from a poisoned WASM instance: duckdb-wasm 1.33.1-dev45 breaks
+    // remote read_parquet with "stoi: no conversion" on an instance that ran
+    // LOAD spatial before its first successful remote read (e.g. after an
+    // earlier query's warm-up failed). That state cannot be undone in place, so
+    // rebuild the instance — which re-runs the pre-spatial warm-up — and retry
+    // once. Only for remote queries, so a genuine local error is not retried.
+    if (isPoisonedRemoteReadError(error, rewritten)) {
+      await resetDatabase();
+      return await runSqlStatementOnce(rewritten, layers);
+    }
+    throw error;
+  }
+}
+
+/**
+ * True when an error is the duckdb-wasm poisoned-instance symptom on a query
+ * that reads a remote source: the "stoi: no conversion" failure combined with
+ * an HTTP(S) URL in the (already rewritten) statement.
+ */
+function isPoisonedRemoteReadError(error: unknown, statement: string): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /stoi:\s*no conversion/i.test(message) && /https?:\/\//i.test(statement)
+  );
+}
+
+/**
+ * Runs one attempt of a prepared SQL statement against a DuckDB instance. Split
+ * out of {@link runSqlQuery} so it can be retried against a freshly rebuilt
+ * instance when the current one's remote read path is poisoned.
+ */
+async function runSqlStatementOnce(
+  rewritten: string,
+  layers: GeoLibreLayer[],
+): Promise<SqlQueryResult> {
   const db = await getDatabase();
   const connection = await db.connect();
   // Per-run prefix so concurrent queries on the shared database do not register
