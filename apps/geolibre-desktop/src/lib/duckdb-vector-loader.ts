@@ -56,7 +56,18 @@ export interface DuckDbVectorFile {
 }
 
 export function getDatabase(): Promise<duckdb.AsyncDuckDB> {
-  dbPromise ??= createDatabase();
+  if (!dbPromise) {
+    // Clear the memo if the build rejects (identity-guarded so a concurrent
+    // rebuild is not clobbered): a transient WASM-bundle fetch failure must not
+    // leave a rejected promise cached forever, breaking every later call.
+    const building: Promise<duckdb.AsyncDuckDB> = createDatabase().catch(
+      (error) => {
+        if (dbPromise === building) dbPromise = null;
+        throw error;
+      },
+    );
+    dbPromise = building;
+  }
   return dbPromise;
 }
 
@@ -70,7 +81,18 @@ let sqlDbPromise: Promise<duckdb.AsyncDuckDB> | null = null;
 
 /** The DuckDB instance dedicated to the SQL Workspace. */
 export function getSqlDatabase(): Promise<duckdb.AsyncDuckDB> {
-  sqlDbPromise ??= createDatabase();
+  if (!sqlDbPromise) {
+    // Same self-heal as getDatabase: clear the memo (identity-guarded against a
+    // concurrent resetSqlDatabase) if the build rejects, so a failed build is
+    // retried rather than cached as a permanently-rejected promise.
+    const building: Promise<duckdb.AsyncDuckDB> = createDatabase().catch(
+      (error) => {
+        if (sqlDbPromise === building) sqlDbPromise = null;
+        throw error;
+      },
+    );
+    sqlDbPromise = building;
+  }
   return sqlDbPromise;
 }
 
