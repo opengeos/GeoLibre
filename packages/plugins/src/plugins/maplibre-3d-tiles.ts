@@ -21,6 +21,11 @@ import type {
   GeoLibreMapControlPosition,
 } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import {
+  addArcgisI3sTilesLayer,
+  isArcgisI3sSceneLayerUrl,
+  restoreArcgisI3sTilesLayers,
+} from "./arcgis-i3s-tiles";
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
@@ -137,6 +142,7 @@ export function closeThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
 
 export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
   restoreGooglePhotorealisticTilesLayers(app);
+  restoreArcgisI3sTilesLayers(app);
 
   const layers = useAppStore
     .getState()
@@ -591,6 +597,7 @@ function installThreeDTilesPanelHandlers(
     if (control) {
       installGooglePhotorealisticTilesPanelHandlers(control, panel);
       updateGooglePhotorealisticTilesPanelList(control);
+      installArcgisI3sTilesPanelHandlers(control, panel);
     }
   }
   installThreeDTilesToggleHandler(control);
@@ -890,6 +897,65 @@ async function addGooglePhotorealisticTilesFromPanel(
   });
   control.collapse();
   updateGooglePhotorealisticTilesPanelList(control);
+}
+
+/**
+ * Intercept the 3D Tiles panel submit for ArcGIS I3S Scene Layer URLs and route
+ * them to the deck.gl I3S overlay, since maplibre-gl-3d-tiles' three.js renderer
+ * only handles OGC 3D Tiles. Mirrors the Google Photorealistic interception.
+ */
+function installArcgisI3sTilesPanelHandlers(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+): void {
+  if (panel.dataset.geolibreI3sTilesHandler === "true") return;
+  panel.dataset.geolibreI3sTilesHandler = "true";
+
+  const urlInput = getThreeDTilesUrlInput(panel);
+  // Capture on the panel (an ancestor of the form) so this runs before
+  // maplibre-gl-3d-tiles' own submit listener — see the Google handler above.
+  panel.addEventListener(
+    "submit",
+    (event) => {
+      if (
+        !(event.target instanceof HTMLElement) ||
+        !event.target.classList.contains("three-d-tiles-form")
+      ) {
+        return;
+      }
+      if (!isArcgisI3sSceneLayerUrl(urlInput?.value ?? "")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      addArcgisI3sTilesFromPanel(control, panel);
+    },
+    { capture: true },
+  );
+}
+
+function addArcgisI3sTilesFromPanel(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+): void {
+  const app = activeThreeDTilesApp;
+  if (!app) return;
+  const url = getThreeDTilesUrlInput(panel)?.value.trim();
+  if (!url) return;
+
+  const name =
+    panel
+      .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
+      ?.value.trim() || layerNameFromUrl(url, "ArcGIS 3D Tiles");
+  const flyTo =
+    panel.querySelector<HTMLInputElement>(
+      'input[aria-label="Fly to tileset after load"]',
+    )?.checked ?? true;
+  const visible =
+    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
+      ?.checked ?? true;
+  const opacity = numberValue(control.getState().opacity, 1);
+
+  addArcgisI3sTilesLayer(app, { url, name, opacity, visible, flyTo });
+  control.collapse();
 }
 
 function restoreGooglePhotorealisticTilesLayers(app: GeoLibreAppAPI): void {
