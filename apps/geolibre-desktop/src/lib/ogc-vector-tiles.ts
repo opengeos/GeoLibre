@@ -81,6 +81,84 @@ function asTiles(value: unknown): string[] | undefined {
   return tiles.length > 0 ? tiles : undefined;
 }
 
+/** Whether an OGC `extent.spatial.crs` is lon/lat (CRS84/EPSG:4326). The OGC API
+ * default when the field is absent is CRS84, so undefined counts as lon/lat. */
+function isLonLatCrs(crs: unknown): boolean {
+  if (crs === undefined || crs === null) return true;
+  return typeof crs === "string" && /CRS84|4326/i.test(crs);
+}
+
+/**
+ * The `[west, south, east, north]` union of an OGC API collections list, using
+ * each collection's `extent.spatial.bbox` (only when advertised in lon/lat).
+ *
+ * @param collections - The `collections` array from an OGC API document, or a
+ *   single collection wrapped in an array.
+ * @returns The union bounds, or undefined when none are usable.
+ */
+export function unionCollectionBounds(
+  collections: unknown,
+): [number, number, number, number] | undefined {
+  if (!Array.isArray(collections)) return undefined;
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  let found = false;
+  for (const collection of collections) {
+    const spatial = (
+      collection as { extent?: { spatial?: { crs?: unknown; bbox?: unknown } } }
+    )?.extent?.spatial;
+    if (!spatial || !isLonLatCrs(spatial.crs)) continue;
+    // `bbox` is an array of boxes; the first is the overall extent.
+    const box = Array.isArray(spatial.bbox) ? spatial.bbox[0] : undefined;
+    const bounds = asBounds(box);
+    if (!bounds) continue;
+    west = Math.min(west, bounds[0]);
+    south = Math.min(south, bounds[1]);
+    east = Math.max(east, bounds[2]);
+    north = Math.max(north, bounds[3]);
+    found = true;
+  }
+  return found ? [west, south, east, north] : undefined;
+}
+
+/**
+ * Best-effort discovery of a tileset's geographic extent from the OGC API
+ * collections metadata, used for zoom-to-layer when the TileJSON advertises no
+ * `bounds`. Derives the API base by stripping the `/tiles/...` suffix from the
+ * tiles URL, then reads the collection(s) extent. Never throws; returns
+ * undefined on any failure so it cannot block adding the layer.
+ *
+ * @param tilesUrl - A tiles URL or template that contains `/tiles/`.
+ * @param signal - An optional abort signal for the request.
+ */
+async function fetchOgcCollectionsBounds(
+  tilesUrl: string,
+  signal?: AbortSignal,
+): Promise<[number, number, number, number] | undefined> {
+  const withoutQuery = tilesUrl.split("?")[0];
+  const marker = "/tiles/";
+  const index = withoutQuery.indexOf(marker);
+  if (index === -1) return undefined;
+  const base = withoutQuery.slice(0, index);
+  try {
+    // Single-collection tileset (.../collections/{id}/tiles/...): the collection
+    // resource itself carries the extent. Otherwise it is a multi-collection
+    // (map) tileset, whose sibling /collections lists every collection.
+    if (/\/collections\/[^/]+$/.test(base)) {
+      const collection = await fetchOgcJson(`${base}?f=json`, signal);
+      return unionCollectionBounds([collection]);
+    }
+    const doc = (await fetchOgcJson(`${base}/collections?f=json`, signal)) as {
+      collections?: unknown;
+    };
+    return unionCollectionBounds(doc?.collections);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * The first `type: "vector"` source in a style document, with its id.
  *
@@ -331,6 +409,16 @@ export async function resolveOgcVectorTiles(input: {
   // Defensive: `sourceLayers` is always an array above, but guarantee it so the
   // dialog can safely read `.length` on the "no source layers" path.
   if (!Array.isArray(config.sourceLayers)) config.sourceLayers = [];
+
+  // An OGC API TileJSON frequently omits `bounds`, which leaves zoom-to-layer
+  // with nothing to fit. Fall back to the collections extent so the layer can
+  // still be framed on the map.
+  if (!config.bounds) {
+    const reference = tilesUrl || config.url || config.tiles?.[0];
+    if (reference && reference.includes("/tiles/")) {
+      config.bounds = await fetchOgcCollectionsBounds(reference, input.signal);
+    }
+  }
 
   return config;
 }

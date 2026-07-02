@@ -7,6 +7,7 @@ import {
   resolveOgcVectorTiles,
   styleSourceLayers,
   tileJsonConfig,
+  unionCollectionBounds,
 } from "../apps/geolibre-desktop/src/lib/ogc-vector-tiles";
 
 describe("hasTilePlaceholders", () => {
@@ -108,6 +109,28 @@ describe("tileJsonConfig", () => {
     );
     assert.equal(tileJsonConfig({ center: [5, Infinity] }, "u").center, undefined);
     assert.equal(tileJsonConfig({ center: [1, 2, 3, 4] }, "u").center, undefined);
+  });
+});
+
+describe("unionCollectionBounds", () => {
+  it("unions the lon/lat bboxes of an OGC collections list", () => {
+    const collections = [
+      { extent: { spatial: { bbox: [[-1.6, 48, 12.4, 56.1]], crs: "CRS84" } } },
+      { extent: { spatial: { bbox: [[3, 50, 7, 53]] } } }, // crs omitted = CRS84
+    ];
+    assert.deepEqual(unionCollectionBounds(collections), [-1.6, 48, 12.4, 56.1]);
+  });
+
+  it("ignores collections with a non-lon/lat crs or no usable bbox", () => {
+    assert.equal(
+      unionCollectionBounds([
+        { extent: { spatial: { bbox: [[0, 0, 1, 1]], crs: "EPSG:3857" } } },
+        { extent: {} },
+        {},
+      ]),
+      undefined,
+    );
+    assert.equal(unionCollectionBounds(undefined), undefined);
   });
 });
 
