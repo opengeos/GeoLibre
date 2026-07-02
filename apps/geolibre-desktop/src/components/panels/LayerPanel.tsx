@@ -22,6 +22,7 @@ import {
   getLayerTimeBinding,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
+  SKETCHES_SOURCE_KIND,
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
 } from "@geolibre/plugins";
@@ -76,6 +77,7 @@ import {
   Pencil,
   PencilRuler,
   RefreshCw,
+  SquarePen,
   Table2,
   TableProperties,
   Timer,
@@ -397,6 +399,9 @@ export function LayerPanel({
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
+  const setLoadEditorFeaturesOpen = useAppStore(
+    (s) => s.setLoadEditorFeaturesOpen,
+  );
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
@@ -1514,6 +1519,20 @@ export function LayerPanel({
                   : t("layers.identifyFeatures")
               : t("layers.identifyUnavailable");
             const canEditGeometry = canEditLayerGeometry(layer);
+            // A vector layer whose in-view features can be loaded into the
+            // GeoEditor (a copy, not in-place): geojson and vector tile layers
+            // (vector-tiles, and PMTiles/MBTiles carrying vector tiles),
+            // excluding the editor's own Sketches layer. Tile layers are
+            // included here (unlike Edit geometry) because loading grabs a copy
+            // of what is rendered rather than editing the source in place;
+            // raster PMTiles/MBTiles have no vector features so are excluded.
+            const canLoadIntoEditor =
+              layer.metadata.sourceKind !== SKETCHES_SOURCE_KIND &&
+              layer.metadata.tileType !== "raster" &&
+              (layer.type === "geojson" ||
+                layer.type === "vector-tiles" ||
+                layer.type === "pmtiles" ||
+                layer.type === "mbtiles");
             const geometryEditActive = geometryEditLayerId === layer.id;
             const geometryEditElsewhere =
               geometryEditLayerId !== null && !geometryEditActive;
@@ -1874,6 +1893,17 @@ export function LayerPanel({
                           {geometryEditActive
                             ? "Finish editing geometry"
                             : "Edit geometry"}
+                        </DropdownMenuItem>
+                      )}
+                      {canLoadIntoEditor && (
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            selectLayer(layer.id);
+                            setLoadEditorFeaturesOpen(true, layer.id);
+                          }}
+                        >
+                          <SquarePen className="mr-2 h-3.5 w-3.5" />
+                          {t("loadEditorFeatures.menuItem")}
                         </DropdownMenuItem>
                       )}
                       {canOpenAttributeTable && (

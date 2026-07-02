@@ -24,6 +24,7 @@
     "@geolibre/core": "*",
     "@geoman-io/maplibre-geoman-free": "^0.7.1",
     "@maplibre/maplibre-gl-directions": "^0.9.1",
+    "@turf/union": "^7.3.5",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "cog-tiler-wasm": "^0.2.4",

@@ -612,6 +612,11 @@ export class MapController {
     position: maplibregl.ControlPosition = "top-right",
   ): boolean {
     if (!this.map) return false;
+    // Guard against adding the same control instance twice: MapLibre would call
+    // onAdd again and stack a second copy of the control's DOM (e.g. a duplicate
+    // GeoEditor toolbar) if a caller re-adds an already-mounted control.
+    // `hasControl` is optional-chained so test doubles without it still work.
+    if (this.map.hasControl?.(control)) return true;
     this.map.addControl(control, position);
     return true;
   }

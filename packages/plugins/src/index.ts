@@ -273,7 +273,23 @@ export {
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
+  isGeoEditorAvailableForImport,
+  getGeoEditorFeatureCount,
+  hasViewImportBaseline,
+  loadViewFeaturesIntoEditor,
+  buildEditorSaveCollection,
 } from "./plugins/maplibre-geo-editor";
+export {
+  listViewVectorLayers,
+  resolveStoreLayerViewSource,
+  queryViewLayerFeatures,
+  VIEW_IMPORT_ID_PROPERTY,
+  VIEW_IMPORT_CHANGE_PROPERTY,
+  type ViewVectorLayer,
+  type ViewImportMap,
+  type ViewImportExport,
+  type ViewImportChangeCounts,
+} from "./plugins/geo-editor-view-import";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";

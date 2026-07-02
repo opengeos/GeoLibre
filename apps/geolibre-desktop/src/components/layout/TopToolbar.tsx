@@ -101,6 +101,7 @@ import type { CollaborationApi } from "../../hooks/useCollaboration";
 import { SettingsDialog } from "./SettingsDialog";
 import { SetViewDialog } from "./SetViewDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
+import { LoadFeaturesIntoEditorDialog } from "./LoadFeaturesIntoEditorDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { RecordTourDialog } from "./RecordTourDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
@@ -230,6 +231,15 @@ export function TopToolbar({
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  const setLoadEditorFeaturesOpen = useAppStore(
+    (s) => s.setLoadEditorFeaturesOpen,
+  );
+  const loadEditorFeaturesOpen = useAppStore(
+    (s) => s.ui.loadEditorFeaturesOpen,
+  );
+  const loadEditorFeaturesLayerId = useAppStore(
+    (s) => s.ui.loadEditorFeaturesLayerId,
+  );
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const projectName = useAppStore((s) => s.projectName);
@@ -1060,6 +1070,12 @@ export function TopToolbar({
         open={setViewOpen}
         onOpenChange={setSetViewOpen}
         mapControllerRef={mapControllerRef}
+      />
+      <LoadFeaturesIntoEditorDialog
+        open={loadEditorFeaturesOpen}
+        onOpenChange={setLoadEditorFeaturesOpen}
+        mapControllerRef={mapControllerRef}
+        initialLayerId={loadEditorFeaturesLayerId}
       />
       <ShareProjectDialog
         open={shareDialogOpen}

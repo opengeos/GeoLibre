@@ -15,6 +15,14 @@ import {
   reconcileEditedFeatures,
   tagFeatureKeys,
 } from "./geo-editor-geometry";
+import {
+  type ViewImportBaseline,
+  type ViewImportExport,
+  buildChangedExport,
+  buildFullExport,
+  captureViewImportBaseline,
+  tagViewFeaturesForImport,
+} from "./geo-editor-view-import";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -111,6 +119,16 @@ let editTargetOriginalVisible: boolean | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 
+/**
+ * Baseline of the features most recently loaded from a map view, keyed by their
+ * view-import id and captured from the post-import (Geoman-normalized) geometry.
+ * Used to compute the "changed only" export (added/modified/deleted). Null until
+ * a view load happens, and cleared when the plugin deactivates.
+ */
+let viewImportBaseline: ViewImportBaseline | null = null;
+/** Per-load id-prefix counter so appended loads cannot collide feature ids. */
+let viewImportLoadCounter = 0;
+
 const GEOMAN_EDIT_SYNC_EVENTS = [
   "gm:dragend",
   "gm:editend",
@@ -157,6 +175,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     // below, so this need not be awaited.
     if (editTargetLayerId) void endLayerGeometryEdit(app, { save: true });
     pluginActive = false;
+    viewImportBaseline = null;
     sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
     setSketchesMapLayerSuppressed(false);
@@ -421,6 +440,151 @@ function syncSketchesToStore(): void {
   if (!sketchesIdleDisplayOverride) {
     scheduleApplySketchesMapDisplay();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Loading map-view features into the editor (and exporting them)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the shared editor is ready to receive features loaded from a map view:
+ * the plugin is active, the control exists, and no in-place geometry edit session
+ * is holding the editor. Callers should activate the plugin first if this is
+ * false because the editor was never created.
+ */
+export function isGeoEditorAvailableForImport(): boolean {
+  return pluginActive && geoEditorControl != null && editTargetLayerId == null;
+}
+
+/** Number of features currently in the editor (for the load-confirm prompt). */
+export function getGeoEditorFeatureCount(): number {
+  if (!geoEditorControl) return 0;
+  try {
+    return geoEditorControl.getAllFeatureCollection().features.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Whether a view-import baseline exists, so a "changed only" export is meaningful. */
+export function hasViewImportBaseline(): boolean {
+  return viewImportBaseline != null;
+}
+
+/**
+ * Load features queried from a map layer in the current view into the shared
+ * editor, so they become editable "Sketches". Features are normalized and tagged
+ * (see `tagViewFeaturesForImport`); the editor's `loadGeoJson` fires the sketches
+ * sync, so they also appear as the Sketches store layer. A baseline is captured
+ * from the post-import geometry for later "changed only" export.
+ *
+ * @param features Plain features from `queryViewLayerFeatures`.
+ * @param options `replace` clears the editor first; otherwise the features are
+ *   appended to whatever is already loaded.
+ * @returns How many features were imported and how many were dropped as
+ *   un-editable, or throws when the editor is not available.
+ */
+export async function loadViewFeaturesIntoEditor(
+  features: Feature[],
+  { replace }: { replace: boolean },
+): Promise<{ imported: number; dropped: number }> {
+  if (!pluginActive || !geoEditorControl) {
+    throw new Error("The GeoEditor is not active.");
+  }
+  if (editTargetLayerId) {
+    throw new Error(
+      "Finish editing the current layer's geometry before loading view features.",
+    );
+  }
+
+  await ensureGeomanReady();
+  if (!geoEditorControl) throw new Error("The GeoEditor is not active.");
+
+  const idPrefix = `view${viewImportLoadCounter++}`;
+  const tagged = tagViewFeaturesForImport(features, idPrefix);
+  // Bail out before touching the editor: with `replace: true`, loading an empty
+  // collection (every queried feature was un-editable) would wipe whatever the
+  // user already had loaded/edited (and the persisted Sketches layer). Report
+  // nothing imported instead.
+  if (tagged.prepared === 0) {
+    return { imported: 0, dropped: tagged.dropped };
+  }
+  const newIds = new Set(
+    tagged.collection.features.map((feature) => String(feature.id)),
+  );
+
+  let collectionToLoad = tagged.collection;
+  if (!replace) {
+    const existing = cloneFeatureCollection(
+      geoEditorControl.getAllFeatureCollection(),
+    );
+    collectionToLoad = {
+      type: "FeatureCollection",
+      features: [...existing.features, ...tagged.collection.features],
+    };
+  }
+
+  // loadGeoJson replaces the editor's collection and fires onGeoJsonLoad, which
+  // (the restore guard being off here) syncs the loaded features to the Sketches
+  // store layer so they render and stay editable.
+  await geoEditorControl.loadGeoJson(collectionToLoad, SKETCHES_SOURCE_PATH);
+
+  // Capture the baseline from the post-import geometry: Geoman normalizes
+  // coordinates on load, so comparing against the loaded values (not the raw
+  // source ones) means only genuine user edits later count as "modified".
+  const afterLoad = geoEditorControl.getAllFeatureCollection();
+  if (replace || !viewImportBaseline) {
+    viewImportBaseline = captureViewImportBaseline(afterLoad);
+  } else {
+    const appended = captureViewImportBaseline(afterLoad, newIds);
+    for (const [id, entry] of appended) viewImportBaseline.set(id, entry);
+  }
+
+  syncSketchesToStore();
+  applySketchesMapDisplay();
+
+  return { imported: tagged.prepared, dropped: tagged.dropped };
+}
+
+/**
+ * Build a GeoJSON collection to export from the editor's current features.
+ * `changedOnly` diffs against the view-import baseline and returns only the
+ * added/modified/deleted features (each tagged); otherwise every feature is
+ * returned with editor-internal properties stripped.
+ *
+ * @param options Whether to export only changes, plus the editor name and ISO
+ *   timestamp stamped onto changed features.
+ * @returns The export result, or null when the editor is unavailable or an
+ *   in-place geometry-edit session has re-targeted the editor.
+ */
+export function buildEditorSaveCollection(options: {
+  changedOnly: boolean;
+  editorName?: string;
+  now: string;
+}): ViewImportExport | null {
+  if (!geoEditorControl) return null;
+  // During an in-place "Edit geometry" session the shared editor holds the
+  // target layer's features, not the loaded view features, and the view-import
+  // baseline is stale. Exporting now would produce a nonsensical diff, so refuse
+  // (the dialog disables Save while such a session is active).
+  if (editTargetLayerId) return null;
+  const collection = cloneFeatureCollection(
+    geoEditorControl.getAllFeatureCollection(),
+  );
+
+  if (!options.changedOnly) {
+    return buildFullExport(collection);
+  }
+  if (!viewImportBaseline) {
+    return {
+      collection: { type: "FeatureCollection", features: [] },
+      counts: { added: 0, modified: 0, deleted: 0 },
+    };
+  }
+  return buildChangedExport(collection, viewImportBaseline, {
+    editorName: options.editorName,
+    now: options.now,
+  });
 }
 
 // ---------------------------------------------------------------------------
