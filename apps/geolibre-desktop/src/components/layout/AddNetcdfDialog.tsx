@@ -250,8 +250,11 @@ export function AddNetcdfDialog({
         const file = localFile;
         if (!file) throw new Error("No file loaded.");
         const { refs } = file.buildLayerRefs(variable, selector);
+        // Use just the file's base name (fileName is a full path on desktop)
+        // so the derived layer name is clean on every platform.
+        const baseName = fileName.split(/[\\/]/).pop() || "netcdf";
         await addCloudNetcdfLayer(appApi, {
-          url: `local:${fileName || "netcdf"}`,
+          url: `local:${baseName}`,
           refs,
           variable,
           clim,

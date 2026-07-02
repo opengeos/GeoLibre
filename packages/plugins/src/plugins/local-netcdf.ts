@@ -334,12 +334,23 @@ export class LocalNetcdfFile {
         const shape = entity.shape ?? entity.metadata.shape ?? [];
         if (shape.length !== 1 || shape[0] !== length) continue;
         if (!isRenderableDtype(entity.metadata)) continue;
-        const value = entity.value;
-        if (!isTypedArray(value)) continue;
+        const raw = entity.value;
+        if (!isTypedArray(raw)) continue;
+        // Apply the coordinate's own scale_factor/add_offset so packed
+        // (e.g. scaled-integer) lat/lon are compared and stored as degrees.
+        const scale = numericAttr(entity, "scale_factor");
+        const offset = numericAttr(entity, "add_offset");
+        const { data, dtype } =
+          scale !== undefined || offset !== undefined
+            ? {
+                data: applyScale(raw, scale ?? 1, offset ?? 0),
+                dtype: "<f8",
+              }
+            : { data: raw, dtype: zarrDtype(entity.metadata) };
         // Reject values outside the geographic range: guards against generic
         // `x`/`y` axes on projected grids (metres) being read as degrees.
-        if (!valuesWithin(value, range)) continue;
-        return { data: value, dtype: zarrDtype(entity.metadata) };
+        if (!valuesWithin(data, range)) continue;
+        return { data, dtype };
       }
     }
     return null;
@@ -623,6 +634,17 @@ function unwrapScalar(value: unknown): unknown {
   if (isTypedArray(value)) return value.length > 0 ? value[0] : undefined;
   if (Array.isArray(value)) return value.length > 0 ? value[0] : undefined;
   return value;
+}
+
+/** Apply `value * scale + offset` to every element, into a new Float64Array. */
+function applyScale(
+  arr: TypedArrayLike,
+  scale: number,
+  offset: number
+): Float64Array {
+  const out = new Float64Array(arr.length);
+  for (let i = 0; i < arr.length; i++) out[i] = Number(arr[i]) * scale + offset;
+  return out;
 }
 
 /** Whether every finite value in the array falls within `[min, max]`. */
