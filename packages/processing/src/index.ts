@@ -127,6 +127,7 @@ export {
   type VectorToPmtilesRequest,
   type VectorToShapefileRequest,
   type VectorToVectorRequest,
+  type VectorOutputFormat,
   type VectorStatus,
   type VectorToolRequest,
   type VectorToolResult,
@@ -141,7 +142,8 @@ export {
   runWhiteboxToolWasm,
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
-  listGeolibreWasmTools,
+  listWasmToolManifests,
+  mergeWasmToolManifests,
   outputBaseName,
   isTiff,
 } from "./wasm-client";
