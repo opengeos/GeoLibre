@@ -154,3 +154,46 @@ describe("resolveOgcVectorTiles (template path)", () => {
     assert.equal(config.sourceLayers.length, 0);
   });
 });
+
+// Exercises the full resolver against a stubbed OGC API: a TileJSON without
+// bounds, then the collections extent used as the fallback.
+describe("resolveOgcVectorTiles (bounds fallback)", () => {
+  it("derives config.bounds from the /collections extent", async () => {
+    const responses: Record<string, unknown> = {
+      "https://ex.com/ogc/v1/tiles/WMQ?f=tilejson": {
+        tilejson: "3.0.0",
+        minzoom: 17,
+        maxzoom: 17,
+        vector_layers: [{ id: "roads" }],
+      },
+      "https://ex.com/ogc/v1/collections?f=json": {
+        collections: [
+          { extent: { spatial: { bbox: [[3, 50, 7, 53]], crs: "CRS84" } } },
+        ],
+      },
+    };
+    const original = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = ((input: string | URL | Request) => {
+      const url = String(input);
+      calls.push(url);
+      const body = responses[url];
+      return Promise.resolve({
+        ok: body !== undefined,
+        status: body !== undefined ? 200 : 404,
+        json: async () => body ?? {},
+      } as Response);
+    }) as typeof fetch;
+    try {
+      const config = await resolveOgcVectorTiles({
+        tilesUrl: "https://ex.com/ogc/v1/tiles/WMQ?f=tilejson",
+      });
+      assert.deepEqual(config.bounds, [3, 50, 7, 53]);
+      assert.deepEqual(config.sourceLayers, ["roads"]);
+      assert.equal(config.minzoom, 17);
+      assert.ok(calls.includes("https://ex.com/ogc/v1/collections?f=json"));
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+});

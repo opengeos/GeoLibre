@@ -110,10 +110,13 @@ export function unionCollectionBounds(
       collection as { extent?: { spatial?: { crs?: unknown; bbox?: unknown } } }
     )?.extent?.spatial;
     if (!spatial || !isLonLatCrs(spatial.crs)) continue;
-    // `bbox` is an array of boxes; the first is the overall extent.
+    // `bbox` is an array of boxes; the first is the overall extent. A box that
+    // crosses the antimeridian (west > east) is not handled: the plain min/max
+    // union below would widen it the wrong way, so skip it rather than produce
+    // a bogus world-spanning extent.
     const box = Array.isArray(spatial.bbox) ? spatial.bbox[0] : undefined;
     const bounds = asBounds(box);
-    if (!bounds) continue;
+    if (!bounds || bounds[0] > bounds[2]) continue;
     west = Math.min(west, bounds[0]);
     south = Math.min(south, bounds[1]);
     east = Math.max(east, bounds[2]);
@@ -131,11 +134,15 @@ export function unionCollectionBounds(
  * undefined on any failure so it cannot block adding the layer.
  *
  * @param tilesUrl - A tiles URL or template that contains `/tiles/`.
- * @param signal - An optional abort signal for the request.
+ * @param signal - The abort signal (caller + overall deadline) for the request.
+ * @param callerSignal - The caller's own signal; a caller abort is rethrown so a
+ *   cancelled add-data request cannot still add the layer, while network and
+ *   timeout failures are swallowed (bounds are best-effort).
  */
 async function fetchOgcCollectionsBounds(
   tilesUrl: string,
   signal?: AbortSignal,
+  callerSignal?: AbortSignal,
 ): Promise<[number, number, number, number] | undefined> {
   const withoutQuery = tilesUrl.split("?")[0];
   const marker = "/tiles/";
@@ -154,13 +161,19 @@ async function fetchOgcCollectionsBounds(
       collections?: unknown;
     };
     return unionCollectionBounds(doc?.collections);
-  } catch {
+  } catch (error) {
+    if (callerSignal?.aborted) throw error;
     return undefined;
   }
 }
 
 /**
  * The first `type: "vector"` source in a style document, with its id.
+ *
+ * Heuristic: OGC API styles usually declare a single vector source (the
+ * tileset), so the first one is it. A style that bundles several vector sources
+ * (e.g. a basemap alongside the tileset) cannot be disambiguated here; the
+ * user can then enter the source layers manually to override.
  *
  * @param style - A parsed Mapbox/MapLibre style document.
  * @returns The source and its key, or null when the style has no vector source.
@@ -299,21 +312,22 @@ function normalizeFetchError(error: unknown): Error {
  * Fetches and parses a remote JSON document, working around cross-origin limits.
  * The Tauri path uses the Rust `fetch_url_bytes` command (not subject to browser
  * CORS); the dev server routes through the same-origin proxy; the hosted web
- * build fetches directly. All paths honor the caller's abort signal and a 30s
- * timeout so an unresponsive OGC endpoint cannot hang the Add Data form.
+ * build fetches directly. When the caller passes a `signal` it owns the deadline
+ * (see `resolveOgcVectorTiles`, which shares one across its requests); otherwise
+ * a 30s timeout is applied so an unresponsive endpoint cannot hang forever.
  */
 async function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown> {
-  const timeout = AbortSignal.timeout(30_000);
-  const abort = signal ? AbortSignal.any([signal, timeout]) : timeout;
+  const abort = signal ?? AbortSignal.timeout(30_000);
   if (isTauri()) {
     // `fetch_url_bytes` cannot be cancelled mid-flight, so race it against the
     // abort/timeout to still return promptly on a slow or hung host.
     const { invoke } = await import("@tauri-apps/api/core");
+    const bytesPromise = invoke<number[] | Uint8Array>("fetch_url_bytes", { url });
+    // If the abort/timeout wins the race, the invoke promise is left unobserved;
+    // swallow a later rejection so it does not surface as an unhandled rejection.
+    bytesPromise.catch(() => {});
     try {
-      const bytes = await Promise.race([
-        invoke<number[] | Uint8Array>("fetch_url_bytes", { url }),
-        rejectOnAbort(abort),
-      ]);
+      const bytes = await Promise.race([bytesPromise, rejectOnAbort(abort)]);
       const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       return JSON.parse(new TextDecoder().decode(array));
     } catch (error) {
@@ -360,20 +374,34 @@ export async function resolveOgcVectorTiles(input: {
   const styleUrl = input.styleUrl?.trim();
   let config: OgcVectorTilesConfig = { sourceLayers: [] };
 
-  if (tilesUrl) {
-    if (hasTilePlaceholders(tilesUrl)) {
-      config.tiles = [normalizeTilePlaceholders(tilesUrl)];
-    } else {
-      const tilejson = (await fetchOgcJson(
-        tilesUrl,
-        input.signal,
-      )) as Record<string, unknown>;
-      config = { ...config, ...tileJsonConfig(tilejson, tilesUrl) };
-    }
+  // One overall deadline shared across every request (the TileJSON, the style,
+  // and the best-effort collections lookup) so a merely-slow host cannot make
+  // the sequential lookups add up to several times the intended 30s.
+  const deadline = AbortSignal.timeout(30_000);
+  const signal = input.signal
+    ? AbortSignal.any([input.signal, deadline])
+    : deadline;
+
+  // The TileJSON and style documents are independent, so fetch them together
+  // rather than back to back (the built-in sample fills in both). A raw tile
+  // template needs no fetch.
+  const isTemplate = tilesUrl !== "" && hasTilePlaceholders(tilesUrl);
+  const [tilejsonDoc, styleDoc] = await Promise.all([
+    tilesUrl && !isTemplate ? fetchOgcJson(tilesUrl, signal) : Promise.resolve(null),
+    styleUrl ? fetchOgcJson(styleUrl, signal) : Promise.resolve(null),
+  ]);
+
+  if (isTemplate) {
+    config.tiles = [normalizeTilePlaceholders(tilesUrl)];
+  } else if (tilejsonDoc) {
+    config = {
+      ...config,
+      ...tileJsonConfig(tilejsonDoc as Record<string, unknown>, tilesUrl),
+    };
   }
 
-  if (styleUrl) {
-    const style = (await fetchOgcJson(styleUrl, input.signal)) as StyleLike;
+  if (styleDoc) {
+    const style = styleDoc as StyleLike;
     const vector = firstVectorSource(style);
     // A provided style is authoritative for the layers it references, so its
     // source layers take precedence over the TileJSON's `vector_layers` (the
@@ -385,13 +413,21 @@ export async function resolveOgcVectorTiles(input: {
     if (!config.name && typeof style.name === "string") {
       config.name = style.name;
     }
-    // Fall back to the style's own vector source when no tiles input was given.
-    if (!config.url && !config.tiles && vector) {
-      if (typeof vector.source.url === "string") {
-        config.url = vector.source.url;
-      } else {
-        config.tiles = asTiles(vector.source.tiles)?.map(normalizeTilePlaceholders);
+    if (vector) {
+      // Fall back to the style's own vector source only when no tiles input was
+      // given...
+      if (!config.url && !config.tiles) {
+        if (typeof vector.source.url === "string") {
+          config.url = vector.source.url;
+        } else {
+          config.tiles = asTiles(vector.source.tiles)?.map(
+            normalizeTilePlaceholders,
+          );
+        }
       }
+      // ...but always fill a missing zoom range / bounds from the style, even
+      // when the tiles came from a raw template that carries none, so MapLibre
+      // does not request tiles outside the levels the endpoint serves.
       if (config.minzoom === undefined && typeof vector.source.minzoom === "number") {
         config.minzoom = vector.source.minzoom;
       }
@@ -412,11 +448,18 @@ export async function resolveOgcVectorTiles(input: {
 
   // An OGC API TileJSON frequently omits `bounds`, which leaves zoom-to-layer
   // with nothing to fit. Fall back to the collections extent so the layer can
-  // still be framed on the map.
+  // still be framed. Only attempt it for a metadata-style URL (no `{z}/{x}/{y}`
+  // placeholders): a raw XYZ template that merely contains `/tiles/` is very
+  // unlikely to be an OGC API service, so probing `/collections` would just be
+  // a wasted request to a third-party host.
   if (!config.bounds) {
     const reference = tilesUrl || config.url || config.tiles?.[0];
-    if (reference && reference.includes("/tiles/")) {
-      config.bounds = await fetchOgcCollectionsBounds(reference, input.signal);
+    if (reference && !hasTilePlaceholders(reference) && reference.includes("/tiles/")) {
+      config.bounds = await fetchOgcCollectionsBounds(
+        reference,
+        signal,
+        input.signal,
+      );
     }
   }
 

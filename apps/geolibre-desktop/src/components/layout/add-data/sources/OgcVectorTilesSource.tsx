@@ -1,5 +1,5 @@
 import { Input, Label } from "@geolibre/ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { resolveOgcVectorTiles } from "../../../../lib/ogc-vector-tiles";
 import {
@@ -28,6 +28,16 @@ export function OgcVectorTilesSource() {
   const [styleUrl, setStyleUrl] = useState("");
   const [sourceLayersText, setSourceLayersText] = useState("");
 
+  // Cancel the in-flight metadata/style/collections fetches if the dialog closes
+  // mid-request, so a slow response cannot add the layer after the user leaves.
+  const resolveAbortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      resolveAbortRef.current?.abort();
+    },
+    [],
+  );
+
   const applySample = (sample: OgcSample) => {
     setTilesUrl(sample.tilesUrl);
     setStyleUrl(sample.styleUrl);
@@ -42,11 +52,17 @@ export function OgcVectorTilesSource() {
       .split(",")
       .map((layer) => layer.trim())
       .filter(Boolean);
+    resolveAbortRef.current?.abort();
+    const controller = new AbortController();
+    resolveAbortRef.current = controller;
     const config = await resolveOgcVectorTiles({
       tilesUrl: tilesUrl.trim(),
       styleUrl: styleUrl.trim() || undefined,
       sourceLayers: manualLayers,
+      signal: controller.signal,
     });
+    // A superseded/cancelled request must not add a layer after the fact.
+    if (controller.signal.aborted) return;
     if (!config.url && !(config.tiles && config.tiles.length > 0)) {
       throw new Error(t("addData.ogcVectorTiles.errorNoTiles"));
     }
