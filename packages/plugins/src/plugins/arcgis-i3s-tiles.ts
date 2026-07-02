@@ -43,7 +43,7 @@ const I3S_MAX_MOUNT_RETRIES = 60;
 // A Scene Layer service endpoint: ".../SceneServer" optionally followed by
 // "/layers/<n>". Covers ArcGIS Online (*.arcgis.com), ArcGIS Enterprise
 // portals, and hosted feature/scene services.
-const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?)/i;
+const I3S_SCENE_SERVER_RE = /\/SceneServer(\/|$|\?|#)/i;
 
 let i3sOverlay: MapboxOverlay | null = null;
 let i3sOverlayMounted = false;
@@ -85,7 +85,14 @@ export function arcgisI3sSceneLayerName(url: string): string | null {
   const match = url
     .trim()
     .match(/\/([^/?#]+)\/SceneServer(?:\/|$|\?|#)/i);
-  return match ? decodeURIComponent(match[1]) : null;
+  if (!match) return null;
+  try {
+    // A malformed percent-escape makes decodeURIComponent throw URIError; fall
+    // back to the raw segment so a bad URL doesn't abort the add flow.
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }
 
 /** Whether a store layer is an ArcGIS I3S tileset layer. */
@@ -369,6 +376,13 @@ function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
     // ("meter-offsets"); remap it on load so getShaderCoordinateSystem accepts
     // it instead of throwing "Invalid coordinateSystem: 2".
     onTileLoad: (tile: unknown) => normalizeI3sTileCoordinateSystem(tile),
+    // The user types an arbitrary Scene Layer URL, so surface failures (bad
+    // URL, CORS-blocked portal, expired token, a service that isn't I3S)
+    // instead of letting the layer just never render with no explanation.
+    onTileError: (_tile: unknown, tileUrl: string, message: string) =>
+      console.error(
+        `[GeoLibre] ArcGIS I3S tile failed to load: ${message} (${tileUrl})`,
+      ),
   });
 }
 

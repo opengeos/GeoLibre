@@ -108,6 +108,13 @@ describe("arcgisI3sSceneLayerName", () => {
   it("returns null when there is no SceneServer service segment", () => {
     assert.equal(arcgisI3sSceneLayerName("https://example.com/tileset.json"), null);
   });
+
+  it("falls back to the raw segment on a malformed percent-escape", () => {
+    assert.equal(
+      arcgisI3sSceneLayerName("https://host/rest/services/Bad%ZZName/SceneServer"),
+      "Bad%ZZName",
+    );
+  });
 });
 
 describe("i3sTilesetLngLat", () => {
