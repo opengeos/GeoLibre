@@ -1,24 +1,26 @@
-// Read a *local* HDF5 / NetCDF-4 file entirely in the browser (no server) and
-// turn a chosen 2-D slice into an in-memory Zarr v2 store, so it can render
-// through the exact same kerchunk/Zarr pipeline as a Cloud-Optimized NetCDF.
+// Read a *local* NetCDF/HDF5 file entirely in the browser (no server) and turn a
+// chosen 2-D slice into an in-memory Zarr v2 store, so it can render through the
+// exact same kerchunk/Zarr pipeline as a Cloud-Optimized NetCDF.
 //
 // The cloud path (see kerchunk-reference-store.ts) resolves each Zarr key to an
-// HTTP byte range inside the remote file. Here there is no HTTP: h5wasm decodes
-// the file client-side, we extract the selected slice (plus its lat/lon
+// HTTP byte range inside the remote file. Here there is no HTTP: the file is
+// decoded client-side, we extract the selected slice (plus its lat/lon
 // coordinate arrays) as plain typed arrays, and emit a *self-contained* Zarr v2
 // reference map whose chunks are inlined as `base64:` data with no compression.
 // That map is a {@link KerchunkRefs}, so it drops straight into
 // `addCloudNetcdfLayer({ refs, ... })` and the @carbonplan/zarr-layer renderer
 // draws it like any other kerchunk store.
 //
-// Scope: HDF5-backed files (that includes NetCDF-4, which is HDF5 underneath).
-// The classic NetCDF-3 (`CDF\x01`) format is not HDF5 and is not handled here.
+// Two backends, chosen by the file's magic bytes:
+//   - HDF5 / NetCDF-4 (`\x89HDF...`) -> h5wasm
+//   - classic NetCDF-3 (`CDF\x01`)   -> netcdfjs (pure JS)
 
+import type { NetCDFReader } from "netcdfjs";
 import type { KerchunkRefs } from "./kerchunk-reference-store";
 
 // h5wasm's structural types, kept minimal so this module does not need the
 // package at type-check time in consumers. The real shapes come from the
-// dynamic import in {@link openLocalNetcdf}.
+// dynamic import in {@link loadH5wasm}.
 interface H5Metadata {
   type: number; // HDF5 type class: 0 = integer, 1 = float
   size: number; // bytes per element
@@ -59,9 +61,31 @@ interface H5wasmNamespace {
   File?: new (name: string, mode: string) => H5File;
 }
 
+/** A NetCDF-3 variable (netcdfjs types `attributes` too loosely, so narrow it). */
+interface Nc3Variable {
+  name: string;
+  /** Indices into the reader's `dimensions` array, in order. */
+  dimensions: number[];
+  attributes: Array<{ name: string; value: unknown }>;
+  /** netcdfjs type tag: byte/char/short/int/float/double. */
+  type: string;
+}
+
 /** HDF5 datatype classes we can render (numeric grids only). */
 const H5T_INTEGER = 0;
 const H5T_FLOAT = 1;
+
+/** NetCDF-3 numeric types → Zarr v2 dtype + typed-array constructor. */
+const NC3_DTYPES: Record<
+  string,
+  { dtype: string; make: (a: ArrayLike<number>) => TypedArrayLike }
+> = {
+  byte: { dtype: "<i1", make: (a) => new Int8Array(a) },
+  short: { dtype: "<i2", make: (a) => new Int16Array(a) },
+  int: { dtype: "<i4", make: (a) => new Int32Array(a) },
+  float: { dtype: "<f4", make: (a) => new Float32Array(a) },
+  double: { dtype: "<f8", make: (a) => new Float64Array(a) },
+};
 
 /** Common coordinate-variable names, longest/most-specific first. */
 const LAT_NAMES = ["latitude", "lat", "y", "nav_lat"];
@@ -73,11 +97,14 @@ const LON_NAMES = ["longitude", "lon", "lng", "x", "nav_lon"];
 const LAT_RANGE = [-91, 91] as const;
 const LON_RANGE = [-181, 361] as const;
 
-/** A renderable variable discovered in a local HDF5/NetCDF file. */
+// File-format signatures (first bytes).
+const HDF5_MAGIC = [0x89, 0x48, 0x44, 0x46, 0x0d, 0x0a, 0x1a, 0x0a];
+
+/** A renderable variable discovered in a local NetCDF/HDF file. */
 export interface LocalNetcdfVariable {
   /** Dataset path (e.g. `air` or `group/temperature`). */
   name: string;
-  /** Dimension names in order (from HDF5 dimension scales, best effort). */
+  /** Dimension names in order (best effort). */
   dims: string[];
   /** Array shape. */
   shape: number[];
@@ -91,13 +118,30 @@ export interface LocalNetcdfLayerRefs {
   variable: string;
 }
 
+/**
+ * A local NetCDF/HDF file opened in the browser. List its renderable variables,
+ * build a Zarr store for a chosen slice, then {@link close} it to release any
+ * backend resources.
+ */
+export interface LocalNetcdfFile {
+  /** Renderable variables (numeric, 2-D or higher), sorted by name. */
+  listVariables(): LocalNetcdfVariable[];
+  /** Build a self-contained Zarr v2 store for one 2-D slice of a variable. */
+  buildLayerRefs(
+    variable: string,
+    selector?: Record<string, number>
+  ): LocalNetcdfLayerRefs;
+  /** Release backend resources (e.g. the WASM filesystem entry). */
+  close(): void;
+}
+
 let modulePromise: Promise<H5wasmModule> | null = null;
 let fileCounter = 0;
 
 /**
  * Lazily load and initialize h5wasm. The (~5.6 MB) single-file WASM module is
- * only fetched the first time a user opens a local NetCDF/HDF file, keeping it
- * out of the main bundle.
+ * only fetched the first time a user opens a local HDF5/NetCDF-4 file, keeping
+ * it out of the main bundle.
  *
  * @returns The initialized h5wasm module namespace.
  */
@@ -127,11 +171,9 @@ async function loadH5wasm(): Promise<H5wasmModule> {
 }
 
 /**
- * A local HDF5/NetCDF-4 file opened in the browser via h5wasm. List its
- * renderable variables, build a Zarr store for a chosen slice, then
- * {@link close} it to release the WASM filesystem entry.
+ * A local HDF5/NetCDF-4 file backed by h5wasm.
  */
-export class LocalNetcdfFile {
+class Hdf5NetcdfFile implements LocalNetcdfFile {
   private constructor(
     private readonly mod: H5wasmModule,
     private readonly file: H5File,
@@ -141,32 +183,41 @@ export class LocalNetcdfFile {
   /**
    * Open a local file's bytes with h5wasm.
    *
-   * @param buffer The raw file bytes (from a file input or drag-and-drop).
-   * @returns An open {@link LocalNetcdfFile}. Call {@link close} when done.
-   * @throws If the bytes are not a readable HDF5 file (e.g. NetCDF-3 classic).
+   * @param buffer The raw file bytes.
+   * @returns An open file. Call {@link close} when done.
+   * @throws If the bytes are not a readable HDF5 file.
    */
-  static async open(buffer: ArrayBuffer): Promise<LocalNetcdfFile> {
+  static async open(buffer: ArrayBuffer): Promise<Hdf5NetcdfFile> {
     const mod = await loadH5wasm();
     const fsPath = `geolibre-netcdf-${fileCounter++}.h5`;
     mod.FS.writeFile(fsPath, new Uint8Array(buffer));
+    let file: H5File | null = null;
     try {
-      const file = new mod.File(fsPath, "r");
-      return new LocalNetcdfFile(mod, file, fsPath);
+      file = new mod.File(fsPath, "r");
+      // The File constructor does NOT throw for non-HDF5 input; force a read so
+      // an invalid handle surfaces here as a clean error rather than a cryptic
+      // h5wasm failure ("name not defined") deep in the listing later.
+      file.keys();
+      return new Hdf5NetcdfFile(mod, file, fsPath);
     } catch (err) {
+      try {
+        file?.close();
+      } catch {
+        /* best effort */
+      }
       try {
         mod.FS.unlink(fsPath);
       } catch {
         /* best effort */
       }
       throw new Error(
-        `Could not read the file as HDF5/NetCDF-4. Classic NetCDF-3 files are not supported. (${
+        `Could not read the file as HDF5/NetCDF-4. (${
           err instanceof Error ? err.message : String(err)
         })`
       );
     }
   }
 
-  /** Close the file and remove it from the WASM in-memory filesystem. */
   close(): void {
     try {
       this.file.close();
@@ -180,19 +231,14 @@ export class LocalNetcdfFile {
     }
   }
 
-  /**
-   * Recursively collect every dataset path in the file.
-   *
-   * @returns Absolute-ish dataset paths (no leading slash), e.g. `group/air`.
-   */
+  /** Recursively collect every dataset path in the file (no leading slash). */
   private datasetPaths(): string[] {
     const out: string[] = [];
     const visit = (group: H5Group, prefix: string) => {
       for (const key of group.keys()) {
         // h5wasm resolves get() relative to the group, so look up the child by
         // its own `key`; `path` is only the accumulated label for output and
-        // recursion. Passing the full path here would fail on nested groups.
-        // A broken/unresolved link may throw; skip it rather than abort the scan.
+        // recursion. A broken/unresolved link may throw; skip it via tryGet.
         const entity = tryGet(group, key);
         if (!entity) continue;
         const path = prefix ? `${prefix}/${key}` : key;
@@ -207,12 +253,6 @@ export class LocalNetcdfFile {
     return out;
   }
 
-  /**
-   * List renderable variables: numeric datasets with at least two dimensions
-   * (gridded data), excluding 1-D coordinate arrays such as lat/lon/time.
-   *
-   * @returns The renderable variables, sorted by name.
-   */
   listVariables(): LocalNetcdfVariable[] {
     const out: LocalNetcdfVariable[] = [];
     for (const path of this.datasetPaths()) {
@@ -220,31 +260,17 @@ export class LocalNetcdfFile {
       if (!isDataset(ds)) continue;
       const shape = ds.shape ?? ds.metadata.shape ?? [];
       if (shape.length < 2) continue;
-      if (!isRenderableDtype(ds.metadata)) continue;
+      if (!isRenderableH5Dtype(ds.metadata)) continue;
       out.push({ name: path, dims: dimensionNames(ds, shape), shape });
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /**
-   * Build a self-contained Zarr v2 store for one 2-D slice of a variable.
-   *
-   * The trailing two axes are treated as (y, x); any leading axes (time, band,
-   * level, ...) are collapsed to the indices given in `selector`. The variable's
-   * matching latitude/longitude coordinate variables are extracted too, so the
-   * renderer can georeference the grid. Emitted chunks are uncompressed and
-   * inlined as `base64:` data.
-   *
-   * @param variable Variable path returned by {@link listVariables}.
-   * @param selector Fixed index per leading dimension name (default 0).
-   * @returns The reference map and variable name for `addCloudNetcdfLayer`.
-   * @throws If the variable is missing, not 2-D+, or has no lat/lon coordinates.
-   */
   buildLayerRefs(
     variable: string,
     selector: Record<string, number> = {}
   ): LocalNetcdfLayerRefs {
-    const ds = this.file.get(variable);
+    const ds = tryGet(this.file, variable);
     if (!isDataset(ds)) {
       throw new Error(`Variable "${variable}" not found in the file.`);
     }
@@ -253,10 +279,8 @@ export class LocalNetcdfFile {
       throw new Error(`Variable "${variable}" is not a 2-D+ grid.`);
     }
     // Re-check the dtype here too: buildLayerRefs is public API and may be
-    // called with a variable that did not pass listVariables' filter (e.g. an
-    // unsupported 16-byte float), which zarrDtype would otherwise map to an
-    // invalid Zarr dtype string.
-    if (!isRenderableDtype(ds.metadata)) {
+    // called with a variable that did not pass listVariables' filter.
+    if (!isRenderableH5Dtype(ds.metadata)) {
       throw new Error(`Variable "${variable}" has an unsupported data type.`);
     }
     const ny = shape[shape.length - 2];
@@ -277,57 +301,53 @@ export class LocalNetcdfFile {
       throw new Error(`Could not read data for variable "${variable}".`);
     }
 
-    // Coordinate arrays keyed exactly `lat` / `lon` so the renderer reads them
-    // to derive bounds and latitude orientation (see _loadSpatialMetadata). The
-    // value ranges reject projected `x`/`y` axes (metres) that would otherwise
-    // be mis-georeferenced as degrees.
+    const { lat, lon } = this.readCoordinates(ny, nx, variable);
+    return {
+      refs: buildInlineZarrRefs({
+        variable,
+        ny,
+        nx,
+        data: sliceData,
+        dtype: h5ZarrDtype(ds.metadata),
+        lat: lat.data,
+        latDtype: lat.dtype,
+        lon: lon.data,
+        lonDtype: lon.dtype,
+        fillValue: h5FillValue(ds),
+        scaleFactor: h5NumericAttr(ds, "scale_factor"),
+        addOffset: h5NumericAttr(ds, "add_offset"),
+      }),
+      variable,
+    };
+  }
+
+  /** Read the variable's lat/lon coordinate arrays (see {@link acceptCoordinate}). */
+  private readCoordinates(
+    ny: number,
+    nx: number,
+    variable: string
+  ): { lat: Coordinate; lon: Coordinate } {
     const lat = this.readCoordinate(LAT_NAMES, ny, variable, LAT_RANGE);
     const lon = this.readCoordinate(LON_NAMES, nx, variable, LON_RANGE);
     if (!lat || !lon) {
-      throw new Error(
-        "Could not find geographic latitude/longitude coordinate variables. Only NetCDF/HDF grids on a WGS84 lat/lon axis are supported."
-      );
+      throw new Error(NO_COORDINATES_MESSAGE);
     }
-
-    const refs = buildInlineZarrRefs({
-      variable,
-      ny,
-      nx,
-      data: sliceData,
-      dtype: zarrDtype(ds.metadata),
-      lat: lat.data,
-      latDtype: lat.dtype,
-      lon: lon.data,
-      lonDtype: lon.dtype,
-      fillValue: fillValueFor(ds),
-      scaleFactor: numericAttr(ds, "scale_factor"),
-      addOffset: numericAttr(ds, "add_offset"),
-    });
-    return { refs, variable };
+    return { lat, lon };
   }
 
   /**
-   * Find and read a 1-D coordinate variable by common names, matching the
-   * expected length.
-   *
-   * Grouped files often keep `lat`/`lon` in the same subgroup as the variable,
-   * so the variable's own group is searched before the file root.
-   *
-   * @param names Candidate variable names, most specific first.
-   * @param length Required array length (matches the grid's y or x extent).
-   * @param variablePath The variable being rendered; its group is searched first.
-   * @returns The coordinate values and their Zarr dtype, or null if not found.
+   * Find a 1-D coordinate variable by common names. Grouped files often keep
+   * `lat`/`lon` in the same subgroup as the variable, so every candidate name in
+   * the variable's own group is tried before falling back to root.
    */
   private readCoordinate(
     names: string[],
     length: number,
     variablePath: string,
     range: readonly [number, number]
-  ): { data: TypedArrayLike; dtype: string } | null {
+  ): Coordinate | null {
     const slash = variablePath.lastIndexOf("/");
     const group = slash >= 0 ? variablePath.slice(0, slash) : "";
-    // Try every name in the variable's own group first, then every name at
-    // root, so a same-group `lat` wins over a root `latitude`.
     const candidates = group
       ? [...names.map((name) => `${group}/${name}`), ...names]
       : names;
@@ -336,37 +356,231 @@ export class LocalNetcdfFile {
       if (!isDataset(entity)) continue;
       const shape = entity.shape ?? entity.metadata.shape ?? [];
       if (shape.length !== 1 || shape[0] !== length) continue;
-      if (!isRenderableDtype(entity.metadata)) continue;
+      if (!isRenderableH5Dtype(entity.metadata)) continue;
       const raw = entity.value;
       if (!isTypedArray(raw)) continue;
-      // Apply the coordinate's own scale_factor/add_offset so packed
-      // (e.g. scaled-integer) lat/lon are compared and stored as degrees.
-      const scale = numericAttr(entity, "scale_factor");
-      const offset = numericAttr(entity, "add_offset");
-      const { data, dtype } =
-        scale !== undefined || offset !== undefined
-          ? {
-              data: applyScale(raw, scale ?? 1, offset ?? 0),
-              dtype: "<f8",
-            }
-          : { data: raw, dtype: zarrDtype(entity.metadata) };
-      // Reject values outside the geographic range: guards against generic
-      // `x`/`y` axes on projected grids (metres) being read as degrees.
-      if (!valuesWithin(data, range)) continue;
-      return { data, dtype };
+      const accepted = acceptCoordinate(
+        raw,
+        h5ZarrDtype(entity.metadata),
+        h5NumericAttr(entity, "scale_factor"),
+        h5NumericAttr(entity, "add_offset"),
+        range
+      );
+      if (accepted) return accepted;
     }
     return null;
   }
 }
 
 /**
- * Open a local HDF5/NetCDF-4 file from its raw bytes.
+ * A local classic NetCDF-3 file backed by netcdfjs (pure JS).
+ */
+class Netcdf3File implements LocalNetcdfFile {
+  private constructor(private readonly reader: NetCDFReader) {}
+
+  static async open(buffer: ArrayBuffer): Promise<Netcdf3File> {
+    const { NetCDFReader } = await import("netcdfjs");
+    try {
+      return new Netcdf3File(new NetCDFReader(new Uint8Array(buffer)));
+    } catch (err) {
+      throw new Error(
+        `Could not read the file as NetCDF-3. (${
+          err instanceof Error ? err.message : String(err)
+        })`
+      );
+    }
+  }
+
+  close(): void {
+    // netcdfjs is pure JS with no external resources to release.
+  }
+
+  private variables(): Nc3Variable[] {
+    return this.reader.variables as unknown as Nc3Variable[];
+  }
+
+  private dims(v: Nc3Variable): string[] {
+    return v.dimensions.map((i) => this.reader.dimensions[i]?.name ?? `dim_${i}`);
+  }
+
+  private shape(v: Nc3Variable): number[] {
+    return v.dimensions.map((i) => {
+      const dim = this.reader.dimensions[i];
+      // A record (unlimited) dimension reports size 0; use the record length.
+      return dim ? dim.size || this.reader.recordDimension.length : 0;
+    });
+  }
+
+  listVariables(): LocalNetcdfVariable[] {
+    const out: LocalNetcdfVariable[] = [];
+    for (const v of this.variables()) {
+      const shape = this.shape(v);
+      if (shape.length < 2) continue;
+      if (!NC3_DTYPES[v.type]) continue;
+      out.push({ name: v.name, dims: this.dims(v), shape });
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  buildLayerRefs(
+    variable: string,
+    selector: Record<string, number> = {}
+  ): LocalNetcdfLayerRefs {
+    const v = this.variables().find((x) => x.name === variable);
+    if (!v) throw new Error(`Variable "${variable}" not found in the file.`);
+    const shape = this.shape(v);
+    if (shape.length < 2) {
+      throw new Error(`Variable "${variable}" is not a 2-D+ grid.`);
+    }
+    const info = NC3_DTYPES[v.type];
+    if (!info) {
+      throw new Error(`Variable "${variable}" has an unsupported data type.`);
+    }
+    const ny = shape[shape.length - 2];
+    const nx = shape[shape.length - 1];
+    const dims = this.dims(v);
+
+    // netcdfjs reads the whole variable; slice the selected 2-D plane in JS.
+    const full = info.make(this.reader.getDataVariable(v.name) as number[]);
+    let lead = 0; // C-order flattening of the leading (non-spatial) indices
+    for (let i = 0; i < shape.length - 2; i++) {
+      lead = lead * shape[i] + clampIndex(selector[dims[i]] ?? 0, shape[i]);
+    }
+    const start = lead * ny * nx;
+    const sliceData = full.subarray(start, start + ny * nx);
+
+    const lat = this.readCoordinate(LAT_NAMES, ny, LAT_RANGE);
+    const lon = this.readCoordinate(LON_NAMES, nx, LON_RANGE);
+    if (!lat || !lon) throw new Error(NO_COORDINATES_MESSAGE);
+
+    return {
+      refs: buildInlineZarrRefs({
+        variable,
+        ny,
+        nx,
+        data: sliceData,
+        dtype: info.dtype,
+        lat: lat.data,
+        latDtype: lat.dtype,
+        lon: lon.data,
+        lonDtype: lon.dtype,
+        fillValue: normalizeFillValue(
+          nc3NumericAttr(v, "_FillValue", true) ??
+            nc3NumericAttr(v, "missing_value", true)
+        ),
+        scaleFactor: nc3NumericAttr(v, "scale_factor"),
+        addOffset: nc3NumericAttr(v, "add_offset"),
+      }),
+      variable,
+    };
+  }
+
+  private readCoordinate(
+    names: string[],
+    length: number,
+    range: readonly [number, number]
+  ): Coordinate | null {
+    for (const name of names) {
+      const v = this.variables().find((x) => x.name === name);
+      if (!v) continue;
+      const shape = this.shape(v);
+      if (shape.length !== 1 || shape[0] !== length) continue;
+      const info = NC3_DTYPES[v.type];
+      if (!info) continue;
+      const raw = info.make(this.reader.getDataVariable(v.name) as number[]);
+      const accepted = acceptCoordinate(
+        raw,
+        info.dtype,
+        nc3NumericAttr(v, "scale_factor"),
+        nc3NumericAttr(v, "add_offset"),
+        range
+      );
+      if (accepted) return accepted;
+    }
+    return null;
+  }
+}
+
+/**
+ * Open a local NetCDF/HDF file from its raw bytes, choosing the backend by the
+ * file's magic bytes: classic NetCDF-3 via netcdfjs, HDF5/NetCDF-4 via h5wasm.
  *
  * @param buffer The file bytes.
  * @returns An open {@link LocalNetcdfFile}.
+ * @throws If the file is neither a readable NetCDF-3 nor HDF5/NetCDF-4 file.
  */
-export function openLocalNetcdf(buffer: ArrayBuffer): Promise<LocalNetcdfFile> {
-  return LocalNetcdfFile.open(buffer);
+export async function openLocalNetcdf(
+  buffer: ArrayBuffer
+): Promise<LocalNetcdfFile> {
+  const head = new Uint8Array(buffer.slice(0, HDF5_MAGIC.length));
+  if (isNetcdf3Signature(head)) return Netcdf3File.open(buffer);
+  if (isHdf5Signature(head)) return Hdf5NetcdfFile.open(buffer);
+  // Unknown signature (e.g. an HDF5 file with a user block): try HDF5, then
+  // fall back to NetCDF-3 before giving up.
+  try {
+    return await Hdf5NetcdfFile.open(buffer);
+  } catch {
+    return Netcdf3File.open(buffer);
+  }
+}
+
+/** Whether the bytes start with the HDF5 signature. */
+function isHdf5Signature(bytes: Uint8Array): boolean {
+  if (bytes.length < HDF5_MAGIC.length) return false;
+  return HDF5_MAGIC.every((b, i) => bytes[i] === b);
+}
+
+/** Whether the bytes start with a classic NetCDF-3 signature (`CDF` + version). */
+function isNetcdf3Signature(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x43 && // C
+    bytes[1] === 0x44 && // D
+    bytes[2] === 0x46 && // F
+    (bytes[3] === 1 || bytes[3] === 2 || bytes[3] === 5)
+  );
+}
+
+// --- Shared coordinate + fill helpers ----------------------------------------
+
+/** A resolved coordinate array plus its emitted Zarr dtype. */
+interface Coordinate {
+  data: TypedArrayLike;
+  dtype: string;
+}
+
+const NO_COORDINATES_MESSAGE =
+  "Could not find geographic latitude/longitude coordinate variables. Only NetCDF/HDF grids on a WGS84 lat/lon axis are supported.";
+
+/**
+ * Apply a coordinate's scale_factor/add_offset (so packed scaled-integer lat/lon
+ * become degrees) and reject it unless every value is finite and inside the
+ * geographic range (guards generic `x`/`y` projected axes in metres).
+ */
+function acceptCoordinate(
+  raw: TypedArrayLike,
+  nativeDtype: string,
+  scale: number | undefined,
+  offset: number | undefined,
+  range: readonly [number, number]
+): Coordinate | null {
+  const { data, dtype }: Coordinate =
+    scale !== undefined || offset !== undefined
+      ? { data: applyScale(raw, scale ?? 1, offset ?? 0), dtype: "<f8" }
+      : { data: raw, dtype: nativeDtype };
+  return valuesWithin(data, range) ? { data, dtype } : null;
+}
+
+/**
+ * Normalize a fill/nodata value into a Zarr v2 fill value. Non-finite values
+ * need their string form; a bare Infinity would otherwise be turned into null
+ * by JSON.stringify, dropping the marker.
+ */
+function normalizeFillValue(value: number | undefined): number | string | null {
+  if (typeof value !== "number") return null;
+  if (Number.isNaN(value)) return "NaN";
+  if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+  return value;
 }
 
 // --- Zarr v2 emission ---------------------------------------------------------
@@ -556,14 +770,14 @@ type TypedArrayLike =
   | Float64Array;
 
 /** Map an h5wasm datatype to a little-endian Zarr v2 dtype string. */
-function zarrDtype(meta: H5Metadata): string {
+function h5ZarrDtype(meta: H5Metadata): string {
   if (meta.type === H5T_FLOAT) return `<f${meta.size}`;
   if (meta.type === H5T_INTEGER) return `${meta.signed ? "<i" : "<u"}${meta.size}`;
   throw new Error(`Unsupported HDF5 datatype (class ${meta.type}).`);
 }
 
-/** Whether a datatype is a numeric class we can render. */
-function isRenderableDtype(meta: H5Metadata): boolean {
+/** Whether an HDF5 datatype is a numeric class we can render. */
+function isRenderableH5Dtype(meta: H5Metadata): boolean {
   // Only 4/8-byte floats: there is no 1-byte float, and h5wasm throws
   // "Float16 not supported" for 2-byte (half-precision) floats. Integers
   // additionally allow 1 and 2 bytes.
@@ -601,7 +815,7 @@ function base64Encode(bytes: Uint8Array): string {
 }
 
 /**
- * Best-effort dimension names for a dataset: prefer HDF5 dimension-scale labels
+ * Best-effort dimension names for an HDF5 dataset: prefer dimension-scale labels
  * (set by NetCDF-4), falling back to `dim_<i>` for unlabeled axes.
  */
 function dimensionNames(ds: H5Dataset, shape: number[]): string[] {
@@ -614,29 +828,33 @@ function dimensionNames(ds: H5Dataset, shape: number[]): string[] {
   return shape.map((_, i) => labels[i] || `dim_${i}`);
 }
 
-/** Read a numeric scalar attribute, or undefined if absent/non-numeric. */
-function numericAttr(ds: H5Dataset, name: string): number | undefined {
-  const attr = ds.attrs[name];
-  const value = unwrapScalar(attr?.value);
+/** Read a numeric scalar HDF5 attribute, or undefined if absent/non-numeric. */
+function h5NumericAttr(ds: H5Dataset, name: string): number | undefined {
+  const value = unwrapScalar(ds.attrs[name]?.value);
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-/**
- * Determine the Zarr fill value from `_FillValue`/`missing_value`. NaN is
- * emitted as the string `"NaN"` (a valid Zarr v2 fill value).
- */
-function fillValueFor(ds: H5Dataset): number | string | null {
+/** Determine the Zarr fill value from an HDF5 `_FillValue`/`missing_value`. */
+function h5FillValue(ds: H5Dataset): number | string | null {
   for (const key of ["_FillValue", "missing_value"]) {
     const value = unwrapScalar(ds.attrs[key]?.value);
-    if (typeof value === "number") {
-      // Non-finite fills need their Zarr v2 string form; a bare Infinity would
-      // otherwise be turned into null by JSON.stringify, dropping the marker.
-      if (Number.isNaN(value)) return "NaN";
-      if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
-      return value;
-    }
+    if (typeof value === "number") return normalizeFillValue(value);
   }
   return null;
+}
+
+/**
+ * Read a numeric NetCDF-3 attribute. When `allowNonFinite` is set, NaN/Infinity
+ * pass through (for fill values); otherwise only finite numbers are returned.
+ */
+function nc3NumericAttr(
+  v: Nc3Variable,
+  name: string,
+  allowNonFinite = false
+): number | undefined {
+  const value = v.attributes.find((a) => a.name === name)?.value;
+  if (typeof value !== "number") return undefined;
+  return allowNonFinite || Number.isFinite(value) ? value : undefined;
 }
 
 /** Reduce a possibly-array attribute value to its first scalar. */

@@ -1,10 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   buildInlineZarrRefs,
+  openLocalNetcdf,
   type InlineZarrGrid,
 } from "../packages/plugins/src/plugins/local-netcdf";
 import { KerchunkReferenceStore } from "../packages/plugins/src/plugins/kerchunk-reference-store";
+
+/** Read a test fixture file as an ArrayBuffer. */
+function fixture(name: string): ArrayBuffer {
+  const path = fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
+  const buf = readFileSync(path);
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
+}
 
 /** Decode a JSON metadata value from the store. */
 async function readJson(
@@ -229,5 +239,72 @@ describe("buildInlineZarrRefs", () => {
       chunk.byteLength / 2
     );
     assert.deepEqual(Array.from(values), [1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe("openLocalNetcdf (NetCDF-3)", () => {
+  it("lists renderable variables from a classic NetCDF-3 file", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const vars = file.listVariables();
+      assert.equal(vars.length, 1);
+      assert.equal(vars[0].name, "temp");
+      assert.deepEqual(vars[0].dims, ["time", "lat", "lon"]);
+      assert.deepEqual(vars[0].shape, [2, 2, 3]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("builds a Zarr store for a selected time slice", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      // time index 1 -> the +10 plane.
+      const { refs } = file.buildLayerRefs("temp", { time: 1 });
+      const store = new KerchunkReferenceStore(refs);
+
+      const zarray = await readJson(store, "temp/.zarray");
+      assert.deepEqual(zarray.shape, [2, 3]);
+      assert.equal(zarray.dtype, "<f4");
+      assert.equal(zarray.fill_value, -9999);
+
+      const chunk = await store.get("temp/0.0");
+      assert.ok(chunk);
+      const values = new Float32Array(
+        chunk.buffer,
+        chunk.byteOffset,
+        chunk.byteLength / 4
+      );
+      assert.deepEqual(Array.from(values), [11, 12, 13, 14, 15, 16]);
+
+      const latChunk = await store.get("lat/0");
+      assert.ok(latChunk);
+      const lat = new Float32Array(
+        latChunk.buffer,
+        latChunk.byteOffset,
+        latChunk.byteLength / 4
+      );
+      assert.deepEqual(Array.from(lat), [10, 20]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("defaults the time slice to index 0", async () => {
+    const file = await openLocalNetcdf(fixture("sample-nc3.nc"));
+    try {
+      const { refs } = file.buildLayerRefs("temp");
+      const store = new KerchunkReferenceStore(refs);
+      const chunk = await store.get("temp/0.0");
+      assert.ok(chunk);
+      const values = new Float32Array(
+        chunk.buffer,
+        chunk.byteOffset,
+        chunk.byteLength / 4
+      );
+      assert.deepEqual(Array.from(values), [1, 2, 3, 4, 5, 6]);
+    } finally {
+      file.close();
+    }
   });
 });

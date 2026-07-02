@@ -124,8 +124,8 @@ export {
 } from "./plugins/kerchunk-reference-store";
 export {
   openLocalNetcdf,
-  LocalNetcdfFile,
   buildInlineZarrRefs,
+  type LocalNetcdfFile,
   type LocalNetcdfVariable,
   type LocalNetcdfLayerRefs,
   type InlineZarrGrid,

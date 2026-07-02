@@ -32,10 +32,10 @@ import { SampleDataSelect } from "./add-data/shared";
 const SAMPLE_URL =
   "https://data.source.coop/giswqs/opengeos/netcdf/air-temperature.kerchunk.json";
 
-// Extensions accepted for a local file. Only HDF5-backed formats are listed:
-// `.cdf` (classic NetCDF-3) and `.hdf` (usually HDF4) are omitted because
-// h5wasm cannot read them and would fail with a clear error.
-const LOCAL_EXTENSIONS = ["nc", "nc4", "h5", "hdf5"];
+// Extensions accepted for a local file: classic NetCDF-3 (.nc/.cdf, via
+// netcdfjs) and HDF5-backed NetCDF-4/HDF5 (.nc/.nc4/.h5/.hdf5, via h5wasm).
+// `.hdf` (usually HDF4) is omitted since neither backend reads it.
+const LOCAL_EXTENSIONS = ["nc", "nc4", "cdf", "h5", "hdf5"];
 
 /** A renderable variable, shared shape across the cloud and local readers. */
 type RenderableVariable = KerchunkVariable;
