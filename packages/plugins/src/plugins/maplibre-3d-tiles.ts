@@ -1,8 +1,11 @@
 import {
   DEFAULT_LAYER_STYLE,
+  getGoogleMapsApiKey,
   type GeoLibreLayer,
   useAppStore,
 } from "@geolibre/core";
+import type { Layer } from "@deck.gl/core";
+import type { MapboxOverlay } from "@deck.gl/mapbox";
 import {
   DEFAULT_TILESET_URL,
   ThreeDTilesControl,
@@ -12,7 +15,12 @@ import {
   type ThreeDTilesControlOptions,
   type ThreeDTilesItemState,
 } from "maplibre-gl-3d-tiles";
-import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreDeckGL,
+  GeoLibreMapControlPosition,
+} from "../types";
+import { ensureMercatorProjection } from "./map-projection-utils";
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
 const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
@@ -22,6 +30,22 @@ const THREE_D_TILES_LAYER_ID = "geolibre-3d-tiles";
 const THREE_VERSION = "0.184.0";
 const DEFAULT_DRACO_DECODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/draco/`;
 const DEFAULT_KTX2_TRANSCODER_PATH = `https://unpkg.com/three@${THREE_VERSION}/examples/jsm/libs/basis/`;
+const GOOGLE_PHOTOREALISTIC_TILES_URL =
+  "https://tile.googleapis.com/v1/3dtiles/root.json";
+const GOOGLE_PHOTOREALISTIC_TILES_LABEL =
+  "Google Photorealistic 3D Tiles";
+const GOOGLE_MAPS_API_KEY_HEADER = "X-GOOG-API-KEY";
+const GOOGLE_MAPS_API_KEY_MASK = "********";
+const GOOGLE_PHOTOREALISTIC_SOURCE_KIND =
+  "google-photorealistic-3d-tiles";
+const GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX =
+  "geolibre-google-photorealistic-3d-tiles";
+const GOOGLE_PHOTOREALISTIC_INITIAL_VIEW = {
+  center: [14.42, 50.089] as [number, number],
+  zoom: 16,
+  bearing: 90,
+  pitch: 60,
+};
 
 const THREE_D_TILES_OPTIONS = {
   className: "geolibre-3d-tiles-control",
@@ -32,7 +56,13 @@ const THREE_D_TILES_OPTIONS = {
   title: "Add 3D Tiles Layer",
   // Empty input; the sample tileset is the explicit, opt-in way to load one.
   tilesetUrl: "",
-  sampleData: [{ label: "AGI HQ", url: DEFAULT_TILESET_URL }],
+  sampleData: [
+    { label: "AGI HQ", url: DEFAULT_TILESET_URL },
+    {
+      label: GOOGLE_PHOTOREALISTIC_TILES_LABEL,
+      url: GOOGLE_PHOTOREALISTIC_TILES_URL,
+    },
+  ],
 } satisfies ThreeDTilesControlOptions;
 
 let threeDTilesControl: ThreeDTilesControl | null = null;
@@ -40,6 +70,16 @@ let threeDTilesControlMounted = false;
 let threeDTilesPanelPinned = false;
 let threeDTilesStoreUnsubscribe: (() => void) | null = null;
 let threeDTilesStoreSyncSuspended = 0;
+let threeDTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
+let activeThreeDTilesApp: GeoLibreAppAPI | null = null;
+
+let googleTilesOverlay: MapboxOverlay | null = null;
+let googleTilesOverlayMounted = false;
+let googleTilesStoreUnsubscribe: (() => void) | null = null;
+let googleTilesDeckGL: GeoLibreDeckGL | null = null;
+let googleTilesApp: GeoLibreAppAPI | null = null;
+let googleTilesBoundMap: unknown;
+let ensureGoogleTilesOverlayInFlight: Promise<void> | null = null;
 
 type ThreeDTilesLayerInstance = InstanceType<typeof ThreeDTilesLayer>;
 
@@ -64,6 +104,8 @@ export function closeThreeDTilesLayerPanel(app: GeoLibreAppAPI): void {
 }
 
 export function restoreThreeDTilesLayers(app: GeoLibreAppAPI): void {
+  restoreGooglePhotorealisticTilesLayers(app);
+
   const layers = useAppStore
     .getState()
     .layers.filter(isThreeDTilesControlLayer);
@@ -114,6 +156,7 @@ function openStandaloneThreeDTilesControl(app: GeoLibreAppAPI): boolean {
 function ensureThreeDTilesControl(
   app: GeoLibreAppAPI,
 ): ThreeDTilesControl | null {
+  activeThreeDTilesApp = app;
   threeDTilesControl ??= createThreeDTilesControl();
 
   if (!threeDTilesControlMounted) {
@@ -123,6 +166,7 @@ function ensureThreeDTilesControl(
     );
     if (!added) {
       resetThreeDTilesControl(threeDTilesControl);
+      if (activeThreeDTilesApp === app) activeThreeDTilesApp = null;
       return null;
     }
     threeDTilesControlMounted = true;
@@ -145,7 +189,12 @@ function createThreeDTilesControl(): ThreeDTilesControl {
 
   control.on("statechange", syncHandler);
   patchThreeDTilesControlOnRemove(control);
+  addThreeDTilesRuntimeEnvListener(control);
   threeDTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) {
+      updateGooglePhotorealisticTilesPanelList(control);
+    }
+
     const currentById = new Map(state.layers.map((layer) => [layer.id, layer]));
 
     for (const layer of previous.layers) {
@@ -250,7 +299,10 @@ function restoreThreeDTilesMapLayer(
   const layerName = layer.name || layerNameFromUrl(url, id);
   const beforeId = validThreeDTilesBeforeId(control, layer.beforeId);
   const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
-  const requestHeaders = stringRecordValue(layer.source.requestHeaders);
+  const requestHeaders = resolveThreeDTilesRequestHeaders(
+    url,
+    stringRecordValue(layer.source.requestHeaders),
+  );
   const existingTilesets = control
     .getState()
     .tilesets.filter((tileset) => tileset.id !== id);
@@ -389,11 +441,13 @@ function createThreeDTilesStoreLayer(
       sourceId: tileset.id,
       type: "3d-tiles",
       url: tileset.tilesetUrl,
-      // Persisted so a saved project reloads an authenticated tileset; this
-      // means any credential in a header is stored in the project file.
-      // JSON.stringify drops the key when undefined, so a header-less tileset
-      // is not written to the project file.
-      requestHeaders: tileset.requestHeaders,
+      // Non-Google authenticated tilesets still persist their headers. Google
+      // Photorealistic 3D Tiles resolves its API key from runtime env instead,
+      // so shared projects do not carry the key in plain text.
+      requestHeaders: persistedThreeDTilesRequestHeaders(
+        tileset.tilesetUrl,
+        tileset.requestHeaders,
+      ),
     },
     visible: tileset.visible,
     opacity,
@@ -457,9 +511,12 @@ function resetThreeDTilesControl(control: ThreeDTilesControl | null): void {
 
   threeDTilesStoreUnsubscribe?.();
   threeDTilesStoreUnsubscribe = null;
+  threeDTilesRuntimeEnvUnsubscribe?.();
+  threeDTilesRuntimeEnvUnsubscribe = null;
   threeDTilesPanelPinned = false;
   threeDTilesControlMounted = false;
   threeDTilesControl = null;
+  activeThreeDTilesApp = null;
   // Clear the suspension counter so a control torn down mid-hydration cannot
   // leave its successor permanently suppressing store sync events.
   threeDTilesStoreSyncSuspended = 0;
@@ -469,7 +526,8 @@ function isThreeDTilesControlLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "3d-tiles" &&
     layer.metadata.sourceKind === "3d-tiles-url" &&
-    layer.metadata.externalNativeLayer === true
+    layer.metadata.externalNativeLayer === true &&
+    !isGooglePhotorealisticTilesetLayerUrl(layer)
   );
 }
 
@@ -498,8 +556,552 @@ function installThreeDTilesPanelHandlers(
   if (panel) {
     panel.classList.add("geolibre-3d-tiles-panel");
     installThreeDTilesCloseHandler(control, panel);
+    if (control) {
+      installGooglePhotorealisticTilesPanelHandlers(control, panel);
+      updateGooglePhotorealisticTilesPanelList(control);
+    }
   }
   installThreeDTilesToggleHandler(control);
+}
+
+function addThreeDTilesRuntimeEnvListener(control: ThreeDTilesControl): void {
+  if (threeDTilesRuntimeEnvUnsubscribe || typeof window === "undefined") return;
+
+  const handleRuntimeEnvChange = () => {
+    applyGooglePhotorealisticTilesPanelDefaults(control);
+    renderGooglePhotorealisticTilesLayers();
+  };
+
+  window.addEventListener(
+    "geolibre:runtime-env-change",
+    handleRuntimeEnvChange,
+  );
+  threeDTilesRuntimeEnvUnsubscribe = () => {
+    window.removeEventListener(
+      "geolibre:runtime-env-change",
+      handleRuntimeEnvChange,
+    );
+  };
+}
+
+function installGooglePhotorealisticTilesPanelHandlers(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+): void {
+  if (panel.dataset.geolibreGoogleTilesHandler === "true") return;
+  panel.dataset.geolibreGoogleTilesHandler = "true";
+
+  const applyDefaults = () =>
+    applyGooglePhotorealisticTilesPanelDefaults(control);
+  const deferApplyDefaults = () => window.setTimeout(applyDefaults, 0);
+  const urlInput = getThreeDTilesUrlInput(panel);
+  urlInput?.addEventListener("input", applyDefaults);
+  urlInput?.addEventListener("change", applyDefaults);
+  panel
+    .querySelector<HTMLFormElement>(".three-d-tiles-form")
+    ?.addEventListener(
+      "submit",
+      (event) => {
+        applyDefaults();
+        if (!isGooglePhotorealisticTilesetUrl(urlInput?.value ?? "")) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        void addGooglePhotorealisticTilesFromPanel(control, panel);
+      },
+      { capture: true },
+    );
+  panel.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const option = target.closest<HTMLButtonElement>(
+      ".three-d-tiles-sample-option",
+    );
+    if (option?.title === GOOGLE_PHOTOREALISTIC_TILES_URL) {
+      deferApplyDefaults();
+    }
+  });
+
+  applyDefaults();
+}
+
+function applyGooglePhotorealisticTilesPanelDefaults(
+  control: ThreeDTilesControl,
+): void {
+  const panel = getThreeDTilesPanel(control);
+  if (!panel) return;
+
+  const urlInput = getThreeDTilesUrlInput(panel);
+  if (!urlInput || !isGooglePhotorealisticTilesetUrl(urlInput.value)) {
+    setGooglePhotorealisticHeadersToggleVisible(panel, false);
+    return;
+  }
+
+  const layerNameInput = panel.querySelector<HTMLInputElement>(
+    'input[aria-label="Layer name"]',
+  );
+  if (
+    layerNameInput &&
+    (!layerNameInput.value.trim() ||
+      layerNameInput.value.trim() === "3D Tiles" ||
+      layerNameInput.value.trim() ===
+        layerNameFromUrl(GOOGLE_PHOTOREALISTIC_TILES_URL, "3D Tiles"))
+  ) {
+    layerNameInput.value = GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  }
+
+  const altitudeInput = panel.querySelector<HTMLInputElement>(
+    'input[aria-label="Altitude offset"]',
+  );
+  if (
+    altitudeInput &&
+    (!altitudeInput.value.trim() || Number(altitudeInput.value) === -300)
+  ) {
+    altitudeInput.value = "0";
+  }
+
+  const headersInput = panel.querySelector<HTMLTextAreaElement>(
+    'textarea[aria-label="Request headers"]',
+  );
+  if (!headersInput) return;
+
+  const headers = resolveThreeDTilesRequestHeaders(
+    GOOGLE_PHOTOREALISTIC_TILES_URL,
+    parseThreeDTilesRequestHeaders(headersInput.value),
+  );
+  installGooglePhotorealisticHeadersToggle(panel, headersInput);
+  headersInput.value = serializeGooglePhotorealisticPanelRequestHeaders(
+    headers,
+    panel.dataset.geolibreGoogleMapsApiKeyVisible === "true",
+  );
+  setGooglePhotorealisticHeadersToggleVisible(
+    panel,
+    Boolean(headers?.[GOOGLE_MAPS_API_KEY_HEADER]),
+  );
+}
+
+function getThreeDTilesUrlInput(panel: HTMLElement): HTMLInputElement | null {
+  return panel.querySelector<HTMLInputElement>('input[aria-label="Tileset URL"]');
+}
+
+function installGooglePhotorealisticHeadersToggle(
+  panel: HTMLElement,
+  headersInput: HTMLTextAreaElement,
+): void {
+  if (panel.querySelector(".geolibre-google-tiles-key-toggle")) return;
+
+  panel.dataset.geolibreGoogleMapsApiKeyVisible = "false";
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className =
+    "geolibre-google-tiles-key-toggle three-d-tiles-small-button";
+  toggle.textContent = "Show key";
+  toggle.setAttribute("aria-label", "Show Google Maps API key");
+  toggle.setAttribute("aria-pressed", "false");
+  toggle.hidden = true;
+
+  toggle.addEventListener("click", () => {
+    const visible =
+      panel.dataset.geolibreGoogleMapsApiKeyVisible !== "true";
+    panel.dataset.geolibreGoogleMapsApiKeyVisible = visible
+      ? "true"
+      : "false";
+    updateGooglePhotorealisticHeadersToggle(toggle, visible);
+
+    const headers = resolveThreeDTilesRequestHeaders(
+      GOOGLE_PHOTOREALISTIC_TILES_URL,
+      parseThreeDTilesRequestHeaders(headersInput.value),
+    );
+    headersInput.value = serializeGooglePhotorealisticPanelRequestHeaders(
+      headers,
+      visible,
+    );
+  });
+
+  headersInput.insertAdjacentElement("afterend", toggle);
+}
+
+function setGooglePhotorealisticHeadersToggleVisible(
+  panel: HTMLElement,
+  visible: boolean,
+): void {
+  const toggle = panel.querySelector<HTMLButtonElement>(
+    ".geolibre-google-tiles-key-toggle",
+  );
+  if (toggle) toggle.hidden = !visible;
+}
+
+function updateGooglePhotorealisticHeadersToggle(
+  toggle: HTMLButtonElement,
+  visible: boolean,
+): void {
+  toggle.textContent = visible ? "Hide key" : "Show key";
+  toggle.setAttribute(
+    "aria-label",
+    visible ? "Hide Google Maps API key" : "Show Google Maps API key",
+  );
+  toggle.setAttribute("aria-pressed", visible ? "true" : "false");
+}
+
+async function addGooglePhotorealisticTilesFromPanel(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+): Promise<void> {
+  const app = activeThreeDTilesApp;
+  if (!app) return;
+
+  const name =
+    panel
+      .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
+      ?.value.trim() || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  const headers = resolveThreeDTilesRequestHeaders(
+    GOOGLE_PHOTOREALISTIC_TILES_URL,
+    parseThreeDTilesRequestHeaders(
+      panel.querySelector<HTMLTextAreaElement>(
+        'textarea[aria-label="Request headers"]',
+      )?.value ?? "",
+    ),
+  );
+  const flyToOnLoad =
+    panel.querySelector<HTMLInputElement>(
+      'input[aria-label="Fly to tileset after load"]',
+    )?.checked ?? true;
+  const visible =
+    panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
+      ?.checked ?? true;
+  const opacity = numberValue(control.getState().opacity, 1);
+
+  addGooglePhotorealisticTilesLayer(app, {
+    name,
+    opacity,
+    visible,
+    requestHeaders: headers,
+    flyTo: flyToOnLoad,
+  });
+  control.collapse();
+  updateGooglePhotorealisticTilesPanelList(control);
+}
+
+function restoreGooglePhotorealisticTilesLayers(app: GeoLibreAppAPI): void {
+  if (
+    useAppStore.getState().layers.some(isGooglePhotorealisticTilesLayer)
+  ) {
+    void ensureGooglePhotorealisticTilesOverlay(app);
+  }
+}
+
+function addGooglePhotorealisticTilesLayer(
+  app: GeoLibreAppAPI,
+  options: {
+    name: string;
+    opacity: number;
+    visible: boolean;
+    requestHeaders?: Record<string, string>;
+    flyTo: boolean;
+  },
+): string {
+  const id = `${GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX}-${crypto.randomUUID()}`;
+  const deckLayerId = `${id}-deck`;
+
+  useAppStore.getState().addLayer({
+    id,
+    name: options.name,
+    type: "3d-tiles",
+    source: {
+      sourceId: id,
+      type: GOOGLE_PHOTOREALISTIC_SOURCE_KIND,
+      url: GOOGLE_PHOTOREALISTIC_TILES_URL,
+      // Keep non-Google custom headers, but never persist the API key header.
+      requestHeaders: persistedThreeDTilesRequestHeaders(
+        GOOGLE_PHOTOREALISTIC_TILES_URL,
+        options.requestHeaders,
+      ),
+    },
+    visible: options.visible,
+    opacity: options.opacity,
+    style: { ...DEFAULT_LAYER_STYLE },
+    metadata: {
+      customLayerType: GOOGLE_PHOTOREALISTIC_SOURCE_KIND,
+      externalDeckLayer: true,
+      externalNativeLayer: true,
+      identifiable: false,
+      nativeLayerIds: [deckLayerId],
+      sourceId: id,
+      sourceKind: GOOGLE_PHOTOREALISTIC_SOURCE_KIND,
+      bounds: [-180, -85, 180, 85],
+    },
+    sourcePath: GOOGLE_PHOTOREALISTIC_TILES_URL,
+  });
+
+  void ensureGooglePhotorealisticTilesOverlay(app);
+  if (options.flyTo) flyToGooglePhotorealisticTiles(app);
+  return id;
+}
+
+function updateGooglePhotorealisticTilesPanelList(
+  control: ThreeDTilesControl | null,
+): void {
+  const panel = getThreeDTilesPanel(control);
+  if (!panel) return;
+
+  const nativeTilesetCount = control?.getState().tilesets.length ?? 0;
+  const googleLayers = useAppStore
+    .getState()
+    .layers.filter(isGooglePhotorealisticTilesLayer);
+  const nativeStatus = panel.querySelector<HTMLElement>(
+    ".three-d-tiles-status",
+  );
+  if (nativeStatus) {
+    nativeStatus.hidden =
+      nativeTilesetCount === 0 && googleLayers.length > 0;
+  }
+
+  const googleList = ensureGooglePhotorealisticTilesPanelList(panel);
+  googleList.replaceChildren();
+  googleList.hidden = googleLayers.length === 0;
+  if (googleLayers.length === 0) return;
+
+  for (const layer of googleLayers) {
+    googleList.appendChild(createGooglePhotorealisticTilesPanelListItem(layer));
+  }
+}
+
+function ensureGooglePhotorealisticTilesPanelList(
+  panel: HTMLElement,
+): HTMLElement {
+  const existing = panel.querySelector<HTMLElement>(
+    ".geolibre-google-tiles-list",
+  );
+  if (existing) return existing;
+
+  const googleList = document.createElement("div");
+  googleList.className = "geolibre-google-tiles-list three-d-tiles-list";
+  googleList.hidden = true;
+
+  const nativeList = panel.querySelector<HTMLElement>(".three-d-tiles-list");
+  if (nativeList) {
+    nativeList.insertAdjacentElement("afterend", googleList);
+  } else {
+    panel.appendChild(googleList);
+  }
+
+  return googleList;
+}
+
+function createGooglePhotorealisticTilesPanelListItem(
+  layer: GeoLibreLayer,
+): HTMLElement {
+  const item = document.createElement("div");
+  item.className =
+    "geolibre-google-tiles-list-item three-d-tiles-list-item active";
+
+  const meta = document.createElement("div");
+  meta.className = "three-d-tiles-list-meta";
+
+  const title = document.createElement("button");
+  title.className = "three-d-tiles-list-title";
+  title.type = "button";
+  title.textContent = layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  title.addEventListener("click", () => {
+    if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
+  });
+
+  const url = document.createElement("span");
+  url.className = "three-d-tiles-list-url";
+  url.textContent = GOOGLE_PHOTOREALISTIC_TILES_URL;
+
+  const status = document.createElement("span");
+  status.className = "three-d-tiles-list-status";
+  status.dataset.status = "loaded";
+  status.textContent = "loaded";
+
+  meta.appendChild(title);
+  meta.appendChild(url);
+  meta.appendChild(status);
+
+  const actions = document.createElement("div");
+  actions.className = "three-d-tiles-list-actions";
+
+  const visible = document.createElement("input");
+  visible.type = "checkbox";
+  visible.checked = layer.visible;
+  visible.setAttribute(
+    "aria-label",
+    `Toggle ${layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL}`,
+  );
+  visible.addEventListener("change", () => {
+    useAppStore.getState().updateLayer(layer.id, { visible: visible.checked });
+  });
+
+  const opacity = document.createElement("input");
+  opacity.className = "three-d-tiles-opacity";
+  opacity.type = "range";
+  opacity.min = "0";
+  opacity.max = "1";
+  opacity.step = "0.05";
+  opacity.value = String(layer.opacity);
+  opacity.setAttribute(
+    "aria-label",
+    `Opacity for ${layer.name || GOOGLE_PHOTOREALISTIC_TILES_LABEL}`,
+  );
+  opacity.addEventListener("input", () => {
+    const nextOpacity = Number(opacity.value);
+    if (Number.isFinite(nextOpacity)) {
+      useAppStore.getState().updateLayer(layer.id, { opacity: nextOpacity });
+    }
+  });
+
+  const flyTo = createGooglePhotorealisticTilesPanelSmallButton("Fly");
+  flyTo.addEventListener("click", () => {
+    if (googleTilesApp) flyToGooglePhotorealisticTiles(googleTilesApp);
+  });
+
+  const remove = createGooglePhotorealisticTilesPanelSmallButton("Remove");
+  remove.addEventListener("click", () => {
+    useAppStore.getState().removeLayer(layer.id);
+  });
+
+  actions.appendChild(visible);
+  actions.appendChild(opacity);
+  actions.appendChild(flyTo);
+  actions.appendChild(remove);
+
+  item.appendChild(meta);
+  item.appendChild(actions);
+  return item;
+}
+
+function createGooglePhotorealisticTilesPanelSmallButton(
+  label: string,
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.className = "three-d-tiles-small-button";
+  button.type = "button";
+  button.textContent = label;
+  return button;
+}
+
+function flyToGooglePhotorealisticTiles(app: GeoLibreAppAPI): void {
+  const map = app.getMap?.();
+  if (!map) return;
+  ensureMercatorProjection(map);
+  map.flyTo({
+    ...GOOGLE_PHOTOREALISTIC_INITIAL_VIEW,
+    essential: true,
+  });
+}
+
+function isGooglePhotorealisticTilesLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "3d-tiles" &&
+    (layer.metadata.sourceKind === GOOGLE_PHOTOREALISTIC_SOURCE_KIND ||
+      isGooglePhotorealisticTilesetLayerUrl(layer))
+  );
+}
+
+function ensureGooglePhotorealisticTilesOverlay(
+  app: GeoLibreAppAPI,
+): Promise<void> {
+  if (ensureGoogleTilesOverlayInFlight) return ensureGoogleTilesOverlayInFlight;
+  ensureGoogleTilesOverlayInFlight = runEnsureGooglePhotorealisticTilesOverlay(
+    app,
+  ).finally(() => {
+    ensureGoogleTilesOverlayInFlight = null;
+  });
+  return ensureGoogleTilesOverlayInFlight;
+}
+
+async function runEnsureGooglePhotorealisticTilesOverlay(
+  app: GeoLibreAppAPI,
+): Promise<void> {
+  googleTilesApp = app;
+  if (!app.getDeckGL) return;
+  googleTilesDeckGL ??= await app.getDeckGL();
+
+  const map = app.getMap?.() ?? null;
+  if (googleTilesOverlay && googleTilesBoundMap === map) {
+    renderGooglePhotorealisticTilesLayers();
+    return;
+  }
+
+  if (googleTilesOverlay && googleTilesOverlayMounted) {
+    app.removeMapControl(googleTilesOverlay);
+  }
+  googleTilesBoundMap = map;
+  googleTilesOverlay = new googleTilesDeckGL.mapbox.MapboxOverlay({
+    interleaved: false,
+    layers: [],
+  });
+  googleTilesOverlayMounted = false;
+  googleTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) {
+      renderGooglePhotorealisticTilesLayers();
+    }
+  });
+  renderGooglePhotorealisticTilesLayers();
+}
+
+function renderGooglePhotorealisticTilesLayers(): void {
+  if (!googleTilesOverlay || !googleTilesDeckGL || !googleTilesApp) return;
+
+  const layers = useAppStore
+    .getState()
+    .layers.filter(isGooglePhotorealisticTilesLayer);
+  if (layers.length > 0) {
+    ensureMercatorProjection(googleTilesApp.getMap?.());
+  }
+
+  if (!googleTilesOverlayMounted) {
+    if (layers.length === 0) return;
+    if (!googleTilesApp.addMapControl(googleTilesOverlay, "top-left")) return;
+    googleTilesOverlayMounted = true;
+  }
+
+  const deckLayers = layers
+    .filter((layer) => layer.visible)
+    .map((layer) => buildGooglePhotorealisticTilesDeckLayer(layer))
+    .filter((layer): layer is Layer => layer !== null)
+    .reverse();
+
+  googleTilesOverlay.setProps({ layers: deckLayers });
+}
+
+function buildGooglePhotorealisticTilesDeckLayer(
+  layer: GeoLibreLayer,
+): Layer | null {
+  if (!googleTilesDeckGL) return null;
+  const requestHeaders = resolveThreeDTilesRequestHeaders(
+    GOOGLE_PHOTOREALISTIC_TILES_URL,
+    stringRecordValue(layer.source.requestHeaders),
+  );
+
+  return new googleTilesDeckGL.geoLayers.Tile3DLayer({
+    id: googlePhotorealisticTilesDeckLayerId(layer),
+    data: GOOGLE_PHOTOREALISTIC_TILES_URL,
+    loadOptions: {
+      fetch: requestHeaders ? { headers: requestHeaders } : undefined,
+      tileset: {
+        maximumScreenSpaceError: 20,
+        maximumMemoryUsage: 512,
+        memoryAdjustedScreenSpaceError: true,
+      },
+    },
+    opacity: layer.opacity,
+    pickable: false,
+    operation: "terrain+draw",
+  }) as Layer;
+}
+
+function googlePhotorealisticTilesDeckLayerId(layer: GeoLibreLayer): string {
+  const nativeLayerIds = layer.metadata.nativeLayerIds;
+  if (Array.isArray(nativeLayerIds)) {
+    const deckLayerId = nativeLayerIds.find(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    );
+    if (deckLayerId) return deckLayerId;
+  }
+  return `${layer.id}-deck`;
 }
 
 function getThreeDTilesPanel(
@@ -712,6 +1314,104 @@ function stringRecordValue(
       entry[0].trim() !== "" && typeof entry[1] === "string",
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function resolveThreeDTilesRequestHeaders(
+  url: string,
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
+
+  const nonGoogleHeaders = stripGoogleMapsApiKeyHeader(headers);
+  const apiKey = getGoogleMapsApiKey();
+  if (!apiKey) return nonEmptyRecord(nonGoogleHeaders);
+  return {
+    ...(nonGoogleHeaders ?? {}),
+    [GOOGLE_MAPS_API_KEY_HEADER]: apiKey,
+  };
+}
+
+function persistedThreeDTilesRequestHeaders(
+  url: string,
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
+  return nonEmptyRecord(stripGoogleMapsApiKeyHeader(headers));
+}
+
+function stripGoogleMapsApiKeyHeader(
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!headers) return undefined;
+  const entries = Object.entries(headers).filter(
+    ([name]) => name.toLowerCase() !== GOOGLE_MAPS_API_KEY_HEADER.toLowerCase(),
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function isGooglePhotorealisticTilesetUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.hostname === "tile.googleapis.com" &&
+      parsed.pathname === "/v1/3dtiles/root.json"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isGooglePhotorealisticTilesetLayerUrl(layer: GeoLibreLayer): boolean {
+  const url = stringValue(layer.source.url) ?? layer.sourcePath;
+  return url ? isGooglePhotorealisticTilesetUrl(url) : false;
+}
+
+function parseThreeDTilesRequestHeaders(
+  text: string,
+): Record<string, string> | undefined {
+  const headers: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const separator = line.indexOf(":");
+    if (separator === -1) continue;
+    const name = line.slice(0, separator).trim();
+    if (!name) continue;
+    headers[name] = line.slice(separator + 1).trim();
+  }
+  return nonEmptyRecord(headers);
+}
+
+function serializeThreeDTilesRequestHeaders(
+  headers: Record<string, string> | undefined,
+): string {
+  if (!headers) return "";
+  return Object.entries(headers)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join("\n");
+}
+
+function serializeGooglePhotorealisticPanelRequestHeaders(
+  headers: Record<string, string> | undefined,
+  showApiKey: boolean,
+): string {
+  if (!headers) return "";
+  if (showApiKey) return serializeThreeDTilesRequestHeaders(headers);
+
+  return serializeThreeDTilesRequestHeaders(
+    Object.fromEntries(
+      Object.entries(headers).map(([name, value]) => [
+        name,
+        name.toLowerCase() === GOOGLE_MAPS_API_KEY_HEADER.toLowerCase()
+          ? GOOGLE_MAPS_API_KEY_MASK
+          : value,
+      ]),
+    ),
+  );
+}
+
+function nonEmptyRecord(
+  value: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  return value && Object.keys(value).length > 0 ? value : undefined;
 }
 
 function recordsEqual(

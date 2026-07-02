@@ -23,6 +23,10 @@ const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ).version as string;
 
+if (!process.env.VITE_GOOGLE_MAPS_API_KEY && process.env.GOOGLE_MAPS_API_KEY) {
+  process.env.VITE_GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+}
+
 // Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
 // (`npm run build`), so their presence flags a desktop build. Used below to drop
 // the service worker from the desktop bundle.

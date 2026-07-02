@@ -36,7 +36,7 @@ Panels also auto-hide on small screens for a responsive layout.
 - **Environment variables**: named key-value pairs (for example, API keys for Earth Engine, Street View, and other integrations). You can enable or disable individual variables, and secret values are masked. Variable names must start with a letter or underscore and contain only letters, numbers, and underscores.
 
 !!! tip "Where credentials go"
-    Provider credentials for integrations like Earth Engine, Street View, or other keyed services belong here. See [Data Integrations](data-integrations.md) and [Getting Started](../getting-started.md#optional-imagery-credentials).
+    Provider credentials for integrations like Earth Engine, Street View, Google Photorealistic 3D Tiles, or other keyed services belong here. See [Data Integrations](data-integrations.md) and [Getting Started](../getting-started.md#optional-imagery-credentials).
 
 !!! tip "Protomaps basemaps"
     To use the [Protomaps](https://protomaps.com) basemaps in the **New map** dialog, add an environment variable named `VITE_PROTOMAPS_API_KEY` with your own Protomaps API key. The Protomaps options appear in the dialog as soon as the key is enabled — no restart needed. When no key is set, the Protomaps section is hidden. See [Getting Started](../getting-started.md#optional-basemap-credentials) for setting the key at build time for a self-hosted deployment.

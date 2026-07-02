@@ -1610,6 +1610,11 @@ body,
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.16) !important;
 }
 
+.geolibre-3d-tiles-panel .geolibre-google-tiles-key-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
 .geolibre-3d-tiles-panel .three-d-tiles-checkbox input,
 .geolibre-3d-tiles-panel .three-d-tiles-list-actions input[type="checkbox"],
 .geolibre-3d-tiles-panel .three-d-tiles-opacity {

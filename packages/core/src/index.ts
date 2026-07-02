@@ -73,6 +73,7 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getGoogleMapsApiKey,
   getProtomapsApiKey,
   getProtomapsStyleUrl,
   getRuntimeEnvironment,

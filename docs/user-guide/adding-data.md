@@ -42,7 +42,7 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
 | --- | --- |
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
 | **Splatting Layer** | Gaussian splat scenes. |
-| **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. |
+| **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
 
 ## Databases
 

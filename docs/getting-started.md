@@ -158,14 +158,14 @@ Where to find the output:
 
 ## Optional imagery credentials
 
-The Street View plugin can use Google Street View and Mapillary imagery. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
+The Street View plugin can use Google Street View and Mapillary imagery. The 3D Tiles panel can also load Google Photorealistic 3D Tiles with the same Google Maps key. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
 
 ```env
 VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 VITE_MAPILLARY_ACCESS_TOKEN=your_mapillary_access_token
 ```
 
-For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
+For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Google Photorealistic 3D Tiles, enable the Map Tiles API. For local shell testing, `GOOGLE_MAPS_API_KEY` is also accepted by the desktop Vite build. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
 
 Restart `npm run dev` or `npm run tauri:dev` after changing environment variables.
 
@@ -195,7 +195,7 @@ VITE_TOMTOM_API_KEY=your_tomtom_api_key             # TomTom Traffic Flow
 VITE_HERE_API_KEY=your_here_api_key                 # HERE Traffic Flow
 ```
 
-Google Traffic reuses the same `VITE_GOOGLE_MAPS_API_KEY` as Street View; enable the **Map Tiles API** for that key in Google Cloud. A newly entered key takes effect immediately, without reopening the project. Until a provider's key is set, its overlay reports a missing-key error instead of loading tiles.
+Google Traffic and Google Photorealistic 3D Tiles reuse the same `VITE_GOOGLE_MAPS_API_KEY` as Street View; enable the **Map Tiles API** for that key in Google Cloud. A newly entered key takes effect immediately, without reopening the project. Until a provider's key is set, its overlay reports a missing-key error instead of loading tiles.
 
 ## Optional Amazon Location styles
 

@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { getGoogleMapsApiKey, useAppStore } from "@geolibre/core";
 import {
   BasemapControl,
   type BasemapChangeEvent,
@@ -44,7 +44,7 @@ function getTrafficOverlayCredentials(): {
 } {
   const env = getRuntimeEnvironment();
   return {
-    googleMapsApiKey: env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "",
+    googleMapsApiKey: getGoogleMapsApiKey(env) || "",
     tomtomApiKey: env.VITE_TOMTOM_API_KEY?.trim() || "",
     hereApiKey: env.VITE_HERE_API_KEY?.trim() || "",
   };

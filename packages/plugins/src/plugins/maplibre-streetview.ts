@@ -1,3 +1,4 @@
+import { getGoogleMapsApiKey } from "@geolibre/core";
 import {
   StreetViewControl,
   type StreetViewControlOptions,
@@ -29,7 +30,7 @@ function getStreetViewCredentials(): Pick<
   "defaultProvider" | "googleApiKey" | "mapillaryAccessToken"
 > {
   const env = getRuntimeEnvironment();
-  const googleApiKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || undefined;
+  const googleApiKey = getGoogleMapsApiKey(env);
   const mapillaryAccessToken =
     env.VITE_MAPILLARY_ACCESS_TOKEN?.trim() || undefined;
 
