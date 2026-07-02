@@ -2111,6 +2111,13 @@
       "runningLocally": "Running locally with WebAssembly. No sidecar required.",
       "catalogSnapshotError": "Could not load Whitebox catalog snapshot.",
       "localRunnerError": "Could not load the local (WASM) tool runner. Turn off \"Run locally (WASM)\" to use the sidecar.",
+      "output": {
+        "geojson": "GeoJSON (add to map)",
+        "geoparquet": "GeoParquet (download, keeps CRS)",
+        "flatgeobuf": "FlatGeobuf (download, keeps CRS)",
+        "shapefile": "Shapefile (download, keeps CRS)",
+        "projectedHint": "Saved to your downloads in the target CRS. The map only displays EPSG:4326, so a projected result is not added as a layer."
+      },
       "filterBySource": "Filter by source",
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",

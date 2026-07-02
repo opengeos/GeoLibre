@@ -8,10 +8,50 @@
 import type { FeatureCollection } from "geojson";
 import type {
   RunWhiteboxToolRequest,
+  VectorOutputFormat,
   WhiteboxJob,
   WhiteboxTool,
   WhiteboxToolParameter,
 } from "./sidecar-client";
+
+/**
+ * File extension the WASM tool writes for each CRS-preserving vector output
+ * format. Selecting one of these (instead of the default GeoJSON) keeps the
+ * tool's target-CRS coordinates, which the GeoJSON writer would otherwise
+ * reproject back to WGS84 for RFC 7946 compliance.
+ */
+const VECTOR_OUTPUT_EXTENSION: Record<
+  Exclude<VectorOutputFormat, "geojson">,
+  string
+> = {
+  geoparquet: "parquet",
+  flatgeobuf: "fgb",
+  shapefile: "shp",
+};
+
+/**
+ * Bundle a Shapefile the WASM tool wrote (`.shp` plus its `.shx`/`.dbf`/`.prj`/
+ * `.cpg` sidecars) into a single zip, since a Shapefile is inherently multi-file.
+ * Returns `null` when the main `.shp` is missing (a failed/partial write).
+ *
+ * @param shpFile - The `.shp` filename in the WASM output map.
+ * @param files - Every file the tool wrote, keyed by name.
+ * @returns The zip bytes, or `null` if there is no `.shp` to bundle.
+ */
+async function zipShapefileSidecars(
+  shpFile: string,
+  files: Record<string, Uint8Array>,
+): Promise<Uint8Array | null> {
+  const base = shpFile.replace(/\.shp$/i, "");
+  const members: Record<string, Uint8Array> = {};
+  for (const ext of ["shp", "shx", "dbf", "prj", "cpg"]) {
+    const member = files[`${base}.${ext}`];
+    if (member) members[`${base}.${ext}`] = member;
+  }
+  if (!members[`${base}.shp`]) return null;
+  const { zipSync } = await import("fflate");
+  return zipSync(members);
+}
 
 interface ToolRunResult {
   exitCode: number;
@@ -316,7 +356,17 @@ export async function runWhiteboxToolWasm(
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
-  const outputs: { name: string; file: string; raster: boolean }[] = [];
+  // How each output file is turned into a job output: "geojson" is parsed into a
+  // FeatureCollection (a map layer); "bytes" is returned raw (a raster COG, a
+  // file_out blob, or a CRS-preserving vector file to download); "shapefile" is
+  // zipped with its sidecars first.
+  const outputs: {
+    name: string;
+    file: string;
+    kind: "geojson" | "bytes" | "shapefile";
+  }[] = [];
+  const vectorFormat: VectorOutputFormat =
+    request.vector_output_format ?? "geojson";
 
   for (const param of request.tool?.params ?? []) {
     const kind = paramKind(param);
@@ -359,15 +409,28 @@ export async function runWhiteboxToolWasm(
       input[file] = bytes;
       args.push(`--${name}=/work/${file}`);
     } else if (kind === "vector_out") {
-      const file = `${outputBaseName(request.tool_id, name)}.geojson`;
-      outputs.push({ name, file, raster: false });
-      args.push(`--${name}=/work/${file}`);
+      const base = outputBaseName(request.tool_id, name);
+      // GeoJSON is reprojected to WGS84 on write (a map layer); the other formats
+      // keep the tool's target CRS and are returned as bytes to download.
+      if (vectorFormat === "geojson") {
+        const file = `${base}.geojson`;
+        outputs.push({ name, file, kind: "geojson" });
+        args.push(`--${name}=/work/${file}`);
+      } else {
+        const file = `${base}.${VECTOR_OUTPUT_EXTENSION[vectorFormat]}`;
+        outputs.push({
+          name,
+          file,
+          kind: vectorFormat === "shapefile" ? "shapefile" : "bytes",
+        });
+        args.push(`--${name}=/work/${file}`);
+      }
     } else if (kind === "raster_out" || kind === "file_out") {
       // file_out is treated as an opaque binary output (no GeoJSON parsing),
       // mirroring how raster outputs are returned as raw bytes.
       const ext = kind === "file_out" ? "dat" : "tif";
       const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
-      outputs.push({ name, file, raster: true });
+      outputs.push({ name, file, kind: "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else {
       const value = request.parameters[name];
@@ -390,9 +453,14 @@ export async function runWhiteboxToolWasm(
 
   const out: Record<string, unknown> = {};
   for (const entry of outputs) {
+    if (entry.kind === "shapefile") {
+      const zipped = await zipShapefileSidecars(entry.file, files);
+      if (zipped) out[entry.name] = zipped;
+      continue;
+    }
     const bytes = files[entry.file];
     if (!bytes) continue;
-    if (entry.raster) {
+    if (entry.kind === "bytes") {
       out[entry.name] = bytes;
       continue;
     }

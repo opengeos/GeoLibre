@@ -131,6 +131,20 @@ export interface WhiteboxLayerInput {
   bytes?: Uint8Array;
 }
 
+/**
+ * Output format for the in-browser WASM runner's `vector_out` parameters.
+ * `"geojson"` (the default) is reprojected to WGS84 (RFC 7946) and returned as a
+ * `FeatureCollection` for a map layer; the other formats preserve the tool's
+ * target-CRS coordinates and CRS metadata and are returned as bytes to download
+ * (a reprojection result would otherwise lose its projection, since GeoLibre and
+ * MapLibre only render EPSG:4326). Ignored by the Python sidecar.
+ */
+export type VectorOutputFormat =
+  | "geojson"
+  | "geoparquet"
+  | "flatgeobuf"
+  | "shapefile";
+
 export interface RunWhiteboxToolRequest {
   tool_id: string;
   parameters: Record<string, unknown>;
@@ -138,6 +152,8 @@ export interface RunWhiteboxToolRequest {
   layer_inputs?: Record<string, WhiteboxLayerInput>;
   include_pro?: boolean;
   tier?: string;
+  /** WASM runner only: format for `vector_out` outputs (default `"geojson"`). */
+  vector_output_format?: VectorOutputFormat;
 }
 
 interface WhiteboxCatalogResponse {

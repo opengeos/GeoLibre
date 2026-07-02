@@ -127,6 +127,7 @@ export {
   type VectorToPmtilesRequest,
   type VectorToShapefileRequest,
   type VectorToVectorRequest,
+  type VectorOutputFormat,
   type VectorStatus,
   type VectorToolRequest,
   type VectorToolResult,
