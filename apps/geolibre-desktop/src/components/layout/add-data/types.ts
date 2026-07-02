@@ -7,6 +7,7 @@ export type AddDataKind =
   | "wms"
   | "wfs"
   | "wmts"
+  | "ogc-vector-tiles"
   | "gpx"
   | "georss"
   | "delimited-text"

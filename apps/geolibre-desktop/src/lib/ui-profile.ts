@@ -96,6 +96,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "wms", section: "webServices", labelKey: "toolbar.layerType.wms", tier: "basic" },
   { id: "wfs", section: "webServices", labelKey: "toolbar.layerType.wfs", tier: "intermediate" },
   { id: "wmts", section: "webServices", labelKey: "toolbar.layerType.wmts", tier: "intermediate" },
+  { id: "ogc-vector-tiles", section: "webServices", labelKey: "toolbar.layerType.ogcVectorTiles", tier: "intermediate" },
   { id: "arcgis", section: "webServices", labelKey: "toolbar.layerType.arcgis", tier: "intermediate" },
   { id: "georss", section: "webServices", labelKey: "toolbar.layerType.georss", tier: "intermediate" },
   { id: "stac", section: "webServices", labelKey: "toolbar.item.stacLayer", tier: "advanced" },
