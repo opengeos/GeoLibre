@@ -192,6 +192,10 @@ export interface AppState {
     segmentationOpen: boolean;
     geocodeOpen: boolean;
     sqlWorkspaceOpen: boolean;
+    loadEditorFeaturesOpen: boolean;
+    // Store layer preselected in the "Load Features into Editor" dialog when it
+    // is opened from a layer's context menu, or null when opened without a target.
+    loadEditorFeaturesLayerId: string | null;
     pythonConsoleOpen: boolean;
     notebookOpen: boolean;
     assistantOpen: boolean;
@@ -278,6 +282,7 @@ export interface AppState {
   setSegmentationOpen: (open: boolean) => void;
   setGeocodeOpen: (open: boolean) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
+  setLoadEditorFeaturesOpen: (open: boolean, layerId?: string | null) => void;
   setPythonConsoleOpen: (open: boolean) => void;
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
@@ -592,6 +597,8 @@ export const useAppStore = create<AppState>()(
         segmentationOpen: false,
         geocodeOpen: false,
         sqlWorkspaceOpen: false,
+        loadEditorFeaturesOpen: false,
+        loadEditorFeaturesLayerId: null,
         pythonConsoleOpen: false,
         notebookOpen: false,
         assistantOpen: false,
@@ -786,6 +793,14 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, geocodeOpen: open } })),
       setSqlWorkspaceOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
+      setLoadEditorFeaturesOpen: (open, layerId) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            loadEditorFeaturesOpen: open,
+            loadEditorFeaturesLayerId: open ? (layerId ?? null) : null,
+          },
+        })),
       setPythonConsoleOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, pythonConsoleOpen: open } })),
       setNotebookOpen: (open) =>
