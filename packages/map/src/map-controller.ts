@@ -943,13 +943,38 @@ export class MapController {
       this.getLayerMetadataBounds(layer) ??
       this.getLayerSourceBounds(layer);
     if (!bounds || !this.map) return;
-    this.map.fitBounds(
-      [
-        [bounds[0], bounds[1]],
-        [bounds[2], bounds[3]],
-      ],
-      { padding: 40, duration: 800 },
-    );
+    const box: [[number, number], [number, number]] = [
+      [bounds[0], bounds[1]],
+      [bounds[2], bounds[3]],
+    ];
+    // Tile layers only carry data from their source `minzoom` up (e.g. an OGC
+    // API vector tileset served only at z17). Fitting the whole extent would
+    // land far below that zoom and render nothing, so when the fit is too far
+    // out, fly to the extent center at the layer's minimum render zoom instead.
+    const minRenderZoom = this.getLayerMinRenderZoom(layer);
+    if (minRenderZoom !== null) {
+      const camera = this.map.cameraForBounds(box, { padding: 40 });
+      if (camera?.center && typeof camera.zoom === "number" && camera.zoom < minRenderZoom) {
+        this.map.flyTo({
+          center: camera.center,
+          zoom: minRenderZoom,
+          duration: 800,
+        });
+        return;
+      }
+    }
+    this.map.fitBounds(box, { padding: 40, duration: 800 });
+  }
+
+  /** The layer's minimum render zoom (its tile source `minzoom`), if advertised
+   * — the zoom below which a tile source shows no data. */
+  private getLayerMinRenderZoom(layer: GeoLibreLayer): number | null {
+    for (const value of [layer.source.minzoom, layer.metadata.minzoom]) {
+      if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+    return null;
   }
 
   fitBounds(bounds: [number, number, number, number]): void {
