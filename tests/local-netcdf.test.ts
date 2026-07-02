@@ -178,6 +178,31 @@ describe("buildInlineZarrRefs", () => {
     assert.deepEqual(Array.from(values), [10, 20, 30, 40]);
   });
 
+  it("does not roll when the longitude axis contains a non-finite value", async () => {
+    const grid: InlineZarrGrid = {
+      variable: "air",
+      ny: 1,
+      nx: 4,
+      data: new Float32Array([10, 20, 30, 40]),
+      dtype: "<f4",
+      lat: new Float64Array([0]),
+      latDtype: "<f8",
+      // Looks like a 0-360 axis but has a NaN: must be left untouched, not
+      // mis-split by the roll.
+      lon: new Float64Array([0, 90, NaN, 270]),
+      lonDtype: "<f8",
+    };
+    const store = new KerchunkReferenceStore(buildInlineZarrRefs(grid));
+    const dataChunk = await store.get("air/0.0");
+    assert.ok(dataChunk);
+    const values = new Float32Array(
+      dataChunk.buffer,
+      dataChunk.byteOffset,
+      dataChunk.byteLength / 4
+    );
+    assert.deepEqual(Array.from(values), [10, 20, 30, 40]);
+  });
+
   it("emits an integer dtype for integer grids", async () => {
     const grid: InlineZarrGrid = {
       ...sampleGrid(),

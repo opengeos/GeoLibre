@@ -452,6 +452,12 @@ function rollLongitude(
   let ascending = true;
   for (let i = 0; i < nx; i++) {
     const v = Number(lon[i]);
+    // A non-finite entry disables rolling (leaving the array untouched) rather
+    // than silently mis-splitting: NaN comparisons are always false.
+    if (!Number.isFinite(v)) {
+      ascending = false;
+      continue;
+    }
     if (v < min) min = v;
     if (v > max) max = v;
     if (i > 0 && v <= Number(lon[i - 1])) ascending = false;
@@ -538,10 +544,17 @@ function zarrDtype(meta: H5Metadata): string {
 
 /** Whether a datatype is a numeric class we can render. */
 function isRenderableDtype(meta: H5Metadata): boolean {
-  return (
-    (meta.type === H5T_FLOAT || meta.type === H5T_INTEGER) &&
-    (meta.size === 1 || meta.size === 2 || meta.size === 4 || meta.size === 8)
-  );
+  // Floats exist only at 2/4/8 bytes (no 1-byte float in Zarr v2/numpy);
+  // integers additionally allow 1 byte.
+  if (meta.type === H5T_FLOAT) {
+    return meta.size === 2 || meta.size === 4 || meta.size === 8;
+  }
+  if (meta.type === H5T_INTEGER) {
+    return (
+      meta.size === 1 || meta.size === 2 || meta.size === 4 || meta.size === 8
+    );
+  }
+  return false;
 }
 
 /**
@@ -595,7 +608,11 @@ function fillValueFor(ds: H5Dataset): number | string | null {
   for (const key of ["_FillValue", "missing_value"]) {
     const value = unwrapScalar(ds.attrs[key]?.value);
     if (typeof value === "number") {
-      return Number.isNaN(value) ? "NaN" : value;
+      // Non-finite fills need their Zarr v2 string form; a bare Infinity would
+      // otherwise be turned into null by JSON.stringify, dropping the marker.
+      if (Number.isNaN(value)) return "NaN";
+      if (!Number.isFinite(value)) return value > 0 ? "Infinity" : "-Infinity";
+      return value;
     }
   }
   return null;
