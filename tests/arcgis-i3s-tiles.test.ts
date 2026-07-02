@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  arcgisI3sSceneLayerName,
+  i3sTilesetLngLat,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
+  persistI3sTilesetCenter,
   ARCGIS_I3S_SOURCE_KIND,
 } from "../packages/plugins/src/plugins/arcgis-i3s-tiles";
+import { useAppStore } from "../packages/core/src/store";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 
 describe("isArcgisI3sSceneLayerUrl", () => {
@@ -68,6 +72,101 @@ describe("isArcgisI3sTilesLayer", () => {
         type: "raster",
       } as unknown as GeoLibreLayer),
       false,
+    );
+  });
+});
+
+describe("arcgisI3sSceneLayerName", () => {
+  it("derives the service name from the SceneServer path", () => {
+    assert.equal(
+      arcgisI3sSceneLayerName(
+        "https://tiles.arcgis.com/tiles/ab/arcgis/rest/services/SF_Bldgs/SceneServer/layers/0",
+      ),
+      "SF_Bldgs",
+    );
+    assert.equal(
+      arcgisI3sSceneLayerName(
+        "https://services.arcgis.com/ab/arcgis/rest/services/Trees/SceneServer",
+      ),
+      "Trees",
+    );
+    assert.equal(
+      arcgisI3sSceneLayerName(
+        "https://example.com/server/rest/services/City/SceneServer?token=xyz",
+      ),
+      "City",
+    );
+  });
+
+  it("decodes percent-encoded service names", () => {
+    assert.equal(
+      arcgisI3sSceneLayerName("https://host/rest/services/My%20City/SceneServer"),
+      "My City",
+    );
+  });
+
+  it("returns null when there is no SceneServer service segment", () => {
+    assert.equal(arcgisI3sSceneLayerName("https://example.com/tileset.json"), null);
+  });
+});
+
+describe("i3sTilesetLngLat", () => {
+  it("returns the [lng, lat] pair from a cartographic center", () => {
+    assert.deepEqual(i3sTilesetLngLat({ cartographicCenter: [10, 20, 30] }), [
+      10, 20,
+    ]);
+  });
+
+  it("returns null for missing, malformed, or non-finite centers", () => {
+    assert.equal(i3sTilesetLngLat(null), null);
+    assert.equal(i3sTilesetLngLat({}), null);
+    assert.equal(i3sTilesetLngLat({ cartographicCenter: [Number.NaN, 20] }), null);
+    assert.equal(
+      i3sTilesetLngLat({ cartographicCenter: ["a", "b"] as unknown as number[] }),
+      null,
+    );
+  });
+});
+
+describe("persistI3sTilesetCenter", () => {
+  function seedI3sLayer(): GeoLibreLayer {
+    const layer = {
+      id: "i3s-1",
+      name: "Scene",
+      type: "3d-tiles",
+      source: { sourceId: "i3s-1", type: ARCGIS_I3S_SOURCE_KIND, url: "u" },
+      visible: true,
+      opacity: 1,
+      style: {},
+      metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+    } as unknown as GeoLibreLayer;
+    useAppStore.setState({ layers: [layer] });
+    return layer;
+  }
+
+  it("writes the tileset center into layer.metadata.center", () => {
+    seedI3sLayer();
+    persistI3sTilesetCenter("i3s-1", { cartographicCenter: [-122.4, 37.8, 0] });
+    assert.deepEqual(useAppStore.getState().layers[0].metadata.center, [
+      -122.4, 37.8,
+    ]);
+  });
+
+  it("skips a redundant store write when the center is unchanged", () => {
+    seedI3sLayer();
+    persistI3sTilesetCenter("i3s-1", { cartographicCenter: [-122.4, 37.8, 0] });
+    const afterFirst = useAppStore.getState().layers[0];
+    persistI3sTilesetCenter("i3s-1", { cartographicCenter: [-122.4, 37.8, 0] });
+    // No write means the layer object reference is untouched.
+    assert.equal(useAppStore.getState().layers[0], afterFirst);
+  });
+
+  it("ignores invalid centers and unknown / non-I3S layers", () => {
+    seedI3sLayer();
+    persistI3sTilesetCenter("i3s-1", { cartographicCenter: [Number.NaN, 1] });
+    assert.equal(useAppStore.getState().layers[0].metadata.center, undefined);
+    assert.doesNotThrow(() =>
+      persistI3sTilesetCenter("missing", { cartographicCenter: [1, 2, 3] }),
     );
   });
 });

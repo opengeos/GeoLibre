@@ -26,6 +26,7 @@ import {
 } from "./map-projection-utils";
 import {
   addArcgisI3sTilesLayer,
+  arcgisI3sSceneLayerName,
   isArcgisI3sSceneLayerUrl,
   restoreArcgisI3sTilesLayers,
   THREE_D_TILES_TILESET_LOAD_LIMITS,
@@ -957,7 +958,9 @@ function addArcgisI3sTilesFromPanel(
   const name =
     panel
       .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
-      ?.value.trim() || layerNameFromUrl(url, "ArcGIS I3S Scene Layer");
+      ?.value.trim() ||
+    arcgisI3sSceneLayerName(url) ||
+    layerNameFromUrl(url, "ArcGIS I3S Scene Layer");
   const flyTo =
     panel.querySelector<HTMLInputElement>(
       'input[aria-label="Fly to tileset after load"]',

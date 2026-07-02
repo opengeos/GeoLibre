@@ -73,6 +73,21 @@ export function isArcgisI3sSceneLayerUrl(url: string): boolean {
   return I3S_SCENE_SERVER_RE.test(url.trim());
 }
 
+/**
+ * A friendly default layer name for an I3S URL: the service name (the path
+ * segment right before `/SceneServer`), e.g. `.../SF_Bldgs/SceneServer/layers/0`
+ * → `SF_Bldgs`. Falls back to `null` so callers can use their generic naming.
+ *
+ * @param url The Scene Layer URL.
+ * @returns The service name, or null if it can't be extracted.
+ */
+export function arcgisI3sSceneLayerName(url: string): string | null {
+  const match = url
+    .trim()
+    .match(/\/([^/?#]+)\/SceneServer(?:\/|$|\?|#)/i);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 /** Whether a store layer is an ArcGIS I3S tileset layer. */
 export function isArcgisI3sTilesLayer(layer: GeoLibreLayer): boolean {
   return (
@@ -147,9 +162,19 @@ export function restoreArcgisI3sTilesLayers(app: GeoLibreAppAPI): void {
 
 function ensureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
   if (i3sEnsureInFlight) return i3sEnsureInFlight;
-  i3sEnsureInFlight = runEnsureArcgisI3sTilesOverlay(app).finally(() => {
-    i3sEnsureInFlight = null;
-  });
+  // Both call sites are fire-and-forget, so log any failure here rather than
+  // leaving it as an unhandled rejection with no clue why the layer never
+  // rendered.
+  i3sEnsureInFlight = runEnsureArcgisI3sTilesOverlay(app)
+    .catch((error) => {
+      console.error(
+        "[GeoLibre] Failed to initialize the ArcGIS I3S overlay",
+        error,
+      );
+    })
+    .finally(() => {
+      i3sEnsureInFlight = null;
+    });
   return i3sEnsureInFlight;
 }
 
@@ -209,7 +234,15 @@ async function runEnsureArcgisI3sTilesOverlay(
 
 /** Lazily import the I3SLoader from @loaders.gl/i3s. */
 function loadI3sLoader(): Promise<unknown> {
-  i3sLoaderPromise ??= import("@loaders.gl/i3s").then((m) => m.I3SLoader);
+  // Clear the cache on failure so a transient chunk-load error (flaky network,
+  // stale CDN after a deploy, ad blocker) doesn't permanently break the feature
+  // — the next add/restore can retry instead of awaiting a rejected promise.
+  i3sLoaderPromise ??= import("@loaders.gl/i3s")
+    .then((m) => m.I3SLoader)
+    .catch((error) => {
+      i3sLoaderPromise = null;
+      throw error;
+    });
   return i3sLoaderPromise;
 }
 
@@ -377,8 +410,14 @@ function warnOnUnsupportedI3sSceneLayerType(
   url: string,
   tileset: unknown,
 ): void {
-  const layerType = (tileset as { tileset?: { layerType?: unknown } } | null)
-    ?.tileset?.layerType;
+  // @loaders.gl exposes the parsed SceneLayer under Tileset3D.tileset, but read
+  // the top level too in case a future version surfaces layerType directly. If
+  // neither is present the check just does nothing (the warning is best-effort).
+  const header = tileset as {
+    layerType?: unknown;
+    tileset?: { layerType?: unknown };
+  } | null;
+  const layerType = header?.tileset?.layerType ?? header?.layerType;
   if (
     typeof layerType === "string" &&
     !SUPPORTED_I3S_LAYER_TYPES.has(layerType)
@@ -392,7 +431,7 @@ function warnOnUnsupportedI3sSceneLayerType(
 }
 
 /** Read a tileset's cartographic center as an [lng, lat] pair, if present. */
-function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
+export function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
   const center = (
     tileset as { cartographicCenter?: [number, number, number] } | null
   )?.cartographicCenter;
@@ -413,7 +452,10 @@ function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
  * panel's "Zoom to layer" (MapController.fitLayer) works — an I3S layer has no
  * geojson or MapLibre source, so `metadata.center` is its only bounds hint.
  */
-function persistI3sTilesetCenter(layerId: string, tileset: unknown): void {
+export function persistI3sTilesetCenter(
+  layerId: string,
+  tileset: unknown,
+): void {
   const center = i3sTilesetLngLat(tileset);
   if (!center) return;
   const layer = useAppStore
