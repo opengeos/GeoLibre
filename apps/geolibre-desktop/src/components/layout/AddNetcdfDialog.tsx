@@ -205,9 +205,7 @@ export function AddNetcdfDialog({
         return;
       }
       if (vars.length === 0) {
-        throw new Error(
-          "No renderable (2-D or higher) variables found in the file."
-        );
+        throw new Error(t("addData.netcdf.errorNoVariables"));
       }
       openFileRef.current = file;
       setLocalFile(file);
@@ -248,13 +246,15 @@ export function AddNetcdfDialog({
 
       if (source === "file") {
         const file = localFile;
-        if (!file) throw new Error("No file loaded.");
+        if (!file) throw new Error(t("addData.netcdf.errorNoFile"));
         const { refs } = file.buildLayerRefs(variable, selector);
         // Use just the file's base name (fileName is a full path on desktop)
-        // so the derived layer name is clean on every platform.
+        // so the derived layer name is clean on every platform. Encode it so a
+        // name with URL-special chars (#, ?, %) survives layerNameFromUrl's
+        // new URL(...) parse.
         const baseName = fileName.split(/[\\/]/).pop() || "netcdf";
         await addCloudNetcdfLayer(appApi, {
-          url: `local:${baseName}`,
+          url: `local:${encodeURIComponent(baseName)}`,
           refs,
           variable,
           clim,
@@ -374,7 +374,7 @@ export function AddNetcdfDialog({
                   ? t("addData.netcdf.readingFile")
                   : fileName
                   ? t("addData.netcdf.chooseDifferentFile")
-                  : t("addData.netcdf.chooseFile")}
+                  : t("addData.common.chooseFile")}
               </Button>
               {fileName && (
                 <p className="text-xs text-muted-foreground">{fileName}</p>

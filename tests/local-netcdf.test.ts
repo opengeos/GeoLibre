@@ -201,6 +201,16 @@ describe("buildInlineZarrRefs", () => {
       dataChunk.byteLength / 4
     );
     assert.deepEqual(Array.from(values), [10, 20, 30, 40]);
+
+    // The longitude coordinate must also be left untouched (no roll).
+    const lonChunk = await store.get("lon/0");
+    assert.ok(lonChunk);
+    const lon = new Float64Array(
+      lonChunk.buffer,
+      lonChunk.byteOffset,
+      lonChunk.byteLength / 8
+    );
+    assert.deepEqual(Array.from(lon), [0, 90, NaN, 270]);
   });
 
   it("emits an integer dtype for integer grids", async () => {

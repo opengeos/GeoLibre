@@ -192,7 +192,8 @@ export class LocalNetcdfFile {
         // h5wasm resolves get() relative to the group, so look up the child by
         // its own `key`; `path` is only the accumulated label for output and
         // recursion. Passing the full path here would fail on nested groups.
-        const entity = group.get(key);
+        // A broken/unresolved link may throw; skip it rather than abort the scan.
+        const entity = tryGet(group, key);
         if (!entity) continue;
         const path = prefix ? `${prefix}/${key}` : key;
         if (isDataset(entity)) {
@@ -215,7 +216,7 @@ export class LocalNetcdfFile {
   listVariables(): LocalNetcdfVariable[] {
     const out: LocalNetcdfVariable[] = [];
     for (const path of this.datasetPaths()) {
-      const ds = this.file.get(path);
+      const ds = tryGet(this.file, path);
       if (!isDataset(ds)) continue;
       const shape = ds.shape ?? ds.metadata.shape ?? [];
       if (shape.length < 2) continue;
@@ -325,33 +326,34 @@ export class LocalNetcdfFile {
   ): { data: TypedArrayLike; dtype: string } | null {
     const slash = variablePath.lastIndexOf("/");
     const group = slash >= 0 ? variablePath.slice(0, slash) : "";
-    for (const name of names) {
-      // Prefer a coordinate in the variable's own group, then fall back to root.
-      const candidates = group ? [`${group}/${name}`, name] : [name];
-      for (const path of candidates) {
-        const entity = this.file.get(path);
-        if (!isDataset(entity)) continue;
-        const shape = entity.shape ?? entity.metadata.shape ?? [];
-        if (shape.length !== 1 || shape[0] !== length) continue;
-        if (!isRenderableDtype(entity.metadata)) continue;
-        const raw = entity.value;
-        if (!isTypedArray(raw)) continue;
-        // Apply the coordinate's own scale_factor/add_offset so packed
-        // (e.g. scaled-integer) lat/lon are compared and stored as degrees.
-        const scale = numericAttr(entity, "scale_factor");
-        const offset = numericAttr(entity, "add_offset");
-        const { data, dtype } =
-          scale !== undefined || offset !== undefined
-            ? {
-                data: applyScale(raw, scale ?? 1, offset ?? 0),
-                dtype: "<f8",
-              }
-            : { data: raw, dtype: zarrDtype(entity.metadata) };
-        // Reject values outside the geographic range: guards against generic
-        // `x`/`y` axes on projected grids (metres) being read as degrees.
-        if (!valuesWithin(data, range)) continue;
-        return { data, dtype };
-      }
+    // Try every name in the variable's own group first, then every name at
+    // root, so a same-group `lat` wins over a root `latitude`.
+    const candidates = group
+      ? [...names.map((name) => `${group}/${name}`), ...names]
+      : names;
+    for (const path of candidates) {
+      const entity = tryGet(this.file, path);
+      if (!isDataset(entity)) continue;
+      const shape = entity.shape ?? entity.metadata.shape ?? [];
+      if (shape.length !== 1 || shape[0] !== length) continue;
+      if (!isRenderableDtype(entity.metadata)) continue;
+      const raw = entity.value;
+      if (!isTypedArray(raw)) continue;
+      // Apply the coordinate's own scale_factor/add_offset so packed
+      // (e.g. scaled-integer) lat/lon are compared and stored as degrees.
+      const scale = numericAttr(entity, "scale_factor");
+      const offset = numericAttr(entity, "add_offset");
+      const { data, dtype } =
+        scale !== undefined || offset !== undefined
+          ? {
+              data: applyScale(raw, scale ?? 1, offset ?? 0),
+              dtype: "<f8",
+            }
+          : { data: raw, dtype: zarrDtype(entity.metadata) };
+      // Reject values outside the geographic range: guards against generic
+      // `x`/`y` axes on projected grids (metres) being read as degrees.
+      if (!valuesWithin(data, range)) continue;
+      return { data, dtype };
     }
     return null;
   }
@@ -411,6 +413,13 @@ export interface InlineZarrGrid {
  *   `addCloudNetcdfLayer({ refs })`.
  */
 export function buildInlineZarrRefs(grid: InlineZarrGrid): KerchunkRefs {
+  // The coordinate arrays are always written under the fixed keys `lat`/`lon`,
+  // so a data variable literally named `lat`/`lon` would collide with them.
+  if (grid.variable === "lat" || grid.variable === "lon") {
+    throw new Error(
+      `Variable name "${grid.variable}" collides with a coordinate array.`
+    );
+  }
   const refs: KerchunkRefs = { ".zgroup": '{"zarr_format":2}' };
 
   // The map spans -180..180. Data on a 0..360 longitude grid would otherwise
@@ -555,10 +564,11 @@ function zarrDtype(meta: H5Metadata): string {
 
 /** Whether a datatype is a numeric class we can render. */
 function isRenderableDtype(meta: H5Metadata): boolean {
-  // Floats exist only at 2/4/8 bytes (no 1-byte float in Zarr v2/numpy);
-  // integers additionally allow 1 byte.
+  // Only 4/8-byte floats: there is no 1-byte float, and h5wasm throws
+  // "Float16 not supported" for 2-byte (half-precision) floats. Integers
+  // additionally allow 1 and 2 bytes.
   if (meta.type === H5T_FLOAT) {
-    return meta.size === 2 || meta.size === 4 || meta.size === 8;
+    return meta.size === 4 || meta.size === 8;
   }
   if (meta.type === H5T_INTEGER) {
     return (
@@ -647,16 +657,25 @@ function applyScale(
   return out;
 }
 
-/** Whether every finite value in the array falls within `[min, max]`. */
+/** Whether every value in the array is finite and falls within `[min, max]`. */
 function valuesWithin(
   arr: TypedArrayLike,
   [min, max]: readonly [number, number]
 ): boolean {
   for (let i = 0; i < arr.length; i++) {
     const v = Number(arr[i]);
-    if (Number.isFinite(v) && (v < min || v > max)) return false;
+    if (!Number.isFinite(v) || v < min || v > max) return false;
   }
   return true;
+}
+
+/** Look up a child entity, returning null if h5wasm throws (broken link). */
+function tryGet(group: H5Group, name: string): unknown {
+  try {
+    return group.get(name);
+  } catch {
+    return null;
+  }
 }
 
 /** Clamp a selector index into `[0, size)`. */

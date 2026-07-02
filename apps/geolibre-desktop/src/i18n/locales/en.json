@@ -443,10 +443,11 @@
       "sourceCloud": "Cloud-Optimized (kerchunk URL)",
       "sourceLocal": "Local file (HDF5 / NetCDF-4)",
       "localFileLabel": "Local file",
-      "chooseFile": "Choose file",
       "chooseDifferentFile": "Choose a different file",
       "readingFile": "Reading...",
-      "localFileHelp": "Select a local HDF5 or NetCDF-4 (.nc/.h5) file. It is decoded in your browser; large files use more memory. Classic NetCDF-3 files are not supported."
+      "localFileHelp": "Select a local HDF5 or NetCDF-4 (.nc, .nc4, .h5, or .hdf5) file. It is decoded in your browser; large files use more memory. Classic NetCDF-3 files are not supported.",
+      "errorNoVariables": "No renderable (2-D or higher) variables found in the file.",
+      "errorNoFile": "No file loaded."
     },
     "deckViz": {
       "defaultName": "Deck.gl Layer",
