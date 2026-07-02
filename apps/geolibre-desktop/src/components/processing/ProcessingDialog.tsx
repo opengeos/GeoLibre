@@ -610,10 +610,10 @@ export function ProcessingDialog({
         setError(
           catalogError instanceof Error
             ? catalogError.message
-            : "Could not load Whitebox catalog snapshot.",
+            : t("processing.whitebox.catalogSnapshotError"),
         );
       } else if (nextTools.length === 0) {
-        setError("Could not load Whitebox catalog snapshot.");
+        setError(t("processing.whitebox.catalogSnapshotError"));
       }
       setLoadingTools(false);
       return;

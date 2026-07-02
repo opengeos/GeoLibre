@@ -176,12 +176,14 @@ export function mergeWasmToolManifests(
   const wasmById = new Map(wasmTools.map((tool) => [tool.id, tool] as const));
   const merged = catalogTools.map((tool) => {
     const wasm = wasmById.get(tool.id);
+    if (!wasm) return tool;
+    // Consume the match regardless of what follows, so a WASM-only-appended
+    // tool (below) can never duplicate a catalog tool's id.
+    wasmById.delete(tool.id);
     // Defensive fallback: a tool the WASM binary reports with no params (a
     // malformed/empty manifest, or a rare zero-parameter tool) keeps the
     // catalog's params rather than being blanked to an unusable empty form.
-    if (!wasm?.params?.length) return tool;
-    // Consume the match so only WASM-only tools remain to be appended below.
-    wasmById.delete(tool.id);
+    if (!wasm.params?.length) return tool;
     return { ...tool, params: wasm.params };
   });
   const geolibreOnly = [...wasmById.values()].filter(
