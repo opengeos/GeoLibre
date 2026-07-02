@@ -6,12 +6,56 @@
 // algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
+import { normalizeVectorOutputFormat } from "./sidecar-client";
 import type {
   RunWhiteboxToolRequest,
+  VectorOutputFormat,
   WhiteboxJob,
   WhiteboxTool,
   WhiteboxToolParameter,
 } from "./sidecar-client";
+
+/**
+ * File extension the WASM tool writes for each CRS-preserving vector output
+ * format. Selecting one of these (instead of the default GeoJSON) keeps the
+ * tool's target-CRS coordinates, which the GeoJSON writer would otherwise
+ * reproject back to WGS84 for RFC 7946 compliance.
+ */
+const VECTOR_OUTPUT_EXTENSION: Record<
+  Exclude<VectorOutputFormat, "geojson">,
+  string
+> = {
+  geoparquet: "parquet",
+  flatgeobuf: "fgb",
+  shapefile: "shp",
+};
+
+/**
+ * Bundle a Shapefile the WASM tool wrote (`.shp` plus its `.shx`/`.dbf`/`.prj`/
+ * `.cpg` sidecars) into a single zip, since a Shapefile is inherently multi-file.
+ * Returns `null` when any of the core members (`.shp`/`.shx`/`.dbf`) is missing:
+ * most GIS clients reject a Shapefile that lacks them, so an incomplete bundle
+ * is treated like a failed/partial write rather than shipped as a valid output.
+ *
+ * @param shpFile - The `.shp` filename in the WASM output map.
+ * @param files - Every file the tool wrote, keyed by name.
+ * @returns The zip bytes, or `null` if the core `.shp`/`.shx`/`.dbf` are incomplete.
+ */
+async function zipShapefileSidecars(
+  shpFile: string,
+  files: Record<string, Uint8Array>,
+): Promise<Uint8Array | null> {
+  const base = shpFile.replace(/\.shp$/i, "");
+  const required = ["shp", "shx", "dbf"] as const;
+  const members: Record<string, Uint8Array> = {};
+  for (const ext of [...required, "prj", "cpg"]) {
+    const member = files[`${base}.${ext}`];
+    if (member) members[`${base}.${ext}`] = member;
+  }
+  if (required.some((ext) => !members[`${base}.${ext}`])) return null;
+  const { zipSync } = await import("fflate");
+  return zipSync(members);
+}
 
 interface ToolRunResult {
   exitCode: number;
@@ -84,49 +128,96 @@ export async function listWhiteboxWasmTools(): Promise<string[]> {
 }
 
 /**
- * The GeoLibre-authored tools (`source: "geolibre"`) the WASM runner adds on top
- * of the Whitebox suite — e.g. `write_geoparquet`, `delineate_depressions` —
- * mapped to {@link WhiteboxTool} so the Processing toolbox can list and run them
- * alongside the catalog tools. These aren't in the Whitebox catalog snapshot, so
- * the toolbox can only discover them from the binary's own manifests.
- *
- * Each manifest param already carries `io_role`/`data_kind`/`schema`, which the
- * dialog's `parameterKind` reads directly; we additionally flatten an enum
- * schema's choices to `options` so the param renders as a dropdown.
+ * Map one WASM tool manifest to the {@link WhiteboxTool} shape the Processing
+ * toolbox renders. Each manifest param already carries `io_role`/`data_kind`/
+ * `schema`, which the dialog's `parameterKind` reads directly; we additionally
+ * flatten an enum schema's choices to `options` so the param renders as a
+ * dropdown. `source` is preserved only for GeoLibre-authored tools, matching how
+ * the Whitebox catalog snapshot leaves Whitebox tools' `source` unset.
  */
-export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
+function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
+  return {
+    id: manifest.id,
+    display_name: manifest.display_name,
+    summary: manifest.summary,
+    category: manifest.category,
+    license_tier: manifest.license_tier,
+    source:
+      manifest.source?.toLowerCase() === "geolibre" ? "geolibre" : undefined,
+    params: (manifest.params ?? []).map((param) => {
+      const mapped: WhiteboxToolParameter = {
+        name: param.name,
+        description: param.description,
+        required: param.required,
+        io_role: param.io_role,
+        data_kind: param.data_kind,
+        schema: param.schema,
+      };
+      if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
+        // Coerce to strings (not filter to strings): an enum with numeric or
+        // boolean values would otherwise drop to an empty list and render as a
+        // plain text input instead of a dropdown.
+        mapped.options = param.schema.options
+          .map((option) => option?.value)
+          .filter((value) => value != null)
+          .map(String);
+      }
+      return mapped;
+    }),
+  };
+}
+
+/**
+ * Every WASM tool manifest mapped to {@link WhiteboxTool}. In local (WASM) mode
+ * the binary is the source of truth for parameter names and shapes, which can
+ * diverge from the Python sidecar's catalog for the same tool id (e.g.
+ * `reproject_vector` takes `epsg`, not the catalog's `dst_epsg`). Use
+ * {@link mergeWasmToolManifests} to reconcile these against the catalog.
+ */
+export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
   const { listManifests } = await loadToolsModule();
   const manifests = await listManifests();
-  return manifests
-    .filter((manifest) => manifest.source?.toLowerCase() === "geolibre")
-    .map((manifest) => ({
-      id: manifest.id,
-      display_name: manifest.display_name,
-      summary: manifest.summary,
-      category: manifest.category,
-      license_tier: manifest.license_tier,
-      source: "geolibre",
-      params: (manifest.params ?? []).map((param) => {
-        const mapped: WhiteboxToolParameter = {
-          name: param.name,
-          description: param.description,
-          required: param.required,
-          io_role: param.io_role,
-          data_kind: param.data_kind,
-          schema: param.schema,
-        };
-        if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
-          // Coerce to strings (not filter to strings): an enum with numeric or
-          // boolean values would otherwise drop to an empty list and render as a
-          // plain text input instead of a dropdown.
-          mapped.options = param.schema.options
-            .map((option) => option?.value)
-            .filter((value) => value != null)
-            .map(String);
-        }
-        return mapped;
-      }),
-    }));
+  return manifests.map(manifestToWhiteboxTool);
+}
+
+/**
+ * Reconcile the Whitebox catalog snapshot with the WASM binary's own manifests
+ * for local (WASM) mode. The catalog supplies the tool list, display names, and
+ * categories; the WASM manifest is authoritative for each tool's parameters,
+ * because the binary can expose a different parameter set than the Python
+ * sidecar (e.g. `reproject_vector` validates `epsg`, whereas the catalog names
+ * the parameter `dst_epsg`, causing a "parameter 'epsg' is required" failure).
+ *
+ * Every catalog tool that the WASM binary also implements keeps its catalog
+ * metadata but takes the manifest's parameters; the GeoLibre-authored tools that
+ * never appear in the catalog are appended.
+ *
+ * @param catalogTools - Tools from the Whitebox catalog snapshot.
+ * @param wasmTools - Every WASM tool manifest ({@link listWasmToolManifests}).
+ * @returns Catalog tools with WASM parameters, plus WASM-only GeoLibre tools.
+ */
+export function mergeWasmToolManifests(
+  catalogTools: WhiteboxTool[],
+  wasmTools: WhiteboxTool[],
+): WhiteboxTool[] {
+  const wasmById = new Map(wasmTools.map((tool) => [tool.id, tool] as const));
+  const merged = catalogTools.map((tool) => {
+    const wasm = wasmById.get(tool.id);
+    if (!wasm) return tool;
+    // Consume the match so a WASM-only-appended tool (below) can never duplicate
+    // a catalog tool's id.
+    wasmById.delete(tool.id);
+    // The WASM binary is authoritative for the parameters (even an empty set)
+    // and for the tool's provenance; keep only the catalog's display metadata
+    // (name, category, …). Preserving `source` matters so a GeoLibre-authored
+    // tool that also has a catalog stub keeps its "geolibre" marker for the
+    // source filter.
+    return { ...tool, params: wasm.params, source: wasm.source ?? tool.source };
+  });
+  const geolibreOnly = [...wasmById.values()].filter(
+    (tool) => tool.source === "geolibre",
+  );
+  return [...merged, ...geolibreOnly];
 }
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
@@ -269,7 +360,23 @@ export async function runWhiteboxToolWasm(
   const encoder = new TextEncoder();
   const input: Record<string, Uint8Array> = {};
   const args: string[] = [];
-  const outputs: { name: string; file: string; raster: boolean }[] = [];
+  // How each output file is turned into a job output: "geojson" is parsed into a
+  // FeatureCollection (a map layer); "bytes" is returned raw (a raster COG, a
+  // file_out blob, or a CRS-preserving vector file to download); "shapefile" is
+  // zipped with its sidecars first.
+  const outputs: {
+    name: string;
+    file: string;
+    kind: "geojson" | "bytes" | "shapefile";
+  }[] = [];
+  // Defensive: validate the requested format so a bad value (e.g. a stale
+  // output path from switching sidecar/WASM modes) degrades to GeoJSON instead
+  // of indexing VECTOR_OUTPUT_EXTENSION to `undefined` and writing a
+  // `..._output.undefined` file the tool can't format. One format applies to
+  // every `vector_out` param; no current tool exposes more than one.
+  const vectorFormat: VectorOutputFormat = normalizeVectorOutputFormat(
+    request.vector_output_format,
+  );
 
   for (const param of request.tool?.params ?? []) {
     const kind = paramKind(param);
@@ -312,15 +419,28 @@ export async function runWhiteboxToolWasm(
       input[file] = bytes;
       args.push(`--${name}=/work/${file}`);
     } else if (kind === "vector_out") {
-      const file = `${outputBaseName(request.tool_id, name)}.geojson`;
-      outputs.push({ name, file, raster: false });
-      args.push(`--${name}=/work/${file}`);
+      const base = outputBaseName(request.tool_id, name);
+      // GeoJSON is reprojected to WGS84 on write (a map layer); the other formats
+      // keep the tool's target CRS and are returned as bytes to download.
+      if (vectorFormat === "geojson") {
+        const file = `${base}.geojson`;
+        outputs.push({ name, file, kind: "geojson" });
+        args.push(`--${name}=/work/${file}`);
+      } else {
+        const file = `${base}.${VECTOR_OUTPUT_EXTENSION[vectorFormat]}`;
+        outputs.push({
+          name,
+          file,
+          kind: vectorFormat === "shapefile" ? "shapefile" : "bytes",
+        });
+        args.push(`--${name}=/work/${file}`);
+      }
     } else if (kind === "raster_out" || kind === "file_out") {
       // file_out is treated as an opaque binary output (no GeoJSON parsing),
       // mirroring how raster outputs are returned as raw bytes.
       const ext = kind === "file_out" ? "dat" : "tif";
       const file = `${outputBaseName(request.tool_id, name)}.${ext}`;
-      outputs.push({ name, file, raster: true });
+      outputs.push({ name, file, kind: "bytes" });
       args.push(`--${name}=/work/${file}`);
     } else {
       const value = request.parameters[name];
@@ -343,9 +463,23 @@ export async function runWhiteboxToolWasm(
 
   const out: Record<string, unknown> = {};
   for (const entry of outputs) {
+    if (entry.kind === "shapefile") {
+      const zipped = await zipShapefileSidecars(entry.file, files);
+      if (zipped) {
+        out[entry.name] = zipped;
+      } else {
+        // The tool reported success but the Shapefile is incomplete (a core
+        // .shp/.shx/.dbf member is missing). Note it in the job messages so the
+        // user isn't left with a silently empty output.
+        stdout.push(
+          `Warning: "${entry.name}" produced an incomplete Shapefile (missing .shp/.shx/.dbf); no output written.`,
+        );
+      }
+      continue;
+    }
     const bytes = files[entry.file];
     if (!bytes) continue;
-    if (entry.raster) {
+    if (entry.kind === "bytes") {
       out[entry.name] = bytes;
       continue;
     }

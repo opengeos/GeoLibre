@@ -131,6 +131,48 @@ export interface WhiteboxLayerInput {
   bytes?: Uint8Array;
 }
 
+/**
+ * Output format for the in-browser WASM runner's `vector_out` parameters.
+ * `"geojson"` (the default) is reprojected to WGS84 (RFC 7946) and returned as a
+ * `FeatureCollection` for a map layer; the other formats preserve the tool's
+ * target-CRS coordinates and CRS metadata and are returned as bytes to download
+ * (a reprojection result would otherwise lose its projection, since GeoLibre and
+ * MapLibre only render EPSG:4326). Ignored by the Python sidecar.
+ */
+export type VectorOutputFormat =
+  | "geojson"
+  | "geoparquet"
+  | "flatgeobuf"
+  | "shapefile";
+
+/** Every valid {@link VectorOutputFormat}, for validating untrusted values. */
+export const VECTOR_OUTPUT_FORMATS: readonly VectorOutputFormat[] = [
+  "geojson",
+  "geoparquet",
+  "flatgeobuf",
+  "shapefile",
+];
+
+/**
+ * Coerce an arbitrary value to a {@link VectorOutputFormat}, falling back to
+ * `"geojson"`. Guards against a stale `vector_out` value: in sidecar mode the
+ * param holds a free-text output path, which persists in the form state after
+ * toggling "Run locally (WASM)" (the form only resets on tool change). Without
+ * this, that path string would be force-cast to a format and produce a broken
+ * output filename such as `..._output.undefined`.
+ *
+ * @param value - An arbitrary value that may or may not be a known format.
+ * @returns The value if it is a known format, otherwise `"geojson"`.
+ */
+export function normalizeVectorOutputFormat(
+  value: unknown,
+): VectorOutputFormat {
+  return typeof value === "string" &&
+    (VECTOR_OUTPUT_FORMATS as readonly string[]).includes(value)
+    ? (value as VectorOutputFormat)
+    : "geojson";
+}
+
 export interface RunWhiteboxToolRequest {
   tool_id: string;
   parameters: Record<string, unknown>;
@@ -138,6 +180,8 @@ export interface RunWhiteboxToolRequest {
   layer_inputs?: Record<string, WhiteboxLayerInput>;
   include_pro?: boolean;
   tier?: string;
+  /** WASM runner only: format for `vector_out` outputs (default `"geojson"`). */
+  vector_output_format?: VectorOutputFormat;
 }
 
 interface WhiteboxCatalogResponse {

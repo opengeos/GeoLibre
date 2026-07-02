@@ -19,6 +19,7 @@ import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
+import { OgcVectorTilesSource } from "./add-data/sources/OgcVectorTilesSource";
 import { PhotosSource } from "./add-data/sources/PhotosSource";
 import { PostgresSource } from "./add-data/sources/PostgresSource";
 import { VideoSource } from "./add-data/sources/VideoSource";
@@ -60,6 +61,8 @@ function renderSource(
       return <WfsSource />;
     case "wmts":
       return <WmtsSource />;
+    case "ogc-vector-tiles":
+      return <OgcVectorTilesSource />;
     case "gpx":
       return <GpxSource />;
     case "georss":

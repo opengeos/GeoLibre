@@ -19,6 +19,7 @@ export type KindI18nKey =
   | "wms"
   | "wfs"
   | "wmts"
+  | "ogcVectorTiles"
   | "gpx"
   | "georss"
   | "delimitedText"
@@ -40,6 +41,7 @@ export const KIND_I18N_KEY: Record<AddDataKind, KindI18nKey> = {
   wms: "wms",
   wfs: "wfs",
   wmts: "wmts",
+  "ogc-vector-tiles": "ogcVectorTiles",
   gpx: "gpx",
   georss: "georss",
   "delimited-text": "delimitedText",
@@ -61,6 +63,13 @@ export const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 export const DEFAULT_WFS_TYPE_NAME = "topp:states";
 export const DEFAULT_WMTS_URL =
   "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
+// PDOK BGT (Dutch large-scale base map) served as OGC API - Tiles vector tiles.
+// The style document carries the source-layer names the TileJSON omits; both
+// are prefilled so the sample works out of the box (zoom into the Netherlands).
+export const DEFAULT_OGC_VECTOR_TILES_URL =
+  "https://api.pdok.nl/lv/bgt/ogc/v1/tiles/WebMercatorQuad?f=tilejson";
+export const DEFAULT_OGC_VECTOR_TILES_STYLE_URL =
+  "https://api.pdok.nl/lv/bgt/ogc/v1/styles/bgt_standaardvisualisatie__webmercatorquad?f=mapbox";
 export const DEFAULT_GPX_URL =
   "https://data.source.coop/giswqs/opengeos/fells_loop.gpx";
 // USGS "Magnitude 2.5+ Earthquakes, Past Day" Atom feed (Simple georss:point).

@@ -2187,9 +2187,34 @@ function syncVectorTileLayer(
 ): void {
   const src = sourceId(layer.id);
   const url = layer.source.url as string | undefined;
-  if (!url) return;
+  // OGC API tilesets (and any raw tile template) are added from `tiles` when no
+  // TileJSON URL is available; MapLibre then needs the zoom range up front so it
+  // does not request tiles outside the tileset's advertised levels.
+  const tiles = Array.isArray(layer.source.tiles)
+    ? (layer.source.tiles as unknown[]).filter(
+        (tile): tile is string => typeof tile === "string" && tile.length > 0,
+      )
+    : undefined;
+  if (!url && !(tiles && tiles.length > 0)) return;
   if (!map.getSource(src)) {
-    map.addSource(src, { type: "vector", url });
+    if (url) {
+      map.addSource(src, { type: "vector", url });
+    } else {
+      const bounds = layer.source.bounds;
+      map.addSource(src, {
+        type: "vector",
+        tiles: tiles as string[],
+        ...(typeof layer.source.minzoom === "number"
+          ? { minzoom: layer.source.minzoom }
+          : {}),
+        ...(typeof layer.source.maxzoom === "number"
+          ? { maxzoom: layer.source.maxzoom }
+          : {}),
+        ...(Array.isArray(bounds) && bounds.length === 4
+          ? { bounds: bounds as [number, number, number, number] }
+          : {}),
+      });
+    }
   }
   const visibility = layer.visible ? "visible" : "none";
   const sourceLayers = getVectorTileSourceLayers(layer);

@@ -122,6 +122,10 @@
         "label": "Add WMTS Layer",
         "description": "Add a WMTS tile URL template as a raster layer."
       },
+      "ogcVectorTiles": {
+        "label": "Add OGC Vector Tiles Layer",
+        "description": "Add an OGC API - Tiles (vector) service from a TileJSON or tile template, optionally reading its source layers from a style URL."
+      },
       "gpx": {
         "label": "Add GPX Layer",
         "description": "Add GPX waypoints, routes, and tracks as one or more vector layers."
@@ -267,6 +271,22 @@
       "sampleLabel": "World imagery (Wayback)",
       "errorUrl": "Enter a WMTS tile URL template.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
+    },
+    "ogcVectorTiles": {
+      "defaultName": "OGC Vector Tiles Layer",
+      "tilesUrl": "Tiles URL",
+      "tilesUrlPlaceholder": "https://example.com/tiles/WebMercatorQuad?f=tilejson",
+      "tilesUrlHint": "A TileJSON metadata URL or a {z}/{y}/{x} MVT tile template.",
+      "styleUrl": "Style URL",
+      "styleUrlPlaceholder": "https://example.com/styles/default?f=mapbox",
+      "styleUrlHint": "Optional Mapbox/MapLibre style JSON. Used to discover the tileset's source layers when the TileJSON omits them.",
+      "sourceLayers": "Source layers",
+      "sourceLayersPlaceholder": "layer_a, layer_b",
+      "sourceLayersHint": "Optional comma-separated source layer names. Overrides the layers found in the TileJSON or style.",
+      "sampleLabel": "PDOK BGT (Netherlands)",
+      "errorUrl": "Enter a tiles URL or a style URL.",
+      "errorNoTiles": "Could not determine the vector tile endpoint. Enter a TileJSON URL, a tile template, or a style URL.",
+      "errorNoLayers": "Could not determine the vector tile source layers. Add a style URL or enter the source layer names."
     },
     "arcgis": {
       "defaultName": "ArcGIS Layer",
@@ -1381,6 +1401,7 @@
       "wms": "WMS Layer",
       "wfs": "WFS Layer",
       "wmts": "WMTS Layer",
+      "ogcVectorTiles": "OGC Vector Tiles Layer",
       "arcgis": "ArcGIS Layer",
       "georss": "GeoRSS Layer",
       "video": "Video Layer",
@@ -2120,6 +2141,15 @@
       "runLocal": "Run locally (WASM)",
       "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
       "runningLocally": "Running locally with WebAssembly. No sidecar required.",
+      "catalogSnapshotError": "Could not load Whitebox catalog snapshot.",
+      "localRunnerError": "Could not load the local (WASM) tool runner. Refresh and try again, or use the sidecar if it is available.",
+      "output": {
+        "geojson": "GeoJSON (add to map)",
+        "geoparquet": "GeoParquet (download, keeps CRS)",
+        "flatgeobuf": "FlatGeobuf (download, keeps CRS)",
+        "shapefile": "Shapefile (download, keeps CRS)",
+        "projectedHint": "Saved to your downloads in the target CRS. The map only displays EPSG:4326, so a projected result is not added as a layer."
+      },
       "filterBySource": "Filter by source",
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",
