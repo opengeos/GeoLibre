@@ -1799,6 +1799,7 @@
     "selectPlaceholder": "Select a layer…",
     "refresh": "Refresh layer list",
     "noLayers": "No vector layers are in the current view. Add a vector layer or pan to a basemap area with vector features, then refresh.",
+    "editSessionActive": "Finish the in-place geometry edit (Layers panel → Finish editing geometry) before loading or saving features here.",
     "editorName": "Editor Name",
     "editorNamePlaceholder": "Your name (optional)",
     "loadFeatures": "Load Features",

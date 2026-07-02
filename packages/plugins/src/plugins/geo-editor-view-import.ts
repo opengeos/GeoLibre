@@ -2,11 +2,13 @@ import type {
   Feature,
   FeatureCollection,
   Geometry,
+  LineString,
+  MultiLineString,
   MultiPolygon,
   Polygon,
   Position,
 } from "geojson";
-import { union } from "@turf/union";
+import union from "@turf/union";
 
 /**
  * Pure helpers for loading the vector features currently rendered in the map
@@ -35,6 +37,15 @@ export const VIEW_IMPORT_ID_PROPERTY = "__geolibre_view_fid";
  * the feature was added, modified, or deleted relative to what was loaded.
  */
 export const VIEW_IMPORT_CHANGE_PROPERTY = "__change";
+
+/**
+ * Provenance keys stamped onto changed/added/deleted features on export. They
+ * are namespaced (rather than plain `editor`/`modified`) so a source dataset
+ * that already carries an `editor` or `modified` attribute is not silently
+ * overwritten in the exported GeoJSON.
+ */
+export const VIEW_IMPORT_EDITOR_PROPERTY = "__geolibre_editor";
+export const VIEW_IMPORT_MODIFIED_PROPERTY = "__geolibre_modified";
 
 /** The kind of change a feature represents in a "changed only" export. */
 export type ViewImportChangeKind = "added" | "modified" | "deleted";
@@ -280,40 +291,60 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-/**
- * Whether any coordinate of a geometry falls inside the given bounds. Used to
- * keep only features that intersect the current viewport, since a source's
- * loaded tiles may cover more area than is on screen.
- */
-export function geometryIntersectsBounds(
-  geometry: Geometry | null | undefined,
-  bounds: ViewBounds,
-): boolean {
-  if (!geometry) return false;
-  const walk = (value: unknown): boolean => {
-    if (!Array.isArray(value)) return false;
+/** The [minX, minY, maxX, maxY] bounding box of a geometry, or null when empty. */
+function geometryBbox(
+  geometry: Geometry,
+): [number, number, number, number] | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  const walk = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
     if (
       value.length >= 2 &&
       isFiniteNumber(value[0]) &&
       isFiniteNumber(value[1])
     ) {
       const [lng, lat] = value as [number, number];
-      return (
-        lng >= bounds.west &&
-        lng <= bounds.east &&
-        lat >= bounds.south &&
-        lat <= bounds.north
-      );
+      if (lng < minX) minX = lng;
+      if (lng > maxX) maxX = lng;
+      if (lat < minY) minY = lat;
+      if (lat > maxY) maxY = lat;
+      return;
     }
-    for (const item of value) {
-      if (walk(item)) return true;
-    }
-    return false;
+    for (const item of value) walk(item);
   };
+  walk((geometry as { coordinates?: unknown }).coordinates);
+  return Number.isFinite(minX) ? [minX, minY, maxX, maxY] : null;
+}
+
+/**
+ * Whether a geometry's bounding box overlaps the given viewport bounds. Uses a
+ * bbox-overlap test (not a vertex-in-bounds test) so features that intersect the
+ * view without any vertex on screen still count: a line crossing the viewport,
+ * or a large polygon that fully contains it. This over-includes features whose
+ * bbox overlaps but whose geometry does not, which is acceptable here — the
+ * source only yields features from loaded tiles, and including a nearby feature
+ * is far better than dropping one the user can clearly see.
+ */
+export function geometryIntersectsBounds(
+  geometry: Geometry | null | undefined,
+  bounds: ViewBounds,
+): boolean {
+  if (!geometry) return false;
   if (geometry.type === "GeometryCollection") {
     return geometry.geometries.some((g) => geometryIntersectsBounds(g, bounds));
   }
-  return walk((geometry as { coordinates?: unknown }).coordinates);
+  const bbox = geometryBbox(geometry);
+  if (!bbox) return false;
+  const [minX, minY, maxX, maxY] = bbox;
+  return (
+    minX <= bounds.east &&
+    maxX >= bounds.west &&
+    minY <= bounds.north &&
+    maxY >= bounds.south
+  );
 }
 
 /** A rough size for a geometry, used to keep the largest of duplicate tiles. */
@@ -335,14 +366,23 @@ function isPolygonal(
   return type === "Polygon" || type === "MultiPolygon";
 }
 
+function isLinear(
+  feature: Feature,
+): feature is Feature<LineString | MultiLineString> {
+  const type = feature.geometry?.type;
+  return type === "LineString" || type === "MultiLineString";
+}
+
 /**
  * Reassemble the tile-clipped pieces of one feature into a single geometry.
  * `querySourceFeatures` returns a feature once per tile it spans, each clipped
  * to that tile, so a feature straddling a tile boundary comes back as several
  * partial shapes. Polygonal pieces are dissolved with a union (their shared,
  * buffered tile-boundary edges cancel out, reconstructing the whole footprint);
- * if the union fails, or the pieces are not polygonal, the largest piece is kept
- * as a safe fallback rather than a wrong merge.
+ * line pieces are collected into a MultiLineString so every fragment is kept
+ * (they are not topologically stitched, but nothing is dropped). If reassembly
+ * is not possible (mixed/other types, or the union throws) the largest piece is
+ * kept as a safe fallback rather than a wrong merge.
  *
  * @param pieces The clipped pieces of one feature (>= 1).
  * @returns A single feature with the reassembled geometry.
@@ -360,22 +400,34 @@ function mergeClippedPieces(pieces: Feature[]): Feature {
   }
   if (pieces.length === 1) return largest;
 
+  const withMergedGeometry = (geometry: Geometry): Feature => ({
+    type: "Feature",
+    ...(largest.id != null ? { id: largest.id } : {}),
+    geometry,
+    properties: { ...(largest.properties ?? {}) },
+  });
+
   if (pieces.every(isPolygonal)) {
     try {
       const merged = union({
         type: "FeatureCollection",
         features: pieces as Feature<Polygon | MultiPolygon>[],
       });
-      if (merged?.geometry) {
-        return {
-          type: "Feature",
-          ...(largest.id != null ? { id: largest.id } : {}),
-          geometry: merged.geometry,
-          properties: { ...(largest.properties ?? {}) },
-        };
-      }
+      if (merged?.geometry) return withMergedGeometry(merged.geometry);
     } catch {
       // Degenerate geometry can make the union throw; fall back to the largest.
+    }
+  } else if (pieces.every(isLinear)) {
+    // Collect every clipped segment so a road/line crossing a tile boundary is
+    // preserved whole rather than reduced to its largest fragment.
+    const lines: Position[][] = [];
+    for (const piece of pieces) {
+      const geometry = piece.geometry;
+      if (geometry.type === "LineString") lines.push(geometry.coordinates);
+      else lines.push(...geometry.coordinates);
+    }
+    if (lines.length > 0) {
+      return withMergedGeometry({ type: "MultiLineString", coordinates: lines });
     }
   }
 
@@ -651,8 +703,10 @@ export function captureViewImportBaseline(
     if (!id) continue;
     if (!feature.geometry) continue;
     if (onlyIds && !onlyIds.has(id)) continue;
+    // Deep-clone so a later in-place mutation of the editor's geometry cannot
+    // drift the baseline (which would make the changed-only diff miss edits).
     baseline.set(id, {
-      geometry: feature.geometry,
+      geometry: structuredClone(feature.geometry),
       properties: stripEditorProperties(feature.properties),
     });
   }
@@ -694,8 +748,8 @@ function withEditorMetadata(
 ): Record<string, unknown> {
   return {
     ...properties,
-    ...(editorName ? { editor: editorName } : {}),
-    modified: now,
+    ...(editorName ? { [VIEW_IMPORT_EDITOR_PROPERTY]: editorName } : {}),
+    [VIEW_IMPORT_MODIFIED_PROPERTY]: now,
   };
 }
 
@@ -728,7 +782,7 @@ export function buildFullExport(
  * are tagged `modified`, features with no baseline id are `added`, and baseline
  * features no longer present are emitted as `deleted` (carrying their original
  * geometry and attributes). Each feature gets a {@link VIEW_IMPORT_CHANGE_PROPERTY}
- * tag and, for added/modified features, `editor`/`modified` metadata.
+ * tag plus namespaced editor/timestamp provenance keys.
  *
  * @param collection The editor's current feature collection.
  * @param baseline The baseline from {@link captureViewImportBaseline}.
@@ -791,8 +845,8 @@ export function buildChangedExport(
       geometry: original.geometry,
       properties: {
         ...original.properties,
-        ...(editorName ? { editor: editorName } : {}),
-        modified: now,
+        ...(editorName ? { [VIEW_IMPORT_EDITOR_PROPERTY]: editorName } : {}),
+        [VIEW_IMPORT_MODIFIED_PROPERTY]: now,
         [VIEW_IMPORT_CHANGE_PROPERTY]: "deleted",
       },
     });

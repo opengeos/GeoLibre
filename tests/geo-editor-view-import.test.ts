@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import type { Feature, FeatureCollection } from "geojson";
 import {
   VIEW_IMPORT_CHANGE_PROPERTY,
+  VIEW_IMPORT_EDITOR_PROPERTY,
   VIEW_IMPORT_ID_PROPERTY,
+  VIEW_IMPORT_MODIFIED_PROPERTY,
   buildChangedExport,
   buildFullExport,
   captureViewImportBaseline,
@@ -154,8 +156,29 @@ describe("geometryIntersectsBounds", () => {
       true,
     );
   });
-  it("returns false when every vertex is outside the bounds", () => {
+  it("returns false when the geometry's bbox does not overlap the bounds", () => {
     assert.equal(geometryIntersectsBounds({ type: "Point", coordinates: [20, 20] }, bounds), false);
+  });
+  it("returns true for a polygon that fully contains the viewport (no vertex inside)", () => {
+    assert.equal(
+      geometryIntersectsBounds(
+        {
+          type: "Polygon",
+          coordinates: [[[-90, -90], [-90, 90], [90, 90], [90, -90], [-90, -90]]],
+        },
+        bounds,
+      ),
+      true,
+    );
+  });
+  it("returns true for a line crossing the viewport with both endpoints outside", () => {
+    assert.equal(
+      geometryIntersectsBounds(
+        { type: "LineString", coordinates: [[-20, 5], [30, 5]] },
+        bounds,
+      ),
+      true,
+    );
   });
   it("handles GeometryCollection", () => {
     assert.equal(
@@ -223,6 +246,28 @@ describe("dedupeViewportFeatures", () => {
     const b = point(2, 2);
     const result = dedupeViewportFeatures([a, b], WORLD);
     assert.equal(result.length, 2);
+  });
+
+  it("reassembles line fragments of one id into a MultiLineString (no fragment dropped)", () => {
+    const west: Feature = {
+      type: "Feature",
+      id: 7,
+      geometry: { type: "LineString", coordinates: [[0, 0], [1, 0]] },
+      properties: { name: "road" },
+    };
+    const east: Feature = {
+      type: "Feature",
+      id: 7,
+      geometry: { type: "LineString", coordinates: [[1, 0], [2, 0]] },
+      properties: { name: "road" },
+    };
+    const result = dedupeViewportFeatures([west, east], WORLD);
+    assert.equal(result.length, 1);
+    assert.equal(result[0].geometry?.type, "MultiLineString");
+    assert.equal(
+      (result[0].geometry as { coordinates: number[][][] }).coordinates.length,
+      2,
+    );
   });
 });
 
@@ -351,10 +396,14 @@ describe("buildChangedExport", () => {
     );
     assert.equal(deleted.properties?.name, "delete-me");
 
-    // Editor metadata is stamped and internal tags are stripped from the export.
+    // Editor metadata is stamped (namespaced, so it can't clobber user
+    // attributes) and internal tags are stripped from the export.
     const modified = byChange("modified")[0];
-    assert.equal(modified.properties?.editor, "Alice");
-    assert.equal(modified.properties?.modified, "2026-07-02T00:00:00.000Z");
+    assert.equal(modified.properties?.[VIEW_IMPORT_EDITOR_PROPERTY], "Alice");
+    assert.equal(
+      modified.properties?.[VIEW_IMPORT_MODIFIED_PROPERTY],
+      "2026-07-02T00:00:00.000Z",
+    );
     assert.ok(!(VIEW_IMPORT_ID_PROPERTY in (modified.properties ?? {})));
     assert.ok(!("__gm_shape" in (modified.properties ?? {})));
   });

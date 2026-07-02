@@ -502,6 +502,13 @@ export async function loadViewFeaturesIntoEditor(
 
   const idPrefix = `view${viewImportLoadCounter++}`;
   const tagged = tagViewFeaturesForImport(features, idPrefix);
+  // Bail out before touching the editor: with `replace: true`, loading an empty
+  // collection (every queried feature was un-editable) would wipe whatever the
+  // user already had loaded/edited (and the persisted Sketches layer). Report
+  // nothing imported instead.
+  if (tagged.prepared === 0) {
+    return { imported: 0, dropped: tagged.dropped };
+  }
   const newIds = new Set(
     tagged.collection.features.map((feature) => String(feature.id)),
   );
@@ -547,7 +554,8 @@ export async function loadViewFeaturesIntoEditor(
  *
  * @param options Whether to export only changes, plus the editor name and ISO
  *   timestamp stamped onto changed features.
- * @returns The export result, or null when the editor is unavailable.
+ * @returns The export result, or null when the editor is unavailable or an
+ *   in-place geometry-edit session has re-targeted the editor.
  */
 export function buildEditorSaveCollection(options: {
   changedOnly: boolean;
@@ -555,6 +563,11 @@ export function buildEditorSaveCollection(options: {
   now: string;
 }): ViewImportExport | null {
   if (!geoEditorControl) return null;
+  // During an in-place "Edit geometry" session the shared editor holds the
+  // target layer's features, not the loaded view features, and the view-import
+  // baseline is stale. Exporting now would produce a nonsensical diff, so refuse
+  // (the dialog disables Save while such a session is active).
+  if (editTargetLayerId) return null;
   const collection = cloneFeatureCollection(
     geoEditorControl.getAllFeatureCollection(),
   );

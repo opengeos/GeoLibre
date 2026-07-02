@@ -4,12 +4,14 @@ import type { MapController } from "@geolibre/map";
 import {
   buildEditorSaveCollection,
   getGeoEditorFeatureCount,
+  getGeometryEditTargetLayerId,
   hasViewImportBaseline,
   isGeoEditorAvailableForImport,
   loadViewFeaturesIntoEditor,
   queryViewLayerFeatures,
   resolveStoreLayerViewSource,
   SKETCHES_SOURCE_KIND,
+  subscribeGeometryEdit,
   type ViewImportMap,
   type ViewVectorLayer,
 } from "@geolibre/plugins";
@@ -20,7 +22,9 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -85,6 +89,12 @@ export function LoadFeaturesIntoEditorDialog({
 }: LoadFeaturesIntoEditorDialogProps) {
   const { t } = useTranslation();
   const storeLayers = useAppStore((s) => s.layers);
+  // While an in-place "Edit geometry" session is active the shared editor holds
+  // that layer's geometry (not the loaded view features), so loading/saving here
+  // would be wrong; the panel disables its actions and shows a note instead.
+  const geometryEditActive =
+    useSyncExternalStore(subscribeGeometryEdit, getGeometryEditTargetLayerId) !==
+    null;
   const [eligible, setEligible] = useState<EligibleLayer[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [editorName, setEditorName] = useState("");
@@ -131,10 +141,22 @@ export function LoadFeaturesIntoEditorDialog({
     );
   }, [computeEligible]);
 
-  // On open: repopulate the eligible list, preselect any context-menu target,
-  // restore the saved editor name, and place the panel near the top-right.
+  // Tracks the true open transition (false -> true). Without this the effect
+  // below would also re-run whenever `computeEligible` changes identity (i.e.
+  // whenever the Layers panel changes), resetting the drag position, collapse
+  // state, and any in-progress status while the panel is already open.
+  const wasOpenRef = useRef(false);
+
+  // On the open transition: repopulate the eligible list, preselect any
+  // context-menu target, restore the saved editor name, and dock the panel at
+  // the bottom-left of the map canvas.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
     const next = computeEligible();
     setEligible(next);
     setSelectedId(
@@ -254,22 +276,44 @@ export function LoadFeaturesIntoEditorDialog({
         setStatus({ message: t("loadEditorFeatures.selectLayer"), kind: "error" });
         return;
       }
+      // Mark busy for the query window too, so the form (and Load button) is
+      // disabled while the query runs — a second click can't fire a concurrent
+      // query.
+      setBusy(true);
       setStatus({ message: t("loadEditorFeatures.loading"), kind: "info" });
       // Query on the next tick so the "Loading…" status can paint first.
       window.setTimeout(() => {
-        const features = queryViewLayerFeatures(
-          map as unknown as ViewImportMap,
-          selectedLayer.source,
-        );
+        let features: Feature[];
+        try {
+          features = queryViewLayerFeatures(
+            map as unknown as ViewImportMap,
+            selectedLayer.source,
+          );
+        } catch (error) {
+          // e.g. the layer's source was removed between selecting and loading.
+          setStatus({
+            message:
+              error instanceof Error
+                ? error.message
+                : t("loadEditorFeatures.loadFailed"),
+            kind: "error",
+          });
+          setBusy(false);
+          return;
+        }
         if (features.length === 0) {
           setStatus({ message: t("loadEditorFeatures.noneInView"), kind: "error" });
+          setBusy(false);
           return;
         }
         if (features.length > LOAD_WARN_THRESHOLD) {
           setPendingLoad({ replace, features });
           setStatus(null);
+          setBusy(false);
           return;
         }
+        // Hand off to commitLoad, which manages `busy` for the load itself.
+        setBusy(false);
         void commitLoad(features, replace, selectedLayer.name);
       }, 0);
     },
@@ -442,6 +486,12 @@ export function LoadFeaturesIntoEditorDialog({
           {t("loadEditorFeatures.description")}
         </p>
 
+        {geometryEditActive && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs">
+            {t("loadEditorFeatures.editSessionActive")}
+          </p>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="load-editor-layer">
             {t("loadEditorFeatures.vectorLayer")}
@@ -574,7 +624,7 @@ export function LoadFeaturesIntoEditorDialog({
           <Button
             type="button"
             className="w-full"
-            disabled={busy || !selectedId}
+            disabled={busy || !selectedId || geometryEditActive}
             onClick={handleLoadClick}
           >
             {t("loadEditorFeatures.loadFeatures")}
@@ -591,7 +641,7 @@ export function LoadFeaturesIntoEditorDialog({
           <Button
             type="button"
             variant="outline"
-            disabled={busy || !changesAvailable}
+            disabled={busy || !changesAvailable || geometryEditActive}
             title={t("loadEditorFeatures.saveChangesHint")}
             onClick={() => void runSave(true)}
           >
@@ -599,7 +649,7 @@ export function LoadFeaturesIntoEditorDialog({
           </Button>
           <Button
             type="button"
-            disabled={busy}
+            disabled={busy || geometryEditActive}
             onClick={() => void runSave(false)}
           >
             {t("loadEditorFeatures.saveAll")}
