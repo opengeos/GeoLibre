@@ -21,7 +21,9 @@ import { ensureMercatorProjection } from "./map-projection-utils";
 /** Source-kind tag stored on an ArcGIS I3S layer's source + metadata. */
 export const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 const ARCGIS_I3S_LAYER_ID_PREFIX = "arcgis-i3s-tiles";
-const I3S_MAX_MOUNT_RETRIES = 30;
+// ~1s at 60fps, matching GOOGLE_TILES_MAX_MOUNT_RETRIES so a slow project
+// restore has the same budget to wait for the map before giving up.
+const I3S_MAX_MOUNT_RETRIES = 60;
 
 // A Scene Layer service endpoint: ".../SceneServer" optionally followed by
 // "/layers/<n>". Covers ArcGIS Online (*.arcgis.com), ArcGIS Enterprise
@@ -109,8 +111,7 @@ export function addArcgisI3sTilesLayer(
     sourcePath: url,
   });
 
-  i3sFlyToRequested.add(id);
-  if (!options.flyTo) i3sFlyToRequested.delete(id);
+  if (options.flyTo) i3sFlyToRequested.add(id);
   void ensureArcgisI3sTilesOverlay(app);
   return id;
 }
@@ -126,26 +127,6 @@ export function restoreArcgisI3sTilesLayers(app: GeoLibreAppAPI): void {
   if (useAppStore.getState().layers.some(isArcgisI3sTilesLayer)) {
     void ensureArcgisI3sTilesOverlay(app);
   }
-}
-
-/** Tear down all I3S overlay state (plugin deactivation / map teardown). */
-export function teardownArcgisI3sTilesOverlay(app: GeoLibreAppAPI): void {
-  if (i3sOverlay && i3sOverlayMounted) {
-    try {
-      app.removeMapControl(i3sOverlay);
-    } catch {
-      /* stale map: best effort */
-    }
-  }
-  i3sStoreUnsubscribe?.();
-  i3sStoreUnsubscribe = null;
-  i3sOverlay = null;
-  i3sOverlayMounted = false;
-  i3sBoundMap = null;
-  lastI3sLayerSignature = null;
-  i3sMountRetries = 0;
-  i3sMountGaveUp = false;
-  i3sFlyToRequested.clear();
 }
 
 function ensureArcgisI3sTilesOverlay(app: GeoLibreAppAPI): Promise<void> {
@@ -321,6 +302,16 @@ function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
     id: `${layer.id}-deck`,
     data: url,
     loader: i3sLoader,
+    // Cap tile detail/memory the same way the Google Photorealistic overlay
+    // does, so a large textured-mesh scene doesn't load with deck.gl's
+    // unbounded defaults.
+    loadOptions: {
+      tileset: {
+        maximumScreenSpaceError: 20,
+        maximumMemoryUsage: 512,
+        memoryAdjustedScreenSpaceError: true,
+      },
+    },
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",

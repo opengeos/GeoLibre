@@ -937,14 +937,22 @@ function addArcgisI3sTilesFromPanel(
   panel: HTMLElement,
 ): void {
   const app = activeThreeDTilesApp;
-  if (!app) return;
+  if (!app) {
+    console.warn(
+      "[GeoLibre] ArcGIS I3S submit ignored: no active 3D Tiles app",
+    );
+    return;
+  }
   const url = getThreeDTilesUrlInput(panel)?.value.trim();
-  if (!url) return;
+  if (!url) {
+    console.warn("[GeoLibre] ArcGIS I3S submit ignored: empty URL");
+    return;
+  }
 
   const name =
     panel
       .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
-      ?.value.trim() || layerNameFromUrl(url, "ArcGIS 3D Tiles");
+      ?.value.trim() || layerNameFromUrl(url, "ArcGIS I3S Scene Layer");
   const flyTo =
     panel.querySelector<HTMLInputElement>(
       'input[aria-label="Fly to tileset after load"]',
