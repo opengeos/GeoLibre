@@ -372,7 +372,8 @@ export async function runWhiteboxToolWasm(
   // Defensive: validate the requested format so a bad value (e.g. a stale
   // output path from switching sidecar/WASM modes) degrades to GeoJSON instead
   // of indexing VECTOR_OUTPUT_EXTENSION to `undefined` and writing a
-  // `..._output.undefined` file the tool can't format.
+  // `..._output.undefined` file the tool can't format. One format applies to
+  // every `vector_out` param; no current tool exposes more than one.
   const vectorFormat: VectorOutputFormat = normalizeVectorOutputFormat(
     request.vector_output_format,
   );
@@ -464,7 +465,16 @@ export async function runWhiteboxToolWasm(
   for (const entry of outputs) {
     if (entry.kind === "shapefile") {
       const zipped = await zipShapefileSidecars(entry.file, files);
-      if (zipped) out[entry.name] = zipped;
+      if (zipped) {
+        out[entry.name] = zipped;
+      } else {
+        // The tool reported success but the Shapefile is incomplete (a core
+        // .shp/.shx/.dbf member is missing). Note it in the job messages so the
+        // user isn't left with a silently empty output.
+        stdout.push(
+          `Warning: "${entry.name}" produced an incomplete Shapefile (missing .shp/.shx/.dbf); no output written.`,
+        );
+      }
       continue;
     }
     const bytes = files[entry.file];

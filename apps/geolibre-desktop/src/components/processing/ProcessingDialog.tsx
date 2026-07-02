@@ -595,6 +595,13 @@ export function ProcessingDialog({
           : [];
       const catalogError =
         catalogResult.status === "rejected" ? catalogResult.reason : null;
+      // A snapshot that resolves to an empty list (malformed/empty JSON that
+      // doesn't throw) silently drops the ~700 Whitebox tools. Detect it from
+      // the raw result, not `catalogTools`, so a fetch that returned only locked
+      // tools isn't mistaken for a load failure.
+      const catalogEmpty =
+        catalogResult.status === "fulfilled" &&
+        catalogResult.value.length === 0;
       const wasmTools =
         wasmResult.status === "fulfilled" ? wasmResult.value : [];
       const wasmError =
@@ -632,10 +639,7 @@ export function ProcessingDialog({
             ? catalogError.message
             : t("processing.whitebox.catalogSnapshotError"),
         );
-      } else if (catalogTools.length === 0 || nextTools.length === 0) {
-        // The catalog can also resolve to an empty list (a malformed/empty
-        // snapshot doesn't throw), which silently drops the ~700 Whitebox tools
-        // even when a few GeoLibre-authored WASM tools keep `nextTools` non-empty.
+      } else if (catalogEmpty || nextTools.length === 0) {
         setError(t("processing.whitebox.catalogSnapshotError"));
       }
       setLoadingTools(false);
@@ -787,6 +791,30 @@ export function ProcessingDialog({
     // previously browsed file's bytes for this parameter.
     browsedInputsRef.current.delete(name);
     setValues((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleRunLocalChange = (nextRunLocal: boolean) => {
+    setRunLocal(nextRunLocal);
+    // A `vector_out` param holds an output-format string in WASM mode but a
+    // free-text path in sidecar mode, and the form only resets on tool change.
+    // Turning WASM mode off would otherwise leave a format like "geoparquet" as
+    // the sidecar output path, so reset any such param to its default.
+    if (nextRunLocal || !selectedTool) return;
+    const defaults = createDefaultValues(selectedTool);
+    setValues((prev) => {
+      const next = { ...prev };
+      for (const param of selectedTool.params ?? []) {
+        const current = prev[param.name];
+        if (
+          parameterKind(param) === "vector_out" &&
+          typeof current === "string" &&
+          normalizeVectorOutputFormat(current) === current
+        ) {
+          next[param.name] = defaults[param.name];
+        }
+      }
+      return next;
+    });
   };
 
   // Stash a browsed input file's bytes and show its name in the field. Used by
@@ -1203,7 +1231,7 @@ export function ProcessingDialog({
                     type="checkbox"
                     data-testid="whitebox-run-local"
                     checked={runLocal}
-                    onChange={(e) => setRunLocal(e.target.checked)}
+                    onChange={(e) => handleRunLocalChange(e.target.checked)}
                   />
                   {t("processing.whitebox.runLocal")}
                 </label>
