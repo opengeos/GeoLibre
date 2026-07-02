@@ -80,8 +80,26 @@ let googleTilesDeckGL: GeoLibreDeckGL | null = null;
 let googleTilesApp: GeoLibreAppAPI | null = null;
 let googleTilesBoundMap: unknown;
 let ensureGoogleTilesOverlayInFlight: Promise<void> | null = null;
+let googleTilesMountRetryScheduled = false;
+let googleTilesMountRetries = 0;
+let googleTilesPreviousProjection: "globe" | "mercator" | null = null;
+let googleAltitudeOffsetTile3DLayerClass: DeckTile3DLayerClass | null = null;
+// The last rendered Google-layer signature, used to skip rebuilding deck layers
+// when an unrelated layer mutation fires the store subscription.
+let lastGoogleTilesLayerSignature: string | null = null;
+// ~1s at 60fps: bound the mount retry so a map that never initializes cannot
+// spin requestAnimationFrame forever.
+const GOOGLE_TILES_MAX_MOUNT_RETRIES = 60;
 
 type ThreeDTilesLayerInstance = InstanceType<typeof ThreeDTilesLayer>;
+
+type RenderableDeckLayer = Layer & {
+  props: Record<string, unknown>;
+  renderLayers(): unknown;
+};
+type DeckTile3DLayerClass = new (
+  props: Record<string, unknown>,
+) => RenderableDeckLayer;
 
 interface ThreeDTilesControlInternals {
   _layers?: Map<string, ThreeDTilesLayerInstance>;
@@ -569,6 +587,10 @@ function addThreeDTilesRuntimeEnvListener(control: ThreeDTilesControl): void {
 
   const handleRuntimeEnvChange = () => {
     applyGooglePhotorealisticTilesPanelDefaults(control);
+    // The resolved API key may have changed, but the persisted layer records
+    // (which never carry the key) have not, so the render signature would be
+    // unchanged. Force a rebuild so the new key reaches the deck.gl layer.
+    lastGoogleTilesLayerSignature = null;
     renderGooglePhotorealisticTilesLayers();
   };
 
@@ -597,19 +619,38 @@ function installGooglePhotorealisticTilesPanelHandlers(
   const urlInput = getThreeDTilesUrlInput(panel);
   urlInput?.addEventListener("input", applyDefaults);
   urlInput?.addEventListener("change", applyDefaults);
-  panel
-    .querySelector<HTMLFormElement>(".three-d-tiles-form")
-    ?.addEventListener(
-      "submit",
-      (event) => {
-        applyDefaults();
-        if (!isGooglePhotorealisticTilesetUrl(urlInput?.value ?? "")) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        void addGooglePhotorealisticTilesFromPanel(control, panel);
-      },
-      { capture: true },
-    );
+  panel.addEventListener("input", (event) => {
+    if (
+      event.target instanceof HTMLInputElement &&
+      event.target.getAttribute("aria-label") === "Altitude offset"
+    ) {
+      updateGooglePhotorealisticTilesAltitudeOffset(control, panel);
+    }
+  });
+  // Intercept the submit on the panel (an ancestor of the form) during the
+  // capture phase so this runs before maplibre-gl-3d-tiles' own form-level
+  // submit listener. A capture listener on the form target itself would not:
+  // per the DOM spec, listeners on the same target fire in registration order
+  // regardless of the capture flag, and the library registers its submit
+  // listener first (at panel construction, before this lazy install). Capturing
+  // on the ancestor also covers both Load-button clicks and Enter submission.
+  panel.addEventListener(
+    "submit",
+    (event) => {
+      if (
+        !(event.target instanceof HTMLElement) ||
+        !event.target.classList.contains("three-d-tiles-form")
+      ) {
+        return;
+      }
+      applyDefaults();
+      if (!isGooglePhotorealisticTilesetUrl(urlInput?.value ?? "")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void addGooglePhotorealisticTilesFromPanel(control, panel);
+    },
+    { capture: true },
+  );
   panel.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -624,6 +665,29 @@ function installGooglePhotorealisticTilesPanelHandlers(
   applyDefaults();
 }
 
+function updateGooglePhotorealisticTilesAltitudeOffset(
+  control: ThreeDTilesControl,
+  panel: HTMLElement,
+): void {
+  if (!isGooglePhotorealisticTilesetUrl(getThreeDTilesUrlInput(panel)?.value)) {
+    return;
+  }
+  const altitudeInput = panel.querySelector<HTMLInputElement>(
+    'input[aria-label="Altitude offset"]',
+  );
+  const altitudeOffset = numberInputValue(
+    altitudeInput?.value,
+    numberValue(control.getState().altitudeOffset, 0),
+  );
+  const store = useAppStore.getState();
+  for (const layer of store.layers.filter(isGooglePhotorealisticTilesLayer)) {
+    store.updateLayer(layer.id, {
+      source: { ...layer.source, altitudeOffset },
+      metadata: { ...layer.metadata, altitudeOffset },
+    });
+  }
+}
+
 function applyGooglePhotorealisticTilesPanelDefaults(
   control: ThreeDTilesControl,
 ): void {
@@ -632,6 +696,24 @@ function applyGooglePhotorealisticTilesPanelDefaults(
 
   const urlInput = getThreeDTilesUrlInput(panel);
   if (!urlInput || !isGooglePhotorealisticTilesetUrl(urlInput.value)) {
+    // Switched away from the Google tileset: drop the masked X-GOOG-API-KEY the
+    // Google flow injected so the native 3D Tiles submit path does not send or
+    // persist a bogus custom header (which would cause avoidable CORS/preflight
+    // failures on the non-Google source).
+    const headersInput = panel.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Request headers"]',
+    );
+    if (headersInput) {
+      headersInput.value = serializeThreeDTilesRequestHeaders(
+        stripGoogleMapsApiKeyHeader(
+          parseThreeDTilesRequestHeaders(headersInput.value),
+        ),
+      );
+    }
+    panel.dataset.geolibreGoogleMapsApiKeyVisible = "false";
+    // Re-arm the one-shot altitude default so it applies again if the user
+    // returns to a Google URL.
+    delete panel.dataset.geolibreGoogleAltitudeApplied;
     setGooglePhotorealisticHeadersToggleVisible(panel, false);
     return;
   }
@@ -652,11 +734,19 @@ function applyGooglePhotorealisticTilesPanelDefaults(
   const altitudeInput = panel.querySelector<HTMLInputElement>(
     'input[aria-label="Altitude offset"]',
   );
+  // Google photorealistic tiles are anchored to the WGS84 ellipsoid, so the
+  // native control's -300 default offset is wrong for them. Apply a 0 default
+  // once, the first time the URL becomes a Google tileset, then leave the field
+  // alone. This defaults pass runs on every URL input/change, so overwriting
+  // unconditionally would silently reset a value the user deliberately typed
+  // (including -300, which is indistinguishable from the native default).
   if (
     altitudeInput &&
+    panel.dataset.geolibreGoogleAltitudeApplied !== "true" &&
     (!altitudeInput.value.trim() || Number(altitudeInput.value) === -300)
   ) {
     altitudeInput.value = "0";
+    panel.dataset.geolibreGoogleAltitudeApplied = "true";
   }
 
   const headersInput = panel.querySelector<HTMLTextAreaElement>(
@@ -718,7 +808,10 @@ function installGooglePhotorealisticHeadersToggle(
     );
   });
 
-  headersInput.insertAdjacentElement("afterend", toggle);
+  headersInput
+    .closest(".three-d-tiles-field")
+    ?.insertAdjacentElement("afterend", toggle) ??
+    headersInput.insertAdjacentElement("afterend", toggle);
 }
 
 function setGooglePhotorealisticHeadersToggleVisible(
@@ -750,6 +843,17 @@ async function addGooglePhotorealisticTilesFromPanel(
   const app = activeThreeDTilesApp;
   if (!app) return;
 
+  // The submitted URL is only used to detect that this is the Google tileset;
+  // the layer always loads the canonical root URL and takes its key from the
+  // env / X-GOOG-API-KEY header. Warn if the user embedded a `key=` query
+  // parameter (as Google's docs often show), which is silently ignored here.
+  const submittedUrl = getThreeDTilesUrlInput(panel)?.value.trim();
+  if (submittedUrl && urlHasKeyQueryParam(submittedUrl)) {
+    console.warn(
+      "[GeoLibre] Ignoring the `key` query parameter in the Google Photorealistic 3D Tiles URL; the API key is taken from VITE_GOOGLE_MAPS_API_KEY (or the X-GOOG-API-KEY request header) instead.",
+    );
+  }
+
   const name =
     panel
       .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
@@ -770,13 +874,20 @@ async function addGooglePhotorealisticTilesFromPanel(
     panel.querySelector<HTMLInputElement>('input[aria-label="Visible on load"]')
       ?.checked ?? true;
   const opacity = numberValue(control.getState().opacity, 1);
+  const altitudeOffset = numberInputValue(
+    panel.querySelector<HTMLInputElement>('input[aria-label="Altitude offset"]')
+      ?.value,
+    numberValue(control.getState().altitudeOffset, 0),
+  );
 
   addGooglePhotorealisticTilesLayer(app, {
     name,
+    altitudeOffset,
     opacity,
     visible,
     requestHeaders: headers,
     flyTo: flyToOnLoad,
+    map: control.getMap(),
   });
   control.collapse();
   updateGooglePhotorealisticTilesPanelList(control);
@@ -794,10 +905,12 @@ function addGooglePhotorealisticTilesLayer(
   app: GeoLibreAppAPI,
   options: {
     name: string;
+    altitudeOffset: number;
     opacity: number;
     visible: boolean;
     requestHeaders?: Record<string, string>;
     flyTo: boolean;
+    map?: ReturnType<ThreeDTilesControl["getMap"]>;
   },
 ): string {
   const id = `${GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX}-${crypto.randomUUID()}`;
@@ -811,6 +924,7 @@ function addGooglePhotorealisticTilesLayer(
       sourceId: id,
       type: GOOGLE_PHOTOREALISTIC_SOURCE_KIND,
       url: GOOGLE_PHOTOREALISTIC_TILES_URL,
+      altitudeOffset: options.altitudeOffset,
       // Keep non-Google custom headers, but never persist the API key header.
       requestHeaders: persistedThreeDTilesRequestHeaders(
         GOOGLE_PHOTOREALISTIC_TILES_URL,
@@ -829,12 +943,13 @@ function addGooglePhotorealisticTilesLayer(
       sourceId: id,
       sourceKind: GOOGLE_PHOTOREALISTIC_SOURCE_KIND,
       bounds: [-180, -85, 180, 85],
+      altitudeOffset: options.altitudeOffset,
     },
     sourcePath: GOOGLE_PHOTOREALISTIC_TILES_URL,
   });
 
   void ensureGooglePhotorealisticTilesOverlay(app);
-  if (options.flyTo) flyToGooglePhotorealisticTiles(app);
+  if (options.flyTo) flyToGooglePhotorealisticTiles(app, options.map);
   return id;
 }
 
@@ -981,14 +1096,44 @@ function createGooglePhotorealisticTilesPanelSmallButton(
   return button;
 }
 
-function flyToGooglePhotorealisticTiles(app: GeoLibreAppAPI): void {
-  const map = app.getMap?.();
-  if (!map) return;
-  ensureMercatorProjection(map);
+function flyToGooglePhotorealisticTiles(
+  app: GeoLibreAppAPI,
+  mapOverride?: ReturnType<ThreeDTilesControl["getMap"]>,
+): void {
+  forceGooglePhotorealisticMercatorProjection(app, mapOverride);
+  useAppStore.getState().setMapView(
+    {
+      ...GOOGLE_PHOTOREALISTIC_INITIAL_VIEW,
+      bbox: undefined,
+    },
+    false,
+  );
+  const map = mapOverride ?? app.getMap?.();
+  if (!map) {
+    app.fitBounds?.([14.35, 50.05, 14.49, 50.12]);
+    return;
+  }
   map.flyTo({
     ...GOOGLE_PHOTOREALISTIC_INITIAL_VIEW,
     essential: true,
   });
+}
+
+function forceGooglePhotorealisticMercatorProjection(
+  app: GeoLibreAppAPI,
+  mapOverride?: ReturnType<ThreeDTilesControl["getMap"]>,
+): void {
+  if (googleTilesPreviousProjection === null) {
+    googleTilesPreviousProjection = app.getMapProjection?.() ?? null;
+  }
+  app.setMapProjection?.("mercator");
+  ensureMercatorProjection(mapOverride ?? app.getMap?.());
+}
+
+function restoreGooglePhotorealisticPreviousProjection(): void {
+  if (!googleTilesApp || googleTilesPreviousProjection === null) return;
+  googleTilesApp.setMapProjection?.(googleTilesPreviousProjection);
+  googleTilesPreviousProjection = null;
 }
 
 function isGooglePhotorealisticTilesLayer(layer: GeoLibreLayer): boolean {
@@ -1025,14 +1170,27 @@ async function runEnsureGooglePhotorealisticTilesOverlay(
   }
 
   if (googleTilesOverlay && googleTilesOverlayMounted) {
-    app.removeMapControl(googleTilesOverlay);
+    // The previously bound map may already be torn down (style reload / project
+    // open), in which case removeMapControl can throw. Guard it like the other
+    // overlays in this repo so a stale-map cleanup does not break the rebind.
+    try {
+      app.removeMapControl(googleTilesOverlay);
+    } catch (error) {
+      console.warn(
+        "[GeoLibre] Failed to detach the Google 3D Tiles overlay from the previous map",
+        error,
+      );
+    }
   }
   googleTilesBoundMap = map;
   googleTilesOverlay = new googleTilesDeckGL.mapbox.MapboxOverlay({
-    interleaved: false,
+    interleaved: true,
     layers: [],
   });
   googleTilesOverlayMounted = false;
+  // A fresh overlay instance holds no layers and no prior mount attempts.
+  lastGoogleTilesLayerSignature = null;
+  googleTilesMountRetries = 0;
   googleTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
       renderGooglePhotorealisticTilesLayers();
@@ -1047,15 +1205,52 @@ function renderGooglePhotorealisticTilesLayers(): void {
   const layers = useAppStore
     .getState()
     .layers.filter(isGooglePhotorealisticTilesLayer);
-  if (layers.length > 0) {
-    ensureMercatorProjection(googleTilesApp.getMap?.());
+
+  // Tear the overlay back down once the last Google tileset is gone, mirroring
+  // the lazy mount below, so an empty deck.gl overlay is not left attached to
+  // the map for the rest of the session.
+  if (layers.length === 0) {
+    if (googleTilesOverlayMounted) {
+      try {
+        googleTilesApp.removeMapControl(googleTilesOverlay);
+      } catch (error) {
+        console.warn(
+          "[GeoLibre] Failed to remove the empty Google 3D Tiles overlay",
+          error,
+        );
+      }
+      googleTilesOverlayMounted = false;
+    }
+    lastGoogleTilesLayerSignature = null;
+    googleTilesMountRetries = 0;
+    restoreGooglePhotorealisticPreviousProjection();
+    return;
   }
 
+  forceGooglePhotorealisticMercatorProjection(googleTilesApp);
+
   if (!googleTilesOverlayMounted) {
-    if (layers.length === 0) return;
-    if (!googleTilesApp.addMapControl(googleTilesOverlay, "top-left")) return;
+    if (!googleTilesApp.addMapControl(googleTilesOverlay, "top-left")) {
+      // The map may still be initializing (e.g. during project restore). The
+      // store subscription only fires on layer-set changes, so schedule a
+      // bounded retry on the next animation frame rather than leaving the tiles
+      // permanently unmounted.
+      scheduleGoogleTilesMountRetry();
+      return;
+    }
     googleTilesOverlayMounted = true;
+    googleTilesMountRetries = 0;
+    // A fresh mount starts with no layers, so force the setProps below.
+    lastGoogleTilesLayerSignature = null;
   }
+
+  // The store subscription fires on ANY layer-set change, not just Google ones.
+  // Rebuilding hands deck.gl new loadOptions/fetch object references each time,
+  // which can trigger a needless tileset re-fetch, so skip when nothing about
+  // the Google layers themselves changed.
+  const signature = googleTilesLayerSignature(layers);
+  if (signature === lastGoogleTilesLayerSignature) return;
+  lastGoogleTilesLayerSignature = signature;
 
   const deckLayers = layers
     .filter((layer) => layer.visible)
@@ -1066,18 +1261,53 @@ function renderGooglePhotorealisticTilesLayers(): void {
   googleTilesOverlay.setProps({ layers: deckLayers });
 }
 
+function scheduleGoogleTilesMountRetry(): void {
+  if (
+    googleTilesMountRetryScheduled ||
+    typeof requestAnimationFrame === "undefined"
+  ) {
+    return;
+  }
+  if (googleTilesMountRetries >= GOOGLE_TILES_MAX_MOUNT_RETRIES) {
+    console.warn(
+      "[GeoLibre] Gave up mounting the Google 3D Tiles overlay after repeated addMapControl failures.",
+    );
+    return;
+  }
+  googleTilesMountRetries += 1;
+  googleTilesMountRetryScheduled = true;
+  requestAnimationFrame(() => {
+    googleTilesMountRetryScheduled = false;
+    renderGooglePhotorealisticTilesLayers();
+  });
+}
+
+function googleTilesLayerSignature(layers: GeoLibreLayer[]): string {
+  return layers
+    .map((layer) => {
+      const headers = stringRecordValue(layer.source.requestHeaders);
+      const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
+      const headerKeys = headers ? Object.keys(headers).sort().join(",") : "";
+      return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${altitudeOffset}:${headerKeys}`;
+    })
+    .join("|");
+}
+
 function buildGooglePhotorealisticTilesDeckLayer(
   layer: GeoLibreLayer,
 ): Layer | null {
   if (!googleTilesDeckGL) return null;
+  const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
   const requestHeaders = resolveThreeDTilesRequestHeaders(
     GOOGLE_PHOTOREALISTIC_TILES_URL,
     stringRecordValue(layer.source.requestHeaders),
   );
 
-  return new googleTilesDeckGL.geoLayers.Tile3DLayer({
+  const Tile3DLayer = getGoogleAltitudeOffsetTile3DLayerClass();
+  return new Tile3DLayer({
     id: googlePhotorealisticTilesDeckLayerId(layer),
     data: GOOGLE_PHOTOREALISTIC_TILES_URL,
+    altitudeOffset,
     loadOptions: {
       fetch: requestHeaders ? { headers: requestHeaders } : undefined,
       tileset: {
@@ -1088,8 +1318,95 @@ function buildGooglePhotorealisticTilesDeckLayer(
     },
     opacity: layer.opacity,
     pickable: false,
-    operation: "terrain+draw",
+    operation: "draw",
   }) as Layer;
+}
+
+function getGoogleAltitudeOffsetTile3DLayerClass(): DeckTile3DLayerClass {
+  if (googleAltitudeOffsetTile3DLayerClass) {
+    return googleAltitudeOffsetTile3DLayerClass;
+  }
+  if (!googleTilesDeckGL) {
+    throw new Error("deck.gl modules are not loaded");
+  }
+
+  const BaseLayer = googleTilesDeckGL.geoLayers
+    .Tile3DLayer as unknown as DeckTile3DLayerClass;
+  googleAltitudeOffsetTile3DLayerClass = class extends BaseLayer {
+    static componentName = "GoogleAltitudeOffsetTile3DLayer";
+
+    renderLayers(): unknown {
+      const altitudeOffset = numberValue(this.props.altitudeOffset, 0);
+      return offsetGooglePhotorealisticTileLayers(
+        super.renderLayers(),
+        altitudeOffset,
+      );
+    }
+  };
+  return googleAltitudeOffsetTile3DLayerClass;
+}
+
+function offsetGooglePhotorealisticTileLayers(
+  layers: unknown,
+  altitudeOffset: number,
+): unknown {
+  if (!Number.isFinite(altitudeOffset) || altitudeOffset === 0) {
+    return layers;
+  }
+  if (Array.isArray(layers)) {
+    return layers.map((layer) =>
+      offsetGooglePhotorealisticTileLayers(layer, altitudeOffset),
+    );
+  }
+  if (!isDeckLayerInstance(layers)) return layers;
+
+  return layers.clone({
+    modelMatrix: translatedModelMatrix(
+      matrix16Value(layers.props.modelMatrix),
+      altitudeOffset,
+    ),
+  });
+}
+
+function translatedModelMatrix(
+  modelMatrix: number[] | null,
+  altitudeOffset: number,
+): number[] {
+  const source = modelMatrix ?? [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1,
+  ];
+  const translated = [...source];
+  translated[12] = source[12] + source[8] * altitudeOffset;
+  translated[13] = source[13] + source[9] * altitudeOffset;
+  translated[14] = source[14] + source[10] * altitudeOffset;
+  translated[15] = source[15] + source[11] * altitudeOffset;
+  return translated;
+}
+
+function matrix16Value(value: unknown): number[] | null {
+  if (!isArrayLike(value)) return null;
+  const values = Array.from(value);
+  if (
+    values.length === 16 &&
+    values.every((entry): entry is number => typeof entry === "number")
+  ) {
+    return values;
+  }
+  return null;
+}
+
+function isDeckLayerInstance(value: unknown): value is Layer & {
+  props: Record<string, unknown>;
+  clone(props: Record<string, unknown>): Layer;
+} {
+  return (
+    isRecord(value) &&
+    isRecord(value.props) &&
+    typeof value.clone === "function"
+  );
 }
 
 function googlePhotorealisticTilesDeckLayerId(layer: GeoLibreLayer): string {
@@ -1280,6 +1597,12 @@ function numberValue(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function numberInputValue(value: unknown, fallback: number): number {
+  if (typeof value !== "string") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function optionalNumberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value)
     ? value
@@ -1366,6 +1689,14 @@ function isGooglePhotorealisticTilesetLayerUrl(layer: GeoLibreLayer): boolean {
   return url ? isGooglePhotorealisticTilesetUrl(url) : false;
 }
 
+function urlHasKeyQueryParam(url: string): boolean {
+  try {
+    return new URL(url).searchParams.has("key");
+  } catch {
+    return false;
+  }
+}
+
 function parseThreeDTilesRequestHeaders(
   text: string,
 ): Record<string, string> | undefined {
@@ -1441,6 +1772,15 @@ function valuesEqual(left: unknown, right: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isArrayLike(value: unknown): value is ArrayLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "length" in value &&
+    typeof value.length === "number"
+  );
 }
 
 function layerNameFromUrl(url: string, fallback: string): string {

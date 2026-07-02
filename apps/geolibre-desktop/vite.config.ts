@@ -8,7 +8,8 @@ import type {
   RollupOptions,
   WarningHandlerWithDefault,
 } from "rollup";
-import { defineConfig, type Plugin } from "vite";
+import { fileURLToPath } from "node:url";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
@@ -23,8 +24,26 @@ const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ).version as string;
 
-if (!process.env.VITE_GOOGLE_MAPS_API_KEY && process.env.GOOGLE_MAPS_API_KEY) {
-  process.env.VITE_GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
+// Vite only exposes `VITE_`-prefixed vars to the client, so the Google Maps key
+// is surfaced as `VITE_GOOGLE_MAPS_API_KEY`. Accept a bare `GOOGLE_MAPS_API_KEY`
+// too (handy for local shell/CI testing) and copy it into the prefixed name.
+// `loadEnv(mode, dir, "")` reads the app's `.env*` files with no prefix filter,
+// so a key placed in `apps/geolibre-desktop/.env.local` also works, not just a
+// real shell env var (process.env alone would miss the file).
+const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FILE_ENV = loadEnv(
+  process.env.NODE_ENV || "development",
+  CONFIG_DIR,
+  "",
+);
+if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
+  const googleMapsApiKey =
+    process.env.GOOGLE_MAPS_API_KEY ||
+    FILE_ENV.VITE_GOOGLE_MAPS_API_KEY ||
+    FILE_ENV.GOOGLE_MAPS_API_KEY;
+  if (googleMapsApiKey) {
+    process.env.VITE_GOOGLE_MAPS_API_KEY = googleMapsApiKey;
+  }
 }
 
 // Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
