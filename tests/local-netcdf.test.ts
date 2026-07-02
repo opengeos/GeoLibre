@@ -26,6 +26,18 @@ async function readJson(
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
+/** Decode a store chunk as a little-endian float32 array. */
+async function readFloat32(
+  store: KerchunkReferenceStore,
+  key: string
+): Promise<number[]> {
+  const chunk = await store.get(key);
+  assert.ok(chunk, `missing key ${key}`);
+  return Array.from(
+    new Float32Array(chunk.buffer, chunk.byteOffset, chunk.byteLength / 4)
+  );
+}
+
 /** A small 2x3 float32 grid with 2 lat rows and 3 lon columns. */
 function sampleGrid(): InlineZarrGrid {
   return {
@@ -268,23 +280,11 @@ describe("openLocalNetcdf (NetCDF-3)", () => {
       assert.equal(zarray.dtype, "<f4");
       assert.equal(zarray.fill_value, -9999);
 
-      const chunk = await store.get("temp/0.0");
-      assert.ok(chunk);
-      const values = new Float32Array(
-        chunk.buffer,
-        chunk.byteOffset,
-        chunk.byteLength / 4
+      assert.deepEqual(
+        await readFloat32(store, "temp/0.0"),
+        [11, 12, 13, 14, 15, 16]
       );
-      assert.deepEqual(Array.from(values), [11, 12, 13, 14, 15, 16]);
-
-      const latChunk = await store.get("lat/0");
-      assert.ok(latChunk);
-      const lat = new Float32Array(
-        latChunk.buffer,
-        latChunk.byteOffset,
-        latChunk.byteLength / 4
-      );
-      assert.deepEqual(Array.from(lat), [10, 20]);
+      assert.deepEqual(await readFloat32(store, "lat/0"), [10, 20]);
     } finally {
       file.close();
     }
@@ -295,14 +295,24 @@ describe("openLocalNetcdf (NetCDF-3)", () => {
     try {
       const { refs } = file.buildLayerRefs("temp");
       const store = new KerchunkReferenceStore(refs);
-      const chunk = await store.get("temp/0.0");
-      assert.ok(chunk);
-      const values = new Float32Array(
-        chunk.buffer,
-        chunk.byteOffset,
-        chunk.byteLength / 4
+      assert.deepEqual(
+        await readFloat32(store, "temp/0.0"),
+        [1, 2, 3, 4, 5, 6]
       );
-      assert.deepEqual(Array.from(values), [1, 2, 3, 4, 5, 6]);
+    } finally {
+      file.close();
+    }
+  });
+
+  it("rejects generic x/y axes without geographic units", async () => {
+    // data(y, x) with x/y pixel-index coords and no CF units: must not be
+    // mis-read as WGS84 degrees.
+    const file = await openLocalNetcdf(fixture("sample-nc3-xy.nc"));
+    try {
+      assert.throws(
+        () => file.buildLayerRefs("data"),
+        /latitude\/longitude coordinate/i
+      );
     } finally {
       file.close();
     }

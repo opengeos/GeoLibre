@@ -247,11 +247,14 @@ export function AddNetcdfDialog({
       if (source === "file") {
         const file = localFile;
         if (!file) throw new Error(t("addData.netcdf.errorNoFile"));
+        // Yield once so the "Adding..." state paints before the synchronous,
+        // CPU-heavy decode/base64-encode of a potentially large local grid.
+        await new Promise((resolve) => setTimeout(resolve, 0));
         const { refs } = file.buildLayerRefs(variable, selector);
-        // Use just the file's base name (fileName is a full path on desktop)
-        // so the derived layer name is clean on every platform. Encode it so a
-        // name with URL-special chars (#, ?, %) survives layerNameFromUrl's
-        // new URL(...) parse.
+        // Use just the file's base name (fileName is a full path on desktop) so
+        // the derived layer name is clean on every platform. Encode it so a name
+        // with URL-special chars (#, ?, %) survives layerNameFromUrl's new
+        // URL(...) parse; that helper decodes it again for the display name.
         const baseName = fileName.split(/[\\/]/).pop() || "netcdf";
         await addCloudNetcdfLayer(appApi, {
           url: `local:${encodeURIComponent(baseName)}`,
@@ -312,8 +315,9 @@ export function AddNetcdfDialog({
               id="netcdf-source"
               value={source}
               onChange={(event) => {
+                // Reset the loaded-manifest/file state, but keep any typed URL
+                // so switching to "Local file" and back doesn't discard it.
                 invalidateLoadedSource();
-                setUrl("");
                 setSource(event.target.value as "url" | "file");
               }}
             >

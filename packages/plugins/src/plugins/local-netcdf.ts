@@ -91,6 +91,11 @@ const NC3_DTYPES: Record<
 const LAT_NAMES = ["latitude", "lat", "y", "nav_lat"];
 const LON_NAMES = ["longitude", "lon", "lng", "x", "nav_lon"];
 
+// Generic axis names that are only trusted as geographic coordinates when the
+// variable also carries a geographic units/standard_name attribute — a bare
+// `x`/`y` often holds projected metres or plain pixel indices.
+const GENERIC_COORD_NAMES = new Set(["x", "y"]);
+
 // Plausible geographic value ranges, with a small tolerance for grids whose
 // cell centers sit slightly outside the nominal extent. Longitude allows both
 // the -180..180 and 0..360 conventions.
@@ -357,6 +362,16 @@ class Hdf5NetcdfFile implements LocalNetcdfFile {
       const shape = entity.shape ?? entity.metadata.shape ?? [];
       if (shape.length !== 1 || shape[0] !== length) continue;
       if (!isRenderableH5Dtype(entity.metadata)) continue;
+      const baseName = path.split("/").pop() ?? path;
+      if (
+        !isTrustedCoordinate(
+          baseName,
+          h5StringAttr(entity, "units"),
+          h5StringAttr(entity, "standard_name")
+        )
+      ) {
+        continue;
+      }
       const raw = entity.value;
       if (!isTypedArray(raw)) continue;
       const accepted = acceptCoordinate(
@@ -487,6 +502,15 @@ class Netcdf3File implements LocalNetcdfFile {
       if (shape.length !== 1 || shape[0] !== length) continue;
       const info = NC3_DTYPES[v.type];
       if (!info) continue;
+      if (
+        !isTrustedCoordinate(
+          name,
+          nc3StringAttr(v, "units"),
+          nc3StringAttr(v, "standard_name")
+        )
+      ) {
+        continue;
+      }
       const raw = info.make(this.reader.getDataVariable(v.name) as number[]);
       const accepted = acceptCoordinate(
         raw,
@@ -569,6 +593,28 @@ function acceptCoordinate(
       ? { data: applyScale(raw, scale ?? 1, offset ?? 0), dtype: "<f8" }
       : { data: raw, dtype: nativeDtype };
   return valuesWithin(data, range) ? { data, dtype } : null;
+}
+
+/**
+ * Whether a candidate coordinate should be accepted for the given name. A
+ * strong name (lat/latitude/lon/longitude/...) is trusted directly; a generic
+ * `x`/`y` is only trusted when a CF `units` ("degrees_north"/"degrees_east"/...)
+ * or `standard_name` ("latitude"/"longitude") attribute confirms it is
+ * geographic, so projected/pixel-index axes are not read as degrees.
+ *
+ * @param name The candidate variable's base name (case-insensitive).
+ * @param units The variable's `units` attribute, if any.
+ * @param standardName The variable's `standard_name` attribute, if any.
+ */
+function isTrustedCoordinate(
+  name: string,
+  units: string | undefined,
+  standardName: string | undefined
+): boolean {
+  if (!GENERIC_COORD_NAMES.has(name.toLowerCase())) return true;
+  if (units && /degree/i.test(units)) return true;
+  const s = standardName?.toLowerCase();
+  return s === "latitude" || s === "longitude";
 }
 
 /**
@@ -778,16 +824,14 @@ function h5ZarrDtype(meta: H5Metadata): string {
 
 /** Whether an HDF5 datatype is a numeric class we can render. */
 function isRenderableH5Dtype(meta: H5Metadata): boolean {
-  // Only 4/8-byte floats: there is no 1-byte float, and h5wasm throws
-  // "Float16 not supported" for 2-byte (half-precision) floats. Integers
-  // additionally allow 1 and 2 bytes.
+  // Floats: only 4/8 bytes (no 1-byte float; h5wasm throws "Float16 not
+  // supported" for 2-byte). Integers: 1/2/4 bytes — 8-byte ints come back as
+  // BigInt64Array, which the numeric helpers and Zarr renderer can't handle.
   if (meta.type === H5T_FLOAT) {
     return meta.size === 4 || meta.size === 8;
   }
   if (meta.type === H5T_INTEGER) {
-    return (
-      meta.size === 1 || meta.size === 2 || meta.size === 4 || meta.size === 8
-    );
+    return meta.size === 1 || meta.size === 2 || meta.size === 4;
   }
   return false;
 }
@@ -834,6 +878,12 @@ function h5NumericAttr(ds: H5Dataset, name: string): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+/** Read a string HDF5 attribute, or undefined if absent/non-string. */
+function h5StringAttr(ds: H5Dataset, name: string): string | undefined {
+  const value = unwrapScalar(ds.attrs[name]?.value);
+  return typeof value === "string" ? value : undefined;
+}
+
 /** Determine the Zarr fill value from an HDF5 `_FillValue`/`missing_value`. */
 function h5FillValue(ds: H5Dataset): number | string | null {
   for (const key of ["_FillValue", "missing_value"]) {
@@ -855,6 +905,12 @@ function nc3NumericAttr(
   const value = v.attributes.find((a) => a.name === name)?.value;
   if (typeof value !== "number") return undefined;
   return allowNonFinite || Number.isFinite(value) ? value : undefined;
+}
+
+/** Read a string NetCDF-3 attribute, or undefined if absent/non-string. */
+function nc3StringAttr(v: Nc3Variable, name: string): string | undefined {
+  const value = v.attributes.find((a) => a.name === name)?.value;
+  return typeof value === "string" ? value : undefined;
 }
 
 /** Reduce a possibly-array attribute value to its first scalar. */

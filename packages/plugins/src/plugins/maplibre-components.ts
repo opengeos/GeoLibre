@@ -5347,7 +5347,15 @@ function stacAssetFromLayerId(id: string): string | undefined {
 function layerNameFromUrl(url: string, fallback: string): string {
   try {
     const fileName = new URL(url).pathname.split("/").pop() ?? fallback;
-    return fileName.replace(/\.[^.]+$/, "") || fallback;
+    const base = fileName.replace(/\.[^.]+$/, "") || fallback;
+    // Decode percent-encoding for display, so a name like `air%20temperature`
+    // (e.g. a `local:` URL built from a file name with spaces/reserved chars)
+    // shows as `air temperature`. Guard against malformed escapes.
+    try {
+      return decodeURIComponent(base);
+    } catch {
+      return base;
+    }
   } catch {
     return fallback;
   }
