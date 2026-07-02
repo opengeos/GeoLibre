@@ -245,6 +245,13 @@ export class LocalNetcdfFile {
     if (shape.length < 2) {
       throw new Error(`Variable "${variable}" is not a 2-D+ grid.`);
     }
+    // Re-check the dtype here too: buildLayerRefs is public API and may be
+    // called with a variable that did not pass listVariables' filter (e.g. an
+    // unsupported 16-byte float), which zarrDtype would otherwise map to an
+    // invalid Zarr dtype string.
+    if (!isRenderableDtype(ds.metadata)) {
+      throw new Error(`Variable "${variable}" has an unsupported data type.`);
+    }
     const ny = shape[shape.length - 2];
     const nx = shape[shape.length - 1];
     const dims = dimensionNames(ds, shape);
@@ -265,8 +272,8 @@ export class LocalNetcdfFile {
 
     // Coordinate arrays keyed exactly `lat` / `lon` so the renderer reads them
     // to derive bounds and latitude orientation (see _loadSpatialMetadata).
-    const lat = this.readCoordinate(LAT_NAMES, ny);
-    const lon = this.readCoordinate(LON_NAMES, nx);
+    const lat = this.readCoordinate(LAT_NAMES, ny, variable);
+    const lon = this.readCoordinate(LON_NAMES, nx, variable);
     if (!lat || !lon) {
       throw new Error(
         "Could not find latitude/longitude coordinate variables. Only georeferenced NetCDF/HDF grids are supported."
@@ -294,23 +301,34 @@ export class LocalNetcdfFile {
    * Find and read a 1-D coordinate variable by common names, matching the
    * expected length.
    *
+   * Grouped files often keep `lat`/`lon` in the same subgroup as the variable,
+   * so the variable's own group is searched before the file root.
+   *
    * @param names Candidate variable names, most specific first.
    * @param length Required array length (matches the grid's y or x extent).
+   * @param variablePath The variable being rendered; its group is searched first.
    * @returns The coordinate values and their Zarr dtype, or null if not found.
    */
   private readCoordinate(
     names: string[],
-    length: number
+    length: number,
+    variablePath: string
   ): { data: TypedArrayLike; dtype: string } | null {
+    const slash = variablePath.lastIndexOf("/");
+    const group = slash >= 0 ? variablePath.slice(0, slash) : "";
     for (const name of names) {
-      const entity = this.file.get(name);
-      if (!isDataset(entity)) continue;
-      const shape = entity.shape ?? entity.metadata.shape ?? [];
-      if (shape.length !== 1 || shape[0] !== length) continue;
-      if (!isRenderableDtype(entity.metadata)) continue;
-      const value = entity.value;
-      if (!isTypedArray(value)) continue;
-      return { data: value, dtype: zarrDtype(entity.metadata) };
+      // Prefer a coordinate in the variable's own group, then fall back to root.
+      const candidates = group ? [`${group}/${name}`, name] : [name];
+      for (const path of candidates) {
+        const entity = this.file.get(path);
+        if (!isDataset(entity)) continue;
+        const shape = entity.shape ?? entity.metadata.shape ?? [];
+        if (shape.length !== 1 || shape[0] !== length) continue;
+        if (!isRenderableDtype(entity.metadata)) continue;
+        const value = entity.value;
+        if (!isTypedArray(value)) continue;
+        return { data: value, dtype: zarrDtype(entity.metadata) };
+      }
     }
     return null;
   }

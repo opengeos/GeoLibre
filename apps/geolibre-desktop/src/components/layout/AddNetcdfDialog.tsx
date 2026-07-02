@@ -194,15 +194,17 @@ export function AddNetcdfDialog({
     const gen = opGen.current;
     setFileName(selected.path);
     setLoadingVars(true);
+    // Held outside the try so a throw after open (e.g. listVariables on a
+    // corrupt dataset) still closes the WASM file handle in the catch.
+    let file: LocalNetcdfFile | null = null;
     try {
-      const file = await openLocalNetcdf(selected.data);
+      file = await openLocalNetcdf(selected.data);
       const vars = file.listVariables();
       if (gen !== opGen.current) {
         file.close(); // dialog was closed/reopened while decoding
         return;
       }
       if (vars.length === 0) {
-        file.close();
         throw new Error(
           "No renderable (2-D or higher) variables found in the file."
         );
@@ -211,6 +213,8 @@ export function AddNetcdfDialog({
       setLocalFile(file);
       applyLoadedVariables(vars);
     } catch (err) {
+      // Close the just-opened handle unless it was stored for later use.
+      if (file && openFileRef.current !== file) file.close();
       if (gen !== opGen.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -284,21 +288,23 @@ export function AddNetcdfDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Boxes className="h-4 w-4" />
-            Add NetCDF / HDF
+            {t("addData.netcdf.title")}
           </DialogTitle>
           <DialogDescription>
-            Render a NetCDF or HDF5 dataset: a remote Cloud-Optimized file via a
-            kerchunk reference (read over HTTP range requests), or a local
-            HDF5/NetCDF-4 file read in your browser.
+            {t("addData.netcdf.description")}
           </DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          {/* This dialog's prose is intentionally left in English for now: it
-              predates the Add Data i18n catalog and is out of scope for this
-              change (only the sample label is routed through t()). */}
+          {/* The title/description and the local-file cohort of strings added
+              here are routed through t(). The older Cloud-URL prose (kerchunk
+              URL label, variable/color inputs, buttons) predates the Add Data
+              i18n catalog and remains English pre-existing debt, out of scope
+              for this change. */}
           <div className="space-y-1.5">
-            <Label htmlFor="netcdf-source">Source</Label>
+            <Label htmlFor="netcdf-source">
+              {t("addData.netcdf.sourceLabel")}
+            </Label>
             <Select
               id="netcdf-source"
               value={source}
@@ -308,8 +314,8 @@ export function AddNetcdfDialog({
                 setSource(event.target.value as "url" | "file");
               }}
             >
-              <option value="url">Cloud-Optimized (kerchunk URL)</option>
-              <option value="file">Local file (HDF5 / NetCDF-4)</option>
+              <option value="url">{t("addData.netcdf.sourceCloud")}</option>
+              <option value="file">{t("addData.netcdf.sourceLocal")}</option>
             </Select>
           </div>
 
@@ -353,7 +359,7 @@ export function AddNetcdfDialog({
             </>
           ) : (
             <div className="space-y-1.5">
-              <Label>Local file</Label>
+              <Label>{t("addData.netcdf.localFileLabel")}</Label>
               <Button
                 type="button"
                 variant="outline"
@@ -362,18 +368,16 @@ export function AddNetcdfDialog({
               >
                 <FileUp className="mr-2 h-3.5 w-3.5" />
                 {loadingVars
-                  ? "Reading..."
+                  ? t("addData.netcdf.readingFile")
                   : fileName
-                  ? "Choose a different file"
-                  : "Choose file"}
+                  ? t("addData.netcdf.chooseDifferentFile")
+                  : t("addData.netcdf.chooseFile")}
               </Button>
               {fileName && (
                 <p className="text-xs text-muted-foreground">{fileName}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                Select a local HDF5 or NetCDF-4 (.nc/.h5) file. It is decoded in
-                your browser; large files use more memory. Classic NetCDF-3 files
-                are not supported.
+                {t("addData.netcdf.localFileHelp")}
               </p>
             </div>
           )}
