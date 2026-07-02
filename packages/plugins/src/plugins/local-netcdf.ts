@@ -89,9 +89,9 @@ let modulePromise: Promise<H5wasmModule> | null = null;
 let fileCounter = 0;
 
 /**
- * Lazily load and initialize h5wasm. The (~1-2 MB) WASM module is only fetched
- * the first time a user opens a local NetCDF/HDF file, keeping it out of the
- * main bundle.
+ * Lazily load and initialize h5wasm. The (~5.6 MB) single-file WASM module is
+ * only fetched the first time a user opens a local NetCDF/HDF file, keeping it
+ * out of the main bundle.
  *
  * @returns The initialized h5wasm module namespace.
  */
@@ -110,7 +110,14 @@ async function loadH5wasm(): Promise<H5wasmModule> {
     const module = await ready;
     return { FS: module.FS, File };
   })();
-  return modulePromise;
+  try {
+    return await modulePromise;
+  } catch (err) {
+    // A transient failure (network/cache hiccup) leaves a rejected promise
+    // cached; clear it so the next open retries instead of failing forever.
+    modulePromise = null;
+    throw err;
+  }
 }
 
 /**
@@ -513,12 +520,14 @@ function typedArrayBytes(arr: TypedArrayLike): Uint8Array {
 
 /** Encode bytes as base64 in chunks (avoids String.fromCharCode arg limits). */
 function base64Encode(bytes: Uint8Array): string {
-  let binary = "";
+  // Collect per-chunk strings and join once: repeated `+=` on a growing string
+  // is O(n^2) and spikes memory for large grids; this stays linear.
+  const parts: string[] = [];
   const CHUNK = 0x8000;
   for (let i = 0; i < bytes.length; i += CHUNK) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    parts.push(String.fromCharCode(...bytes.subarray(i, i + CHUNK)));
   }
-  return btoa(binary);
+  return btoa(parts.join(""));
 }
 
 /**
