@@ -7,7 +7,8 @@ import {
   fetchRemoteWhiteboxCatalogSnapshot,
   fetchWhiteboxStatus,
   fetchWhiteboxTools,
-  listGeolibreWasmTools,
+  listWasmToolManifests,
+  mergeWasmToolManifests,
   runWhiteboxTool,
   runWhiteboxToolWasm,
   outputBaseName,
@@ -566,36 +567,47 @@ export function ProcessingDialog({
 
     // In WASM mode the tools run in-browser, so skip the Python sidecar probe
     // entirely (on the web build that request 404s to the SPA index.html, which
-    // is the "Unexpected token '<'" JSON error). Just load the catalog for the
-    // parameter UI.
+    // is the "Unexpected token '<'" JSON error). Load the catalog for the tool
+    // list + display metadata, then let the WASM binary's own manifests be
+    // authoritative for parameters: the local tools can expose a different
+    // parameter set than the sidecar (e.g. reproject_vector validates `epsg`,
+    // not the catalog's `dst_epsg`, #1047), and they add the GeoLibre-authored
+    // tools (write_geoparquet, delineate_depressions, …) absent from the catalog.
     if (runLocal) {
-      await applyRemoteCatalogSnapshot(
-        t("processing.whitebox.runningLocally"),
-        false,
-      );
-      // The GeoLibre-authored tools (write_geoparquet, delineate_depressions, …)
-      // aren't in the Whitebox catalog snapshot, so append them from the WASM
-      // binary's own manifests. WASM-only: they have no Python sidecar
-      // equivalent, hence only in the runLocal branch.
+      setRuntimeAvailable(false);
+      setRuntimeMessage(t("processing.whitebox.runningLocally"));
+      let catalogTools: WhiteboxTool[] = [];
+      let catalogError: unknown = null;
       try {
-        const geolibreTools = await listGeolibreWasmTools();
-        if (geolibreTools.length > 0) {
-          setTools((current) => {
-            // On an id collision, prefer the GeoLibre manifest (it carries the
-            // richer param schemas) over a catalog stub.
-            const geolibreIds = new Set(geolibreTools.map((tool) => tool.id));
-            return [
-              ...current.filter((tool) => !geolibreIds.has(tool.id)),
-              ...geolibreTools,
-            ];
-          });
-          // Select the first GeoLibre tool if the snapshot was empty (otherwise
-          // applyRemoteCatalogSnapshot already picked a selection).
-          setSelectedToolId((current) => current || geolibreTools[0].id);
-        }
+        // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
+        // catalog entirely rather than show them as disabled rows.
+        catalogTools = (await fetchRemoteWhiteboxCatalogSnapshot()).filter(
+          (tool) => !tool.locked,
+        );
       } catch (err) {
-        // Non-fatal: the catalog tools still load if the WASM enumeration fails.
-        console.warn("[GeoLibre] Could not enumerate WASM GeoLibre tools:", err);
+        catalogError = err;
+      }
+      let wasmTools: WhiteboxTool[] = [];
+      try {
+        wasmTools = await listWasmToolManifests();
+      } catch (err) {
+        // Non-fatal: the catalog tools still load if the WASM enumeration fails
+        // (they just keep the catalog's parameter names).
+        console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", err);
+      }
+      const nextTools = mergeWasmToolManifests(catalogTools, wasmTools);
+      setTools(nextTools);
+      setSelectedToolId((current) =>
+        nextTools.some((tool) => tool.id === current)
+          ? current
+          : nextTools[0]?.id ?? "",
+      );
+      if (nextTools.length === 0) {
+        setError(
+          catalogError instanceof Error
+            ? catalogError.message
+            : "Could not load Whitebox catalog snapshot.",
+        );
       }
       setLoadingTools(false);
       return;

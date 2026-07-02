@@ -142,6 +142,8 @@ export {
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
   listGeolibreWasmTools,
+  listWasmToolManifests,
+  mergeWasmToolManifests,
   outputBaseName,
   isTiff,
 } from "./wasm-client";

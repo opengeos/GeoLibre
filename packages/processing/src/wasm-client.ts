@@ -84,49 +84,106 @@ export async function listWhiteboxWasmTools(): Promise<string[]> {
 }
 
 /**
+ * Map one WASM tool manifest to the {@link WhiteboxTool} shape the Processing
+ * toolbox renders. Each manifest param already carries `io_role`/`data_kind`/
+ * `schema`, which the dialog's `parameterKind` reads directly; we additionally
+ * flatten an enum schema's choices to `options` so the param renders as a
+ * dropdown. `source` is preserved only for GeoLibre-authored tools, matching how
+ * the Whitebox catalog snapshot leaves Whitebox tools' `source` unset.
+ */
+function manifestToWhiteboxTool(manifest: ToolManifest): WhiteboxTool {
+  return {
+    id: manifest.id,
+    display_name: manifest.display_name,
+    summary: manifest.summary,
+    category: manifest.category,
+    license_tier: manifest.license_tier,
+    source:
+      manifest.source?.toLowerCase() === "geolibre" ? "geolibre" : undefined,
+    params: (manifest.params ?? []).map((param) => {
+      const mapped: WhiteboxToolParameter = {
+        name: param.name,
+        description: param.description,
+        required: param.required,
+        io_role: param.io_role,
+        data_kind: param.data_kind,
+        schema: param.schema,
+      };
+      if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
+        // Coerce to strings (not filter to strings): an enum with numeric or
+        // boolean values would otherwise drop to an empty list and render as a
+        // plain text input instead of a dropdown.
+        mapped.options = param.schema.options
+          .map((option) => option?.value)
+          .filter((value) => value != null)
+          .map(String);
+      }
+      return mapped;
+    }),
+  };
+}
+
+/**
+ * Every WASM tool manifest mapped to {@link WhiteboxTool}. In local (WASM) mode
+ * the binary is the source of truth for parameter names and shapes, which can
+ * diverge from the Python sidecar's catalog for the same tool id (e.g.
+ * `reproject_vector` takes `epsg`, not the catalog's `dst_epsg`). Use
+ * {@link mergeWasmToolManifests} to reconcile these against the catalog.
+ */
+export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
+  const { listManifests } = await loadToolsModule();
+  const manifests = await listManifests();
+  return manifests.map(manifestToWhiteboxTool);
+}
+
+/**
  * The GeoLibre-authored tools (`source: "geolibre"`) the WASM runner adds on top
  * of the Whitebox suite — e.g. `write_geoparquet`, `delineate_depressions` —
  * mapped to {@link WhiteboxTool} so the Processing toolbox can list and run them
  * alongside the catalog tools. These aren't in the Whitebox catalog snapshot, so
  * the toolbox can only discover them from the binary's own manifests.
- *
- * Each manifest param already carries `io_role`/`data_kind`/`schema`, which the
- * dialog's `parameterKind` reads directly; we additionally flatten an enum
- * schema's choices to `options` so the param renders as a dropdown.
  */
 export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
-  const { listManifests } = await loadToolsModule();
-  const manifests = await listManifests();
-  return manifests
-    .filter((manifest) => manifest.source?.toLowerCase() === "geolibre")
-    .map((manifest) => ({
-      id: manifest.id,
-      display_name: manifest.display_name,
-      summary: manifest.summary,
-      category: manifest.category,
-      license_tier: manifest.license_tier,
-      source: "geolibre",
-      params: (manifest.params ?? []).map((param) => {
-        const mapped: WhiteboxToolParameter = {
-          name: param.name,
-          description: param.description,
-          required: param.required,
-          io_role: param.io_role,
-          data_kind: param.data_kind,
-          schema: param.schema,
-        };
-        if (param.schema?.kind === "enum" && Array.isArray(param.schema.options)) {
-          // Coerce to strings (not filter to strings): an enum with numeric or
-          // boolean values would otherwise drop to an empty list and render as a
-          // plain text input instead of a dropdown.
-          mapped.options = param.schema.options
-            .map((option) => option?.value)
-            .filter((value) => value != null)
-            .map(String);
-        }
-        return mapped;
-      }),
-    }));
+  const tools = await listWasmToolManifests();
+  return tools.filter((tool) => tool.source === "geolibre");
+}
+
+/**
+ * Reconcile the Whitebox catalog snapshot with the WASM binary's own manifests
+ * for local (WASM) mode. The catalog supplies the tool list, display names, and
+ * categories; the WASM manifest is authoritative for each tool's parameters,
+ * because the binary can expose a different parameter set than the Python
+ * sidecar (e.g. `reproject_vector` validates `epsg`, whereas the catalog names
+ * the parameter `dst_epsg`, causing a "parameter 'epsg' is required" failure).
+ *
+ * Every catalog tool that the WASM binary also implements keeps its catalog
+ * metadata but takes the manifest's parameters; the GeoLibre-authored tools that
+ * never appear in the catalog are appended.
+ *
+ * @param catalogTools - Tools from the Whitebox catalog snapshot.
+ * @param wasmTools - Every WASM tool manifest ({@link listWasmToolManifests}).
+ * @returns Catalog tools with WASM parameters, plus WASM-only GeoLibre tools.
+ */
+export function mergeWasmToolManifests(
+  catalogTools: WhiteboxTool[],
+  wasmTools: WhiteboxTool[],
+): WhiteboxTool[] {
+  const wasmById = new Map(wasmTools.map((tool) => [tool.id, tool] as const));
+  const merged = catalogTools.map((tool) => {
+    const wasm = wasmById.get(tool.id);
+    if (!wasm?.params?.length) return tool;
+    // Consume the match so only WASM-only tools remain to be appended below.
+    wasmById.delete(tool.id);
+    return {
+      ...tool,
+      params: wasm.params,
+      return_type: wasm.return_type ?? tool.return_type,
+    };
+  });
+  const geolibreOnly = [...wasmById.values()].filter(
+    (tool) => tool.source === "geolibre",
+  );
+  return [...merged, ...geolibreOnly];
 }
 
 function datasetParameterKind(dataKind: string, suffix: "in" | "out"): string {
