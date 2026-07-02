@@ -82,30 +82,36 @@ describe("mergeWasmToolManifests", () => {
     );
   });
 
-  it("does not duplicate a catalog tool when its WASM match has empty params", () => {
-    // A GeoLibre-authored tool that also has a catalog stub but whose WASM
-    // manifest reports no params must be consumed (kept once, catalog params),
-    // never appended a second time via the GeoLibre-only leftovers.
+  it("consumes a matched GeoLibre tool once and preserves its source", () => {
+    // A GeoLibre-authored tool that also has a catalog stub must be merged once
+    // (never appended a second time via the GeoLibre-only leftovers), take the
+    // WASM manifest's params, and keep its "geolibre" source so the source
+    // filter still recognises it.
     const catalogStub: WhiteboxTool = {
       id: "write_geoparquet",
       display_name: "Write GeoParquet",
       params: [{ name: "input", kind: "vector_in", required: true }],
     };
-    const wasmEmptyParams: WhiteboxTool = {
+    const wasmTool: WhiteboxTool = {
       id: "write_geoparquet",
       source: "geolibre",
-      params: [],
+      params: [
+        { name: "input", data_kind: "vector", io_role: "input" },
+        { name: "compression", data_kind: "string" },
+      ],
     };
-    const merged = mergeWasmToolManifests([catalogStub], [wasmEmptyParams]);
+    const merged = mergeWasmToolManifests([catalogStub], [wasmTool]);
     assert.equal(
       merged.filter((tool) => tool.id === "write_geoparquet").length,
       1,
     );
-    // Falls back to the catalog params since the WASM manifest had none.
     assert.deepEqual(
       merged[0].params?.map((param) => param.name),
-      ["input"],
+      ["input", "compression"],
     );
+    assert.equal(merged[0].source, "geolibre");
+    // Catalog display metadata is retained.
+    assert.equal(merged[0].display_name, "Write GeoParquet");
   });
 
   it("does not append WASM-only Whitebox tools missing from the catalog", () => {

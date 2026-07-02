@@ -2110,6 +2110,7 @@
       "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
       "runningLocally": "Running locally with WebAssembly. No sidecar required.",
       "catalogSnapshotError": "Could not load Whitebox catalog snapshot.",
+      "localRunnerError": "Could not load the local (WASM) tool runner. Turn off \"Run locally (WASM)\" to use the sidecar.",
       "filterBySource": "Filter by source",
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",

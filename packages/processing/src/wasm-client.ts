@@ -137,23 +137,6 @@ export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
 }
 
 /**
- * The GeoLibre-authored tools (`source: "geolibre"`) the WASM runner adds on top
- * of the Whitebox suite — e.g. `write_geoparquet`, `delineate_depressions` —
- * mapped to {@link WhiteboxTool} so the Processing toolbox can list and run them
- * alongside the catalog tools. These aren't in the Whitebox catalog snapshot, so
- * the toolbox can only discover them from the binary's own manifests.
- */
-export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
-  const { listManifests } = await loadToolsModule();
-  const manifests = await listManifests();
-  // Filter by source *before* mapping so we don't allocate a WhiteboxTool for
-  // every one of the ~700 Whitebox manifests just to discard them.
-  return manifests
-    .filter((manifest) => manifest.source?.toLowerCase() === "geolibre")
-    .map(manifestToWhiteboxTool);
-}
-
-/**
  * Reconcile the Whitebox catalog snapshot with the WASM binary's own manifests
  * for local (WASM) mode. The catalog supplies the tool list, display names, and
  * categories; the WASM manifest is authoritative for each tool's parameters,
@@ -177,14 +160,15 @@ export function mergeWasmToolManifests(
   const merged = catalogTools.map((tool) => {
     const wasm = wasmById.get(tool.id);
     if (!wasm) return tool;
-    // Consume the match regardless of what follows, so a WASM-only-appended
-    // tool (below) can never duplicate a catalog tool's id.
+    // Consume the match so a WASM-only-appended tool (below) can never duplicate
+    // a catalog tool's id.
     wasmById.delete(tool.id);
-    // Defensive fallback: a tool the WASM binary reports with no params (a
-    // malformed/empty manifest, or a rare zero-parameter tool) keeps the
-    // catalog's params rather than being blanked to an unusable empty form.
-    if (!wasm.params?.length) return tool;
-    return { ...tool, params: wasm.params };
+    // The WASM binary is authoritative for the parameters (even an empty set)
+    // and for the tool's provenance; keep only the catalog's display metadata
+    // (name, category, …). Preserving `source` matters so a GeoLibre-authored
+    // tool that also has a catalog stub keeps its "geolibre" marker for the
+    // source filter.
+    return { ...tool, params: wasm.params, source: wasm.source ?? tool.source };
   });
   const geolibreOnly = [...wasmById.values()].filter(
     (tool) => tool.source === "geolibre",

@@ -576,24 +576,30 @@ export function ProcessingDialog({
     if (runLocal) {
       setRuntimeAvailable(false);
       setRuntimeMessage(t("processing.whitebox.runningLocally"));
-      let catalogTools: WhiteboxTool[] = [];
-      let catalogError: unknown = null;
-      try {
-        // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
-        // catalog entirely rather than show them as disabled rows.
-        catalogTools = (await fetchRemoteWhiteboxCatalogSnapshot()).filter(
-          (tool) => !tool.locked,
+      // The catalog snapshot (HTTP/bundled asset) and the WASM manifest
+      // enumeration (loads + queries the WASM module) are independent, so fetch
+      // them concurrently rather than serially.
+      const [catalogResult, wasmResult] = await Promise.allSettled([
+        fetchRemoteWhiteboxCatalogSnapshot(),
+        listWasmToolManifests(),
+      ]);
+      // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
+      // catalog entirely rather than show them as disabled rows.
+      const catalogTools =
+        catalogResult.status === "fulfilled"
+          ? catalogResult.value.filter((tool) => !tool.locked)
+          : [];
+      const catalogError =
+        catalogResult.status === "rejected" ? catalogResult.reason : null;
+      const wasmTools =
+        wasmResult.status === "fulfilled" ? wasmResult.value : [];
+      const wasmError =
+        wasmResult.status === "rejected" ? wasmResult.reason : null;
+      if (wasmError) {
+        console.warn(
+          "[GeoLibre] Could not enumerate WASM tool manifests:",
+          wasmError,
         );
-      } catch (err) {
-        catalogError = err;
-      }
-      let wasmTools: WhiteboxTool[] = [];
-      try {
-        wasmTools = await listWasmToolManifests();
-      } catch (err) {
-        // Non-fatal: the catalog tools still load if the WASM enumeration fails
-        // (they just keep the catalog's parameter names).
-        console.warn("[GeoLibre] Could not enumerate WASM tool manifests:", err);
       }
       const nextTools = mergeWasmToolManifests(catalogTools, wasmTools);
       setTools(nextTools);
@@ -602,11 +608,15 @@ export function ProcessingDialog({
           ? current
           : nextTools[0]?.id ?? "",
       );
-      // Surface a catalog-fetch failure even when the WASM manifests still yield
-      // a few GeoLibre-authored tools: otherwise the user silently loses the
-      // ~700 Whitebox catalog tools with no explanation (a regression vs the
-      // sidecar path, which always reported the error).
-      if (catalogError) {
+      // In local mode the WASM runner is what actually executes tools, so its
+      // failure is the most important to report: without it every tool keeps the
+      // catalog's parameter names and would fail on run (exactly #1047). Failing
+      // that, surface a catalog-fetch failure even when the WASM manifests still
+      // yielded a few GeoLibre-authored tools, so the user is not silently left
+      // without the ~700 Whitebox catalog tools.
+      if (wasmError) {
+        setError(t("processing.whitebox.localRunnerError"));
+      } else if (catalogError) {
         setError(
           catalogError instanceof Error
             ? catalogError.message

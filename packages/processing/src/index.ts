@@ -141,7 +141,6 @@ export {
   runWhiteboxToolWasm,
   whiteboxWasmAvailable,
   listWhiteboxWasmTools,
-  listGeolibreWasmTools,
   listWasmToolManifests,
   mergeWasmToolManifests,
   outputBaseName,
