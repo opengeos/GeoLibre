@@ -82,7 +82,9 @@ export function OgcVectorTilesSource() {
           styleUrl: styleUrl.trim() || undefined,
         },
       ),
-      { fit: Boolean(config.bounds || config.center) },
+      // fitLayer resolves a vector-tiles layer only from bounds (it never reads
+      // `center` for this type), so only request a fit when bounds are known.
+      { fit: Boolean(config.bounds) },
     );
   });
 

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   firstVectorSource,
   hasTilePlaceholders,
+  resolveOgcVectorTiles,
   styleSourceLayers,
   tileJsonConfig,
 } from "../apps/geolibre-desktop/src/lib/ogc-vector-tiles";
@@ -98,5 +99,35 @@ describe("tileJsonConfig", () => {
     const config = tileJsonConfig({}, "https://ex.com/tiles?f=tilejson");
     assert.equal(config.url, "https://ex.com/tiles?f=tilejson");
     assert.equal(config.sourceLayers, undefined);
+  });
+
+  it("keeps only a finite [lng, lat(, zoom)] center", () => {
+    assert.deepEqual(
+      tileJsonConfig({ center: [5, 52, 8] }, "u").center,
+      [5, 52, 8],
+    );
+    assert.equal(tileJsonConfig({ center: [5, Infinity] }, "u").center, undefined);
+    assert.equal(tileJsonConfig({ center: [1, 2, 3, 4] }, "u").center, undefined);
+  });
+});
+
+// The `{z}/{x}/{y}` template path resolves without any network request, so it
+// can be exercised directly.
+describe("resolveOgcVectorTiles (template path)", () => {
+  it("normalizes uppercase placeholders MapLibre would not substitute", async () => {
+    const config = await resolveOgcVectorTiles({
+      tilesUrl: "https://ex.com/{Z}/{Y}/{X}?f=mvt",
+      sourceLayers: ["roads"],
+    });
+    assert.deepEqual(config.tiles, ["https://ex.com/{z}/{y}/{x}?f=mvt"]);
+    assert.deepEqual(config.sourceLayers, ["roads"]);
+  });
+
+  it("always returns sourceLayers as an array", async () => {
+    const config = await resolveOgcVectorTiles({
+      tilesUrl: "https://ex.com/{z}/{x}/{y}",
+    });
+    assert.ok(Array.isArray(config.sourceLayers));
+    assert.equal(config.sourceLayers.length, 0);
   });
 });

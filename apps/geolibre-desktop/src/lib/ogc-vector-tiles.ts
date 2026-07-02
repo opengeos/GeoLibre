@@ -165,25 +165,82 @@ export function tileJsonConfig(
   if (typeof tilejson.maxzoom === "number") config.maxzoom = tilejson.maxzoom;
   const bounds = asBounds(tilejson.bounds);
   if (bounds) config.bounds = bounds;
-  if (Array.isArray(tilejson.center)) {
-    config.center = tilejson.center.filter(
-      (value): value is number => typeof value === "number",
-    );
+  // A TileJSON `center` is `[lng, lat]` or `[lng, lat, zoom]`; reject anything
+  // else so non-finite or malformed values never reach the layer metadata.
+  const center = tilejson.center;
+  if (
+    Array.isArray(center) &&
+    (center.length === 2 || center.length === 3) &&
+    center.every((value) => typeof value === "number" && Number.isFinite(value))
+  ) {
+    config.center = center as number[];
   }
   const sourceLayers = vectorLayerIds(tilejson);
   if (sourceLayers.length > 0) config.sourceLayers = sourceLayers;
   return config;
 }
 
-/** Fetches and parses a remote JSON document, working around cross-origin limits. */
+/** Lowercases `{z}`/`{x}`/`{y}` so MapLibre's case-sensitive tile substitution
+ * works: an uppercase-placeholder template would otherwise be requested
+ * verbatim and silently fail to load. */
+function normalizeTilePlaceholders(url: string): string {
+  return url
+    .replace(/\{z\}/gi, "{z}")
+    .replace(/\{x\}/gi, "{x}")
+    .replace(/\{y\}/gi, "{y}");
+}
+
+/** A promise that rejects when the signal aborts, with its abort reason. Used to
+ * race an uncancellable Tauri invoke against the caller's abort and a timeout. */
+function rejectOnAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
+
+/** Converts opaque fetch/abort failures into a clear, user-facing Error so the
+ * Add Data dialog surfaces the real cause instead of a generic fallback. */
+function normalizeFetchError(error: unknown): Error {
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return new Error("The request timed out.");
+  }
+  // A CORS/network rejection surfaces as a bare TypeError with no status.
+  if (error instanceof TypeError) {
+    return new Error(
+      "Could not reach the service. It may not allow cross-origin requests from the browser; try the desktop app.",
+    );
+  }
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * Fetches and parses a remote JSON document, working around cross-origin limits.
+ * The Tauri path uses the Rust `fetch_url_bytes` command (not subject to browser
+ * CORS); the dev server routes through the same-origin proxy; the hosted web
+ * build fetches directly. All paths honor the caller's abort signal and a 30s
+ * timeout so an unresponsive OGC endpoint cannot hang the Add Data form.
+ */
 async function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown> {
+  const timeout = AbortSignal.timeout(30_000);
+  const abort = signal ? AbortSignal.any([signal, timeout]) : timeout;
   if (isTauri()) {
-    // The Rust `fetch_url_bytes` command is not subject to browser CORS, so any
-    // OGC service works from the desktop app.
+    // `fetch_url_bytes` cannot be cancelled mid-flight, so race it against the
+    // abort/timeout to still return promptly on a slow or hung host.
     const { invoke } = await import("@tauri-apps/api/core");
-    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", { url });
-    const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    return JSON.parse(new TextDecoder().decode(array));
+    try {
+      const bytes = await Promise.race([
+        invoke<number[] | Uint8Array>("fetch_url_bytes", { url }),
+        rejectOnAbort(abort),
+      ]);
+      const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+      return JSON.parse(new TextDecoder().decode(array));
+    } catch (error) {
+      throw normalizeFetchError(error);
+    }
   }
   const isDev = Boolean(
     (import.meta as ImportMeta & { env?: { DEV?: boolean } }).env?.DEV,
@@ -191,10 +248,12 @@ async function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown>
   const fetchUrl = isDev
     ? `${OGC_PROXY_PATH}?url=${encodeURIComponent(url)}`
     : url;
-  const timeout = AbortSignal.timeout(30_000);
-  const response = await fetch(fetchUrl, {
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-  });
+  let response: Response;
+  try {
+    response = await fetch(fetchUrl, { signal: abort });
+  } catch (error) {
+    throw normalizeFetchError(error);
+  }
   if (!response.ok) {
     throw new Error(`Request failed with status ${response.status}`);
   }
@@ -225,7 +284,7 @@ export async function resolveOgcVectorTiles(input: {
 
   if (tilesUrl) {
     if (hasTilePlaceholders(tilesUrl)) {
-      config.tiles = [tilesUrl];
+      config.tiles = [normalizeTilePlaceholders(tilesUrl)];
     } else {
       const tilejson = (await fetchOgcJson(
         tilesUrl,
@@ -238,9 +297,13 @@ export async function resolveOgcVectorTiles(input: {
   if (styleUrl) {
     const style = (await fetchOgcJson(styleUrl, input.signal)) as StyleLike;
     const vector = firstVectorSource(style);
-    if (config.sourceLayers.length === 0) {
-      config.sourceLayers = styleSourceLayers(style, vector?.id);
-    }
+    // A provided style is authoritative for the layers it references, so its
+    // source layers take precedence over the TileJSON's `vector_layers` (the
+    // documented manual > style > TileJSON order). An explicit manual list
+    // still wins below. When the style references none, keep what the TileJSON
+    // advertised rather than blanking the layer.
+    const layerNames = styleSourceLayers(style, vector?.id);
+    if (layerNames.length > 0) config.sourceLayers = layerNames;
     if (!config.name && typeof style.name === "string") {
       config.name = style.name;
     }
@@ -249,7 +312,7 @@ export async function resolveOgcVectorTiles(input: {
       if (typeof vector.source.url === "string") {
         config.url = vector.source.url;
       } else {
-        config.tiles = asTiles(vector.source.tiles);
+        config.tiles = asTiles(vector.source.tiles)?.map(normalizeTilePlaceholders);
       }
       if (config.minzoom === undefined && typeof vector.source.minzoom === "number") {
         config.minzoom = vector.source.minzoom;
@@ -265,6 +328,9 @@ export async function resolveOgcVectorTiles(input: {
   if (input.sourceLayers && input.sourceLayers.length > 0) {
     config.sourceLayers = input.sourceLayers;
   }
+  // Defensive: `sourceLayers` is always an array above, but guarantee it so the
+  // dialog can safely read `.length` on the "no source layers" path.
+  if (!Array.isArray(config.sourceLayers)) config.sourceLayers = [];
 
   return config;
 }
