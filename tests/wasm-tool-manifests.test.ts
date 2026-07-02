@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   mergeWasmToolManifests,
+  normalizeVectorOutputFormat,
   type WhiteboxTool,
 } from "@geolibre/processing";
 
@@ -121,5 +122,22 @@ describe("mergeWasmToolManifests", () => {
     };
     const merged = mergeWasmToolManifests([], [wasmOnlyWhitebox]);
     assert.equal(merged.length, 0);
+  });
+});
+
+describe("normalizeVectorOutputFormat", () => {
+  it("passes through the known formats", () => {
+    for (const format of ["geojson", "geoparquet", "flatgeobuf", "shapefile"]) {
+      assert.equal(normalizeVectorOutputFormat(format), format);
+    }
+  });
+
+  it("falls back to geojson for a stale output path or bad value", () => {
+    // A leftover sidecar-mode path (or any non-format string/undefined) must not
+    // be treated as a format, else the WASM runner writes `..._output.undefined`.
+    assert.equal(normalizeVectorOutputFormat("/Users/me/output.shp"), "geojson");
+    assert.equal(normalizeVectorOutputFormat(""), "geojson");
+    assert.equal(normalizeVectorOutputFormat(undefined), "geojson");
+    assert.equal(normalizeVectorOutputFormat(42), "geojson");
   });
 });

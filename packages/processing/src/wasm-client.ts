@@ -6,6 +6,7 @@
 // algorithms and outputs as the sidecar; bounded by WASM's ~4 GiB memory and
 // single-threaded execution (use the sidecar for very large data).
 import type { FeatureCollection } from "geojson";
+import { normalizeVectorOutputFormat } from "./sidecar-client";
 import type {
   RunWhiteboxToolRequest,
   VectorOutputFormat,
@@ -32,23 +33,26 @@ const VECTOR_OUTPUT_EXTENSION: Record<
 /**
  * Bundle a Shapefile the WASM tool wrote (`.shp` plus its `.shx`/`.dbf`/`.prj`/
  * `.cpg` sidecars) into a single zip, since a Shapefile is inherently multi-file.
- * Returns `null` when the main `.shp` is missing (a failed/partial write).
+ * Returns `null` when any of the core members (`.shp`/`.shx`/`.dbf`) is missing:
+ * most GIS clients reject a Shapefile that lacks them, so an incomplete bundle
+ * is treated like a failed/partial write rather than shipped as a valid output.
  *
  * @param shpFile - The `.shp` filename in the WASM output map.
  * @param files - Every file the tool wrote, keyed by name.
- * @returns The zip bytes, or `null` if there is no `.shp` to bundle.
+ * @returns The zip bytes, or `null` if the core `.shp`/`.shx`/`.dbf` are incomplete.
  */
 async function zipShapefileSidecars(
   shpFile: string,
   files: Record<string, Uint8Array>,
 ): Promise<Uint8Array | null> {
   const base = shpFile.replace(/\.shp$/i, "");
+  const required = ["shp", "shx", "dbf"] as const;
   const members: Record<string, Uint8Array> = {};
-  for (const ext of ["shp", "shx", "dbf", "prj", "cpg"]) {
+  for (const ext of [...required, "prj", "cpg"]) {
     const member = files[`${base}.${ext}`];
     if (member) members[`${base}.${ext}`] = member;
   }
-  if (!members[`${base}.shp`]) return null;
+  if (required.some((ext) => !members[`${base}.${ext}`])) return null;
   const { zipSync } = await import("fflate");
   return zipSync(members);
 }
@@ -365,8 +369,13 @@ export async function runWhiteboxToolWasm(
     file: string;
     kind: "geojson" | "bytes" | "shapefile";
   }[] = [];
-  const vectorFormat: VectorOutputFormat =
-    request.vector_output_format ?? "geojson";
+  // Defensive: validate the requested format so a bad value (e.g. a stale
+  // output path from switching sidecar/WASM modes) degrades to GeoJSON instead
+  // of indexing VECTOR_OUTPUT_EXTENSION to `undefined` and writing a
+  // `..._output.undefined` file the tool can't format.
+  const vectorFormat: VectorOutputFormat = normalizeVectorOutputFormat(
+    request.vector_output_format,
+  );
 
   for (const param of request.tool?.params ?? []) {
     const kind = paramKind(param);

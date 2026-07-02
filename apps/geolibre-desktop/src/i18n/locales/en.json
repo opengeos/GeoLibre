@@ -2110,7 +2110,7 @@
       "runLocalHint": "Run locally in WebAssembly (no Python sidecar)",
       "runningLocally": "Running locally with WebAssembly. No sidecar required.",
       "catalogSnapshotError": "Could not load Whitebox catalog snapshot.",
-      "localRunnerError": "Could not load the local (WASM) tool runner. Turn off \"Run locally (WASM)\" to use the sidecar.",
+      "localRunnerError": "Could not load the local (WASM) tool runner. Refresh and try again, or use the sidecar if it is available.",
       "output": {
         "geojson": "GeoJSON (add to map)",
         "geoparquet": "GeoParquet (download, keeps CRS)",

@@ -107,6 +107,8 @@ export {
   fetchVectorStatus,
   runWhiteboxTool,
   WHITEBOX_CATALOG_URL,
+  VECTOR_OUTPUT_FORMATS,
+  normalizeVectorOutputFormat,
   type ConversionJob,
   type ConversionStatus,
   type CsvToGeoParquetRequest,

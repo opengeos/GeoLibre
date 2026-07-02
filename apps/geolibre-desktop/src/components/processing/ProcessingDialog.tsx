@@ -9,10 +9,10 @@ import {
   fetchWhiteboxTools,
   listWasmToolManifests,
   mergeWasmToolManifests,
+  normalizeVectorOutputFormat,
   runWhiteboxTool,
   runWhiteboxToolWasm,
   outputBaseName,
-  type VectorOutputFormat,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxTool,
@@ -605,6 +605,12 @@ export function ProcessingDialog({
           wasmError,
         );
       }
+      if (catalogError) {
+        console.warn(
+          "[GeoLibre] Could not load Whitebox catalog snapshot:",
+          catalogError,
+        );
+      }
       const nextTools = mergeWasmToolManifests(catalogTools, wasmTools);
       setTools(nextTools);
       setSelectedToolId((current) =>
@@ -626,7 +632,10 @@ export function ProcessingDialog({
             ? catalogError.message
             : t("processing.whitebox.catalogSnapshotError"),
         );
-      } else if (nextTools.length === 0) {
+      } else if (catalogTools.length === 0 || nextTools.length === 0) {
+        // The catalog can also resolve to an empty list (a malformed/empty
+        // snapshot doesn't throw), which silently drops the ~700 Whitebox tools
+        // even when a few GeoLibre-authored WASM tools keep `nextTools` non-empty.
         setError(t("processing.whitebox.catalogSnapshotError"));
       }
       setLoadingTools(false);
@@ -947,10 +956,10 @@ export function ProcessingDialog({
         )
       : undefined;
     const vectorOutValue = vectorOut ? values[vectorOut.name] : undefined;
-    const vectorOutputFormat: VectorOutputFormat =
-      typeof vectorOutValue === "string" && vectorOutValue
-        ? (vectorOutValue as VectorOutputFormat)
-        : "geojson";
+    // Validate against the known formats: a stale sidecar-mode output path left
+    // in the form state (the form only resets on tool change) would otherwise be
+    // cast to a bogus format and produce a `..._output.undefined` filename.
+    const vectorOutputFormat = normalizeVectorOutputFormat(vectorOutValue);
 
     try {
       const request = {
@@ -1402,11 +1411,12 @@ function ParameterField({
       ) : kind === "vector_out" && runLocal ? (
         // In WASM mode a vector output is either a WGS84 map layer (GeoJSON) or a
         // downloaded file in a CRS-preserving format that keeps a reprojection's
-        // target CRS (which the map, being EPSG:4326, cannot show).
+        // target CRS (which the map, being EPSG:4326, cannot show). Normalize the
+        // value so a stale sidecar-mode output path doesn't leak into the Select.
         <div className="grid gap-1.5">
           <Select
             id={`whitebox-${param.name}`}
-            value={valueText || "geojson"}
+            value={normalizeVectorOutputFormat(valueText)}
             onChange={(event) => onChange(event.target.value)}
           >
             <option value="geojson">
@@ -1422,7 +1432,7 @@ function ParameterField({
               {t("processing.whitebox.output.shapefile")}
             </option>
           </Select>
-          {valueText && valueText !== "geojson" && (
+          {normalizeVectorOutputFormat(valueText) !== "geojson" && (
             <p className="text-xs text-muted-foreground">
               {t("processing.whitebox.output.projectedHint")}
             </p>
