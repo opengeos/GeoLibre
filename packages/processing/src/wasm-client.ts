@@ -144,8 +144,13 @@ export async function listWasmToolManifests(): Promise<WhiteboxTool[]> {
  * the toolbox can only discover them from the binary's own manifests.
  */
 export async function listGeolibreWasmTools(): Promise<WhiteboxTool[]> {
-  const tools = await listWasmToolManifests();
-  return tools.filter((tool) => tool.source === "geolibre");
+  const { listManifests } = await loadToolsModule();
+  const manifests = await listManifests();
+  // Filter by source *before* mapping so we don't allocate a WhiteboxTool for
+  // every one of the ~700 Whitebox manifests just to discard them.
+  return manifests
+    .filter((manifest) => manifest.source?.toLowerCase() === "geolibre")
+    .map(manifestToWhiteboxTool);
 }
 
 /**
@@ -171,14 +176,13 @@ export function mergeWasmToolManifests(
   const wasmById = new Map(wasmTools.map((tool) => [tool.id, tool] as const));
   const merged = catalogTools.map((tool) => {
     const wasm = wasmById.get(tool.id);
+    // Defensive fallback: a tool the WASM binary reports with no params (a
+    // malformed/empty manifest, or a rare zero-parameter tool) keeps the
+    // catalog's params rather than being blanked to an unusable empty form.
     if (!wasm?.params?.length) return tool;
     // Consume the match so only WASM-only tools remain to be appended below.
     wasmById.delete(tool.id);
-    return {
-      ...tool,
-      params: wasm.params,
-      return_type: wasm.return_type ?? tool.return_type,
-    };
+    return { ...tool, params: wasm.params };
   });
   const geolibreOnly = [...wasmById.values()].filter(
     (tool) => tool.source === "geolibre",

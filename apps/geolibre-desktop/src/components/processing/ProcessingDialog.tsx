@@ -602,12 +602,18 @@ export function ProcessingDialog({
           ? current
           : nextTools[0]?.id ?? "",
       );
-      if (nextTools.length === 0) {
+      // Surface a catalog-fetch failure even when the WASM manifests still yield
+      // a few GeoLibre-authored tools: otherwise the user silently loses the
+      // ~700 Whitebox catalog tools with no explanation (a regression vs the
+      // sidecar path, which always reported the error).
+      if (catalogError) {
         setError(
           catalogError instanceof Error
             ? catalogError.message
             : "Could not load Whitebox catalog snapshot.",
         );
+      } else if (nextTools.length === 0) {
+        setError("Could not load Whitebox catalog snapshot.");
       }
       setLoadingTools(false);
       return;
