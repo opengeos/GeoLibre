@@ -41,11 +41,18 @@ interface MercatorProjectionApp {
 
 // `setMapProjection`/`getMapProjection` drive a single global map setting, but
 // multiple deck.gl overlays (Google Photorealistic 3D Tiles, ArcGIS I3S) each
-// need the map forced to mercator while they are mounted. A ref-counted lock
-// keyed by overlay type lets them share that override: the projection worth
-// restoring is captured once when the first holder acquires, and restored only
-// when the last holder releases — so removing one overlay no longer clobbers a
-// mercator override another overlay still needs.
+// need the map forced to mercator while they are mounted. A lock keyed by
+// overlay type lets them share that override: the projection worth restoring is
+// captured once when the first holder acquires, and restored only when the last
+// holder releases — so removing one overlay no longer clobbers a mercator
+// override another overlay still needs.
+//
+// Membership is keyed by overlay TYPE, not per acquire() call: `acquire` runs
+// on every store-driven render (many times per overlay) and is idempotent,
+// while each overlay type calls `release` exactly once when its last layer is
+// removed. A per-call reference count would therefore never reach zero (acquire
+// fires far more often than release) and the projection would never restore, so
+// a Set of held overlay-type keys is the correct model here.
 const mercatorProjectionHolders = new Set<string>();
 let capturedProjectionToRestore: "globe" | "mercator" | null = null;
 

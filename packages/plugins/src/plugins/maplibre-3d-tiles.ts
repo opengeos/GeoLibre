@@ -28,6 +28,7 @@ import {
   addArcgisI3sTilesLayer,
   isArcgisI3sSceneLayerUrl,
   restoreArcgisI3sTilesLayers,
+  THREE_D_TILES_TILESET_LOAD_LIMITS,
 } from "./arcgis-i3s-tiles";
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -1458,11 +1459,7 @@ function buildGooglePhotorealisticTilesDeckLayer(
     altitudeOffset,
     loadOptions: {
       fetch: requestHeaders ? { headers: requestHeaders } : undefined,
-      tileset: {
-        maximumScreenSpaceError: 20,
-        maximumMemoryUsage: 512,
-        memoryAdjustedScreenSpaceError: true,
-      },
+      tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
     },
     opacity: layer.opacity,
     pickable: false,

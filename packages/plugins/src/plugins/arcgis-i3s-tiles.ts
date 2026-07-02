@@ -24,6 +24,18 @@ import {
 /** Source-kind tag stored on an ArcGIS I3S layer's source + metadata. */
 export const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
 const ARCGIS_I3S_LAYER_ID_PREFIX = "arcgis-i3s-tiles";
+
+/**
+ * Tile detail/memory caps shared by the deck.gl 3D-tiles overlays (this I3S
+ * overlay and the Google Photorealistic one) so a large textured-mesh scene
+ * doesn't load with deck.gl's unbounded defaults. Kept in one place so the two
+ * overlays don't drift apart.
+ */
+export const THREE_D_TILES_TILESET_LOAD_LIMITS = {
+  maximumScreenSpaceError: 20,
+  maximumMemoryUsage: 512,
+  memoryAdjustedScreenSpaceError: true,
+} as const;
 // ~1s at 60fps, matching GOOGLE_TILES_MAX_MOUNT_RETRIES so a slow project
 // restore has the same budget to wait for the map before giving up.
 const I3S_MAX_MOUNT_RETRIES = 60;
@@ -306,21 +318,17 @@ function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
     id: `${layer.id}-deck`,
     data: url,
     loader: i3sLoader,
-    // Cap tile detail/memory the same way the Google Photorealistic overlay
-    // does, so a large textured-mesh scene doesn't load with deck.gl's
-    // unbounded defaults.
+    // Cap tile detail/memory so a large textured-mesh scene doesn't load with
+    // deck.gl's unbounded defaults (shared with the Google overlay).
     loadOptions: {
-      tileset: {
-        maximumScreenSpaceError: 20,
-        maximumMemoryUsage: 512,
-        memoryAdjustedScreenSpaceError: true,
-      },
+      tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
     },
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",
     onTilesetLoad: (tileset: unknown) => {
       warnOnUnsupportedI3sSceneLayerType(url, tileset);
+      persistI3sTilesetCenter(layer.id, tileset);
       flyToI3sTileset(layer.id, tileset);
     },
     // @loaders.gl/i3s tags mesh content with a numeric coordinateSystem
@@ -383,10 +391,52 @@ function warnOnUnsupportedI3sSceneLayerType(
   }
 }
 
+/** Read a tileset's cartographic center as an [lng, lat] pair, if present. */
+function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
+  const center = (
+    tileset as { cartographicCenter?: [number, number, number] } | null
+  )?.cartographicCenter;
+  if (
+    !center ||
+    typeof center[0] !== "number" ||
+    typeof center[1] !== "number" ||
+    !Number.isFinite(center[0]) ||
+    !Number.isFinite(center[1])
+  ) {
+    return null;
+  }
+  return [center[0], center[1]];
+}
+
+/**
+ * Persist a loaded tileset's center into the layer metadata so the main Layers
+ * panel's "Zoom to layer" (MapController.fitLayer) works — an I3S layer has no
+ * geojson or MapLibre source, so `metadata.center` is its only bounds hint.
+ */
+function persistI3sTilesetCenter(layerId: string, tileset: unknown): void {
+  const center = i3sTilesetLngLat(tileset);
+  if (!center) return;
+  const layer = useAppStore
+    .getState()
+    .layers.find(({ id }) => id === layerId);
+  if (!layer || !isArcgisI3sTilesLayer(layer)) return;
+  // onTilesetLoad can fire more than once; skip the store write when unchanged.
+  const existing = layer.metadata.center;
+  if (
+    Array.isArray(existing) &&
+    existing[0] === center[0] &&
+    existing[1] === center[1]
+  ) {
+    return;
+  }
+  useAppStore.getState().updateLayer(layerId, {
+    metadata: { ...layer.metadata, center },
+  });
+}
+
 /** Fly to a freshly-loaded tileset the first time, if the add requested it. */
 function flyToI3sTileset(layerId: string, tileset: unknown): void {
   if (!i3sFlyToRequested.has(layerId) || !i3sApp) return;
-  i3sFlyToRequested.delete(layerId);
   const info = tileset as {
     cartographicCenter?: [number, number, number];
     zoom?: number;
@@ -395,7 +445,10 @@ function flyToI3sTileset(layerId: string, tileset: unknown): void {
   const map = i3sApp.getMap?.() as
     | { flyTo?: (opts: Record<string, unknown>) => void }
     | undefined;
+  // Only consume the fly-to request once we can actually fly, so a transient
+  // missing map/flyTo doesn't permanently drop it.
   if (!center || !map?.flyTo) return;
+  i3sFlyToRequested.delete(layerId);
   map.flyTo({
     center: [center[0], center[1]],
     zoom: typeof info?.zoom === "number" ? Math.max(0, info.zoom - 1) : 15,
