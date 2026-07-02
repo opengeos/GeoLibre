@@ -16,7 +16,10 @@ import {
 import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../types";
-import { ensureMercatorProjection } from "./map-projection-utils";
+import {
+  acquireMercatorProjectionLock,
+  releaseMercatorProjectionLock,
+} from "./map-projection-utils";
 
 /** Source-kind tag stored on an ArcGIS I3S layer's source + metadata. */
 export const ARCGIS_I3S_SOURCE_KIND = "arcgis-i3s";
@@ -41,7 +44,8 @@ let lastI3sLayerSignature: string | null = null;
 let i3sMountRetryScheduled = false;
 let i3sMountRetries = 0;
 let i3sMountGaveUp = false;
-let i3sPreviousProjection: "globe" | "mercator" | null = null;
+/** Ref-counted mercator lock key for this overlay (see map-projection-utils). */
+const I3S_PROJECTION_LOCK_KEY = ARCGIS_I3S_SOURCE_KIND;
 // I3SLoader is loaded lazily (it pulls in a fair amount of parsing code) the
 // first time an I3S layer is rendered, and cached here.
 let i3sLoaderPromise: Promise<unknown> | null = null;
@@ -315,7 +319,10 @@ function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",
-    onTilesetLoad: (tileset: unknown) => flyToI3sTileset(layer.id, tileset),
+    onTilesetLoad: (tileset: unknown) => {
+      warnOnUnsupportedI3sSceneLayerType(url, tileset);
+      flyToI3sTileset(layer.id, tileset);
+    },
     // @loaders.gl/i3s tags mesh content with a numeric coordinateSystem
     // (METER_OFFSETS = 2), but deck.gl 9 expects the string form
     // ("meter-offsets"); remap it on load so getShaderCoordinateSystem accepts
@@ -347,6 +354,35 @@ function normalizeI3sTileCoordinateSystem(tile: unknown): void {
   }
 }
 
+/** Scene-layer types this mesh-only Tile3DLayer + I3SLoader pipeline renders. */
+const SUPPORTED_I3S_LAYER_TYPES = new Set(["3DObject", "IntegratedMesh"]);
+
+/**
+ * Warn when a loaded tileset is a scene-layer type this overlay can't render
+ * (e.g. an I3S PointCloud layer), which the mesh pipeline would otherwise fail
+ * to display with no explanation.
+ *
+ * @param url The Scene Layer URL, for context in the warning.
+ * @param tileset The tileset object passed to `onTilesetLoad`.
+ */
+function warnOnUnsupportedI3sSceneLayerType(
+  url: string,
+  tileset: unknown,
+): void {
+  const layerType = (tileset as { tileset?: { layerType?: unknown } } | null)
+    ?.tileset?.layerType;
+  if (
+    typeof layerType === "string" &&
+    !SUPPORTED_I3S_LAYER_TYPES.has(layerType)
+  ) {
+    console.warn(
+      `[GeoLibre] ArcGIS I3S scene layer type "${layerType}" is not supported ` +
+        "(only 3DObject and IntegratedMesh mesh layers render); this layer may " +
+        `not display: ${url}`,
+    );
+  }
+}
+
 /** Fly to a freshly-loaded tileset the first time, if the add requested it. */
 function flyToI3sTileset(layerId: string, tileset: unknown): void {
   if (!i3sFlyToRequested.has(layerId) || !i3sApp) return;
@@ -367,19 +403,10 @@ function flyToI3sTileset(layerId: string, tileset: unknown): void {
 }
 
 function forceI3sMercatorProjection(app: GeoLibreAppAPI): void {
-  if (i3sPreviousProjection === null) {
-    // Only capture "globe" as worth restoring (never a value we forced), so a
-    // reopened I3S-only project isn't left stuck in mercator. Mirrors the
-    // Google Photorealistic overlay.
-    const current = app.getMapProjection?.() ?? null;
-    i3sPreviousProjection = current === "globe" ? "globe" : null;
-  }
-  app.setMapProjection?.("mercator");
-  ensureMercatorProjection(app.getMap?.());
+  acquireMercatorProjectionLock(I3S_PROJECTION_LOCK_KEY, app, app.getMap?.());
 }
 
 function restoreI3sPreviousProjection(): void {
-  if (!i3sApp || i3sPreviousProjection === null) return;
-  i3sApp.setMapProjection?.(i3sPreviousProjection);
-  i3sPreviousProjection = null;
+  if (!i3sApp) return;
+  releaseMercatorProjectionLock(I3S_PROJECTION_LOCK_KEY, i3sApp);
 }

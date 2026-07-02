@@ -20,7 +20,10 @@ import type {
   GeoLibreDeckGL,
   GeoLibreMapControlPosition,
 } from "../types";
-import { ensureMercatorProjection } from "./map-projection-utils";
+import {
+  acquireMercatorProjectionLock,
+  releaseMercatorProjectionLock,
+} from "./map-projection-utils";
 import {
   addArcgisI3sTilesLayer,
   isArcgisI3sSceneLayerUrl,
@@ -90,7 +93,8 @@ let googleTilesMountRetries = 0;
 // Latches once the bounded mount retry gives up, so the warning logs once
 // rather than on every subsequent store-driven render.
 let googleTilesMountGaveUp = false;
-let googleTilesPreviousProjection: "globe" | "mercator" | null = null;
+/** Ref-counted mercator lock key for this overlay (see map-projection-utils). */
+const GOOGLE_PROJECTION_LOCK_KEY = "google-photorealistic";
 let googleAltitudeOffsetTile3DLayerClass: DeckTile3DLayerClass | null = null;
 // Runtime-env listener owned by the Google overlay lifecycle, so a project with
 // only Google layers (which never creates the native ThreeDTilesControl) still
@@ -1212,24 +1216,16 @@ function forceGooglePhotorealisticMercatorProjection(
   app: GeoLibreAppAPI,
   mapOverride?: ReturnType<ThreeDTilesControl["getMap"]>,
 ): void {
-  if (googleTilesPreviousProjection === null) {
-    // Only remember a projection worth restoring to. Never capture "mercator":
-    // it may be a value WE forced and persisted into the project file, so a
-    // reopened Google-only project would otherwise capture the forced mercator
-    // as the "previous" and leave the map stuck in mercator after the last
-    // Google layer is removed. Capturing only "globe" restores correctly
-    // within a session and never auto-restores a forced value across reloads.
-    const current = app.getMapProjection?.() ?? null;
-    googleTilesPreviousProjection = current === "globe" ? "globe" : null;
-  }
-  app.setMapProjection?.("mercator");
-  ensureMercatorProjection(mapOverride ?? app.getMap?.());
+  acquireMercatorProjectionLock(
+    GOOGLE_PROJECTION_LOCK_KEY,
+    app,
+    mapOverride ?? app.getMap?.(),
+  );
 }
 
 function restoreGooglePhotorealisticPreviousProjection(): void {
-  if (!googleTilesApp || googleTilesPreviousProjection === null) return;
-  googleTilesApp.setMapProjection?.(googleTilesPreviousProjection);
-  googleTilesPreviousProjection = null;
+  if (!googleTilesApp) return;
+  releaseMercatorProjectionLock(GOOGLE_PROJECTION_LOCK_KEY, googleTilesApp);
 }
 
 function isGooglePhotorealisticTilesLayer(layer: GeoLibreLayer): boolean {
