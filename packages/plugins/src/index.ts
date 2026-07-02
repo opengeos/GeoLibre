@@ -123,6 +123,14 @@ export {
   type KerchunkVariable,
 } from "./plugins/kerchunk-reference-store";
 export {
+  openLocalNetcdf,
+  LocalNetcdfFile,
+  buildInlineZarrRefs,
+  type LocalNetcdfVariable,
+  type LocalNetcdfLayerRefs,
+  type InlineZarrGrid,
+} from "./plugins/local-netcdf";
+export {
   closeDuckDBLayerPanel,
   getDuckDBFeatureBounds,
   getDuckDBLayerRows,

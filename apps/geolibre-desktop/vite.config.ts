@@ -646,6 +646,10 @@ function pwaPlugin(): Plugin[] {
     // its first runtime fetch and is CacheFirst-cached thereafter.
     "**/maplibre-*",
     "**/duckdb-*",
+    // h5wasm's ~5.6 MB single-file chunk (embedded libhdf5) for the local
+    // NetCDF/HDF reader. Lazily imported when a user opens a local file, so it
+    // is CacheFirst-cached on first use rather than bloating the precache.
+    "**/hdf5_hl-*",
     "**/pglite-*",
     "**/earth-engine-browser-*",
     "**/mapillary-*",
@@ -878,6 +882,11 @@ export default defineConfig({
       // breaks that asset reference so the tiler stops rendering. Serve it
       // as-is. (Its plain-JS deps are pre-bundled via optimizeDeps.include.)
       "cog-tiler-wasm",
+      // h5wasm (local NetCDF/HDF5 reader) loads its libhdf5 .wasm via
+      // `new URL(..., import.meta.url)`; esbuild pre-bundling mangles that
+      // asset reference, so serve it as-is. Only reached through the lazy
+      // dynamic import in local-netcdf.ts when a user opens a local file.
+      "h5wasm",
     ],
   },
   build: {
