@@ -67,6 +67,12 @@ const H5T_FLOAT = 1;
 const LAT_NAMES = ["latitude", "lat", "y", "nav_lat"];
 const LON_NAMES = ["longitude", "lon", "lng", "x", "nav_lon"];
 
+// Plausible geographic value ranges, with a small tolerance for grids whose
+// cell centers sit slightly outside the nominal extent. Longitude allows both
+// the -180..180 and 0..360 conventions.
+const LAT_RANGE = [-91, 91] as const;
+const LON_RANGE = [-181, 361] as const;
+
 /** A renderable variable discovered in a local HDF5/NetCDF file. */
 export interface LocalNetcdfVariable {
   /** Dataset path (e.g. `air` or `group/temperature`). */
@@ -271,12 +277,14 @@ export class LocalNetcdfFile {
     }
 
     // Coordinate arrays keyed exactly `lat` / `lon` so the renderer reads them
-    // to derive bounds and latitude orientation (see _loadSpatialMetadata).
-    const lat = this.readCoordinate(LAT_NAMES, ny, variable);
-    const lon = this.readCoordinate(LON_NAMES, nx, variable);
+    // to derive bounds and latitude orientation (see _loadSpatialMetadata). The
+    // value ranges reject projected `x`/`y` axes (metres) that would otherwise
+    // be mis-georeferenced as degrees.
+    const lat = this.readCoordinate(LAT_NAMES, ny, variable, LAT_RANGE);
+    const lon = this.readCoordinate(LON_NAMES, nx, variable, LON_RANGE);
     if (!lat || !lon) {
       throw new Error(
-        "Could not find latitude/longitude coordinate variables. Only georeferenced NetCDF/HDF grids are supported."
+        "Could not find geographic latitude/longitude coordinate variables. Only NetCDF/HDF grids on a WGS84 lat/lon axis are supported."
       );
     }
 
@@ -312,7 +320,8 @@ export class LocalNetcdfFile {
   private readCoordinate(
     names: string[],
     length: number,
-    variablePath: string
+    variablePath: string,
+    range: readonly [number, number]
   ): { data: TypedArrayLike; dtype: string } | null {
     const slash = variablePath.lastIndexOf("/");
     const group = slash >= 0 ? variablePath.slice(0, slash) : "";
@@ -327,6 +336,9 @@ export class LocalNetcdfFile {
         if (!isRenderableDtype(entity.metadata)) continue;
         const value = entity.value;
         if (!isTypedArray(value)) continue;
+        // Reject values outside the geographic range: guards against generic
+        // `x`/`y` axes on projected grids (metres) being read as degrees.
+        if (!valuesWithin(value, range)) continue;
         return { data: value, dtype: zarrDtype(entity.metadata) };
       }
     }
@@ -594,6 +606,18 @@ function unwrapScalar(value: unknown): unknown {
   if (isTypedArray(value)) return value.length > 0 ? value[0] : undefined;
   if (Array.isArray(value)) return value.length > 0 ? value[0] : undefined;
   return value;
+}
+
+/** Whether every finite value in the array falls within `[min, max]`. */
+function valuesWithin(
+  arr: TypedArrayLike,
+  [min, max]: readonly [number, number]
+): boolean {
+  for (let i = 0; i < arr.length; i++) {
+    const v = Number(arr[i]);
+    if (Number.isFinite(v) && (v < min || v > max)) return false;
+  }
+  return true;
 }
 
 /** Clamp a selector index into `[0, size)`. */
