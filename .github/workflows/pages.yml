@@ -61,6 +61,11 @@ jobs:
           # dialog can offer Protomaps basemaps. When unset, those options are
           # hidden (see getProtomapsStyleUrl in @geolibre/core).
           VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+          # Google Photorealistic 3D Tiles and Google Street View use the same
+          # Maps key. Prefer the Vite-prefixed secret name, but also pass the
+          # bare name below so vite.config.ts can expose local/CI test setups.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           # Public relay URL (baked into the client bundle), not a secret. Lights
           # up live collaboration; requires the workers/collab relay to be
           # deployed (see docs/collaboration.md).

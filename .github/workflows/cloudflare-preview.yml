@@ -18,7 +18,8 @@ name: Cloudflare preview
 #   CLOUDFLARE_API_TOKEN   - needs the "Cloudflare Pages: Edit" permission
 #   CLOUDFLARE_ACCOUNT_ID
 # Optional (baked into the client bundle, same as pages.yml):
-#   VITE_GEE_OAUTH_CLIENT_ID, VITE_PROTOMAPS_API_KEY
+#   VITE_GEE_OAUTH_CLIENT_ID, VITE_PROTOMAPS_API_KEY,
+#   VITE_GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY
 
 on:
   pull_request:
@@ -78,6 +79,8 @@ jobs:
           GEOLIBRE_APP_BASE: ./
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
           VITE_PROTOMAPS_API_KEY: ${{ secrets.VITE_PROTOMAPS_API_KEY }}
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
           VITE_GEOLIBRE_COLLAB_URL: wss://collab.geolibre.app
 
       - name: Build documentation

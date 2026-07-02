@@ -82,18 +82,32 @@ let googleTilesBoundMap: unknown;
 let ensureGoogleTilesOverlayInFlight: Promise<void> | null = null;
 let googleTilesMountRetryScheduled = false;
 let googleTilesMountRetries = 0;
+// Latches once the bounded mount retry gives up, so the warning logs once
+// rather than on every subsequent store-driven render.
+let googleTilesMountGaveUp = false;
 let googleTilesPreviousProjection: "globe" | "mercator" | null = null;
 let googleAltitudeOffsetTile3DLayerClass: DeckTile3DLayerClass | null = null;
+// Runtime-env listener owned by the Google overlay lifecycle, so a project with
+// only Google layers (which never creates the native ThreeDTilesControl) still
+// picks up an API-key change without reopening the project.
+let googleTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
 // The last rendered Google-layer signature, used to skip rebuilding deck layers
 // when an unrelated layer mutation fires the store subscription.
 let lastGoogleTilesLayerSignature: string | null = null;
+const googleTilesApiKeysByLayerId = new Map<string, string>();
+const googleTilesApiKeysByPanel = new WeakMap<HTMLElement, string>();
 // ~1s at 60fps: bound the mount retry so a map that never initializes cannot
 // spin requestAnimationFrame forever.
 const GOOGLE_TILES_MAX_MOUNT_RETRIES = 60;
 
 type ThreeDTilesLayerInstance = InstanceType<typeof ThreeDTilesLayer>;
 
-type RenderableDeckLayer = Layer & {
+// Structural shape of the deck.gl Tile3DLayer instances we subclass. It is
+// intentionally NOT `Layer & …`: the abstract `Layer` base declares abstract
+// members (e.g. initializeState) that a class expression extending this
+// constructor would otherwise be required to implement, even though the real
+// runtime base (deck.gl's Tile3DLayer) already provides them.
+type RenderableDeckLayer = {
   props: Record<string, unknown>;
   renderLayers(): unknown;
 };
@@ -619,14 +633,6 @@ function installGooglePhotorealisticTilesPanelHandlers(
   const urlInput = getThreeDTilesUrlInput(panel);
   urlInput?.addEventListener("input", applyDefaults);
   urlInput?.addEventListener("change", applyDefaults);
-  panel.addEventListener("input", (event) => {
-    if (
-      event.target instanceof HTMLInputElement &&
-      event.target.getAttribute("aria-label") === "Altitude offset"
-    ) {
-      updateGooglePhotorealisticTilesAltitudeOffset(control, panel);
-    }
-  });
   // Intercept the submit on the panel (an ancestor of the form) during the
   // capture phase so this runs before maplibre-gl-3d-tiles' own form-level
   // submit listener. A capture listener on the form target itself would not:
@@ -665,29 +671,6 @@ function installGooglePhotorealisticTilesPanelHandlers(
   applyDefaults();
 }
 
-function updateGooglePhotorealisticTilesAltitudeOffset(
-  control: ThreeDTilesControl,
-  panel: HTMLElement,
-): void {
-  if (!isGooglePhotorealisticTilesetUrl(getThreeDTilesUrlInput(panel)?.value)) {
-    return;
-  }
-  const altitudeInput = panel.querySelector<HTMLInputElement>(
-    'input[aria-label="Altitude offset"]',
-  );
-  const altitudeOffset = numberInputValue(
-    altitudeInput?.value,
-    numberValue(control.getState().altitudeOffset, 0),
-  );
-  const store = useAppStore.getState();
-  for (const layer of store.layers.filter(isGooglePhotorealisticTilesLayer)) {
-    store.updateLayer(layer.id, {
-      source: { ...layer.source, altitudeOffset },
-      metadata: { ...layer.metadata, altitudeOffset },
-    });
-  }
-}
-
 function applyGooglePhotorealisticTilesPanelDefaults(
   control: ThreeDTilesControl,
 ): void {
@@ -709,7 +692,9 @@ function applyGooglePhotorealisticTilesPanelDefaults(
           parseThreeDTilesRequestHeaders(headersInput.value),
         ),
       );
+      headersInput.placeholder = "";
     }
+    googleTilesApiKeysByPanel.delete(panel);
     panel.dataset.geolibreGoogleMapsApiKeyVisible = "false";
     // Re-arm the one-shot altitude default so it applies again if the user
     // returns to a Google URL.
@@ -754,9 +739,13 @@ function applyGooglePhotorealisticTilesPanelDefaults(
   );
   if (!headersInput) return;
 
+  headersInput.placeholder = `${GOOGLE_MAPS_API_KEY_HEADER}: <your Google Maps API key>`;
+  const rawHeaders = parseThreeDTilesRequestHeaders(headersInput.value);
+  const panelApiKey = rememberGoogleMapsApiKeyFromHeaders(panel, rawHeaders);
   const headers = resolveThreeDTilesRequestHeaders(
     GOOGLE_PHOTOREALISTIC_TILES_URL,
-    parseThreeDTilesRequestHeaders(headersInput.value),
+    rawHeaders,
+    panelApiKey,
   );
   installGooglePhotorealisticHeadersToggle(panel, headersInput);
   headersInput.value = serializeGooglePhotorealisticPanelRequestHeaders(
@@ -798,9 +787,12 @@ function installGooglePhotorealisticHeadersToggle(
       : "false";
     updateGooglePhotorealisticHeadersToggle(toggle, visible);
 
+    const rawHeaders = parseThreeDTilesRequestHeaders(headersInput.value);
+    const panelApiKey = rememberGoogleMapsApiKeyFromHeaders(panel, rawHeaders);
     const headers = resolveThreeDTilesRequestHeaders(
       GOOGLE_PHOTOREALISTIC_TILES_URL,
-      parseThreeDTilesRequestHeaders(headersInput.value),
+      rawHeaders,
+      panelApiKey,
     );
     headersInput.value = serializeGooglePhotorealisticPanelRequestHeaders(
       headers,
@@ -858,13 +850,19 @@ async function addGooglePhotorealisticTilesFromPanel(
     panel
       .querySelector<HTMLInputElement>('input[aria-label="Layer name"]')
       ?.value.trim() || GOOGLE_PHOTOREALISTIC_TILES_LABEL;
+  const rawHeaders = parseThreeDTilesRequestHeaders(
+    panel.querySelector<HTMLTextAreaElement>(
+      'textarea[aria-label="Request headers"]',
+    )?.value ?? "",
+  );
+  const manualGoogleMapsApiKey = rememberGoogleMapsApiKeyFromHeaders(
+    panel,
+    rawHeaders,
+  );
   const headers = resolveThreeDTilesRequestHeaders(
     GOOGLE_PHOTOREALISTIC_TILES_URL,
-    parseThreeDTilesRequestHeaders(
-      panel.querySelector<HTMLTextAreaElement>(
-        'textarea[aria-label="Request headers"]',
-      )?.value ?? "",
-    ),
+    rawHeaders,
+    manualGoogleMapsApiKey,
   );
   const flyToOnLoad =
     panel.querySelector<HTMLInputElement>(
@@ -886,6 +884,7 @@ async function addGooglePhotorealisticTilesFromPanel(
     opacity,
     visible,
     requestHeaders: headers,
+    googleMapsApiKey: manualGoogleMapsApiKey,
     flyTo: flyToOnLoad,
     map: control.getMap(),
   });
@@ -909,12 +908,16 @@ function addGooglePhotorealisticTilesLayer(
     opacity: number;
     visible: boolean;
     requestHeaders?: Record<string, string>;
+    googleMapsApiKey?: string;
     flyTo: boolean;
     map?: ReturnType<ThreeDTilesControl["getMap"]>;
   },
 ): string {
   const id = `${GOOGLE_PHOTOREALISTIC_LAYER_ID_PREFIX}-${crypto.randomUUID()}`;
   const deckLayerId = `${id}-deck`;
+  if (options.googleMapsApiKey) {
+    googleTilesApiKeysByLayerId.set(id, options.googleMapsApiKey);
+  }
 
   useAppStore.getState().addLayer({
     id,
@@ -972,8 +975,20 @@ function updateGooglePhotorealisticTilesPanelList(
   }
 
   const googleList = ensureGooglePhotorealisticTilesPanelList(panel);
-  googleList.replaceChildren();
   googleList.hidden = googleLayers.length === 0;
+
+  // Only rebuild the DOM when the SET of Google layers changes. This runs on
+  // every store mutation anywhere in the app, and an unconditional
+  // replaceChildren() would detach and recreate the per-layer opacity <input>
+  // mid-drag (dropping pointer capture and truncating the gesture). The slider
+  // and visibility checkbox already reflect their own live state, and the map
+  // is updated by renderGooglePhotorealisticTilesLayers, so skipping the
+  // rebuild when the ids are unchanged is safe.
+  const idSignature = googleLayers.map((layer) => layer.id).join("|");
+  if (googleList.dataset.geolibreGoogleListIds === idSignature) return;
+  googleList.dataset.geolibreGoogleListIds = idSignature;
+
+  googleList.replaceChildren();
   if (googleLayers.length === 0) return;
 
   for (const layer of googleLayers) {
@@ -1124,7 +1139,14 @@ function forceGooglePhotorealisticMercatorProjection(
   mapOverride?: ReturnType<ThreeDTilesControl["getMap"]>,
 ): void {
   if (googleTilesPreviousProjection === null) {
-    googleTilesPreviousProjection = app.getMapProjection?.() ?? null;
+    // Only remember a projection worth restoring to. Never capture "mercator":
+    // it may be a value WE forced and persisted into the project file, so a
+    // reopened Google-only project would otherwise capture the forced mercator
+    // as the "previous" and leave the map stuck in mercator after the last
+    // Google layer is removed. Capturing only "globe" restores correctly
+    // within a session and never auto-restores a forced value across reloads.
+    const current = app.getMapProjection?.() ?? null;
+    googleTilesPreviousProjection = current === "globe" ? "globe" : null;
   }
   app.setMapProjection?.("mercator");
   ensureMercatorProjection(mapOverride ?? app.getMap?.());
@@ -1191,12 +1213,48 @@ async function runEnsureGooglePhotorealisticTilesOverlay(
   // A fresh overlay instance holds no layers and no prior mount attempts.
   lastGoogleTilesLayerSignature = null;
   googleTilesMountRetries = 0;
+  googleTilesMountGaveUp = false;
+  addGoogleTilesRuntimeEnvListener();
   googleTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
+      const currentGoogleLayerIds = new Set(
+        state.layers
+          .filter(isGooglePhotorealisticTilesLayer)
+          .map(({ id }) => id),
+      );
+      for (const layer of previous.layers) {
+        if (
+          isGooglePhotorealisticTilesLayer(layer) &&
+          !currentGoogleLayerIds.has(layer.id)
+        ) {
+          googleTilesApiKeysByLayerId.delete(layer.id);
+        }
+      }
       renderGooglePhotorealisticTilesLayers();
     }
   });
   renderGooglePhotorealisticTilesLayers();
+}
+
+function addGoogleTilesRuntimeEnvListener(): void {
+  if (googleTilesRuntimeEnvUnsubscribe || typeof window === "undefined") return;
+
+  // A newly entered API key does not change any persisted layer record, so the
+  // render signature would be unchanged; reset it to force a rebuild that
+  // threads the new key into the deck.gl Tile3DLayer. Registered here (not only
+  // in createThreeDTilesControl) so Google-only projects, which never open the
+  // native 3D Tiles panel, still react to a key change.
+  const handleRuntimeEnvChange = () => {
+    lastGoogleTilesLayerSignature = null;
+    renderGooglePhotorealisticTilesLayers();
+  };
+  window.addEventListener("geolibre:runtime-env-change", handleRuntimeEnvChange);
+  googleTilesRuntimeEnvUnsubscribe = () => {
+    window.removeEventListener(
+      "geolibre:runtime-env-change",
+      handleRuntimeEnvChange,
+    );
+  };
 }
 
 function renderGooglePhotorealisticTilesLayers(): void {
@@ -1223,6 +1281,7 @@ function renderGooglePhotorealisticTilesLayers(): void {
     }
     lastGoogleTilesLayerSignature = null;
     googleTilesMountRetries = 0;
+    googleTilesMountGaveUp = false;
     restoreGooglePhotorealisticPreviousProjection();
     return;
   }
@@ -1240,6 +1299,11 @@ function renderGooglePhotorealisticTilesLayers(): void {
     }
     googleTilesOverlayMounted = true;
     googleTilesMountRetries = 0;
+    googleTilesMountGaveUp = false;
+    // The successful mount can happen on a later async retry, after the map
+    // becomes ready; record the map it actually bound to so a subsequent
+    // ensure() call does not see a stale null and needlessly tear down/refetch.
+    googleTilesBoundMap = googleTilesApp.getMap?.() ?? null;
     // A fresh mount starts with no layers, so force the setProps below.
     lastGoogleTilesLayerSignature = null;
   }
@@ -1264,11 +1328,15 @@ function renderGooglePhotorealisticTilesLayers(): void {
 function scheduleGoogleTilesMountRetry(): void {
   if (
     googleTilesMountRetryScheduled ||
+    googleTilesMountGaveUp ||
     typeof requestAnimationFrame === "undefined"
   ) {
     return;
   }
   if (googleTilesMountRetries >= GOOGLE_TILES_MAX_MOUNT_RETRIES) {
+    // Latch so this warns once, not on every subsequent store-driven render.
+    // A later inline addMapControl attempt can still recover and clear this.
+    googleTilesMountGaveUp = true;
     console.warn(
       "[GeoLibre] Gave up mounting the Google 3D Tiles overlay after repeated addMapControl failures.",
     );
@@ -1287,8 +1355,17 @@ function googleTilesLayerSignature(layers: GeoLibreLayer[]): string {
     .map((layer) => {
       const headers = stringRecordValue(layer.source.requestHeaders);
       const altitudeOffset = numberValue(layer.source.altitudeOffset, 0);
-      const headerKeys = headers ? Object.keys(headers).sort().join(",") : "";
-      return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${altitudeOffset}:${headerKeys}`;
+      // Sign both header names AND values: a changed custom header value must
+      // produce a new signature so the Tile3DLayer rebuilds rather than reusing
+      // stale request headers.
+      const headerEntries = headers
+        ? JSON.stringify(
+            Object.entries(headers).sort(([left], [right]) =>
+              left.localeCompare(right),
+            ),
+          )
+        : "";
+      return `${layer.id}:${layer.visible ? 1 : 0}:${layer.opacity}:${altitudeOffset}:${headerEntries}`;
     })
     .join("|");
 }
@@ -1301,6 +1378,7 @@ function buildGooglePhotorealisticTilesDeckLayer(
   const requestHeaders = resolveThreeDTilesRequestHeaders(
     GOOGLE_PHOTOREALISTIC_TILES_URL,
     stringRecordValue(layer.source.requestHeaders),
+    googleTilesApiKeysByLayerId.get(layer.id),
   );
 
   const Tile3DLayer = getGoogleAltitudeOffsetTile3DLayerClass();
@@ -1319,7 +1397,7 @@ function buildGooglePhotorealisticTilesDeckLayer(
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",
-  }) as Layer;
+  }) as unknown as Layer;
 }
 
 function getGoogleAltitudeOffsetTile3DLayerClass(): DeckTile3DLayerClass {
@@ -1598,7 +1676,9 @@ function numberValue(value: unknown, fallback: number): number {
 }
 
 function numberInputValue(value: unknown, fallback: number): number {
-  if (typeof value !== "string") return fallback;
+  // Number("") is 0 (finite), so guard the empty/whitespace case explicitly:
+  // a blank field must fall back, not silently resolve to 0.
+  if (typeof value !== "string" || value.trim() === "") return fallback;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
@@ -1642,11 +1722,15 @@ function stringRecordValue(
 function resolveThreeDTilesRequestHeaders(
   url: string,
   headers: Record<string, string> | undefined,
+  googleMapsApiKey?: string,
 ): Record<string, string> | undefined {
   if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
 
   const nonGoogleHeaders = stripGoogleMapsApiKeyHeader(headers);
-  const apiKey = getGoogleMapsApiKey();
+  const apiKey =
+    googleMapsApiKeyHeaderValue(headers) ??
+    googleMapsApiKey ??
+    getGoogleMapsApiKey();
   if (!apiKey) return nonEmptyRecord(nonGoogleHeaders);
   return {
     ...(nonGoogleHeaders ?? {}),
@@ -1670,6 +1754,34 @@ function stripGoogleMapsApiKeyHeader(
     ([name]) => name.toLowerCase() !== GOOGLE_MAPS_API_KEY_HEADER.toLowerCase(),
   );
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function googleMapsApiKeyHeaderValue(
+  headers: Record<string, string> | undefined,
+): string | undefined {
+  if (!headers) return undefined;
+  const entry = Object.entries(headers).find(
+    ([name]) => name.toLowerCase() === GOOGLE_MAPS_API_KEY_HEADER.toLowerCase(),
+  );
+  const value = entry?.[1].trim();
+  if (!value || googleMapsApiKeyIsMask(value)) return undefined;
+  return value;
+}
+
+function rememberGoogleMapsApiKeyFromHeaders(
+  panel: HTMLElement,
+  headers: Record<string, string> | undefined,
+): string | undefined {
+  const apiKey = googleMapsApiKeyHeaderValue(headers);
+  if (apiKey) {
+    googleTilesApiKeysByPanel.set(panel, apiKey);
+    return apiKey;
+  }
+  return googleTilesApiKeysByPanel.get(panel);
+}
+
+function googleMapsApiKeyIsMask(value: string): boolean {
+  return /^\*+$/.test(value.trim());
 }
 
 function isGooglePhotorealisticTilesetUrl(url: string): boolean {
