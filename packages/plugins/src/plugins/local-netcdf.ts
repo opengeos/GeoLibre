@@ -183,9 +183,12 @@ export class LocalNetcdfFile {
     const out: string[] = [];
     const visit = (group: H5Group, prefix: string) => {
       for (const key of group.keys()) {
-        const path = prefix ? `${prefix}/${key}` : key;
-        const entity = group.get(path);
+        // h5wasm resolves get() relative to the group, so look up the child by
+        // its own `key`; `path` is only the accumulated label for output and
+        // recursion. Passing the full path here would fail on nested groups.
+        const entity = group.get(key);
         if (!entity) continue;
+        const path = prefix ? `${prefix}/${key}` : key;
         if (isDataset(entity)) {
           out.push(path);
         } else if (isGroup(entity)) {
@@ -424,7 +427,10 @@ function rollLongitude(
     if (i > 0 && v <= Number(lon[i - 1])) ascending = false;
   }
   // Only the clean, common case: strictly-increasing longitudes in [0, 360)
-  // that cross the 180 meridian.
+  // that cross the 180 meridian. Grids that reach exactly 360 (an inclusive
+  // 0..360 axis, sometimes with a duplicated 0/360 seam column) are left
+  // un-rolled: rolling them correctly needs seam handling that is out of scope
+  // here, and they render at their native longitudes rather than incorrectly.
   if (!ascending || min < 0 || max <= 180 || max >= 360) return null;
   let split = 0;
   while (split < nx && Number(lon[split]) < 180) split++;
