@@ -62,6 +62,7 @@ export {
   csvRowsToGeocodeRequests,
   geocodeForward,
   geocodeReverse,
+  setGeocodingFetch,
   type GeocoderConfig,
   type GeocodingProvider,
   type GeocodingProviderId,
