@@ -12,18 +12,57 @@ on:
 
 jobs:
   claude:
+    # Only run for an explicit @claude mention AND only when the author is a
+    # trusted user (repo owner, org member, or invited collaborator). This keeps
+    # a first-time or external contributor from triggering a write-capable agent
+    # run by commenting `@claude` on a public issue or PR.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      (
+        github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
+      ) ||
+      (
+        github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        (
+          github.event.comment.author_association == 'OWNER' ||
+          github.event.comment.author_association == 'MEMBER' ||
+          github.event.comment.author_association == 'COLLABORATOR'
+        )
+      ) ||
+      (
+        github.event_name == 'pull_request_review' &&
+        contains(github.event.review.body, '@claude') &&
+        (
+          github.event.review.author_association == 'OWNER' ||
+          github.event.review.author_association == 'MEMBER' ||
+          github.event.review.author_association == 'COLLABORATOR'
+        )
+      ) ||
+      (
+        github.event_name == 'issues' &&
+        (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')) &&
+        (
+          github.event.issue.author_association == 'OWNER' ||
+          github.event.issue.author_association == 'MEMBER' ||
+          github.event.issue.author_association == 'COLLABORATOR'
+        )
+      )
     runs-on: ubuntu-latest
+    # Least-privilege token. Each scope maps to a concrete operation the agent
+    # performs, and the whole job only runs after the trusted-author gate above.
+    # `id-token: write` is intentionally omitted: this workflow authenticates
+    # with an OAuth token and has no OIDC use case.
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      contents: write # commit and push changes on a branch when asked to edit code
+      pull-requests: write # open/update PRs and post review replies
+      issues: write # post replies on the triggering issue
+      actions: read # read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
