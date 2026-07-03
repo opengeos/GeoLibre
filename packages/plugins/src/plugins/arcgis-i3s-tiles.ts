@@ -379,7 +379,9 @@ function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
     // The user types an arbitrary Scene Layer URL, so surface failures (bad
     // URL, CORS-blocked portal, expired token, a service that isn't I3S)
     // instead of letting the layer just never render with no explanation.
-    onTileError: (_tile: unknown, tileUrl: string, message: string) =>
+    // @loaders.gl Tileset3D calls this as (tile, message, url) — note the deck.gl
+    // typings mislabel the order as (tile, url, message).
+    onTileError: (_tile: unknown, message: string, tileUrl: string) =>
       console.error(
         `[GeoLibre] ArcGIS I3S tile failed to load: ${message} (${tileUrl})`,
       ),
@@ -454,7 +456,11 @@ export function i3sTilesetLngLat(tileset: unknown): [number, number] | null {
     typeof center[0] !== "number" ||
     typeof center[1] !== "number" ||
     !Number.isFinite(center[0]) ||
-    !Number.isFinite(center[1])
+    !Number.isFinite(center[1]) ||
+    // Reject non-WGS84 / garbage centers so a buggy SceneServer response can't
+    // drive flyTo/fitLayer somewhere nonsensical (mirrors lngLatPairValue).
+    Math.abs(center[0]) > 180 ||
+    Math.abs(center[1]) > 90
   ) {
     return null;
   }

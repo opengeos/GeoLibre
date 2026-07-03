@@ -133,6 +133,11 @@ describe("i3sTilesetLngLat", () => {
       null,
     );
   });
+
+  it("rejects centers outside the valid lng/lat range", () => {
+    assert.equal(i3sTilesetLngLat({ cartographicCenter: [200, 20] }), null);
+    assert.equal(i3sTilesetLngLat({ cartographicCenter: [10, 95] }), null);
+  });
 });
 
 describe("persistI3sTilesetCenter", () => {
