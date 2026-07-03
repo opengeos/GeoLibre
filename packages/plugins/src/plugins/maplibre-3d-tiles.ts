@@ -44,6 +44,9 @@ const GOOGLE_PHOTOREALISTIC_TILES_URL =
   "https://tile.googleapis.com/v1/3dtiles/root.json";
 const GOOGLE_PHOTOREALISTIC_TILES_LABEL =
   "Google Photorealistic 3D Tiles";
+const ARCGIS_I3S_SAMPLE_TILES_URL =
+  "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
+const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
 const GOOGLE_MAPS_API_KEY_HEADER = "X-GOOG-API-KEY";
 const GOOGLE_MAPS_API_KEY_MASK = "********";
 const GOOGLE_PHOTOREALISTIC_SOURCE_KIND =
@@ -71,6 +74,10 @@ const THREE_D_TILES_OPTIONS = {
     {
       label: GOOGLE_PHOTOREALISTIC_TILES_LABEL,
       url: GOOGLE_PHOTOREALISTIC_TILES_URL,
+    },
+    {
+      label: ARCGIS_I3S_SAMPLE_TILES_LABEL,
+      url: ARCGIS_I3S_SAMPLE_TILES_URL,
     },
   ],
 } satisfies ThreeDTilesControlOptions;
