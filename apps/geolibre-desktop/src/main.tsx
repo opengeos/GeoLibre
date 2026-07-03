@@ -51,9 +51,14 @@ installDiagnosticsCapture();
 // which the WebView rejects as "Search failed. Try again." Lazy + desktop-only
 // so the web/embedded bundles never import the Tauri HTTP plugin.
 if (isTauri()) {
-  void import("./lib/geocoding-fetch").then(({ installNativeGeocodingFetch }) =>
-    installNativeGeocodingFetch(),
-  );
+  void import("./lib/geocoding-fetch")
+    .then(({ installNativeGeocodingFetch }) => installNativeGeocodingFetch())
+    .catch((error: unknown) => {
+      // If the install fails, geocoding stays on the browser fetch (the
+      // CORS-buggy path this fixes), so surface it rather than let it become a
+      // silent unhandled rejection.
+      console.error("[GeoLibre] Failed to install native geocoding fetch", error);
+    });
 }
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.

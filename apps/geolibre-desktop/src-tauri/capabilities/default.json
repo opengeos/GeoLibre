@@ -19,11 +19,14 @@
       ]
     },
     {
-      "comment": "Geocoding (place search / reverse geocode) is routed through the native HTTP client so it bypasses the WebView's CORS — public Nominatim's CDN intermittently omits the CORS header on cached responses, which the WebView rejects as 'Search failed'. Also lets us send a User-Agent as Nominatim's policy requires.",
+      "comment": "Geocoding (place search / reverse geocode) is routed through the native HTTP client so it bypasses the WebView's CORS — public Nominatim's CDN intermittently omits the CORS header on cached responses, which the WebView rejects as 'Search failed'. Also lets us send a User-Agent as Nominatim's policy requires. Scoped to the built-in geocoder provider hosts only (keep in sync with the GEOCODING_PROVIDERS registry / lib/geocoding-fetch.ts); custom/self-hosted endpoints fall back to the browser fetch.",
       "identifier": "http:default",
       "allow": [
-        { "url": "http://*" },
-        { "url": "https://*" }
+        { "url": "https://nominatim.openstreetmap.org/*" },
+        { "url": "https://api.geocode.earth/*" },
+        { "url": "https://geocode.arcgis.com/*" },
+        { "url": "https://api.mapbox.com/*" },
+        { "url": "https://maps.googleapis.com/*" }
       ]
     }
   ]
