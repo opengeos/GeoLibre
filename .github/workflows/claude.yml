@@ -37,12 +37,23 @@ jobs:
           REPO: ${{ github.repository }}
           ACTOR: ${{ github.actor }}
         run: |
-          role=$(gh api "repos/${REPO}/collaborators/${ACTOR}/permission" --jq '.role_name' 2>/dev/null || echo none)
-          echo "Actor ${ACTOR} resolved to role: ${role}"
-          case "${role}" in
-            admin | maintain | write) echo "trusted=true" >> "${GITHUB_OUTPUT}" ;;
-            *) echo "trusted=false" >> "${GITHUB_OUTPUT}" ;;
-          esac
+          if role=$(gh api "repos/${REPO}/collaborators/${ACTOR}/permission" --jq '.role_name' 2>err.log); then
+            echo "Actor ${ACTOR} resolved to role: ${role}"
+            case "${role}" in
+              admin | maintain | write) echo "trusted=true" >> "${GITHUB_OUTPUT}" ;;
+              *) echo "trusted=false" >> "${GITHUB_OUTPUT}" ;;
+            esac
+          elif grep -q 'HTTP 404' err.log; then
+            # 404 = the actor is not a collaborator with any role: not trusted.
+            echo "Actor ${ACTOR} is not a repository collaborator; marking untrusted."
+            echo "trusted=false" >> "${GITHUB_OUTPUT}"
+          else
+            # Any other failure (auth, rate limit, network) must not be silently
+            # downgraded to "untrusted" -- surface it and fail the job instead.
+            echo "::error::Permission lookup for ${ACTOR} failed:"
+            cat err.log
+            exit 1
+          fi
 
   claude:
     needs: check-access
