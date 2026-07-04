@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@geolibre/ui";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { ProjectPluginTrustState } from "../../hooks/usePlugins";
 
@@ -30,12 +30,17 @@ export function ProjectPluginTrustDialog({
 
   // Trusting/dismissing empties pendingUrls synchronously, before the dialog's
   // exit animation finishes. Keep the last non-empty list so the URLs stay
-  // rendered through the close transition instead of flashing blank.
+  // rendered through the close transition instead of flashing blank. Recorded in
+  // an effect rather than the render body so we never write a ref while
+  // rendering.
   const lastPendingUrls = useRef<string[]>([]);
-  if (trust.pendingUrls.length > 0) {
-    lastPendingUrls.current = trust.pendingUrls;
-  }
-  const urls = trust.pendingUrls.length > 0 ? trust.pendingUrls : lastPendingUrls.current;
+  useEffect(() => {
+    if (trust.pendingUrls.length > 0) {
+      lastPendingUrls.current = trust.pendingUrls;
+    }
+  }, [trust.pendingUrls]);
+  const urls =
+    trust.pendingUrls.length > 0 ? trust.pendingUrls : lastPendingUrls.current;
 
   return (
     <Dialog
