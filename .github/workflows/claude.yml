@@ -25,8 +25,11 @@ jobs:
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    # This job only calls the REST API (via gh) and never checks out or reads
+    # repository content, so it needs no repository scopes. The
+    # collaborators/permission endpoint requires only metadata:read, which the
+    # GITHUB_TOKEN always retains even with an empty permissions block.
+    permissions: {}
     outputs:
       trusted: ${{ steps.check.outputs.trusted }}
     steps:
