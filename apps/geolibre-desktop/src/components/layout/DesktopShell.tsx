@@ -75,6 +75,7 @@ import {
   createAppAPI,
   getPluginManager,
   useExternalPluginsReady,
+  useProjectPluginTrust,
   useSwipeSplitViewExclusivity,
 } from "../../hooks/usePlugins";
 import { registerMbtilesProtocol } from "../../lib/mbtiles";
@@ -122,6 +123,7 @@ import { StoryMapPanel } from "../storymap/StoryMapPanel";
 import { StoryMapPresenter } from "../storymap/StoryMapPresenter";
 import { DiagnosticsDialog } from "./DiagnosticsDialog";
 import { FileNamePromptDialog } from "./FileNamePromptDialog";
+import { ProjectPluginTrustDialog } from "./ProjectPluginTrustDialog";
 import { StatusBar } from "./StatusBar";
 import { TopToolbar } from "./TopToolbar";
 import type { LayoutOptions } from "../../hooks/useLayoutOptions";
@@ -543,6 +545,9 @@ export function DesktopShell({
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const diagnostics = useDiagnosticsSnapshot();
   const externalPluginsReady = useExternalPluginsReady(mapControllerRef);
+  // Gate plugin URLs carried inside an opened project behind an explicit trust
+  // decision before any of their code is fetched or imported (#1062).
+  const projectPluginTrust = useProjectPluginTrust();
   // Keep Layer Swipe and split view mutually exclusive (#844): entering a
   // multi-pane grid turns the swipe slider off.
   useSwipeSplitViewExclusivity(mapControllerRef);
@@ -1886,6 +1891,9 @@ export function DesktopShell({
       {/* Mounted in the always-rendered shell (not the toolbar) so the bookmark
           export name prompt works even when the toolbar is hidden (`?maponly`). */}
       <FileNamePromptDialog />
+      {/* Trust prompt for plugin URLs carried by an opened project (#1062);
+          inert unless the project references an untrusted plugin URL. */}
+      <ProjectPluginTrustDialog trust={projectPluginTrust} />
       <Suspense fallback={null}>
         <ProcessingDialog
           mapControllerRef={mapControllerRef}

@@ -63,7 +63,15 @@
   },
   "managePlugins": {
     "failed": "Failed",
-    "failedToLoad": "Failed to load: {{message}}"
+    "failedToLoad": "Failed to load: {{message}}",
+    "trust": {
+      "title": "Load plugins from this project?",
+      "description_one": "This project wants to load 1 external plugin from a URL you have not installed. Plugins run code with full access to the app.",
+      "description_other": "This project wants to load {{count}} external plugins from URLs you have not installed. Plugins run code with full access to the app.",
+      "warning": "Only load plugins from sources you trust. Loaded plugins run with the same privileges as GeoLibre itself.",
+      "trustButton": "Trust and load",
+      "dismissButton": "Don't load"
+    }
   },
   "viewState": {
     "panelTitle": "Info"
