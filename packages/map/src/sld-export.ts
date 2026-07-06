@@ -182,20 +182,19 @@ function pointSymbolizer(
   let wellKnownName = "circle";
   let markPaint = paint;
   let size = styleValue(style, "circleRadius") * 2;
+  let shapeMarker = false;
 
   if (styleValue(style, "markerEnabled")) {
     const shape = styleValue(style, "markerShape");
     const mapped = MARKER_WELL_KNOWN_NAME[shape];
     if (mapped) {
       wellKnownName = mapped;
-      // A shape marker has a single fill color (markerColor) and no separate
-      // outline in GeoLibre, so drop the stroke opacity influence but keep a
-      // thin outline for legibility.
       markPaint = {
         ...paint,
         fillColor: styleValue(style, "markerColor"),
       };
       size = styleValue(style, "markerSize");
+      shapeMarker = true;
     } else {
       warnings.push(
         `The "${shape}" marker has no SLD equivalent; points use a circle instead.`,
@@ -203,17 +202,25 @@ function pointSymbolizer(
     }
   }
 
+  // A plain circle mark takes the layer's real stroke (matching MapLibre's
+  // circle-stroke-width, so the width round-trips). A built-in shape marker is
+  // rasterized by GeoLibre with a fixed white halo (drawBuiltinMarker) that
+  // ignores strokeColor/strokeWidth, so approximate that halo instead.
+  const stroke = shapeMarker
+    ? `<Stroke>${cssParam("stroke", "#ffffff")}${cssParam(
+        "stroke-width",
+        "1",
+      )}${cssParam("stroke-opacity", num(0.9 * paint.strokeOpacity))}</Stroke>`
+    : `<Stroke>${cssParam("stroke", paint.strokeColor)}${cssParam(
+        "stroke-width",
+        num(paint.strokeWidth),
+      )}${cssParam("stroke-opacity", num(paint.strokeOpacity))}</Stroke>`;
+
   return [
     "<PointSymbolizer><Graphic><Mark>",
     `<WellKnownName>${wellKnownName}</WellKnownName>`,
     fillElement(markPaint),
-    // The mark outline uses the layer's real stroke width and folded opacity,
-    // matching GeoLibre's own point rendering (circle-stroke-width is the full
-    // strokeWidth) so the width round-trips instead of being clamped on import.
-    `<Stroke>${cssParam("stroke", paint.strokeColor)}${cssParam(
-      "stroke-width",
-      num(paint.strokeWidth),
-    )}${cssParam("stroke-opacity", num(paint.strokeOpacity))}</Stroke>`,
+    stroke,
     "</Mark>",
     `<Size>${num(Math.max(1, size))}</Size>`,
     "</Graphic></PointSymbolizer>",
@@ -718,7 +725,10 @@ export function buildSld(
 ): SldExportResult {
   const warnings: string[] = [];
   const style = layer.style;
-  const opacity = layer.visible ? layer.opacity : 0;
+  // Export the layer's real opacity regardless of its current visibility: SLD
+  // has no hidden state, so folding a hidden layer's opacity to 0 would write an
+  // all-transparent style that renders nothing and loses the layer's colors.
+  const opacity = layer.opacity;
   const fontFamily = options.fontFamily?.trim() || DEFAULT_FONT_FAMILY;
 
   const profile: GeometryProfile = geojson
@@ -820,6 +830,17 @@ export function buildSld(
     if (mode === "expression") {
       warnings.push(
         "The custom color expression has no SLD equivalent; the layer is exported with its fallback color.",
+      );
+    } else if (
+      mode === "categorized" ||
+      mode === "graduated" ||
+      mode === "rule-based"
+    ) {
+      // The renderer was attribute-driven but had no usable classes (no
+      // property, all-invalid stops, or empty rules), so it fell back to a
+      // single symbol; flag that rather than silently dropping the classes.
+      warnings.push(
+        `The ${mode} renderer had no valid classes to export; the layer is exported as a single symbol.`,
       );
     }
     renderRules = singleRule(style, opacity, profile, scale, warnings);

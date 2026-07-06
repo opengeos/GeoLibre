@@ -188,8 +188,10 @@ function readRulePaint(rule: XmlNode): RulePaint {
       paint.hasPointMark = true;
       const mark = toArray(graphic.Mark)[0];
       if (isNode(mark)) {
-        const name = nodeText(mark.WellKnownName);
-        if (name) paint.wellKnownName = name;
+        // Per the OGC SE spec an omitted WellKnownName defaults to "square", so
+        // a Mark with no name is a square shape marker, not a circle.
+        const name = nodeText(mark.WellKnownName) ?? "square";
+        paint.wellKnownName = name;
         // Read the mark's Fill into a scratch paint so the mark's own color is
         // preserved in markFillColor even if a polygon Fill (read later)
         // overwrites the shared fillColor.
@@ -202,7 +204,12 @@ function readRulePaint(rule: XmlNode): RulePaint {
         if (markPaint.fillOpacity !== undefined) {
           paint.fillOpacity = markPaint.fillOpacity;
         }
-        readStroke(mark.Stroke, paint);
+        // Only a plain circle's stroke is the layer stroke; a shape marker's
+        // stroke is a fixed halo (see the exporter), so don't read it into the
+        // shared strokeColor/strokeWidth and clobber the layer's real values.
+        if (name === "circle" || !WELL_KNOWN_NAME_TO_SHAPE[name]) {
+          readStroke(mark.Stroke, paint);
+        }
       }
       const size = toNum(nodeText(graphic.Size));
       if (size !== null) paint.pointSize = size;

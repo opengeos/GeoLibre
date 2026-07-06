@@ -208,6 +208,29 @@ describe("parseSld", () => {
     assert.equal(result.style.markerSize, 18);
   });
 
+  it("defaults an omitted WellKnownName to a square marker (SE spec)", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic><Mark>
+        <Fill><CssParameter name="fill">#654321</CssParameter></Fill>
+      </Mark><Size>14</Size></Graphic></PointSymbolizer></Rule>`),
+    );
+    assert.equal(result.style.markerEnabled, true);
+    assert.equal(result.style.markerShape, "square");
+    assert.equal(result.style.markerColor, "#654321");
+  });
+
+  it("does not clobber the stroke color with a shape marker's halo", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic><Mark>
+        <WellKnownName>star</WellKnownName>
+        <Fill><CssParameter name="fill">#ff0000</CssParameter></Fill>
+        <Stroke><CssParameter name="stroke">#ffffff</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke>
+      </Mark><Size>16</Size></Graphic></PointSymbolizer></Rule>`),
+    );
+    // The star's white halo stroke is not read into the shared strokeColor.
+    assert.notEqual(result.style.strokeColor, "#ffffff");
+  });
+
   it("warns when a WellKnownName has no GeoLibre marker equivalent", () => {
     const result = parseSld(
       sld(`<Rule><PointSymbolizer><Graphic><Mark>

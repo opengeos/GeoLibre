@@ -496,6 +496,55 @@ describe("buildSld", () => {
     assert.ok(warnings.some((w) => /fill pattern/.test(w)));
   });
 
+  it("exports a hidden layer with its real opacity, not fully transparent", () => {
+    const { sld } = buildSld(
+      layer({ visible: false, opacity: 1, style: style({ fillOpacity: 0.6 }) }),
+      polygons(),
+    );
+    // Visibility is not folded into opacity, so the fill stays visible (0.6),
+    // not 0.
+    assert.match(sld, /<CssParameter name="fill-opacity">0\.6<\/CssParameter>/);
+    assert.doesNotMatch(sld, /<CssParameter name="fill-opacity">0<\/CssParameter>/);
+  });
+
+  it("warns when an attribute-driven renderer has no valid classes", () => {
+    const { warnings } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "zone",
+          vectorStyleStops: [], // no classes → falls back to single
+        }),
+      }),
+      polygons(),
+    );
+    assert.ok(warnings.some((w) => /no valid classes/.test(w)));
+  });
+
+  it("gives a shape marker a white halo outline, not the layer stroke", () => {
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          markerEnabled: true,
+          markerShape: "star",
+          markerColor: "#ff0000",
+          strokeColor: "#00ff00",
+        }),
+      }),
+      points(),
+    );
+    assert.match(compact(sld), /<WellKnownName>star<\/WellKnownName>/);
+    // The halo is white; the layer's green stroke is not used on the mark.
+    assert.match(
+      compact(sld),
+      /<Mark>.*<Stroke>.*<CssParameter name="stroke">#ffffff<\/CssParameter>/,
+    );
+    assert.doesNotMatch(
+      compact(sld),
+      /<Mark>.*<CssParameter name="stroke">#00ff00<\/CssParameter>/,
+    );
+  });
+
   it("escapes XML-special characters in the layer name", () => {
     const { sld } = buildSld(layer({ name: "A & B <test>" }), polygons());
     assert.match(sld, /<Name>A &amp; B &lt;test&gt;<\/Name>/);
