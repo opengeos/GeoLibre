@@ -220,6 +220,38 @@ describe("SLD round-trip (style → SLD → style)", () => {
     );
   });
 
+  it("preserves a boolean filter literal in a rule-based renderer", () => {
+    // A second, non-equality rule keeps this a rule-based renderer (a lone `==`
+    // rule is indistinguishable from a one-category categorized renderer).
+    const input = style({
+      vectorStyleMode: "rule-based",
+      fillColor: "#dddddd",
+      vectorRules: [
+        {
+          id: "a",
+          label: "",
+          filter: JSON.stringify(["==", ["get", "flag"], true]),
+          color: "#d62728",
+          isElse: false,
+        },
+        {
+          id: "b",
+          label: "",
+          filter: JSON.stringify([">", ["get", "n"], 5]),
+          color: "#1f77b4",
+          isElse: false,
+        },
+        { id: "else", label: "", filter: "", color: "#cccccc", isElse: true },
+      ],
+    });
+    const out = roundTrip(input, "point");
+    assert.equal(out.vectorStyleMode, "rule-based");
+    assert.equal(
+      out.vectorRules[0].filter,
+      JSON.stringify(["==", ["get", "flag"], true]),
+    );
+  });
+
   it("preserves labels", () => {
     const input = style({
       labels: {

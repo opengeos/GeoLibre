@@ -198,6 +198,57 @@ describe("parseSld", () => {
     assert.ok(result.warnings.some((w) => /no GeoLibre equivalent/.test(w)));
   });
 
+  it("disables a stale base marker when importing a plain circle point", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic><Mark>
+        <WellKnownName>circle</WellKnownName>
+        <Fill><CssParameter name="fill">#123456</CssParameter></Fill>
+      </Mark><Size>12</Size></Graphic></PointSymbolizer></Rule>`),
+    );
+    // Explicitly false (not merely absent) so it clears a base markerEnabled.
+    assert.equal(result.style.markerEnabled, false);
+    const merged = applySldImport(
+      { ...DEFAULT_LAYER_STYLE, markerEnabled: true, markerShape: "star" },
+      result,
+    );
+    assert.equal(merged.markerEnabled, false);
+  });
+
+  it("treats an unconditional (no-filter) rule as the categorized fallback", () => {
+    const result = parseSld(
+      sld(`
+        <Rule><ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>t</ogc:PropertyName><ogc:Literal>a</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>
+          <PolygonSymbolizer><Fill><CssParameter name="fill">#00ff00</CssParameter></Fill></PolygonSymbolizer></Rule>
+        <Rule><PolygonSymbolizer><Fill><CssParameter name="fill">#cccccc</CssParameter></Fill></PolygonSymbolizer></Rule>
+      `),
+    );
+    assert.equal(result.style.vectorStyleMode, "categorized");
+    // The filterless rule supplies the fallback color.
+    assert.equal(result.style.fillColor, "#cccccc");
+  });
+
+  it("does not swallow a genuine below-min class as a graduated guard", () => {
+    // A QGIS-style graduated with an explicit (-inf,10) class colored differently
+    // from the [10,20) class must not be read as the exporter's clamp guard.
+    const result = parseSld(
+      sld(`
+        <Rule><ogc:Filter><ogc:PropertyIsLessThan><ogc:PropertyName>v</ogc:PropertyName><ogc:Literal>10</ogc:Literal></ogc:PropertyIsLessThan></ogc:Filter>
+          <PolygonSymbolizer><Fill><CssParameter name="fill">#aaaaaa</CssParameter></Fill></PolygonSymbolizer></Rule>
+        <Rule><ogc:Filter><ogc:And>
+          <ogc:PropertyIsGreaterThanOrEqualTo><ogc:PropertyName>v</ogc:PropertyName><ogc:Literal>10</ogc:Literal></ogc:PropertyIsGreaterThanOrEqualTo>
+          <ogc:PropertyIsLessThan><ogc:PropertyName>v</ogc:PropertyName><ogc:Literal>20</ogc:Literal></ogc:PropertyIsLessThan>
+        </ogc:And></ogc:Filter><PolygonSymbolizer><Fill><CssParameter name="fill">#bbbbbb</CssParameter></Fill></PolygonSymbolizer></Rule>
+        <Rule><ogc:Filter><ogc:PropertyIsGreaterThanOrEqualTo><ogc:PropertyName>v</ogc:PropertyName><ogc:Literal>20</ogc:Literal></ogc:PropertyIsGreaterThanOrEqualTo></ogc:Filter>
+          <PolygonSymbolizer><Fill><CssParameter name="fill">#cccccc</CssParameter></Fill></PolygonSymbolizer></Rule>
+      `),
+    );
+    // The distinct below-min color means it is not the guard → rule-based, all
+    // three classes preserved (not silently dropped).
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    const nonElse = (result.style.vectorRules ?? []).filter((r) => !r.isElse);
+    assert.equal(nonElse.length, 3);
+  });
+
   it("reports a clear error for a non-SLD document", () => {
     const result = parseSld("<html><body>not sld</body></html>");
     assert.equal(result.matchedRuleCount, 0);

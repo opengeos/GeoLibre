@@ -145,8 +145,16 @@ interface RulePaint {
   strokeColor?: string;
   strokeWidth?: number;
   pointSize?: number;
+  /** Whether the rule has a point `PointSymbolizer`/`Mark` at all. */
+  hasPointMark?: boolean;
   /** The point `Mark`'s `WellKnownName`, used to recover a shape marker. */
   wellKnownName?: string;
+  /**
+   * The point `Mark`'s own fill color, kept separate from the shared
+   * {@link fillColor} (which a polygon `Fill` in the same rule may overwrite) so
+   * a recovered `markerColor` always comes from the mark, not the polygon.
+   */
+  markFillColor?: string;
 }
 
 /** Read `fill`/`fill-opacity` from a `Fill` element into the paint. */
@@ -177,11 +185,23 @@ function readRulePaint(rule: XmlNode): RulePaint {
   if (isNode(point)) {
     const graphic = point.Graphic;
     if (isNode(graphic)) {
+      paint.hasPointMark = true;
       const mark = toArray(graphic.Mark)[0];
       if (isNode(mark)) {
         const name = nodeText(mark.WellKnownName);
         if (name) paint.wellKnownName = name;
-        readFill(mark.Fill, paint);
+        // Read the mark's Fill into a scratch paint so the mark's own color is
+        // preserved in markFillColor even if a polygon Fill (read later)
+        // overwrites the shared fillColor.
+        const markPaint: RulePaint = {};
+        readFill(mark.Fill, markPaint);
+        if (markPaint.fillColor !== undefined) {
+          paint.fillColor = markPaint.fillColor;
+          paint.markFillColor = markPaint.fillColor;
+        }
+        if (markPaint.fillOpacity !== undefined) {
+          paint.fillOpacity = markPaint.fillOpacity;
+        }
         readStroke(mark.Stroke, paint);
       }
       const size = toNum(nodeText(graphic.Size));
@@ -277,10 +297,13 @@ function asRange(filterBody: XmlNode): Range | null {
  * graduated detection, and skipped when reading the stops (its value is the
  * first stop, already carried by the first range rule).
  */
-function asBelowBound(filterBody: XmlNode): { property: string } | null {
+function asBelowBound(
+  filterBody: XmlNode,
+): { property: string; value: number } | null {
   const single = asSingleComparison(filterBody);
   if (single && single.op === "PropertyIsLessThan") {
-    return { property: single.property };
+    const value = toNum(single.literal);
+    if (value !== null) return { property: single.property, value };
   }
   return null;
 }
@@ -307,6 +330,20 @@ function literalValue(literal: string): string | number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return literal;
+}
+
+/**
+ * A filter operand literal, additionally recovering `true`/`false` as booleans
+ * so a rule-based filter like `["==", ["get", "flag"], true]` round-trips as a
+ * boolean rather than the string `"true"`. Used only for rule filters, not for
+ * categorized stop values (which the live renderer compares via `to-string`, so
+ * the string form is correct there).
+ */
+function filterLiteral(literal: string): string | number | boolean {
+  const trimmed = literal.trim();
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
+  return literalValue(literal);
 }
 
 /**
@@ -344,7 +381,7 @@ function ogcToMapbox(filterBody: unknown): unknown[] | null {
   if (op in comparisonMap) {
     const body = readComparisonBody(toArray(filterBody[op])[0]);
     if (!body) return null;
-    return [comparisonMap[op], ["get", body.property], literalValue(body.literal)];
+    return [comparisonMap[op], ["get", body.property], filterLiteral(body.literal)];
   }
 
   if (op === "And" || op === "Or") {
@@ -474,22 +511,29 @@ function applyPaint(
   // SLD graphic Size is the mark diameter; GeoLibre circleRadius is the radius.
   if (paint.pointSize !== undefined) patch.circleRadius = paint.pointSize / 2;
 
-  // Recover a shape marker from the point Mark's WellKnownName (`circle` is the
-  // plain default and needs no marker). An unrecognized name (a GeoServer
-  // `shape://…` or an SLD graphic GeoLibre has no shape for) degrades to a
-  // circle with a warning rather than silently dropping the intended symbol.
-  const name = paint.wellKnownName;
-  if (name && name !== "circle") {
-    const shape = WELL_KNOWN_NAME_TO_SHAPE[name];
-    if (shape) {
+  // Recover a shape marker from the point Mark's WellKnownName. Only act when the
+  // rule actually has a point Mark so a polygon/line import never touches the
+  // marker fields. A recognized non-circle name enables the shape marker; a
+  // plain `circle` (or an unrecognized name that degrades to one) explicitly
+  // disables it so a stale `markerEnabled` from the base style is cleared when
+  // the patch is merged over it.
+  if (paint.hasPointMark) {
+    const name = paint.wellKnownName;
+    const shape = name ? WELL_KNOWN_NAME_TO_SHAPE[name] : undefined;
+    if (name && name !== "circle" && shape) {
       patch.markerEnabled = true;
       patch.markerShape = shape;
-      if (paint.fillColor !== undefined) patch.markerColor = paint.fillColor;
+      // markerColor comes from the mark's own fill, not the shared fillColor a
+      // polygon in the same rule may have overwritten.
+      if (paint.markFillColor !== undefined) patch.markerColor = paint.markFillColor;
       if (paint.pointSize !== undefined) patch.markerSize = paint.pointSize;
     } else {
-      warnings.push(
-        `The "${name}" point mark has no GeoLibre equivalent; it was imported as a circle.`,
-      );
+      patch.markerEnabled = false;
+      if (name && name !== "circle" && !shape) {
+        warnings.push(
+          `The "${name}" point mark has no GeoLibre equivalent; it was imported as a circle.`,
+        );
+      }
     }
   }
 }
@@ -612,7 +656,12 @@ function classifyRenderRules(
   warnings: string[],
 ): void {
   const filtered = renderRules.filter((rule) => !rule.isElse && rule.filterBody);
-  const elseRule = renderRules.find((rule) => rule.isElse);
+  // The catch-all is an `ElseFilter` rule or, per the SLD spec, a rule with
+  // neither a Filter nor an ElseFilter (which matches unconditionally). Either
+  // supplies the renderer's fallback color.
+  const elseRule = renderRules.find(
+    (rule) => rule.isElse || !rule.filterBody,
+  );
 
   // The first render rule supplies the flat style (stroke/width/opacity/size are
   // constant across an exported renderer's rules).
@@ -662,36 +711,55 @@ function classifyRenderRules(
     }
   }
 
-  // Graduated: every filter is a numeric range (`>= [AND <]`) or the exporter's
-  // `< first` below-break clamp guard, all on one shared property. The range
-  // rules' lower bounds and colors become the interpolation stops; the guard is
-  // skipped (its value is the first stop, already carried by the first range).
+  // Graduated: every filter is a numeric range (`>= [AND <]`), plus optionally
+  // the exporter's `< first` below-break clamp guard, all on one shared property.
+  // The range rules' lower bounds and colors become the interpolation stops.
   const ranges = filtered.map((rule) =>
     rule.filterBody ? asRange(rule.filterBody) : null,
   );
   const belows = filtered.map((rule) =>
     rule.filterBody ? asBelowBound(rule.filterBody) : null,
   );
-  const gradProperty =
-    ranges.find((range) => range)?.property ??
-    belows.find((below) => below)?.property ??
-    null;
-  const allRangeOrBelow =
+  const rangeIndices = filtered
+    .map((_, index) => index)
+    .filter((index) => ranges[index]);
+  const gradProperty = rangeIndices.length
+    ? ranges[rangeIndices[0]]!.property
+    : null;
+  // The lowest range's bound/color: a below-guard is only recognized (and
+  // skipped) when it exactly matches this, so a genuine open-ended `< x` class
+  // in an external SLD is not silently swallowed.
+  let minLower = Infinity;
+  let minColor: string | undefined;
+  for (const index of rangeIndices) {
+    if (ranges[index]!.lower < minLower) {
+      minLower = ranges[index]!.lower;
+      minColor = filtered[index].paint.fillColor;
+    }
+  }
+  const everyRuleIsRangeOrGuard =
     gradProperty !== null &&
-    filtered.every(
-      (_, index) =>
-        ranges[index]?.property === gradProperty ||
-        belows[index]?.property === gradProperty,
-    );
-  if (allRangeOrBelow) {
+    filtered.every((rule, index) => {
+      if (ranges[index]) return ranges[index]!.property === gradProperty;
+      const below = belows[index];
+      return (
+        below !== null &&
+        below.property === gradProperty &&
+        below.value === minLower &&
+        rule.paint.fillColor === minColor
+      );
+    });
+  if (everyRuleIsRangeOrGuard) {
     const stops: VectorStyleStop[] = [];
-    for (let index = 0; index < filtered.length; index += 1) {
-      const range = ranges[index];
-      if (!range) continue; // Skip the `< first` clamp guard.
+    for (const index of rangeIndices) {
       const color = filtered[index].paint.fillColor;
       if (color === undefined) continue;
       const label = readTitle(filtered[index].node) ?? undefined;
-      stops.push({ value: range.lower, color, ...(label ? { label } : {}) });
+      stops.push({
+        value: ranges[index]!.lower,
+        color,
+        ...(label ? { label } : {}),
+      });
     }
     stops.sort((a, b) => Number(a.value) - Number(b.value));
     if (stops.length >= 2) {
