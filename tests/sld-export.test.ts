@@ -275,6 +275,67 @@ describe("buildSld", () => {
     assert.match(sld, /<ElseFilter\/>/);
   });
 
+  it("skips a rule-based rule with an invalid color", () => {
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "",
+              filter: JSON.stringify(["==", ["get", "a"], "x"]),
+              color: "not-a-color",
+              isElse: false,
+            },
+            {
+              id: "r2",
+              label: "",
+              filter: JSON.stringify(["==", ["get", "a"], "y"]),
+              color: "#00ff00",
+              isElse: false,
+            },
+            { id: "else", label: "", filter: "", color: "#dddddd", isElse: true },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    // The invalid-color rule is dropped; the valid one survives.
+    assert.doesNotMatch(compact(sld), /<ogc:Literal>x<\/ogc:Literal>/);
+    assert.match(compact(sld), /<ogc:Literal>y<\/ogc:Literal>/);
+  });
+
+  it("translates the modern two-operand `in` filter form", () => {
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "",
+              filter: JSON.stringify([
+                "in",
+                ["get", "t"],
+                ["literal", ["a", "b"]],
+              ]),
+              color: "#ff0000",
+              isElse: false,
+            },
+            { id: "else", label: "", filter: "", color: "#dddddd", isElse: true },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    // The two literal-array members expand to equality tests, not a stringified
+    // "a,b".
+    assert.match(compact(sld), /<ogc:Literal>a<\/ogc:Literal>/);
+    assert.match(compact(sld), /<ogc:Literal>b<\/ogc:Literal>/);
+    assert.doesNotMatch(compact(sld), /<ogc:Literal>a,b<\/ogc:Literal>/);
+  });
+
   it("warns for heatmap and cluster point renderers", () => {
     const heat = buildSld(
       layer({ style: style({ pointRenderer: "heatmap" }) }),

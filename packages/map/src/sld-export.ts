@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  isHexColor,
   parseJsonExpression,
   styleValue,
   type GeoLibreLayer,
@@ -395,10 +396,6 @@ function belowFilter(property: string, value: number): string {
   )}</ogc:Literal></ogc:PropertyIsLessThan></ogc:Filter>`;
 }
 
-/** A 6-digit hex color, matching the validity check the live renderer uses. */
-function isColor(value: string): boolean {
-  return /^#[0-9a-f]{6}$/i.test(value.trim());
-}
 
 /**
  * Translate a GeoLibre rule's MapLibre filter (JSON string) into an
@@ -441,12 +438,24 @@ function mapboxFilterToOgc(expression: unknown): string | null {
     return child === null ? null : `<ogc:Not>${child}</ogc:Not>`;
   }
 
-  // `["in", ["get", p], v1, v2, …]` ⇒ an Or of equality tests.
+  // `in` ⇒ an Or of equality tests. Accepts both the modern two-operand form
+  // `["in", ["get", p], ["literal", [v1, v2, …]]]` and the legacy variadic form
+  // `["in", ["get", p], v1, v2, …]`.
   if (op === "in" && rest.length >= 2) {
     const property = getProp(rest[0]);
     if (property === null) return null;
-    const values = rest.slice(1).map(getLiteral);
-    if (values.some((value) => value === null)) return null;
+    const haystack = rest[1];
+    const rawValues =
+      rest.length === 2 &&
+      Array.isArray(haystack) &&
+      haystack[0] === "literal" &&
+      Array.isArray(haystack[1])
+        ? (haystack[1] as unknown[])
+        : rest.slice(1);
+    const values = rawValues.map(getLiteral);
+    if (values.length === 0 || values.some((value) => value === null)) {
+      return null;
+    }
     const tests = values
       .map(
         (value) =>
@@ -503,7 +512,7 @@ function categorizedRules(
   // vectorColorExpression filters them out of the live `match` expression, so
   // the exported SLD renders the same categories the map does.
   for (const stop of stops) {
-    if (String(stop.value).trim().length === 0 || !isColor(stop.color)) continue;
+    if (String(stop.value).trim().length === 0 || !isHexColor(stop.color)) continue;
     const paint = { ...base, fillColor: stop.color };
     rules.push(
       rule(
@@ -556,7 +565,7 @@ function graduatedRules(
     }))
     // Drop stops with a non-numeric value or an invalid color, matching the
     // filtering vectorColorExpression applies before building the interpolation.
-    .filter((stop) => Number.isFinite(stop.value) && isColor(stop.color))
+    .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
 
   warnings.push(
@@ -617,7 +626,9 @@ function ruleBasedRules(
   const out: string[] = [];
   const elseRule = rules.find((entry) => entry.isElse);
   for (const entry of rules) {
-    if (entry.isElse) continue;
+    // Skip else rules and rules with an invalid color, mirroring
+    // ruleBasedColorExpression, so the SLD only contains rules the map draws.
+    if (entry.isElse || !isHexColor(entry.color)) continue;
     const parsed = parseJsonExpression(entry.filter);
     const filter = parsed ? mapboxFilterToOgc(parsed) : null;
     if (filter === null) {
@@ -643,8 +654,13 @@ function ruleBasedRules(
   }
   // Catch-all rule so features matched by no rule still draw. The Title is only
   // written when the else rule has a real label, so an unlabeled else round-trips
-  // back to an empty label instead of a synthetic "Other".
-  const elseColor = elseRule?.color ?? styleValue(style, "fillColor");
+  // back to an empty label instead of a synthetic "Other". The else color falls
+  // back to the layer fill when the rule's own color is invalid, matching
+  // ruleBasedColorExpression.
+  const elseColor =
+    elseRule && isHexColor(elseRule.color)
+      ? elseRule.color
+      : styleValue(style, "fillColor");
   out.push(
     rule(
       "Other",
@@ -744,11 +760,11 @@ export function buildSld(
   // so a renderer whose stops are all invalid falls through to a single symbol
   // rather than emitting an empty categorized/graduated block.
   const validCategorized = stops.filter(
-    (stop) => String(stop.value).trim().length > 0 && isColor(stop.color),
+    (stop) => String(stop.value).trim().length > 0 && isHexColor(stop.color),
   ).length;
   const validGraduated = stops.filter(
     (stop) =>
-      isColor(stop.color) &&
+      isHexColor(stop.color) &&
       Number.isFinite(
         typeof stop.value === "number"
           ? stop.value

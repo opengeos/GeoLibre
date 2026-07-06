@@ -16,7 +16,13 @@ export function isVectorColorExpression(
   return Array.isArray(value);
 }
 
-function isColor(value: string): boolean {
+/**
+ * Whether a string is a 6-digit hex color (`#rrggbb`), the form the vector
+ * renderer treats as valid. Exported so the symbology exporters can apply the
+ * same validity check the live `match`/`case` expressions use rather than
+ * re-deriving the regex.
+ */
+export function isHexColor(value: string): boolean {
   return /^#[0-9a-f]{6}$/i.test(value.trim());
 }
 
@@ -298,7 +304,7 @@ export function vectorColorExpression(
 
   if (mode === "categorized") {
     const stops = styleValue(style, "vectorStyleStops").filter(
-      (stop) => String(stop.value).trim().length > 0 && isColor(stop.color),
+      (stop) => String(stop.value).trim().length > 0 && isHexColor(stop.color),
     );
     if (stops.length === 0) return fallbackColor;
 
@@ -318,7 +324,7 @@ export function vectorColorExpression(
           ? stop.value
           : Number.parseFloat(stop.value),
     }))
-    .filter((stop) => Number.isFinite(stop.value) && isColor(stop.color))
+    .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
   if (stops.length < 2) return fallbackColor;
 
@@ -350,11 +356,11 @@ export function ruleBasedColorExpression(
   const rules = styleValue(style, "vectorRules");
   const elseRule = rules.find((rule) => rule.isElse);
   const elseColor =
-    elseRule && isColor(elseRule.color) ? elseRule.color : fallbackColor;
+    elseRule && isHexColor(elseRule.color) ? elseRule.color : fallbackColor;
 
   const branches: unknown[] = [];
   for (const rule of rules) {
-    if (rule.isElse || !isColor(rule.color)) continue;
+    if (rule.isElse || !isHexColor(rule.color)) continue;
     const filter = parseJsonExpression(rule.filter);
     // A MapLibre filter is an expression that must start with a string operator;
     // skip non-operator arrays (e.g. a bare value) so the compiled `case` never
