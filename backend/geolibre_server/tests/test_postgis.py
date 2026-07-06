@@ -449,6 +449,48 @@ def test_write_baseline_keys_protect_concurrent_inserts(live_table) -> None:
 
 
 @requires_live_postgis
+def test_write_explicit_key_insert_overrides_always_identity(live_table) -> None:
+    """A client-assigned key that matches no row must insert, not error out."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    features = read["geojson"]["features"]
+    stray = {
+        "type": "Feature",
+        "properties": {"name": "Stray", "population": 1, "gid": 9999},
+        "geometry": _point(-84.5, 35.5),
+    }
+    result = postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geojson=_collection(features + [stray]),
+        )
+    )
+    assert result["inserted"] == 1
+    # GENERATED ALWAYS AS IDENTITY accepted the explicit key via the override.
+    assert _rows(f"SELECT name FROM {TABLE} WHERE gid = 9999") == [("Stray",)]
+
+
+@requires_live_postgis
+def test_write_rejects_tables_beyond_feature_cap(live_table, monkeypatch) -> None:
+    """The key-set diff refuses tables larger than the editable-layer cap."""
+    from geolibre_server import vector_ops
+
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    monkeypatch.setattr(vector_ops, "MAX_FEATURES", 2)
+    with pytest.raises(HTTPException) as exc:
+        postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN,
+                table=TABLE,
+                geojson=_collection(read["geojson"]["features"][:2]),
+            )
+        )
+    assert exc.value.status_code == 413
+    # Nothing was written: the three original rows are intact.
+    assert _rows(f"SELECT count(*) FROM {TABLE}")[0][0] == 3
+
+
+@requires_live_postgis
 def test_write_requires_single_column_primary_key(live_table) -> None:
     feature = {
         "type": "Feature",

@@ -179,7 +179,8 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
         cur.execute(
             """
             SELECT a.attname,
-                   (a.attidentity <> '' OR a.atthasdef) AS has_default
+                   (a.attidentity <> '' OR a.atthasdef) AS has_default,
+                   a.attidentity = 'a' AS always_identity
             FROM pg_index i
             JOIN pg_class c ON c.oid = i.indrelid
             JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -191,6 +192,7 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
         pk_rows = cur.fetchall()
         primary_key = pk_rows[0][0] if len(pk_rows) == 1 else None
         pk_is_generated = bool(pk_rows[0][1]) if len(pk_rows) == 1 else False
+        pk_always_identity = bool(pk_rows[0][2]) if len(pk_rows) == 1 else False
 
         cur.execute(
             """
@@ -210,6 +212,7 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
         "srid": srid,
         "primary_key": primary_key,
         "pk_is_generated": pk_is_generated,
+        "pk_always_identity": pk_always_identity,
         "columns": columns,
     }
 
@@ -450,6 +453,23 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
         inserted = updated = 0
         try:
             with conn.cursor() as cur:
+                # The diff needs the table's full key set in memory; refuse
+                # tables beyond the editable-layer cap (such a table could not
+                # have been loaded through /read either), bounding both this
+                # query and the set below.
+                cur.execute(
+                    sql.SQL("SELECT count(*) FROM {schema}.{table}").format(
+                        schema=schema_ident, table=table_ident
+                    )
+                )
+                if cur.fetchone()[0] > vector_ops.MAX_FEATURES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"Table exceeds the {vector_ops.MAX_FEATURES}-feature "
+                            "limit for editable write-back"
+                        ),
+                    )
                 cur.execute(
                     sql.SQL("SELECT {pk} FROM {schema}.{table}").format(
                         pk=sql.Identifier(pk),
@@ -463,94 +483,119 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 existing_keys = {_json_safe(row[0]) for row in cur.fetchall()}
 
                 kept_keys: set[Any] = set()
-                for feature in features:
-                    properties = feature.get("properties") or {}
-                    skipped.update(
-                        key for key in properties if key not in writable_set and key != pk
-                    )
-                    columns = [c for c in writable if c in properties]
-                    values = [
-                        psycopg.types.json.Json(properties[c])
-                        if isinstance(properties[c], (dict, list))
-                        else properties[c]
-                        for c in columns
-                    ]
-                    geometry = feature.get("geometry")
-                    geometry_value = json.dumps(geometry) if geometry else None
+                # Pipeline mode batches the per-feature statements into a few
+                # network round trips instead of one per feature. The counters
+                # track the taken branch (a keyed UPDATE matches exactly one
+                # row by construction) because reading rowcount per statement
+                # would force a sync each time.
+                with conn.pipeline():
+                    for feature in features:
+                        properties = feature.get("properties") or {}
+                        skipped.update(
+                            key
+                            for key in properties
+                            if key not in writable_set and key != pk
+                        )
+                        columns = [c for c in writable if c in properties]
+                        values = [
+                            psycopg.types.json.Json(properties[c])
+                            if isinstance(properties[c], (dict, list))
+                            else properties[c]
+                            for c in columns
+                        ]
+                        geometry = feature.get("geometry")
+                        geometry_value = json.dumps(geometry) if geometry else None
 
-                    # A null primary-key property must not shadow feature.id
-                    # (the read endpoint sets both, but editors may blank the
-                    # property while the feature id survives).
-                    key = properties.get(pk)
-                    if key is None:
-                        key = feature.get("id")
-                    if key is None and not info["pk_is_generated"]:
-                        raise HTTPException(
-                            status_code=400,
-                            detail=(
-                                f"Feature without a '{pk}' value cannot be "
-                                f"inserted: {request.schema_name}.{request.table}'s "
-                                "primary key has no default or identity."
-                            ),
-                        )
-                    if key is not None and key in existing_keys:
-                        kept_keys.add(key)
-                        assignments = [
-                            sql.SQL("{col} = ").format(col=geom_ident)
-                            + (geom_param if geometry_value is not None else sql.SQL("NULL"))
-                        ]
-                        params: list[Any] = (
-                            [geometry_value] if geometry_value is not None else []
-                        )
-                        for column, value in zip(columns, values):
-                            assignments.append(
-                                sql.SQL("{col} = %s").format(col=sql.Identifier(column))
+                        # A null primary-key property must not shadow feature.id
+                        # (the read endpoint sets both, but editors may blank the
+                        # property while the feature id survives).
+                        key = properties.get(pk)
+                        if key is None:
+                            key = feature.get("id")
+                        if key is None and not info["pk_is_generated"]:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=(
+                                    f"Feature without a '{pk}' value cannot be "
+                                    f"inserted: {request.schema_name}."
+                                    f"{request.table}'s primary key has no "
+                                    "default or identity."
+                                ),
                             )
-                            params.append(value)
-                        params.append(key)
-                        cur.execute(
-                            sql.SQL(
-                                "UPDATE {schema}.{table} SET {assignments} WHERE {pk} = %s"
-                            ).format(
-                                schema=schema_ident,
-                                table=table_ident,
-                                assignments=sql.SQL(", ").join(assignments),
-                                pk=sql.Identifier(pk),
-                            ),
-                            params,
-                        )
-                        updated += cur.rowcount
-                    else:
-                        # New feature: the key column is left to its identity /
-                        # default. A non-null key that is not in the table is
-                        # inserted explicitly so client-assigned keys survive.
-                        insert_columns = list(columns)
-                        insert_values = list(values)
-                        if key is not None:
-                            insert_columns.append(pk)
-                            insert_values.append(key)
+                        if key is not None and key in existing_keys:
                             kept_keys.add(key)
-                        column_idents = [geom_ident] + [
-                            sql.Identifier(column) for column in insert_columns
-                        ]
-                        value_exprs = [
-                            geom_param if geometry_value is not None else sql.SQL("NULL")
-                        ] + [sql.SQL("%s")] * len(insert_values)
-                        params = (
-                            [geometry_value] if geometry_value is not None else []
-                        ) + insert_values
-                        cur.execute(
-                            sql.SQL(
-                                "INSERT INTO {schema}.{table} ({columns}) VALUES ({values})"
-                            ).format(
-                                schema=schema_ident,
-                                table=table_ident,
-                                columns=sql.SQL(", ").join(column_idents),
-                                values=sql.SQL(", ").join(value_exprs),
-                            ),
-                            params,
-                        )
-                        inserted += cur.rowcount
+                            assignments = [
+                                sql.SQL("{col} = ").format(col=geom_ident)
+                                + (
+                                    geom_param
+                                    if geometry_value is not None
+                                    else sql.SQL("NULL")
+                                )
+                            ]
+                            params: list[Any] = (
+                                [geometry_value] if geometry_value is not None else []
+                            )
+                            for column, value in zip(columns, values):
+                                assignments.append(
+                                    sql.SQL("{col} = %s").format(
+                                        col=sql.Identifier(column)
+                                    )
+                                )
+                                params.append(value)
+                            params.append(key)
+                            cur.execute(
+                                sql.SQL(
+                                    "UPDATE {schema}.{table} SET {assignments} "
+                                    "WHERE {pk} = %s"
+                                ).format(
+                                    schema=schema_ident,
+                                    table=table_ident,
+                                    assignments=sql.SQL(", ").join(assignments),
+                                    pk=sql.Identifier(pk),
+                                ),
+                                params,
+                            )
+                            updated += 1
+                        else:
+                            # New feature: the key column is left to its identity
+                            # / default. A non-null key that is not in the table
+                            # is inserted explicitly so client-assigned keys
+                            # survive; a GENERATED ALWAYS identity column rejects
+                            # explicit values unless the insert overrides it.
+                            insert_columns = list(columns)
+                            insert_values = list(values)
+                            overriding = sql.SQL("")
+                            if key is not None:
+                                insert_columns.append(pk)
+                                insert_values.append(key)
+                                kept_keys.add(key)
+                                if info["pk_always_identity"]:
+                                    overriding = sql.SQL(" OVERRIDING SYSTEM VALUE")
+                            column_idents = [geom_ident] + [
+                                sql.Identifier(column) for column in insert_columns
+                            ]
+                            value_exprs = [
+                                geom_param
+                                if geometry_value is not None
+                                else sql.SQL("NULL")
+                            ] + [sql.SQL("%s")] * len(insert_values)
+                            params = (
+                                [geometry_value] if geometry_value is not None else []
+                            ) + insert_values
+                            cur.execute(
+                                sql.SQL(
+                                    "INSERT INTO {schema}.{table} ({columns})"
+                                    "{overriding} VALUES ({values})"
+                                ).format(
+                                    schema=schema_ident,
+                                    table=table_ident,
+                                    columns=sql.SQL(", ").join(column_idents),
+                                    overriding=overriding,
+                                    values=sql.SQL(", ").join(value_exprs),
+                                ),
+                                params,
+                            )
+                            inserted += 1
 
                 # Scope deletions to the edit session's baseline when the
                 # client provides one, so rows inserted concurrently by another

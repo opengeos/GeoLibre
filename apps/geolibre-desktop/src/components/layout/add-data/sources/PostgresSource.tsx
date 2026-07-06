@@ -92,7 +92,19 @@ export function PostgresSource() {
       } catch {
         // Ignored: listPostgisTables surfaces the real connection error.
       }
-      const tables = await listPostgisTables(connectionString);
+      const listed = await listPostgisTables(connectionString);
+      // geometry_columns lists one row per geometry column, so a table with
+      // several geometry columns appears several times; keep the first entry
+      // (the /postgis/read endpoint edits that table's first geometry column)
+      // so the select has unique keys.
+      const tables = listed.filter(
+        (table, index) =>
+          listed.findIndex(
+            (candidate) =>
+              candidate.schema === table.schema &&
+              candidate.table === table.table,
+          ) === index,
+      );
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisConnection(connectionString);
       setPostgisTables(tables);
