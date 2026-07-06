@@ -236,7 +236,8 @@ def test_write_updates_inserts_and_deletes(live_table) -> None:
             connection=LIVE_DSN, table=TABLE, geojson=_collection(edited)
         )
     )
-    assert result["updated"] == 2
+    # Only the actually-edited row is rewritten; the untouched one is skipped.
+    assert result["updated"] == 1
     assert result["inserted"] == 1
     assert result["deleted"] == 1
 
@@ -254,6 +255,20 @@ def test_write_updates_inserts_and_deletes(live_table) -> None:
     # The identity key survived the update and advanced for the insert.
     knox_gid = _rows(f"SELECT gid FROM {TABLE} WHERE name = 'Knoxville'")[0][0]
     assert knox_gid == knox["properties"]["gid"]
+
+
+@requires_live_postgis
+def test_write_skips_unchanged_rows(live_table) -> None:
+    """Saving an untouched layer must not rewrite (or delete) any row."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    result = postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN, table=TABLE, geojson=read["geojson"]
+        )
+    )
+    assert result["updated"] == 0
+    assert result["inserted"] == 0
+    assert result["deleted"] == 0
 
 
 @requires_live_postgis
@@ -300,9 +315,11 @@ def test_write_null_pk_property_falls_back_to_feature_id(live_table) -> None:
             connection=LIVE_DSN, table=TABLE, geojson=_collection(features)
         )
     )
+    # Matched as updates (none inserted or deleted); the key column itself is
+    # never written, so no row values changed and all three are skipped.
     assert result["inserted"] == 0
     assert result["deleted"] == 0
-    assert result["updated"] == 3
+    assert result["updated"] == 0
     assert _rows(f"SELECT count(*) FROM {TABLE}")[0][0] == 3
 
 
@@ -404,7 +421,7 @@ def test_write_diffs_correctly_with_uuid_primary_key(live_table) -> None:
             )
         )
         # A str-vs-UUID mismatch would report 0 updated, 2 inserted, 2 deleted.
-        assert result["updated"] == 2
+        assert result["updated"] == 1  # the edited row; the untouched one skips
         assert result["inserted"] == 0
         assert result["deleted"] == 0
         rows = _rows(f"SELECT id::text, name FROM {table} ORDER BY id::text")

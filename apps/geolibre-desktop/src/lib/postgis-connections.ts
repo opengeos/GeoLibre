@@ -1,4 +1,4 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { useAppStore, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   readSavedPostgresConnections,
@@ -18,11 +18,36 @@ import {
  */
 const connectionsByLayerId = new Map<string, string>();
 
+// Layers can disappear through many paths that never touch the LayerPanel
+// remove flow (scripting API, assistant tools, plugin teardown, New Project
+// resetting `layers` wholesale). A store subscription prunes entries whose
+// layer is gone so a credential never outlives its layer, whichever path
+// removed it. Installed lazily on first registration.
+let pruneSubscriptionInstalled = false;
+
+function ensurePruneSubscription(): void {
+  if (pruneSubscriptionInstalled) return;
+  pruneSubscriptionInstalled = true;
+  useAppStore.subscribe((state) => {
+    if (connectionsByLayerId.size === 0) return;
+    prunePostgisConnections(state.layers.map((layer) => layer.id));
+  });
+}
+
+/** Drop registry entries whose layer id is not in the live set. */
+export function prunePostgisConnections(liveLayerIds: Iterable<string>): void {
+  const liveIds = new Set(liveLayerIds);
+  for (const layerId of connectionsByLayerId.keys()) {
+    if (!liveIds.has(layerId)) connectionsByLayerId.delete(layerId);
+  }
+}
+
 /** Remember the connection string an editable PostGIS layer was loaded with. */
 export function registerPostgisConnection(
   layerId: string,
   connection: string,
 ): void {
+  ensurePruneSubscription();
   connectionsByLayerId.set(layerId, connection);
 }
 

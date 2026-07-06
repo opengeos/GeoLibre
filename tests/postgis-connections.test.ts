@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
   postgisBaselineKeys,
+  prunePostgisConnections,
   registerPostgisConnection,
   resolvePostgisConnection,
   unregisterPostgisConnection,
@@ -81,6 +82,20 @@ describe("postgis connection registry", () => {
     withSavedConnections([CONNECTION], () => {
       assert.equal(resolvePostgisConnection(postgisLayer("layer-d")), null);
     });
+  });
+
+  it("prunes registered connections when their layer leaves the store", () => {
+    registerPostgisConnection("layer-gone", CONNECTION);
+    registerPostgisConnection("layer-kept", CONNECTION);
+    // Simulates the store subscription firing after any removal path
+    // (scripting, assistant, New Project): only live layer ids survive.
+    prunePostgisConnections(["layer-kept"]);
+    assert.equal(resolvePostgisConnection(postgisLayer("layer-gone")), null);
+    assert.equal(
+      resolvePostgisConnection(postgisLayer("layer-kept")),
+      CONNECTION,
+    );
+    unregisterPostgisConnection("layer-kept");
   });
 
   it("reads baseline keys from layer metadata, dropping junk entries", () => {

@@ -448,7 +448,9 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
     issues parameterized statements in one transaction:
 
     - features whose primary-key property matches an existing row → ``UPDATE``
-      (geometry plus every property that maps to a real column);
+      (geometry plus every property that maps to a real column), skipped when
+      the payload matches the stored row so untouched features are not
+      rewritten (no spurious triggers/replication/MVCC churn);
     - features without a primary-key value → ``INSERT`` (the key comes from the
       column's identity/default);
     - rows whose key is absent from the payload → ``DELETE``, scoped to the
@@ -512,17 +514,43 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                             "limit for editable write-back"
                         ),
                     )
+                # Read the current rows (geometry serialized exactly as /read
+                # serves it) so unchanged features can be skipped instead of
+                # rewritten: the client always sends the whole layer, and
+                # blind updates would fire triggers, churn replication, and
+                # bloat MVCC for rows the user never touched. Values are
+                # normalized the same way /read serializes them, so
+                # comparisons against the client's JSON-native payload match.
+                geom_expr = (
+                    sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(
+                        geom=geom_ident
+                    )
+                    if info["srid"] not in (0, 4326)
+                    else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom_ident)
+                )
                 cur.execute(
-                    sql.SQL("SELECT {pk} FROM {schema}.{table}").format(
+                    sql.SQL(
+                        "SELECT {pk}, {geom_expr}, {columns} FROM {schema}.{table}"
+                    ).format(
                         pk=sql.Identifier(pk),
+                        geom_expr=geom_expr,
+                        columns=sql.SQL(", ").join(
+                            sql.Identifier(column) for column in info["columns"]
+                        ),
                         schema=schema_ident,
                         table=table_ident,
                     )
                 )
-                # Normalize driver values (uuid.UUID, Decimal, date, ...) the
-                # same way /read serializes them, so membership tests against
-                # the client's JSON-native keys compare like with like.
-                existing_keys = {_json_safe(row[0]) for row in cur.fetchall()}
+                existing_rows: dict[Any, tuple[Any, dict[str, Any]]] = {}
+                for row in cur.fetchall():
+                    existing_rows[_json_safe(row[0])] = (
+                        json.loads(row[1]) if row[1] else None,
+                        {
+                            column: _json_safe(value)
+                            for column, value in zip(info["columns"], row[2:])
+                        },
+                    )
+                existing_keys = set(existing_rows)
 
                 kept_keys: set[Any] = set()
                 # Pipeline mode batches the per-feature statements into a few
@@ -572,6 +600,14 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                             )
                         if key is not None and key in existing_keys:
                             kept_keys.add(key)
+                            # Skip rows whose payload matches what is stored:
+                            # untouched features must not be rewritten.
+                            stored_geometry, stored_values = existing_rows[key]
+                            if geometry == stored_geometry and all(
+                                properties[column] == stored_values.get(column)
+                                for column in columns
+                            ):
+                                continue
                             assignments = [
                                 sql.SQL("{col} = ").format(col=geom_ident)
                                 + (
@@ -658,7 +694,10 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 if to_delete:
                     # Compare as text so the (JSON-native) keys match uuid /
                     # numeric / date key columns; both sides render the same
-                    # canonical form the /read endpoint serialized.
+                    # canonical form the /read endpoint serialized. Known edge:
+                    # a timestamp/timestamptz key's Python str() can differ
+                    # from Postgres's ::text rendering, so such exotic keys may
+                    # not match; integer/text/uuid/numeric/date keys all do.
                     cur.execute(
                         sql.SQL(
                             "DELETE FROM {schema}.{table} WHERE {pk}::text = ANY(%s)"
