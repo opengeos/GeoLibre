@@ -1315,7 +1315,10 @@ export function SettingsDialog({
               {t("settings.menu.environmentVariables")}
             </DropdownMenuItem>
           )}
-          {isTauri() && (
+          {/* Share the same gate as the in-dialog nav/pane so the Store build
+              (and the web build) hide this shortcut too — otherwise it would
+              open the dialog on a fallback section. */}
+          {isSectionVisible("updates") && (
             <DropdownMenuItem
               onSelect={() => {
                 setSection("updates");
