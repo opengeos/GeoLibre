@@ -171,7 +171,9 @@ export function WmsSource() {
     format: wmsFormat,
     transparent: wmsTransparent,
     tileSize: wmsTileSize,
-    version: wmsVersion,
+    // Only persist the version when it has an explicit source; an untouched
+    // default stays eligible for URL/capabilities auto-detection on reload.
+    ...(versionTouched ? { version: wmsVersion } : {}),
   });
 
   const applyFields = (fields: ServiceFields) => {
@@ -274,19 +276,25 @@ export function WmsSource() {
                 // before the GetMap is built); adopt it so a 1.3.0-only server
                 // works without a manual version change, and treat it as an
                 // explicit source that capabilities auto-detection must not
-                // override. Only act when the detected version actually
-                // changed, and only drop the explicit choice when the service
-                // itself (origin + path) changed — fixing an unrelated typo in
-                // the same URL must not clobber the selection.
+                // override. A different service (origin + path changed) always
+                // re-derives the version from its own URL — or the default —
+                // so a choice made for the previous service cannot leak onto
+                // it. Within the same service, only an actual change to the
+                // URL's declared VERSION is adopted; fixing an unrelated typo
+                // must not clobber a manual selection.
                 const detected = wmsVersionFromEndpoint(value);
-                if (detected && detected !== wmsVersionFromEndpoint(previous)) {
+                const serviceChanged =
+                  value.trim().split(/[?#]/)[0] !==
+                  previous.trim().split(/[?#]/)[0];
+                if (serviceChanged) {
+                  setWmsVersion(detected ?? "1.1.1");
+                  markVersionTouched(detected != null);
+                } else if (
+                  detected &&
+                  detected !== wmsVersionFromEndpoint(previous)
+                ) {
                   setWmsVersion(detected);
                   markVersionTouched(true);
-                } else if (
-                  value.trim().split(/[?#]/)[0] !==
-                  previous.trim().split(/[?#]/)[0]
-                ) {
-                  markVersionTouched(detected != null);
                 }
                 // Layers belong to the previous endpoint; clear them (and cancel
                 // any in-flight retrieval) so the list never reflects a
