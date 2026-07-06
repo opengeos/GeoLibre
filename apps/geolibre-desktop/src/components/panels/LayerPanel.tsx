@@ -117,7 +117,13 @@ import {
   writePostgisTable,
   writeVectorToSource,
 } from "@geolibre/processing";
-import { resolvePostgisConnection } from "../../lib/postgis-connections";
+import {
+  getPostgisBaselineKeys,
+  postgisFeatureKeys,
+  resolvePostgisConnection,
+  setPostgisBaselineKeys,
+  unregisterPostgisConnection,
+} from "../../lib/postgis-connections";
 import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
@@ -1020,6 +1026,9 @@ export function LayerPanel({
             schema_name: schema,
             table,
             geojson,
+            // Scope deletions to the rows this session actually read so a
+            // save cannot sweep away rows inserted concurrently elsewhere.
+            baseline_keys: getPostgisBaselineKeys(layer.id) ?? undefined,
           });
           // Re-read the table so inserted features pick up their database-
           // assigned primary keys; without this a second save would insert
@@ -1029,6 +1038,7 @@ export function LayerPanel({
             schema_name: schema,
             table,
           });
+          setPostgisBaselineKeys(layer.id, postgisFeatureKeys(fresh.geojson));
           updateLayer(layer.id, {
             geojson: fresh.geojson,
             metadata: { ...layer.metadata, featureCount: fresh.feature_count },
@@ -2650,6 +2660,9 @@ export function LayerPanel({
               variant="destructive"
               onClick={() => {
                 if (!layerPendingRemoval) return;
+                // Drop the removed layer's PostGIS session state (connection
+                // string, baseline keys) so credentials don't outlive it.
+                unregisterPostgisConnection(layerPendingRemoval.id);
                 removeLayer(layerPendingRemoval.id);
                 setLayerPendingRemoval(null);
               }}

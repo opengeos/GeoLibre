@@ -780,6 +780,12 @@ export interface WritePostgisTableRequest {
   table: string;
   /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
   geojson: FeatureCollection;
+  /**
+   * Primary-key values the edit session started from. When set, deletions are
+   * scoped to these keys so rows inserted concurrently by another session
+   * survive the save; when omitted the sidecar diffs the whole table.
+   */
+  baseline_keys?: Array<string | number>;
 }
 
 export interface WritePostgisTableResult {

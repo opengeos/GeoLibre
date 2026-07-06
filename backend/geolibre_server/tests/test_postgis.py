@@ -368,6 +368,87 @@ def test_read_excludes_secondary_geometry_columns(live_table) -> None:
 
 
 @requires_live_postgis
+def test_write_diffs_correctly_with_uuid_primary_key(live_table) -> None:
+    """Non-integer keys must diff by value, not delete-and-recreate rows."""
+    table = "geolibre_writeback_uuid"
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {table}")
+            cur.execute(
+                f"""
+                CREATE TABLE {table} (
+                    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+                    name text,
+                    geom geometry(Point, 4326)
+                )
+                """
+            )
+            for name, lon in [("a", 0.0), ("b", 1.0)]:
+                cur.execute(
+                    f"INSERT INTO {table} (name, geom) "
+                    "VALUES (%s, ST_SetSRID(ST_MakePoint(%s, 0), 4326))",
+                    (name, lon),
+                )
+        conn.commit()
+    try:
+        read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=table))
+        features = read["geojson"]["features"]
+        original_ids = sorted(f["properties"]["id"] for f in features)
+        features[0]["properties"]["name"] = "a-edited"
+        result = postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN, table=table, geojson=_collection(features)
+            )
+        )
+        # A str-vs-UUID mismatch would report 0 updated, 2 inserted, 2 deleted.
+        assert result["updated"] == 2
+        assert result["inserted"] == 0
+        assert result["deleted"] == 0
+        rows = _rows(f"SELECT id::text, name FROM {table} ORDER BY id::text")
+        assert [row[0] for row in rows] == original_ids
+        assert "a-edited" in {row[1] for row in rows}
+    finally:
+        with psycopg.connect(LIVE_DSN) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"DROP TABLE IF EXISTS {table}")
+            conn.commit()
+
+
+@requires_live_postgis
+def test_write_baseline_keys_protect_concurrent_inserts(live_table) -> None:
+    """Deletions are scoped to the session baseline when one is provided."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    features = read["geojson"]["features"]
+    baseline = [f["properties"]["gid"] for f in features]
+
+    # Another session inserts a row between the read and the save.
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {TABLE} (name, population, geom) VALUES "
+                "('Concurrent', 1, ST_Transform("
+                "ST_SetSRID(ST_MakePoint(-80, 35), 4326), 3857))"
+            )
+        conn.commit()
+
+    # This session deletes one of its own rows and saves with its baseline.
+    edited = features[1:]
+    result = postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geojson=_collection(edited),
+            baseline_keys=baseline,
+        )
+    )
+    assert result["deleted"] == 1
+    names = {row[0] for row in _rows(f"SELECT name FROM {TABLE}")}
+    # The session's own deletion applied; the concurrent insert survived.
+    assert features[0]["properties"]["name"] not in names
+    assert "Concurrent" in names
+
+
+@requires_live_postgis
 def test_write_requires_single_column_primary_key(live_table) -> None:
     feature = {
         "type": "Feature",

@@ -97,6 +97,11 @@ class PostgisWriteRequest(BaseModel):
     schema_name: str = "public"
     table: str
     geojson: dict
+    # Primary-key values the edit session started from (the last read). When
+    # provided, deletions are scoped to these keys, so rows inserted by another
+    # session between the read and this save survive. When omitted, every row
+    # absent from the payload is deleted (full-table diff).
+    baseline_keys: Optional[list] = None
 
 
 def _connect(connection: str) -> Any:
@@ -401,7 +406,9 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
       (geometry plus every property that maps to a real column);
     - features without a primary-key value → ``INSERT`` (the key comes from the
       column's identity/default);
-    - rows whose key is absent from the payload → ``DELETE``.
+    - rows whose key is absent from the payload → ``DELETE``, scoped to the
+      session's ``baseline_keys`` when provided so concurrently inserted rows
+      survive.
 
     Any failure rolls the entire commit back. Properties that do not match a
     table column are skipped and reported in ``messages`` (adding columns is a
@@ -450,7 +457,10 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                         table=table_ident,
                     )
                 )
-                existing_keys = {row[0] for row in cur.fetchall()}
+                # Normalize driver values (uuid.UUID, Decimal, date, ...) the
+                # same way /read serializes them, so membership tests against
+                # the client's JSON-native keys compare like with like.
+                existing_keys = {_json_safe(row[0]) for row in cur.fetchall()}
 
                 kept_keys: set[Any] = set()
                 for feature in features:
@@ -542,20 +552,29 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                         )
                         inserted += cur.rowcount
 
+                # Scope deletions to the edit session's baseline when the
+                # client provides one, so rows inserted concurrently by another
+                # session are not swept away by an unrelated save.
+                deletable = existing_keys
+                if request.baseline_keys is not None:
+                    deletable = existing_keys & set(request.baseline_keys)
                 to_delete = sorted(
-                    existing_keys - kept_keys, key=lambda value: str(value)
+                    deletable - kept_keys, key=lambda value: str(value)
                 )
                 deleted = 0
                 if to_delete:
+                    # Compare as text so the (JSON-native) keys match uuid /
+                    # numeric / date key columns; both sides render the same
+                    # canonical form the /read endpoint serialized.
                     cur.execute(
                         sql.SQL(
-                            "DELETE FROM {schema}.{table} WHERE {pk} = ANY(%s)"
+                            "DELETE FROM {schema}.{table} WHERE {pk}::text = ANY(%s)"
                         ).format(
                             schema=schema_ident,
                             table=table_ident,
                             pk=sql.Identifier(pk),
                         ),
-                        (to_delete,),
+                        ([str(value) for value in to_delete],),
                     )
                     deleted = cur.rowcount
             conn.commit()

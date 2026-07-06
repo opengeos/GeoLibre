@@ -14,7 +14,11 @@ import {
   startMartinServer,
   stopMartinServer,
 } from "../../../../lib/martin";
-import { registerPostgisConnection } from "../../../../lib/postgis-connections";
+import {
+  postgisFeatureKeys,
+  registerPostgisConnection,
+  setPostgisBaselineKeys,
+} from "../../../../lib/postgis-connections";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { isTauri } from "../../../../lib/tauri-io";
 import {
@@ -47,6 +51,10 @@ export function PostgresSource() {
   const [postgisTables, setPostgisTables] = useState<PostgisTableInfo[]>([]);
   const [selectedTableKey, setSelectedTableKey] = useState("");
   const [postgisStatus, setPostgisStatus] = useState<string | null>(null);
+  // The connection string the table list was fetched with. The submit uses
+  // this snapshot (not the live input) so editing the field after a Connect
+  // cannot silently read a same-named table from a different database.
+  const [postgisConnection, setPostgisConnection] = useState("");
 
   // Reset the (shell-owned) Martin connection when the source opens, matching
   // the original dialog: a running server is preserved across reopens only
@@ -86,6 +94,7 @@ export function PostgresSource() {
       }
       const tables = await listPostgisTables(connectionString);
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
+      setPostgisConnection(connectionString);
       setPostgisTables(tables);
       // Default to the first writable table (single-column primary key) so
       // "Editable layer" does not preselect a read-only one.
@@ -229,7 +238,11 @@ export function PostgresSource() {
     if (!table) {
       throw new Error(t("addData.postgres.errorSelectTable"));
     }
-    const connectionString = postgresConnectionString.trim();
+    // The snapshot taken when the table list was fetched, not the live input.
+    const connectionString = postgisConnection;
+    if (!connectionString) {
+      throw new Error(t("addData.postgres.errorConnectFirst"));
+    }
     const result = await readPostgisTable({
       connection: connectionString,
       schema_name: table.schema,
@@ -259,6 +272,7 @@ export function PostgresSource() {
       geojson: result.geojson,
     };
     registerPostgisConnection(layer.id, connectionString);
+    setPostgisBaselineKeys(layer.id, postgisFeatureKeys(result.geojson));
     source.addAndClose(layer, { fit: true });
   };
 
@@ -337,9 +351,15 @@ export function PostgresSource() {
                   ? postgresConnectionString
                   : ""
               }
-              onChange={(event) =>
-                setPostgresConnectionString(event.target.value)
-              }
+              onChange={(event) => {
+                setPostgresConnectionString(event.target.value);
+                if (event.target.value.trim() !== postgisConnection) {
+                  setPostgisTables([]);
+                  setSelectedTableKey("");
+                  setPostgisConnection("");
+                  setPostgisStatus(null);
+                }
+              }}
             >
               <option value="">
                 {t("addData.postgres.selectSavedConnection")}
@@ -362,9 +382,18 @@ export function PostgresSource() {
             autoComplete="off"
             placeholder={t("addData.postgres.connectionStringPlaceholder")}
             value={postgresConnectionString}
-            onChange={(event) =>
-              setPostgresConnectionString(event.target.value)
-            }
+            onChange={(event) => {
+              setPostgresConnectionString(event.target.value);
+              // The fetched table list belongs to the previous connection
+              // string; invalidate it so a stale selection cannot be submitted
+              // against a different database.
+              if (event.target.value.trim() !== postgisConnection) {
+                setPostgisTables([]);
+                setSelectedTableKey("");
+                setPostgisConnection("");
+                setPostgisStatus(null);
+              }
+            }}
           />
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
