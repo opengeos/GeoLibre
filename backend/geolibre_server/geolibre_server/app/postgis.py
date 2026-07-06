@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 # an unresponsive server cannot pin a FastAPI worker thread indefinitely.
 _STATEMENT_TIMEOUT_MS = 60_000
 
-_PASSWORD_URL_RE = re.compile(r"(://[^:/\s@]+:)[^@\s]+@")
+# Username is optional (postgresql://:pw@host relies on PGUSER), so the group
+# is zero-or-more: an empty username must not let the password through.
+_PASSWORD_URL_RE = re.compile(r"(://[^:/\s@]*:)[^@\s]+@")
 _PASSWORD_KV_RE = re.compile(r"(password\s*=\s*)('[^']*'|[^\s]+)", re.IGNORECASE)
 
 
@@ -251,32 +253,42 @@ def postgis_tables(request: PostgisTablesRequest) -> dict[str, Any]:
     FastAPI dispatches this to its thread pool.
     """
     _require_psycopg()
-    with _connect(request.connection) as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT f_table_schema, f_table_name, f_geometry_column,
-                       srid, type
-                FROM geometry_columns
-                ORDER BY f_table_schema, f_table_name, f_geometry_column
-                """
-            )
-            rows = cur.fetchall()
-            cur.execute(
-                """
-                SELECT n.nspname, c.relname, min(a.attname), count(*)
-                FROM pg_index i
-                JOIN pg_class c ON c.oid = i.indrelid
-                JOIN pg_namespace n ON n.oid = c.relnamespace
-                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
-                WHERE i.indisprimary
-                GROUP BY n.nspname, c.relname
-                """
-            )
-            pk_by_table = {
-                (schema, table): pk if count == 1 else None
-                for schema, table, pk, count in cur.fetchall()
-            }
+    try:
+        with _connect(request.connection) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT f_table_schema, f_table_name, f_geometry_column,
+                           srid, type
+                    FROM geometry_columns
+                    ORDER BY f_table_schema, f_table_name, f_geometry_column
+                    """
+                )
+                rows = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT n.nspname, c.relname, min(a.attname), count(*)
+                    FROM pg_index i
+                    JOIN pg_class c ON c.oid = i.indrelid
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    JOIN pg_attribute a
+                        ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
+                    WHERE i.indisprimary
+                    GROUP BY n.nspname, c.relname
+                    """
+                )
+                pk_by_table = {
+                    (schema, table): pk if count == 1 else None
+                    for schema, table, pk, count in cur.fetchall()
+                }
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
+        logger.error("PostGIS table listing failed: %s", _sanitize_error(str(exc)))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not list tables: {_sanitize_error(str(exc))}",
+        ) from exc
 
     tables = [
         {
@@ -317,30 +329,49 @@ def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
     psycopg = _import_psycopg()
     sql = psycopg.sql
 
-    with _connect(request.connection) as conn:
-        info = _table_info(conn, request.schema_name, request.table)
-        geom = sql.Identifier(info["geometry_column"])
-        # A zero/unknown SRID cannot be transformed; serve the coordinates as
-        # stored (the common convention for srid 0 data is lon/lat already).
-        geom_expr = (
-            sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(geom=geom)
-            if info["srid"] not in (0, 4326)
-            else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
+    try:
+        with _connect(request.connection) as conn:
+            info = _table_info(conn, request.schema_name, request.table)
+            geom = sql.Identifier(info["geometry_column"])
+            # A zero/unknown SRID cannot be transformed; serve the coordinates
+            # as stored (the common convention for srid 0 data is lon/lat
+            # already).
+            geom_expr = (
+                sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(
+                    geom=geom
+                )
+                if info["srid"] not in (0, 4326)
+                else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
+            )
+            column_list = sql.SQL(", ").join(
+                [geom_expr]
+                + [sql.Identifier(column) for column in info["columns"]]
+            )
+            query = sql.SQL(
+                "SELECT {columns} FROM {schema}.{table} LIMIT %s"
+            ).format(
+                columns=column_list,
+                schema=sql.Identifier(request.schema_name),
+                table=sql.Identifier(request.table),
+            )
+            with conn.cursor() as cur:
+                # Over-fetch by one row to distinguish "exactly at the cap"
+                # from "the table is larger than the cap".
+                cur.execute(query, (vector_ops.MAX_FEATURES + 1,))
+                rows = cur.fetchall()
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
+        logger.error(
+            "PostGIS read of %s.%s failed: %s",
+            request.schema_name,
+            request.table,
+            _sanitize_error(str(exc)),
         )
-        column_list = sql.SQL(", ").join(
-            [geom_expr]
-            + [sql.Identifier(column) for column in info["columns"]]
-        )
-        query = sql.SQL("SELECT {columns} FROM {schema}.{table} LIMIT %s").format(
-            columns=column_list,
-            schema=sql.Identifier(request.schema_name),
-            table=sql.Identifier(request.table),
-        )
-        with conn.cursor() as cur:
-            # Over-fetch by one row to distinguish "exactly at the cap" from
-            # "the table is larger than the cap".
-            cur.execute(query, (vector_ops.MAX_FEATURES + 1,))
-            rows = cur.fetchall()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not read table: {_sanitize_error(str(exc))}",
+        ) from exc
 
     if len(rows) > vector_ops.MAX_FEATURES:
         raise HTTPException(

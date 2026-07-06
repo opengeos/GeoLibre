@@ -1,4 +1,5 @@
 import {
+  fetchPostgisStatus,
   listPostgisTables,
   readPostgisTable,
   type PostgisTableInfo,
@@ -90,7 +91,14 @@ export function PostgresSource() {
         // externally in dev); a failed start still lets the list call try.
         await startGeoLibreSidecar();
       } catch {
-        // Ignored: listPostgisTables surfaces the real connection error.
+        // Ignored: the status check below surfaces the real error.
+      }
+      // Check the runtime first so a missing psycopg reads as "install the
+      // postgis extra", not as a generic connection failure (mirrors how the
+      // other optional engines gate their dialogs on a *Status call).
+      const status = await fetchPostgisStatus();
+      if (!status.available) {
+        throw new Error(t("addData.postgres.errorRuntimeMissing"));
       }
       const listed = await listPostgisTables(connectionString);
       // geometry_columns lists one row per geometry column, so a table with

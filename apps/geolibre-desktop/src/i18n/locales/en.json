@@ -450,7 +450,8 @@
       "statusNoTables": "No spatial tables were found in this database.",
       "editableTable": "Table",
       "tableReadOnly": "{{table}} (read-only: no primary key)",
-      "errorSelectTable": "Select a table to load."
+      "errorSelectTable": "Select a table to load.",
+      "errorRuntimeMissing": "The processing server does not have the PostGIS runtime (psycopg) installed. Install the geolibre-server 'postgis' extra to load editable layers."
     },
     "video": {
       "defaultName": "Video Layer",

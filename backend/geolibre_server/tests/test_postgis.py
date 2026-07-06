@@ -68,6 +68,9 @@ def test_sanitize_error_scrubs_passwords() -> None:
     assert "hunter2" not in _sanitize_error(url)
     kv = "invalid dsn: host=db user=alice password=hunter2 dbname=gis"
     assert "hunter2" not in _sanitize_error(kv)
+    # An empty username (PGUSER from the environment) must not leak either.
+    no_user = "connection to postgresql://:hunter2@db.example.com/gis failed"
+    assert "hunter2" not in _sanitize_error(no_user)
 
 
 @requires_psycopg
