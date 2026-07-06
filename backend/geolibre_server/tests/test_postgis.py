@@ -300,6 +300,8 @@ def test_write_reports_skipped_columns(live_table) -> None:
         )
     )
     assert any("added_in_editor" in message for message in result["messages"])
+    # Also exposed structurally so clients can build a translated warning.
+    assert result["skipped_fields"] == ["added_in_editor"]
 
 
 @requires_live_postgis

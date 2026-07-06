@@ -2442,6 +2442,7 @@
     "saveEditsError": "Could not save edits to the source file.",
     "saveEditsToPostgis": "Save edits to PostGIS table",
     "saveEditsPostgisSuccess": "Saved to {{table}}: {{inserted}} inserted, {{updated}} updated, {{deleted}} deleted.",
+    "saveEditsPostgisSkippedFields": "Fields without a matching table column were not saved: {{fields}}.",
     "saveEditsPostgisRefreshWarning": "Edits were saved to the table, but refreshing the layer failed. Reload the layer before saving again, or new features may be inserted twice.",
     "saveEditsPostgisNoConnection": "No PostgreSQL connection is available for this layer. Reconnect in Add Data > PostgreSQL, then try again.",
     "typeBasemap": "basemap",

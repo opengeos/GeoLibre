@@ -710,7 +710,8 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     # timestamp/timestamptz and float/real keys' Python str()
                     # can differ from Postgres's ::text rendering (e.g. '5.0'
                     # vs '5'), so such exotic keys may not match and their
-                    # deletes no-op (reported in the deleted count);
+                    # deletes silently no-op (the deleted count comes out
+                    # lower than the client expects);
                     # integer/text/uuid/numeric/date keys all round-trip.
                     cur.execute(
                         sql.SQL(
@@ -761,4 +762,8 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
         "updated": updated,
         "deleted": deleted,
         "messages": messages,
+        # Structured list of the editor-added fields that had no matching
+        # column, so clients can build their own (translated) warning instead
+        # of parsing the prose in `messages`.
+        "skipped_fields": sorted(skipped),
     }

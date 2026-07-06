@@ -796,6 +796,8 @@ export interface WritePostgisTableResult {
   updated: number;
   deleted: number;
   messages: string[];
+  /** Editor-added fields skipped because no table column matches them. */
+  skipped_fields: string[];
 }
 
 /** Return PostGIS runtime (psycopg) availability in the sidecar. */

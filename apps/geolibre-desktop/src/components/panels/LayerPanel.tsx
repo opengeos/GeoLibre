@@ -1078,11 +1078,10 @@ export function LayerPanel({
           // The sidecar reports editor-added fields it could not persist
           // (no matching table column); surface that so the drop is not
           // silent behind a plain success toast.
-          const skippedFieldMessages = result.messages.filter((entry) =>
-            entry.startsWith("Skipped fields"),
-          );
-          if (skippedFieldMessages.length > 0) {
-            message = `${message} ${skippedFieldMessages.join(" ")}`;
+          if (result.skipped_fields?.length) {
+            message = `${message} ${t("layers.saveEditsPostgisSkippedFields", {
+              fields: result.skipped_fields.join(", "),
+            })}`;
           }
         } else {
           const result = await writeVectorToSource({ path, geojson });
