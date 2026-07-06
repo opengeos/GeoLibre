@@ -687,6 +687,14 @@ export function createAppAPI(
       const resolvedFormat = format ?? "image/png";
       const resolvedTransparent = transparent ?? true;
       const resolvedVersion = normalizeWmsVersion(version);
+      // Mirror setMapProjection's unrecognized-value warning so a typo'd
+      // version from an untyped JS plugin is visible instead of silently
+      // coerced.
+      if (version !== undefined && version !== resolvedVersion) {
+        console.warn(
+          `[GeoLibre] addWmsLayer: unsupported WMS version "${String(version)}"; using "${resolvedVersion}".`,
+        );
+      }
       const tileUrl = createWmsTileUrl({
         endpoint: url,
         layers,
