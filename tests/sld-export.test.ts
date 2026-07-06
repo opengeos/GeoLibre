@@ -137,6 +137,157 @@ describe("buildSld", () => {
     assert.match(sld, /<CssParameter name="fill">#cccccc<\/CssParameter>/);
   });
 
+  it("does not emit a LineSymbolizer for a polygon-only layer", () => {
+    // The PolygonSymbolizer's own Stroke draws the border; a separate
+    // LineSymbolizer would draw it twice.
+    const { sld } = buildSld(layer(), polygons());
+    assert.match(sld, /<PolygonSymbolizer>/);
+    assert.doesNotMatch(sld, /<LineSymbolizer>/);
+  });
+
+  it("emits a LineSymbolizer for line geometry", () => {
+    const lines: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        },
+      ],
+    };
+    const { sld } = buildSld(layer(), lines);
+    assert.match(sld, /<LineSymbolizer>/);
+    assert.doesNotMatch(sld, /<PolygonSymbolizer>/);
+  });
+
+  it("deduplicates a per-rule warning across a multi-rule renderer", () => {
+    const { warnings } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "zone",
+          markerEnabled: true,
+          markerShape: "diamond", // no SLD WellKnownName → warns per point rule
+          vectorStyleStops: [
+            { value: "a", color: "#111111" },
+            { value: "b", color: "#222222" },
+          ],
+        }),
+      }),
+      points(),
+    );
+    const markerWarnings = warnings.filter((w) => /diamond/.test(w));
+    assert.equal(markerWarnings.length, 1);
+  });
+
+  it("emits a below-first-break guard rule for a graduated renderer", () => {
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "graduated",
+          vectorStyleProperty: "pop",
+          vectorStyleStops: [
+            { value: 10, color: "#eeeeee" },
+            { value: 100, color: "#111111" },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    // A leading `< 10` rule clamps below-minimum features to the first color.
+    assert.match(
+      compact(sld),
+      /<ogc:PropertyIsLessThan><ogc:PropertyName>pop<\/ogc:PropertyName><ogc:Literal>10<\/ogc:Literal>/,
+    );
+  });
+
+  it("skips categorized stops with an invalid color", () => {
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "zone",
+          vectorStyleStops: [
+            { value: "a", color: "#112233" },
+            { value: "b", color: "not-a-color" },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    assert.match(compact(sld), /<ogc:Literal>a<\/ogc:Literal>/);
+    assert.doesNotMatch(compact(sld), /<ogc:Literal>b<\/ogc:Literal>/);
+  });
+
+  it("translates all/any/not/in rule filters to ogc predicates", () => {
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "",
+              filter: JSON.stringify([
+                "all",
+                ["==", ["get", "a"], "x"],
+                ["!", ["==", ["get", "b"], "y"]],
+                ["in", ["get", "c"], 1, 2],
+              ]),
+              color: "#ff0000",
+              isElse: false,
+            },
+            { id: "else", label: "", filter: "", color: "#dddddd", isElse: true },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    assert.match(compact(sld), /<ogc:And>/);
+    assert.match(compact(sld), /<ogc:Not>/);
+    // `in` expands to an Or of equality tests.
+    assert.match(compact(sld), /<ogc:Or>/);
+  });
+
+  it("skips a rule whose filter has no SLD equivalent, with a warning", () => {
+    const { sld, warnings } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "bad",
+              // `>` needs a scalar literal, not another expression → untranslatable.
+              filter: JSON.stringify([">", ["get", "a"], ["get", "b"]]),
+              color: "#ff0000",
+              isElse: false,
+            },
+            { id: "else", label: "", filter: "", color: "#dddddd", isElse: true },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    assert.ok(warnings.some((w) => /no SLD equivalent/.test(w)));
+    // Only the else rule remains.
+    assert.match(sld, /<ElseFilter\/>/);
+  });
+
+  it("warns for heatmap and cluster point renderers", () => {
+    const heat = buildSld(
+      layer({ style: style({ pointRenderer: "heatmap" }) }),
+      points(),
+    );
+    assert.ok(heat.warnings.some((w) => /heatmap/.test(w)));
+    const cluster = buildSld(
+      layer({ style: style({ pointRenderer: "cluster" }) }),
+      points(),
+    );
+    assert.ok(cluster.warnings.some((w) => /cluster/.test(w)));
+  });
+
   it("maps a graduated renderer to class-break ranges and warns", () => {
     const { sld, warnings } = buildSld(
       layer({

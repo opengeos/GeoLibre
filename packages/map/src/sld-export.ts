@@ -78,8 +78,9 @@ function xmlEscape(value: string): string {
 function num(value: number): string {
   if (!Number.isFinite(value)) return "0";
   // Round to a stable precision so a fold like 0.6 * 1 does not serialize as
-  // 0.6000000000000001, then strip the trailing zeros/point.
-  return String(Number(value.toFixed(6)));
+  // 0.6000000000000001, then strip the trailing zeros/point. `|| 0` collapses a
+  // negative zero (e.g. from negating a 0 offset) so it never serializes "-0".
+  return String(Number(value.toFixed(6)) || 0);
 }
 
 /** One `<CssParameter name="…">value</CssParameter>` line. */
@@ -329,7 +330,10 @@ function renderSymbolizers(
 ): string {
   const parts: string[] = [];
   if (profile.hasPolygon) parts.push(polygonSymbolizer(paint));
-  if (profile.hasLine || profile.hasPolygon) parts.push(lineSymbolizer(paint));
+  // A LineSymbolizer is only emitted for real line geometry; a polygon's border
+  // is already drawn by the PolygonSymbolizer's own Stroke, so adding one here
+  // would draw the boundary twice in a spec-compliant SLD renderer.
+  if (profile.hasLine) parts.push(lineSymbolizer(paint));
   if (profile.hasPoint) parts.push(pointSymbolizer(style, paint, warnings));
   return parts.join("");
 }
@@ -380,6 +384,20 @@ function rangeFilter(
     upper,
   )}</ogc:Literal></ogc:PropertyIsLessThan>`;
   return `<ogc:Filter><ogc:And>${ge}${lt}</ogc:And></ogc:Filter>`;
+}
+
+/** A `< value` filter, used to clamp graduated values below the first break. */
+function belowFilter(property: string, value: number): string {
+  return `<ogc:Filter><ogc:PropertyIsLessThan><ogc:PropertyName>${xmlEscape(
+    property,
+  )}</ogc:PropertyName><ogc:Literal>${num(
+    value,
+  )}</ogc:Literal></ogc:PropertyIsLessThan></ogc:Filter>`;
+}
+
+/** A 6-digit hex color, matching the validity check the live renderer uses. */
+function isColor(value: string): boolean {
+  return /^#[0-9a-f]{6}$/i.test(value.trim());
 }
 
 /**
@@ -481,7 +499,11 @@ function categorizedRules(
 ): string {
   const base = basePaint(style, opacity);
   const rules: string[] = [];
+  // Skip stops with a blank value or an invalid color, matching how
+  // vectorColorExpression filters them out of the live `match` expression, so
+  // the exported SLD renders the same categories the map does.
   for (const stop of stops) {
+    if (String(stop.value).trim().length === 0 || !isColor(stop.color)) continue;
     const paint = { ...base, fillColor: stop.color };
     rules.push(
       rule(
@@ -532,7 +554,9 @@ function graduatedRules(
           ? stop.value
           : Number.parseFloat(String(stop.value)),
     }))
-    .filter((stop) => Number.isFinite(stop.value))
+    // Drop stops with a non-numeric value or an invalid color, matching the
+    // filtering vectorColorExpression applies before building the interpolation.
+    .filter((stop) => Number.isFinite(stop.value) && isColor(stop.color))
     .sort((a, b) => a.value - b.value);
 
   warnings.push(
@@ -540,6 +564,26 @@ function graduatedRules(
   );
 
   const rules: string[] = [];
+  // Values below the first break clamp to the first stop's color on the live
+  // map (the interpolate expression clamps out-of-range inputs), so emit a
+  // leading `< first` rule to reproduce that in SLD consumers. The importer
+  // recognizes and skips this guard so the stop values still round-trip exactly.
+  if (numeric.length > 0) {
+    rules.push(
+      rule(
+        `${property} < ${num(numeric[0].value)}`,
+        numeric[0].label ?? null,
+        belowFilter(property, numeric[0].value),
+        scale,
+        renderSymbolizers(
+          style,
+          { ...base, fillColor: numeric[0].color },
+          profile,
+          warnings,
+        ),
+      ),
+    );
+  }
   for (let index = 0; index < numeric.length; index += 1) {
     const stop = numeric[index];
     const next = numeric[index + 1];
@@ -597,12 +641,14 @@ function ruleBasedRules(
       ),
     );
   }
-  // Catch-all rule so features matched by no rule still draw.
+  // Catch-all rule so features matched by no rule still draw. The Title is only
+  // written when the else rule has a real label, so an unlabeled else round-trips
+  // back to an empty label instead of a synthetic "Other".
   const elseColor = elseRule?.color ?? styleValue(style, "fillColor");
   out.push(
     rule(
       "Other",
-      elseRule?.label || "Other",
+      elseRule?.label || null,
       "<ElseFilter/>",
       scale,
       renderSymbolizers(style, { ...base, fillColor: elseColor }, profile, warnings),
@@ -694,9 +740,24 @@ export function buildSld(
   const mode = styleValue(style, "vectorStyleMode");
   const property = styleValue(style, "vectorStyleProperty").trim();
   const stops = styleValue(style, "vectorStyleStops");
+  // Count only stops that would actually render (non-empty value, valid color),
+  // so a renderer whose stops are all invalid falls through to a single symbol
+  // rather than emitting an empty categorized/graduated block.
+  const validCategorized = stops.filter(
+    (stop) => String(stop.value).trim().length > 0 && isColor(stop.color),
+  ).length;
+  const validGraduated = stops.filter(
+    (stop) =>
+      isColor(stop.color) &&
+      Number.isFinite(
+        typeof stop.value === "number"
+          ? stop.value
+          : Number.parseFloat(String(stop.value)),
+      ),
+  ).length;
 
   let renderRules: string;
-  if (mode === "categorized" && property && stops.length > 0) {
+  if (mode === "categorized" && property && validCategorized > 0) {
     renderRules = categorizedRules(
       style,
       opacity,
@@ -706,7 +767,7 @@ export function buildSld(
       scale,
       warnings,
     );
-  } else if (mode === "graduated" && property && stops.length >= 2) {
+  } else if (mode === "graduated" && property && validGraduated >= 2) {
     renderRules = graduatedRules(
       style,
       opacity,
@@ -764,7 +825,9 @@ export function buildSld(
     "</StyledLayerDescriptor>",
   ].join("\n");
 
-  return { sld: formatSld(sld), warnings };
+  // Several warnings (marker fallback, per-rule notes) are pushed once per
+  // generated rule; dedupe so the user is not shown the same sentence N times.
+  return { sld: formatSld(sld), warnings: [...new Set(warnings)] };
 }
 
 /**

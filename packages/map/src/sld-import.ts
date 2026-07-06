@@ -69,6 +69,10 @@ const parser = new XMLParser({
   parseTagValue: false,
   parseAttributeValue: false,
   trimValues: true,
+  // Do not expand XML entities. SLD symbolizer content (colors, field names,
+  // numbers) never needs them, and disabling entity processing removes the
+  // billion-laughs / entity-expansion attack surface for untrusted files.
+  processEntities: false,
 });
 
 type XmlNode = Record<string, unknown>;
@@ -265,6 +269,29 @@ function asRange(filterBody: XmlNode): Range | null {
   const upper = toNum(lt.literal);
   if (lower === null || upper === null) return null;
   return { property: ge.property, lower, upper };
+}
+
+/**
+ * The property/bound of a bare `< value` filter, which the graduated exporter
+ * emits as a below-first-break clamp guard. Recognized so it does not disqualify
+ * graduated detection, and skipped when reading the stops (its value is the
+ * first stop, already carried by the first range rule).
+ */
+function asBelowBound(filterBody: XmlNode): { property: string } | null {
+  const single = asSingleComparison(filterBody);
+  if (single && single.op === "PropertyIsLessThan") {
+    return { property: single.property };
+  }
+  return null;
+}
+
+/**
+ * A rule's `<Title>` text, used to recover a renderer's label. Only `Title` is
+ * read (not `Name`): the exporter's `Name` is a synthetic description like
+ * "zone = A", so falling back to it would fabricate labels the user never set.
+ */
+function readTitle(node: XmlNode): string | null {
+  return nodeText(node.Title);
 }
 
 /**
@@ -613,7 +640,17 @@ function classifyRenderRules(
     for (let index = 0; index < filtered.length; index += 1) {
       const color = filtered[index].paint.fillColor;
       if (color === undefined) continue;
-      stops.push({ value: literalValue(comparisons[index]!.literal), color });
+      const literal = comparisons[index]!.literal;
+      // Recover a custom stop label from the Title, but only when it differs
+      // from the category value the exporter writes as the Title by default, so
+      // an unlabeled stop stays unlabeled.
+      const title = readTitle(filtered[index].node);
+      const label = title && title !== literal ? title : undefined;
+      stops.push({
+        value: literalValue(literal),
+        color,
+        ...(label ? { label } : {}),
+      });
     }
     if (stops.length > 0) {
       patch.vectorStyleMode = "categorized";
@@ -625,26 +662,41 @@ function classifyRenderRules(
     }
   }
 
-  // Graduated: every filter is a numeric range on one shared property; the lower
-  // bounds and colors become the interpolation stops.
+  // Graduated: every filter is a numeric range (`>= [AND <]`) or the exporter's
+  // `< first` below-break clamp guard, all on one shared property. The range
+  // rules' lower bounds and colors become the interpolation stops; the guard is
+  // skipped (its value is the first stop, already carried by the first range).
   const ranges = filtered.map((rule) =>
     rule.filterBody ? asRange(rule.filterBody) : null,
   );
-  if (
-    ranges.every(
-      (range) => range && range.property === ranges[0]?.property,
-    )
-  ) {
+  const belows = filtered.map((rule) =>
+    rule.filterBody ? asBelowBound(rule.filterBody) : null,
+  );
+  const gradProperty =
+    ranges.find((range) => range)?.property ??
+    belows.find((below) => below)?.property ??
+    null;
+  const allRangeOrBelow =
+    gradProperty !== null &&
+    filtered.every(
+      (_, index) =>
+        ranges[index]?.property === gradProperty ||
+        belows[index]?.property === gradProperty,
+    );
+  if (allRangeOrBelow) {
     const stops: VectorStyleStop[] = [];
     for (let index = 0; index < filtered.length; index += 1) {
+      const range = ranges[index];
+      if (!range) continue; // Skip the `< first` clamp guard.
       const color = filtered[index].paint.fillColor;
       if (color === undefined) continue;
-      stops.push({ value: ranges[index]!.lower, color });
+      const label = readTitle(filtered[index].node) ?? undefined;
+      stops.push({ value: range.lower, color, ...(label ? { label } : {}) });
     }
     stops.sort((a, b) => Number(a.value) - Number(b.value));
     if (stops.length >= 2) {
       patch.vectorStyleMode = "graduated";
-      patch.vectorStyleProperty = ranges[0]!.property;
+      patch.vectorStyleProperty = gradProperty;
       patch.vectorStyleStops = stops;
       return;
     }
@@ -664,7 +716,9 @@ function classifyRenderRules(
     }
     vectorRules.push({
       id: `sld-rule-${index}`,
-      label: "",
+      // The exporter writes each rule's label as its Title; recover it so the
+      // per-rule legend labels survive the round trip.
+      label: readTitle(rule.node) ?? "",
       filter: JSON.stringify(expression),
       color: rule.paint.fillColor ?? DEFAULT_LAYER_STYLE.fillColor,
       isElse: false,
@@ -673,7 +727,7 @@ function classifyRenderRules(
   const elseColor = elseRule?.paint.fillColor ?? DEFAULT_LAYER_STYLE.fillColor;
   vectorRules.push({
     id: "sld-rule-else",
-    label: "",
+    label: elseRule ? (readTitle(elseRule.node) ?? "") : "",
     filter: "",
     color: elseColor,
     isElse: true,

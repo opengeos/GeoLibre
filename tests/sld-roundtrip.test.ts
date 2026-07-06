@@ -156,6 +156,70 @@ describe("SLD round-trip (style → SLD → style)", () => {
     assert.equal(rules[2].color, "#cccccc");
   });
 
+  it("preserves per-rule labels in a rule-based renderer", () => {
+    const input = style({
+      vectorStyleMode: "rule-based",
+      fillColor: "#dddddd",
+      vectorRules: [
+        {
+          id: "a",
+          label: "Big cities",
+          filter: JSON.stringify([">", ["get", "pop"], 1000000]),
+          color: "#d62728",
+          isElse: false,
+        },
+        { id: "else", label: "", filter: "", color: "#cccccc", isElse: true },
+      ],
+    });
+    const out = roundTrip(input, "point");
+    assert.equal(out.vectorRules[0].label, "Big cities");
+  });
+
+  it("preserves a custom categorized stop label", () => {
+    const input = style({
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "zone",
+      fillColor: "#999999",
+      vectorStyleStops: [
+        { value: "a", color: "#ff0000", label: "Zone A" },
+        { value: "b", color: "#00ff00" },
+      ],
+    });
+    const out = roundTrip(input, "polygon");
+    assert.deepEqual(out.vectorStyleStops, input.vectorStyleStops);
+  });
+
+  it("preserves an all/not filter rule (semantically)", () => {
+    const input = style({
+      vectorStyleMode: "rule-based",
+      fillColor: "#dddddd",
+      vectorRules: [
+        {
+          id: "a",
+          label: "",
+          filter: JSON.stringify([
+            "all",
+            ["==", ["get", "type"], "city"],
+            ["!", ["==", ["get", "hidden"], "yes"]],
+          ]),
+          color: "#d62728",
+          isElse: false,
+        },
+        { id: "else", label: "", filter: "", color: "#cccccc", isElse: true },
+      ],
+    });
+    const out = roundTrip(input, "point");
+    assert.equal(out.vectorStyleMode, "rule-based");
+    assert.equal(
+      out.vectorRules[0].filter,
+      JSON.stringify([
+        "all",
+        ["==", ["get", "type"], "city"],
+        ["!", ["==", ["get", "hidden"], "yes"]],
+      ]),
+    );
+  });
+
   it("preserves labels", () => {
     const input = style({
       labels: {
