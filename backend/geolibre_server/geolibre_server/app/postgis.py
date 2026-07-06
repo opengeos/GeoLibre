@@ -41,8 +41,11 @@ logger = logging.getLogger(__name__)
 _STATEMENT_TIMEOUT_MS = 60_000
 
 # Username is optional (postgresql://:pw@host relies on PGUSER), so the group
-# is zero-or-more: an empty username must not let the password through.
-_PASSWORD_URL_RE = re.compile(r"(://[^:/\s@]*:)[^@\s]+@")
+# is zero-or-more: an empty username must not let the password through. The
+# password segment matches greedily to the LAST @ in the token so an unescaped
+# literal @ inside a pasted password is fully redacted (leaning toward
+# over-redaction of the host rather than a partial password leak).
+_PASSWORD_URL_RE = re.compile(r"(://[^:/\s@]*:)[^\s]+@")
 _PASSWORD_KV_RE = re.compile(r"(password\s*=\s*)('[^']*'|[^\s]+)", re.IGNORECASE)
 
 

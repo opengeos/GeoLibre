@@ -82,6 +82,13 @@ def test_sanitize_error_scrubs_passwords() -> None:
     # An empty username (PGUSER from the environment) must not leak either.
     no_user = "connection to postgresql://:hunter2@db.example.com/gis failed"
     assert "hunter2" not in _sanitize_error(no_user)
+    # A pasted password containing a literal, unescaped @ must be fully
+    # redacted, not truncated at its first @.
+    at_sign = "connection to postgresql://alice:p@ss@db.example.com/gis failed"
+    scrubbed = _sanitize_error(at_sign)
+    assert "p@ss" not in scrubbed
+    assert "@ss@" not in scrubbed
+    assert "****@db.example.com" in scrubbed
 
 
 @requires_psycopg

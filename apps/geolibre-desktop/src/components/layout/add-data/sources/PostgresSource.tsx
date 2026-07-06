@@ -125,10 +125,10 @@ export function PostgresSource() {
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisConnection(connectionString);
       setPostgisTables(tables);
-      // Default to the first writable table (single-column primary key) so
-      // "Editable layer" does not preselect a read-only one.
-      const defaultTable =
-        tables.find((table) => table.primary_key) ?? tables[0];
+      // Default to the first writable table (single-column primary key);
+      // read-only tables are listed but disabled, so with no writable table
+      // nothing is preselected and the submit stays disabled.
+      const defaultTable = tables.find((table) => table.primary_key);
       setSelectedTableKey(defaultTable ? postgisTableKey(defaultTable) : "");
       setPostgisStatus(
         tables.length > 0
@@ -495,8 +495,11 @@ export function PostgresSource() {
             >
               {postgisTables.map((table) => {
                 const key = postgisTableKey(table);
+                // Tables without a usable key stay visible (so the user sees
+                // why they are missing) but cannot be picked: this mode exists
+                // to save edits back, which needs a primary key.
                 return (
-                  <option key={key} value={key}>
+                  <option key={key} value={key} disabled={!table.primary_key}>
                     {table.primary_key
                       ? key
                       : t("addData.postgres.tableReadOnly", { table: key })}
