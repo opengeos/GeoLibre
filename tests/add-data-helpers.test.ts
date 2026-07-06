@@ -143,6 +143,8 @@ describe("wmsVersionFromEndpoint", () => {
       "1.1.1",
     );
     assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=1.0.0"), "1.1.1");
+    // Any 1.x value is bucketed the same way normalizeWmsVersion buckets it.
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=1.2.0"), "1.1.1");
   });
 
   it("returns null when no usable version is present", () => {

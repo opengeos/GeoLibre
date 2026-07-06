@@ -121,7 +121,10 @@ export function wmsVersionFromEndpoint(endpoint: string): string | null {
   } catch {
     return null;
   }
-  if (!/^1\.[013]/.test(value)) return null;
+  // Recognize any 1.x value so detection agrees with normalizeWmsVersion's
+  // bucketing (e.g. a rare VERSION=1.2.0 lands in the 1.1.1 bucket rather
+  // than being silently ignored).
+  if (!/^1\.\d/.test(value)) return null;
   return normalizeWmsVersion(value);
 }
 
