@@ -97,6 +97,15 @@ describe("buildSld", () => {
     assert.doesNotMatch(sld, /<PolygonSymbolizer>/);
   });
 
+  it("folds the layer opacity into the point mark outline opacity", () => {
+    const { sld } = buildSld(layer({ opacity: 0.5 }), points());
+    // The mark's Stroke carries the folded stroke-opacity like the other symbolizers.
+    assert.match(
+      compact(sld),
+      /<Mark>.*<Stroke>.*<CssParameter name="stroke-opacity">0\.5<\/CssParameter>/,
+    );
+  });
+
   it("folds the layer opacity into the fill opacity", () => {
     const { sld } = buildSld(
       layer({ opacity: 0.5, style: style({ fillOpacity: 0.6 }) }),

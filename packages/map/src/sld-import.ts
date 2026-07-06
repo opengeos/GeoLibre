@@ -245,12 +245,19 @@ function asRange(filterBody: XmlNode): Range | null {
   return { property: ge.property, lower, upper };
 }
 
-/** A scalar literal, parsed to a number when it looks numeric (for round-trip). */
+/**
+ * A scalar literal, parsed to a number when it is written in canonical decimal
+ * form so numeric filters round-trip (`"1.0"`, `"0.00"`, `"-3.5"`, `"1e3"` all
+ * become numbers). A leading zero before another digit (`"01"`) or any other
+ * non-canonical text is kept as a string so zero-padded categories survive.
+ */
 function literalValue(literal: string): string | number {
-  const parsed = Number.parseFloat(literal);
-  return Number.isFinite(parsed) && String(parsed) === literal.trim()
-    ? parsed
-    : literal;
+  const trimmed = literal.trim();
+  if (/^[+-]?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$/.test(trimmed)) {
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return literal;
 }
 
 /**

@@ -62,6 +62,22 @@ describe("parseSld", () => {
     assert.equal(result.style.fillColor, "#cccccc");
   });
 
+  it("parses canonical numeric categories as numbers but keeps zero-padded ones as strings", () => {
+    const result = parseSld(
+      sld(`
+        <Rule><ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>code</ogc:PropertyName><ogc:Literal>1.0</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>
+          <PolygonSymbolizer><Fill><CssParameter name="fill">#111111</CssParameter></Fill></PolygonSymbolizer></Rule>
+        <Rule><ogc:Filter><ogc:PropertyIsEqualTo><ogc:PropertyName>code</ogc:PropertyName><ogc:Literal>01</ogc:Literal></ogc:PropertyIsEqualTo></ogc:Filter>
+          <PolygonSymbolizer><Fill><CssParameter name="fill">#222222</CssParameter></Fill></PolygonSymbolizer></Rule>
+      `),
+    );
+    assert.equal(result.style.vectorStyleMode, "categorized");
+    assert.deepEqual(result.style.vectorStyleStops, [
+      { value: 1, color: "#111111" },
+      { value: "01", color: "#222222" },
+    ]);
+  });
+
   it("classifies numeric range rules as a graduated renderer", () => {
     const result = parseSld(
       sld(`
