@@ -863,6 +863,21 @@ export function LayerPanel({
           layer,
           mapControllerRef.current?.getMap() ?? undefined,
         );
+        if (!geojson) {
+          // Mirror handleExportLayer: a source-backed (Add Vector Layer) layer
+          // whose features are not readable yet is usually a not-yet-ready map
+          // source, so surface that rather than exporting a style with no data.
+          const message =
+            geojsonVectorSourceId(layer) !== null
+              ? "Layer data is not ready yet. Try again in a moment."
+              : "Style export requires a vector layer with features.";
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: { type: "error", message },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
         const result = buildMapboxStyle(layer, geojson);
         const savedPath = await saveTextFileWithFallback(
           mapboxStyleToJson(result),
@@ -2044,7 +2059,7 @@ export function LayerPanel({
                                 void handleExportStyle(layer);
                               }}
                             >
-                              Mapbox GL style (symbology)
+                              {t("layers.exportMapboxStyle")}
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>

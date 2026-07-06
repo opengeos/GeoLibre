@@ -67,6 +67,16 @@ function polygons(): FeatureCollection {
   };
 }
 
+function mixedGeom(): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: [
+      ...points().features,
+      ...polygons().features,
+    ],
+  };
+}
+
 function layerById(style_: ReturnType<typeof buildMapboxStyle>["style"], id: string) {
   return style_.layers.find((l) => l.id === id);
 }
@@ -213,6 +223,93 @@ describe("geometry handling", () => {
     const source = doc.sources["my-layer-source"] as { data: FeatureCollection };
     assert.equal(source.data.features.length, 0);
     assert.ok(warnings.some((w) => w.includes("not embedded")));
+  });
+});
+
+describe("point renderers", () => {
+  it("emits a heatmap layer for a point-only heatmap renderer", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({ style: style({ pointRenderer: "heatmap" }) }),
+      points(),
+    );
+    assert.ok(layerById(doc, "my-layer-heatmap"), "heatmap layer");
+    assert.equal(layerById(doc, "my-layer-circle"), undefined);
+  });
+
+  it("falls back to plain points for a cluster renderer and warns", () => {
+    const { style: doc, warnings } = buildMapboxStyle(
+      layer({ style: style({ pointRenderer: "cluster" }) }),
+      points(),
+    );
+    assert.ok(layerById(doc, "my-layer-circle"), "circle layer");
+    assert.equal(layerById(doc, "my-layer-heatmap"), undefined);
+    assert.ok(warnings.some((w) => w.toLowerCase().includes("cluster")));
+  });
+
+  it("ignores heatmap/cluster on mixed-geometry layers (renders single)", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({ style: style({ pointRenderer: "heatmap" }) }),
+      mixedGeom(),
+    );
+    // A mixed layer keeps fill + line + a plain circle, never a heatmap.
+    assert.ok(layerById(doc, "my-layer-fill"));
+    assert.ok(layerById(doc, "my-layer-line"));
+    assert.ok(layerById(doc, "my-layer-circle"));
+    assert.equal(layerById(doc, "my-layer-heatmap"), undefined);
+  });
+});
+
+describe("geometry-gated warnings", () => {
+  it("does not warn about fill patterns on a point-only layer", () => {
+    const { warnings } = buildMapboxStyle(
+      layer({ style: style({ fillPattern: "hatch" }) }),
+      points(),
+    );
+    assert.ok(!warnings.some((w) => w.toLowerCase().includes("fill pattern")));
+  });
+
+  it("only warns about dedupe on point-only layers", () => {
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "category",
+      dedupe: "unique" as const,
+    };
+    const mixed = buildMapboxStyle(layer({ style: style({ labels }) }), mixedGeom());
+    assert.ok(!mixed.warnings.some((w) => w.toLowerCase().includes("duplicate-label")));
+    const pointsOnly = buildMapboxStyle(layer({ style: style({ labels }) }), points());
+    assert.ok(pointsOnly.warnings.some((w) => w.toLowerCase().includes("duplicate-label")));
+  });
+});
+
+describe("glyphs dependency", () => {
+  it("warns about the default demo font server when labels are enabled", () => {
+    const { warnings } = buildMapboxStyle(
+      layer({
+        style: style({
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "category" },
+        }),
+      }),
+      points(),
+    );
+    assert.ok(warnings.some((w) => w.toLowerCase().includes("font server")));
+  });
+
+  it("uses a custom glyphs URL without warning when provided", () => {
+    const { style: doc, warnings } = buildMapboxStyle(
+      layer({
+        style: style({
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "category" },
+        }),
+      }),
+      points(),
+      { glyphsUrl: "https://fonts.example.com/{fontstack}/{range}.pbf" },
+    );
+    assert.equal(
+      (doc as { glyphs?: string }).glyphs,
+      "https://fonts.example.com/{fontstack}/{range}.pbf",
+    );
+    assert.ok(!warnings.some((w) => w.toLowerCase().includes("font server")));
   });
 });
 

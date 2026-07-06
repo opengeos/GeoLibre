@@ -67,6 +67,13 @@ export interface MapboxStyleExportOptions {
    * this many features. Defaults to {@link LARGE_EMBED_FEATURE_COUNT}.
    */
   largeFeatureCount?: number;
+  /**
+   * Glyphs (font) URL template written to the style when a label layer is
+   * emitted. Defaults to {@link DEFAULT_GLYPHS_URL} (MapLibre's public demo
+   * font server); pass your own font server for a production style so the
+   * export does not depend on a third-party host.
+   */
+  glyphsUrl?: string;
 }
 
 /** Layer types whose symbology is driven by the vector {@link LayerStyle}. */
@@ -165,6 +172,7 @@ function buildLabelLayer(
   sourceKey: string,
   idBase: string,
   visibility: "visible" | "none",
+  pointOnly: boolean,
   warnings: string[],
 ): LayerSpecification | null {
   const style = layer.style;
@@ -173,7 +181,9 @@ function buildLabelLayer(
   const textField = labelTextField(style, warnings);
   if (textField === null || textField === "") return null;
 
-  if (labels.dedupe !== "off") {
+  // Live dedup only applies to point-only layers, so only warn when it would
+  // actually have taken effect (mirrors the map's dedupe gating).
+  if (labels.dedupe !== "off" && pointOnly) {
     warnings.push(
       "Duplicate-label handling (unique/concatenate) is applied live in " +
         "GeoLibre and is not carried into the exported style; every feature is " +
@@ -272,10 +282,22 @@ export function buildMapboxStyle(
     ? detectGeometryProfile(geojson)
     : { hasPoint: true, hasLine: true, hasPolygon: true };
 
+  // heatmap/cluster and label dedup only apply to point-only layers, matching
+  // the live map.
+  const pointOnly =
+    profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+
   const layers: LayerSpecification[] = [];
   const zoom = zoomRange(style);
 
-  if (style.fillPattern && style.fillPattern !== "none") {
+  // Only warn about a dropped fill pattern when the layer actually has polygons
+  // to fill (and is not extruded, where the pattern never applies).
+  if (
+    profile.hasPolygon &&
+    !style.extrusionEnabled &&
+    style.fillPattern &&
+    style.fillPattern !== "none"
+  ) {
     warnings.push(
       "Fill pattern is not exported (it relies on a generated sprite); the " +
         "polygon uses a flat fill instead.",
@@ -320,9 +342,6 @@ export function buildMapboxStyle(
 
   if (!style.extrusionEnabled && profile.hasPoint) {
     const renderer = styleValue(style, "pointRenderer");
-    // heatmap/cluster only apply to point-only layers, matching the live map.
-    const pointOnly =
-      profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
     const effectiveRenderer = pointOnly ? renderer : "single";
 
     if (style.markerEnabled) {
@@ -378,6 +397,7 @@ export function buildMapboxStyle(
     sourceKey,
     idBase,
     visibility,
+    pointOnly,
     warnings,
   );
   if (labelLayer) layers.push(labelLayer);
@@ -393,9 +413,19 @@ export function buildMapboxStyle(
     },
     layers,
   };
-  // Only reference a glyphs endpoint when a label layer needs one.
+  // Text labels need a glyphs (font) endpoint. Only reference one when a label
+  // layer is emitted, and flag the default third-party dependency so the user
+  // can point `glyphs` at their own font server for a production style.
   if (labelLayer) {
-    (style_ as { glyphs?: string }).glyphs = DEFAULT_GLYPHS_URL;
+    const glyphsUrl = options.glyphsUrl ?? DEFAULT_GLYPHS_URL;
+    (style_ as { glyphs?: string }).glyphs = glyphsUrl;
+    if (!options.glyphsUrl) {
+      warnings.push(
+        "Text labels reference MapLibre's public demo font server " +
+          "(demotiles.maplibre.org); replace the style's `glyphs` URL with " +
+          "your own font server for production use.",
+      );
+    }
   }
 
   return { style: style_, warnings };
