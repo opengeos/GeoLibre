@@ -59,6 +59,12 @@ export function PostgresSource() {
   // string bumps it, so an in-flight listing for the previous string cannot
   // repopulate the dropdown after its results stopped being relevant.
   const listRequestRef = useRef(0);
+  // Latest started editable-connect call. Only its own `finally` may clear
+  // isSubmitting: an older, superseded call settling late must not re-enable
+  // the controls mid-flight of a newer one. Separate from listRequestRef
+  // because input edits bump that token without starting a request (guarding
+  // on it in `finally` would leave isSubmitting stuck true).
+  const connectFlightRef = useRef(0);
 
   // Reset the (shell-owned) Martin connection when the source opens, matching
   // the original dialog: a running server is preserved across reopens only
@@ -75,6 +81,7 @@ export function PostgresSource() {
   // the features are loaded as GeoJSON so edits can be written back.
   const handleConnectEditable = async () => {
     const requestToken = ++listRequestRef.current;
+    const flightId = ++connectFlightRef.current;
     source.setError(null);
     setPostgisStatus(null);
     source.shell.setIsSubmitting(true);
@@ -114,14 +121,13 @@ export function PostgresSource() {
       // several geometry columns appears several times; keep the first entry
       // (the /postgis/read endpoint edits that table's first geometry column)
       // so the select has unique keys.
-      const tables = listed.filter(
-        (table, index) =>
-          listed.findIndex(
-            (candidate) =>
-              candidate.schema === table.schema &&
-              candidate.table === table.table,
-          ) === index,
-      );
+      const seen = new Set<string>();
+      const tables = listed.filter((table) => {
+        const key = postgisTableKey(table);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisConnection(connectionString);
       setPostgisTables(tables);
@@ -141,7 +147,9 @@ export function PostgresSource() {
         setPostgisStatus(null);
       }
     } finally {
-      source.shell.setIsSubmitting(false);
+      if (connectFlightRef.current === flightId) {
+        source.shell.setIsSubmitting(false);
+      }
     }
   };
 

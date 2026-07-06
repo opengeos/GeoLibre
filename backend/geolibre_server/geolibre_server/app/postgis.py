@@ -707,9 +707,11 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     # Compare as text so the (JSON-native) keys match uuid /
                     # numeric / date key columns; both sides render the same
                     # canonical form the /read endpoint serialized. Known edge:
-                    # a timestamp/timestamptz key's Python str() can differ
-                    # from Postgres's ::text rendering, so such exotic keys may
-                    # not match; integer/text/uuid/numeric/date keys all do.
+                    # timestamp/timestamptz and float/real keys' Python str()
+                    # can differ from Postgres's ::text rendering (e.g. '5.0'
+                    # vs '5'), so such exotic keys may not match and their
+                    # deletes no-op (reported in the deleted count);
+                    # integer/text/uuid/numeric/date keys all round-trip.
                     cur.execute(
                         sql.SQL(
                             "DELETE FROM {schema}.{table} WHERE {pk}::text = ANY(%s)"
