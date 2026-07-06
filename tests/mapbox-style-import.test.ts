@@ -69,6 +69,25 @@ function polygons(): FeatureCollection {
   };
 }
 
+function lines(): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { category: "a" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      },
+    ],
+  };
+}
+
 function lineAndPoint(): FeatureCollection {
   return {
     type: "FeatureCollection",
@@ -275,6 +294,23 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     assert.equal(result.extrusionHeightProperty, "levels");
     assert.equal(result.extrusionHeightScale, 3);
     assert.equal(result.extrusionBase, 5);
+  });
+
+  it("does not write a line-only renderer's stroke fallback into fillColor", () => {
+    const original = style({
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "category",
+      strokeColor: "#aa0000",
+      vectorStyleStops: [
+        { value: "a", color: "#ff0000" },
+        { value: "b", color: "#0000ff" },
+      ],
+    });
+    const { style: result } = roundTrip(original, lines());
+    assert.equal(result.vectorStyleMode, "categorized");
+    assert.equal(result.strokeColor, "#aa0000");
+    // The line fallback (strokeColor) must not leak into fillColor.
+    assert.equal(result.fillColor, DEFAULT_LAYER_STYLE.fillColor);
   });
 
   it("keeps the point fallback color on a mixed line+point categorized layer", () => {

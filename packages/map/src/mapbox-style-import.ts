@@ -652,7 +652,10 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     if (!colorClaimed && !circle) {
       const color = parseColorValue(paint["line-color"], warnings);
       if (color.mode && color.mode !== "single") {
-        applyColorRenderer(color, patch);
+        // Take the renderer (mode/property/stops/rules), but not the fallback
+        // color: line-color's baked fallback is strokeColor (already recovered
+        // above), whereas applyColorRenderer would route it into fillColor.
+        applyColorRenderer({ ...color, color: undefined }, patch);
         colorClaimed = true;
       }
     }
