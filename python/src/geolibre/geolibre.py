@@ -1356,6 +1356,7 @@ class Map(anywidget.AnyWidget):
         image_format: str = "image/png",
         transparent: bool = True,
         tile_size: int = 256,
+        version: str = "1.1.1",
         **style: Any,
     ) -> str:
         """Add a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -1368,6 +1369,9 @@ class Map(anywidget.AnyWidget):
             image_format: WMS image format (e.g. ``"image/png"``).
             transparent: Whether to request transparent tiles.
             tile_size: Tile size in pixels.
+            version: WMS protocol version, ``"1.1.1"`` (default) or
+                ``"1.3.0"``. Version 1.3.0 sends ``CRS`` instead of ``SRS``;
+                some servers accept only one version.
             **style: Style overrides.
 
         Returns:
@@ -1382,6 +1386,7 @@ class Map(anywidget.AnyWidget):
                 image_format=image_format,
                 transparent=transparent,
                 tile_size=tile_size,
+                version=version,
                 **style,
             )
         )

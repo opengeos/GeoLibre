@@ -251,7 +251,8 @@
       "selectLayer_one": "Select from {{count}} layer",
       "selectLayer_other": "Select from {{count}} layers",
       "noLayersFound": "No layers were found for this service.",
-      "retrieveError": "Could not retrieve layers from this service."
+      "retrieveError": "Could not retrieve layers from this service.",
+      "version": "WMS version"
     },
     "wfs": {
       "defaultName": "WFS Layer",

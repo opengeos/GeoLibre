@@ -72,7 +72,10 @@ import {
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
-import { createWmsTileUrl } from "../components/layout/add-data/helpers";
+import {
+  createWmsTileUrl,
+  normalizeWmsVersion,
+} from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
 import {
@@ -664,6 +667,7 @@ export function createAppAPI(
         styles,
         format,
         transparent,
+        version,
         ...tileOptions
       } = options;
       // TypeScript enforces these, but an untyped JS plugin can pass "" — an
@@ -682,6 +686,7 @@ export function createAppAPI(
       const resolvedStyles = styles ?? "";
       const resolvedFormat = format ?? "image/png";
       const resolvedTransparent = transparent ?? true;
+      const resolvedVersion = normalizeWmsVersion(version);
       const tileUrl = createWmsTileUrl({
         endpoint: url,
         layers,
@@ -689,6 +694,7 @@ export function createAppAPI(
         format: resolvedFormat,
         transparent: resolvedTransparent,
         tileSize,
+        version: resolvedVersion,
       });
       return store.addTileLayer(
         name,
@@ -703,6 +709,7 @@ export function createAppAPI(
             styles: resolvedStyles,
             format: resolvedFormat,
             transparent: resolvedTransparent,
+            version: resolvedVersion,
           },
           ...tileOptions,
         },
