@@ -129,6 +129,9 @@ describe("normalizeWmsVersion", () => {
     assert.equal(normalizeWmsVersion("1.3.0"), "1.3.0");
     assert.equal(normalizeWmsVersion("1.3"), "1.3.0");
     assert.equal(normalizeWmsVersion("garbage"), "1.1.1");
+    // An untyped JS plugin can pass a non-string; it must not throw.
+    assert.equal(normalizeWmsVersion(1.3), "1.1.1");
+    assert.equal(normalizeWmsVersion({}), "1.1.1");
   });
 });
 

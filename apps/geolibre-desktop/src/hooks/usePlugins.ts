@@ -689,8 +689,12 @@ export function createAppAPI(
       const resolvedVersion = normalizeWmsVersion(version);
       // Mirror setMapProjection's unrecognized-value warning so a typo'd
       // version from an untyped JS plugin is visible instead of silently
-      // coerced.
-      if (version !== undefined && version !== resolvedVersion) {
+      // coerced. Valid shorthand in a recognized 1.x family (e.g. "1.3") is
+      // not warned about — it normalizes cleanly.
+      if (
+        version !== undefined &&
+        (typeof version !== "string" || !/^1\.\d/.test(version.trim()))
+      ) {
         console.warn(
           `[GeoLibre] addWmsLayer: unsupported WMS version "${String(version)}"; using "${resolvedVersion}".`,
         );

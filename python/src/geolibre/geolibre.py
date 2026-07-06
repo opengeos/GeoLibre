@@ -1356,7 +1356,7 @@ class Map(anywidget.AnyWidget):
         image_format: str = "image/png",
         transparent: bool = True,
         tile_size: int = 256,
-        version: str = "1.1.1",
+        version: str | None = "1.1.1",
         **style: Any,
     ) -> str:
         """Add a WMS layer rendered as tiled raster (a WMS GetMap request).

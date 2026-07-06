@@ -69,11 +69,14 @@ export function appendQuery(
 
 /**
  * Normalizes a WMS version to one of the two protocol variants the GetMap
- * builder emits: anything in the 1.3 line is "1.3.0", everything else (or an
- * unset value) falls back to "1.1.1".
+ * builder emits: anything in the 1.3 line is "1.3.0", everything else (an
+ * unset value, or a non-string from an untyped JS plugin) falls back to
+ * "1.1.1".
  */
-export function normalizeWmsVersion(version: string | null | undefined): string {
-  return version?.trim().startsWith("1.3") ? "1.3.0" : "1.1.1";
+export function normalizeWmsVersion(version: unknown): string {
+  return typeof version === "string" && version.trim().startsWith("1.3")
+    ? "1.3.0"
+    : "1.1.1";
 }
 
 export function createWmsTileUrl(options: {

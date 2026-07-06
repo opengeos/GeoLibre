@@ -51,8 +51,9 @@ export function WmsSource() {
   );
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
   const [wmsVersion, setWmsVersion] = useState(wmsFormCache?.version ?? "1.1.1");
-  // True once the user picks a version in the selector; auto-detection (from a
-  // pasted URL or the capabilities response) must not override that choice.
+  // True while the version has an explicit source — the selector, a pasted
+  // URL's VERSION parameter, or a saved service entry. Capabilities
+  // auto-detection only fills the version in when no explicit source exists.
   // Mirrored in a ref so the async retrieve handler reads the value current at
   // response time, not the one captured when the button was clicked.
   const [versionTouched, setVersionTouched] = useState(
@@ -184,17 +185,12 @@ export function WmsSource() {
     // A saved service predating the version field falls back to the endpoint's
     // own VERSION parameter (if any) rather than silently resetting to 1.1.1.
     // Normalize whatever was stored so a hand-edited value (e.g. "1.3") still
-    // matches the selector's option pair.
-    setWmsVersion(
-      normalizeWmsVersion(
-        serviceFieldString(
-          fields,
-          "version",
-          wmsVersionFromEndpoint(endpoint) ?? "1.1.1",
-        ),
-      ),
-    );
-    markVersionTouched(false);
+    // matches the selector's option pair. Either source is an explicit prior
+    // choice, so capabilities auto-detection must not override it later.
+    const savedVersion = serviceFieldString(fields, "version");
+    const detectedVersion = wmsVersionFromEndpoint(endpoint);
+    setWmsVersion(normalizeWmsVersion(savedVersion || detectedVersion || "1.1.1"));
+    markVersionTouched(Boolean(savedVersion || detectedVersion));
     // The new endpoint's layers must be re-retrieved, so drop the old list and
     // cancel any retrieval still in flight for the previous endpoint.
     cancelRetrieve();
@@ -276,20 +272,21 @@ export function WmsSource() {
                 setWmsEndpoint(value);
                 // A pasted URL often carries the service's VERSION (stripped
                 // before the GetMap is built); adopt it so a 1.3.0-only server
-                // works without a manual version change. Only act when the
-                // detected version actually changed, and only drop a manual
-                // version choice when the service itself (origin + path)
-                // changed — fixing an unrelated typo in the same URL must not
-                // clobber the user's selection.
+                // works without a manual version change, and treat it as an
+                // explicit source that capabilities auto-detection must not
+                // override. Only act when the detected version actually
+                // changed, and only drop the explicit choice when the service
+                // itself (origin + path) changed — fixing an unrelated typo in
+                // the same URL must not clobber the selection.
                 const detected = wmsVersionFromEndpoint(value);
                 if (detected && detected !== wmsVersionFromEndpoint(previous)) {
                   setWmsVersion(detected);
-                  markVersionTouched(false);
+                  markVersionTouched(true);
                 } else if (
                   value.trim().split(/[?#]/)[0] !==
                   previous.trim().split(/[?#]/)[0]
                 ) {
-                  markVersionTouched(false);
+                  markVersionTouched(detected != null);
                 }
                 // Layers belong to the previous endpoint; clear them (and cancel
                 // any in-flight retrieval) so the list never reflects a

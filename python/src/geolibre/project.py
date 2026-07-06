@@ -376,7 +376,7 @@ def wms_layer(
     image_format: str = "image/png",
     transparent: bool = True,
     tile_size: int = 256,
-    version: str = "1.1.1",
+    version: str | None = "1.1.1",
     **style: Any,
 ) -> dict[str, Any]:
     """Build a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -396,7 +396,7 @@ def wms_layer(
         version: WMS protocol version, ``"1.1.1"`` (default) or ``"1.3.0"``.
             Version 1.3.0 sends ``CRS`` instead of ``SRS``; some servers accept
             only one version. EPSG:3857 keeps its axis order in both, so the
-            BBOX template is unchanged.
+            BBOX template is unchanged. None falls back to ``"1.1.1"``.
         **style: Style overrides merged into the default layer style.
 
     Returns:
