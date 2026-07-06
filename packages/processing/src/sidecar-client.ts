@@ -739,6 +739,144 @@ export async function writeVectorToSource(
   return (await res.json()) as WriteVectorToSourceResult;
 }
 
+// --- PostGIS editable layers (issue #1070 phase 2) --------------------------
+
+export interface PostgisStatus {
+  available: boolean;
+  message: string;
+}
+
+export interface PostgisTableInfo {
+  schema: string;
+  table: string;
+  geometry_column: string;
+  srid: number;
+  geometry_type: string;
+  /** Single-column primary key, or null when the table has none (read-only). */
+  primary_key: string | null;
+}
+
+export interface ReadPostgisTableRequest {
+  /** libpq connection string (URI or keyword/value form). */
+  connection: string;
+  schema_name?: string;
+  table: string;
+}
+
+export interface ReadPostgisTableResult {
+  /** The table's features as a WGS84 FeatureCollection (pk kept as feature.id). */
+  geojson: FeatureCollection;
+  schema: string;
+  table: string;
+  geometry_column: string;
+  srid: number;
+  primary_key: string | null;
+  feature_count: number;
+}
+
+export interface WritePostgisTableRequest {
+  connection: string;
+  schema_name?: string;
+  table: string;
+  /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
+  geojson: FeatureCollection;
+}
+
+export interface WritePostgisTableResult {
+  schema: string;
+  table: string;
+  feature_count: number;
+  inserted: number;
+  updated: number;
+  deleted: number;
+  messages: string[];
+}
+
+/** Return PostGIS runtime (psycopg) availability in the sidecar. */
+export async function fetchPostgisStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<PostgisStatus> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/postgis/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not check PostGIS runtime"));
+  }
+  return (await res.json()) as PostgisStatus;
+}
+
+/** List the spatial tables of a PostGIS database with write-back readiness. */
+export async function listPostgisTables(
+  connection: string,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<PostgisTableInfo[]> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/postgis/tables`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connection }),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not list PostGIS tables"));
+  }
+  const payload = (await res.json()) as { tables: PostgisTableInfo[] };
+  return payload.tables;
+}
+
+/** Read one PostGIS table as an editable WGS84 GeoJSON FeatureCollection. */
+export async function readPostgisTable(
+  request: ReadPostgisTableRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ReadPostgisTableResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/postgis/read`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not read PostGIS table"));
+  }
+  return (await res.json()) as ReadPostgisTableResult;
+}
+
+/**
+ * Commit edited features back to their source PostGIS table via the sidecar.
+ *
+ * The sidecar diffs the collection against the table by primary key and issues
+ * parameterized INSERT/UPDATE/DELETE statements in one transaction.
+ */
+export async function writePostgisTable(
+  request: WritePostgisTableRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<WritePostgisTableResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/postgis/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not save edits to PostGIS"));
+  }
+  return (await res.json()) as WritePostgisTableResult;
+}
+
 // --- AI segmentation (SamGeo / SAM3) ---------------------------------------
 
 export interface MlStatus {

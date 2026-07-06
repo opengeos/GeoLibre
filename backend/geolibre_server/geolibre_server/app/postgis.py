@@ -1,0 +1,575 @@
+"""PostGIS read/write sidecar endpoints (psycopg).
+
+These endpoints back the second phase of database write-back (issue #1070):
+loading a PostGIS table as an editable WGS84 GeoJSON layer and committing the
+edits back to the source table with per-row parameterized ``INSERT`` /
+``UPDATE`` / ``DELETE`` statements keyed on the table's primary key, all inside
+a single transaction.
+
+psycopg (v3) is an optional dependency (the ``postgis`` extra): when it is not
+installed, ``/postgis/status`` reports ``available: false`` and the desktop app
+hides the editable-layer path, leaving the read-only Martin vector-tile flow.
+
+Security posture:
+
+- All identifiers (schema, table, columns) are resolved against the database
+  catalogs and quoted with ``psycopg.sql.Identifier``; all values are bound as
+  query parameters. Nothing from the request body is interpolated into SQL.
+- Connection strings are used only for the duration of one request and are
+  never logged or echoed back; error details are scrubbed of anything that
+  looks like a password before they leave the sidecar.
+- Writes are transactional: any failure rolls the whole commit back.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import re
+from typing import Any, Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from geolibre_server import vector_ops
+
+router = APIRouter(prefix="/postgis", tags=["postgis"])
+logger = logging.getLogger(__name__)
+
+# Statement timeout applied to every sidecar-issued session so a bad query or
+# an unresponsive server cannot pin a FastAPI worker thread indefinitely.
+_STATEMENT_TIMEOUT_MS = 60_000
+
+_PASSWORD_URL_RE = re.compile(r"(://[^:/\s@]+:)[^@\s]+@")
+_PASSWORD_KV_RE = re.compile(r"(password\s*=\s*)('[^']*'|[^\s]+)", re.IGNORECASE)
+
+
+def psycopg_import_error() -> Optional[str]:
+    """Return the psycopg import error message, or None if it imports cleanly.
+
+    Mirrors :func:`geolibre_server.vector_ops.geopandas_import_error` so callers
+    can log *why* the PostGIS runtime is unavailable.
+    """
+    try:
+        import psycopg  # noqa: F401
+    except Exception as exc:  # noqa: BLE001 - report any import failure
+        return str(exc)
+    return None
+
+
+def _import_psycopg() -> Any:
+    import psycopg
+    import psycopg.types.json  # noqa: F401 - make psycopg.types.json.Json reachable
+
+    return psycopg
+
+
+def _sanitize_error(message: str) -> str:
+    """Scrub password material from an error message before returning it.
+
+    psycopg errors normally do not include credentials, but a malformed
+    connection string can be echoed back verbatim by the URL parser, so every
+    outbound detail is scrubbed of ``user:password@`` URL segments and
+    ``password=...`` keyword pairs.
+    """
+    scrubbed = _PASSWORD_URL_RE.sub(r"\1****@", message)
+    return _PASSWORD_KV_RE.sub(r"\1****", scrubbed)
+
+
+class PostgisTablesRequest(BaseModel):
+    """Request body for listing the editable spatial tables of a database."""
+
+    connection: str
+
+
+class PostgisReadRequest(BaseModel):
+    """Request body for reading one PostGIS table as WGS84 GeoJSON."""
+
+    connection: str
+    schema_name: str = "public"
+    table: str
+
+
+class PostgisWriteRequest(BaseModel):
+    """Request body for committing edited features back to a PostGIS table."""
+
+    connection: str
+    schema_name: str = "public"
+    table: str
+    geojson: dict
+
+
+def _connect(connection: str) -> Any:
+    """Open a psycopg connection with a bounded statement timeout.
+
+    Args:
+        connection: A libpq connection string (URI or keyword/value form).
+
+    Returns:
+        An open psycopg connection.
+
+    Raises:
+        HTTPException: The connection string is empty or the connection fails.
+    """
+    if not connection or not connection.strip():
+        raise HTTPException(status_code=400, detail="connection is required")
+    psycopg = _import_psycopg()
+    try:
+        return psycopg.connect(
+            connection.strip(),
+            connect_timeout=10,
+            options=f"-c statement_timeout={_STATEMENT_TIMEOUT_MS}",
+        )
+    except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not connect to PostgreSQL: {_sanitize_error(str(exc))}",
+        ) from exc
+
+
+def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
+    """Resolve geometry column, SRID, primary key and columns from the catalogs.
+
+    The client only names the schema and table; every identifier used in the
+    generated SQL comes from the database's own catalogs, so a request cannot
+    smuggle SQL through column names.
+
+    Args:
+        conn: An open psycopg connection.
+        schema: Schema name as stored in ``geometry_columns``.
+        table: Table name as stored in ``geometry_columns``.
+
+    Returns:
+        A dict with ``geometry_column``, ``srid``, ``primary_key`` (None when
+        the table has no usable single-column key), ``pk_is_generated`` and
+        ``columns`` (non-geometry column names, in table order).
+
+    Raises:
+        HTTPException: The table is not a registered spatial table.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT f_geometry_column, srid
+            FROM geometry_columns
+            WHERE f_table_schema = %s AND f_table_name = %s
+            ORDER BY f_geometry_column
+            """,
+            (schema, table),
+        )
+        geom_rows = cur.fetchall()
+        if not geom_rows:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Spatial table not found: {schema}.{table}",
+            )
+        geometry_column, srid = geom_rows[0][0], int(geom_rows[0][1] or 0)
+
+        # Single-column primary key, if any. Composite keys are unsupported for
+        # write-back (reported as no key), matching the issue's MVP scope.
+        cur.execute(
+            """
+            SELECT a.attname,
+                   (a.attidentity <> '' OR a.atthasdef) AS has_default
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indrelid
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
+            WHERE i.indisprimary AND n.nspname = %s AND c.relname = %s
+            """,
+            (schema, table),
+        )
+        pk_rows = cur.fetchall()
+        primary_key = pk_rows[0][0] if len(pk_rows) == 1 else None
+        pk_is_generated = bool(pk_rows[0][1]) if len(pk_rows) == 1 else False
+
+        cur.execute(
+            """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+            """,
+            (schema, table),
+        )
+        columns = [row[0] for row in cur.fetchall() if row[0] != geometry_column]
+
+    return {
+        "geometry_column": geometry_column,
+        "srid": srid,
+        "primary_key": primary_key,
+        "pk_is_generated": pk_is_generated,
+        "columns": columns,
+    }
+
+
+@router.get("/status")
+def postgis_status() -> dict[str, Any]:
+    """Return PostGIS runtime (psycopg) availability."""
+    import_error = psycopg_import_error()
+    if import_error is None:
+        return {
+            "available": True,
+            "message": "PostGIS runtime (psycopg) is available.",
+        }
+    logger.info("psycopg runtime unavailable: %s", import_error)
+    return {
+        "available": False,
+        "message": "PostGIS runtime (psycopg) is not installed.",
+    }
+
+
+def _require_psycopg() -> None:
+    import_error = psycopg_import_error()
+    if import_error is not None:
+        logger.info("psycopg runtime unavailable: %s", import_error)
+        raise HTTPException(
+            status_code=503,
+            detail="psycopg is not installed in the sidecar.",
+        )
+
+
+@router.post("/tables")
+def postgis_tables(request: PostgisTablesRequest) -> dict[str, Any]:
+    """List the spatial tables of a database with their write-back readiness.
+
+    A plain ``def`` (like the vector endpoints): psycopg is synchronous, so
+    FastAPI dispatches this to its thread pool.
+    """
+    _require_psycopg()
+    with _connect(request.connection) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT f_table_schema, f_table_name, f_geometry_column,
+                       srid, type
+                FROM geometry_columns
+                ORDER BY f_table_schema, f_table_name, f_geometry_column
+                """
+            )
+            rows = cur.fetchall()
+            cur.execute(
+                """
+                SELECT n.nspname, c.relname, min(a.attname), count(*)
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(i.indkey)
+                WHERE i.indisprimary
+                GROUP BY n.nspname, c.relname
+                """
+            )
+            pk_by_table = {
+                (schema, table): pk if count == 1 else None
+                for schema, table, pk, count in cur.fetchall()
+            }
+
+    tables = [
+        {
+            "schema": schema,
+            "table": table,
+            "geometry_column": geometry_column,
+            "srid": int(srid or 0),
+            "geometry_type": geometry_type,
+            "primary_key": pk_by_table.get((schema, table)),
+        }
+        for schema, table, geometry_column, srid, geometry_type in rows
+    ]
+    return {"tables": tables}
+
+
+def _json_safe(value: Any) -> Any:
+    """Convert a database cell to a JSON-serializable value."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (list, dict)):
+        return value
+    if isinstance(value, (bytes, memoryview)):
+        return bytes(value).hex()
+    # datetime/date/time/Decimal/UUID and anything else stringify cleanly.
+    return str(value)
+
+
+@router.post("/read")
+def postgis_read(request: PostgisReadRequest) -> dict[str, Any]:
+    """Read a PostGIS table as a WGS84 GeoJSON FeatureCollection.
+
+    Geometries are transformed to EPSG:4326 server-side (the app stores and
+    edits every vector layer as WGS84 GeoJSON). The primary-key value is kept
+    both as ``feature.id`` and as a property so edits round-trip through the
+    write endpoint keyed on it.
+    """
+    _require_psycopg()
+    psycopg = _import_psycopg()
+    sql = psycopg.sql
+
+    with _connect(request.connection) as conn:
+        info = _table_info(conn, request.schema_name, request.table)
+        geom = sql.Identifier(info["geometry_column"])
+        # A zero/unknown SRID cannot be transformed; serve the coordinates as
+        # stored (the common convention for srid 0 data is lon/lat already).
+        geom_expr = (
+            sql.SQL("ST_AsGeoJSON(ST_Transform({geom}, 4326))").format(geom=geom)
+            if info["srid"] not in (0, 4326)
+            else sql.SQL("ST_AsGeoJSON({geom})").format(geom=geom)
+        )
+        column_list = sql.SQL(", ").join(
+            [geom_expr]
+            + [sql.Identifier(column) for column in info["columns"]]
+        )
+        query = sql.SQL("SELECT {columns} FROM {schema}.{table} LIMIT %s").format(
+            columns=column_list,
+            schema=sql.Identifier(request.schema_name),
+            table=sql.Identifier(request.table),
+        )
+        with conn.cursor() as cur:
+            # Over-fetch by one row to distinguish "exactly at the cap" from
+            # "the table is larger than the cap".
+            cur.execute(query, (vector_ops.MAX_FEATURES + 1,))
+            rows = cur.fetchall()
+
+    if len(rows) > vector_ops.MAX_FEATURES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Table exceeds the {vector_ops.MAX_FEATURES}-feature limit for "
+                "editable layers"
+            ),
+        )
+
+    pk = info["primary_key"]
+    features = []
+    for row in rows:
+        properties = {
+            column: _json_safe(value)
+            for column, value in zip(info["columns"], row[1:])
+        }
+        feature: dict[str, Any] = {
+            "type": "Feature",
+            "geometry": json.loads(row[0]) if row[0] else None,
+            "properties": properties,
+        }
+        if pk is not None and properties.get(pk) is not None:
+            feature["id"] = properties[pk]
+        features.append(feature)
+
+    return {
+        "geojson": {"type": "FeatureCollection", "features": features},
+        "schema": request.schema_name,
+        "table": request.table,
+        "geometry_column": info["geometry_column"],
+        "srid": info["srid"],
+        "primary_key": pk,
+        "feature_count": len(features),
+    }
+
+
+def _geometry_param(
+    sql: Any, srid: int
+) -> Any:
+    """Build the SQL expression that binds a GeoJSON geometry parameter.
+
+    The bound value is GeoJSON text (WGS84). For a projected table the geometry
+    is transformed back into the stored SRID so the source keeps its CRS,
+    mirroring the GeoPackage write-back behavior.
+    """
+    if srid in (0, 4326):
+        # ST_GeomFromGeoJSON yields SRID 4326; an srid-0 column needs the
+        # geometry re-stamped as "unknown" or the typmod check rejects it.
+        return sql.SQL("ST_SetSRID(ST_GeomFromGeoJSON(%s), {srid})").format(
+            srid=sql.Literal(srid)
+        )
+    return sql.SQL(
+        "ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326), {srid})"
+    ).format(srid=sql.Literal(srid))
+
+
+@router.post("/write")
+def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
+    """Commit edited features back to the source PostGIS table.
+
+    Diffs the incoming FeatureCollection against the table by primary key and
+    issues parameterized statements in one transaction:
+
+    - features whose primary-key property matches an existing row → ``UPDATE``
+      (geometry plus every property that maps to a real column);
+    - features without a primary-key value → ``INSERT`` (the key comes from the
+      column's identity/default);
+    - rows whose key is absent from the payload → ``DELETE``.
+
+    Any failure rolls the entire commit back. Properties that do not match a
+    table column are skipped and reported in ``messages`` (adding columns is a
+    schema change the editor does not perform).
+    """
+    _require_psycopg()
+    psycopg = _import_psycopg()
+    sql = psycopg.sql
+
+    features = request.geojson.get("features") if request.geojson else None
+    if not isinstance(features, list) or not features:
+        raise HTTPException(status_code=400, detail="No features to write.")
+    if len(features) > vector_ops.MAX_FEATURES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Layer exceeds the {vector_ops.MAX_FEATURES}-feature limit",
+        )
+
+    with _connect(request.connection) as conn:
+        info = _table_info(conn, request.schema_name, request.table)
+        pk = info["primary_key"]
+        if pk is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{request.schema_name}.{request.table} has no single-column "
+                    "primary key; write-back requires one."
+                ),
+            )
+
+        writable = [column for column in info["columns"] if column != pk]
+        writable_set = set(writable)
+        schema_ident = sql.Identifier(request.schema_name)
+        table_ident = sql.Identifier(request.table)
+        geom_ident = sql.Identifier(info["geometry_column"])
+        geom_param = _geometry_param(sql, info["srid"])
+
+        skipped: set[str] = set()
+        inserted = updated = 0
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql.SQL("SELECT {pk} FROM {schema}.{table}").format(
+                        pk=sql.Identifier(pk),
+                        schema=schema_ident,
+                        table=table_ident,
+                    )
+                )
+                existing_keys = {row[0] for row in cur.fetchall()}
+
+                kept_keys: set[Any] = set()
+                for feature in features:
+                    properties = feature.get("properties") or {}
+                    skipped.update(
+                        key for key in properties if key not in writable_set and key != pk
+                    )
+                    columns = [c for c in writable if c in properties]
+                    values = [
+                        psycopg.types.json.Json(properties[c])
+                        if isinstance(properties[c], (dict, list))
+                        else properties[c]
+                        for c in columns
+                    ]
+                    geometry = feature.get("geometry")
+                    geometry_value = json.dumps(geometry) if geometry else None
+
+                    key = properties.get(pk, feature.get("id"))
+                    if key is not None and key in existing_keys:
+                        kept_keys.add(key)
+                        assignments = [
+                            sql.SQL("{col} = ").format(col=geom_ident)
+                            + (geom_param if geometry_value is not None else sql.SQL("NULL"))
+                        ]
+                        params: list[Any] = (
+                            [geometry_value] if geometry_value is not None else []
+                        )
+                        for column, value in zip(columns, values):
+                            assignments.append(
+                                sql.SQL("{col} = %s").format(col=sql.Identifier(column))
+                            )
+                            params.append(value)
+                        params.append(key)
+                        cur.execute(
+                            sql.SQL(
+                                "UPDATE {schema}.{table} SET {assignments} WHERE {pk} = %s"
+                            ).format(
+                                schema=schema_ident,
+                                table=table_ident,
+                                assignments=sql.SQL(", ").join(assignments),
+                                pk=sql.Identifier(pk),
+                            ),
+                            params,
+                        )
+                        updated += cur.rowcount
+                    else:
+                        # New feature: the key column is left to its identity /
+                        # default. A non-null key that is not in the table is
+                        # inserted explicitly so client-assigned keys survive.
+                        insert_columns = list(columns)
+                        insert_values = list(values)
+                        if key is not None:
+                            insert_columns.append(pk)
+                            insert_values.append(key)
+                            kept_keys.add(key)
+                        column_idents = [geom_ident] + [
+                            sql.Identifier(column) for column in insert_columns
+                        ]
+                        value_exprs = [
+                            geom_param if geometry_value is not None else sql.SQL("NULL")
+                        ] + [sql.SQL("%s")] * len(insert_values)
+                        params = (
+                            [geometry_value] if geometry_value is not None else []
+                        ) + insert_values
+                        cur.execute(
+                            sql.SQL(
+                                "INSERT INTO {schema}.{table} ({columns}) VALUES ({values})"
+                            ).format(
+                                schema=schema_ident,
+                                table=table_ident,
+                                columns=sql.SQL(", ").join(column_idents),
+                                values=sql.SQL(", ").join(value_exprs),
+                            ),
+                            params,
+                        )
+                        inserted += cur.rowcount
+
+                to_delete = sorted(
+                    existing_keys - kept_keys, key=lambda value: str(value)
+                )
+                deleted = 0
+                if to_delete:
+                    cur.execute(
+                        sql.SQL(
+                            "DELETE FROM {schema}.{table} WHERE {pk} = ANY(%s)"
+                        ).format(
+                            schema=schema_ident,
+                            table=table_ident,
+                            pk=sql.Identifier(pk),
+                        ),
+                        (to_delete,),
+                    )
+                    deleted = cur.rowcount
+            conn.commit()
+        except HTTPException:
+            conn.rollback()
+            raise
+        except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
+            conn.rollback()
+            logger.exception(
+                "PostGIS write-back to %s.%s failed",
+                request.schema_name,
+                request.table,
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Write-back failed: {_sanitize_error(str(exc))}",
+            ) from exc
+
+    messages = [
+        f"Saved {len(features)} feature(s) to {request.schema_name}.{request.table} "
+        f"({inserted} inserted, {updated} updated, {deleted} deleted)"
+    ]
+    if skipped:
+        messages.append(
+            "Skipped fields without a matching column: "
+            + ", ".join(sorted(skipped))
+        )
+
+    return {
+        "schema": request.schema_name,
+        "table": request.table,
+        "feature_count": len(features),
+        "inserted": inserted,
+        "updated": updated,
+        "deleted": deleted,
+        "messages": messages,
+    }
