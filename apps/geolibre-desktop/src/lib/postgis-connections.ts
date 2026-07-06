@@ -3,7 +3,7 @@ import type { FeatureCollection } from "geojson";
 import {
   readSavedPostgresConnections,
   savedPostgresConnectionLabel,
-} from "../components/layout/add-data/helpers";
+} from "./saved-postgres-connections";
 
 /**
  * In-memory registry mapping an editable PostGIS layer to the connection

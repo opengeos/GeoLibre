@@ -1039,9 +1039,15 @@ export function LayerPanel({
             table,
           });
           setPostgisBaselineKeys(layer.id, postgisFeatureKeys(fresh.geojson));
+          // Merge into the store's current metadata, not the click-time
+          // closure: the write/re-read round trip is slow enough for other
+          // updates (auto-refresh, time-slider binding) to land in between.
+          const currentMetadata =
+            useAppStore.getState().layers.find((l) => l.id === layer.id)
+              ?.metadata ?? layer.metadata;
           updateLayer(layer.id, {
             geojson: fresh.geojson,
-            metadata: { ...layer.metadata, featureCount: fresh.feature_count },
+            metadata: { ...currentMetadata, featureCount: fresh.feature_count },
           });
           message = t("layers.saveEditsPostgisSuccess", {
             table: `${schema}.${table}`,

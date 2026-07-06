@@ -628,10 +628,14 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
             raise
         except Exception as exc:  # noqa: BLE001 - surface a stable, scrubbed error
             conn.rollback()
-            logger.exception(
-                "PostGIS write-back to %s.%s failed",
+            # No logger.exception here: a traceback could embed the raw DSN
+            # (e.g. a connection failure mid-commit), and this module promises
+            # credentials never reach the logs. Log the scrubbed message only.
+            logger.error(
+                "PostGIS write-back to %s.%s failed: %s",
                 request.schema_name,
                 request.table,
+                _sanitize_error(str(exc)),
             )
             raise HTTPException(
                 status_code=400,
