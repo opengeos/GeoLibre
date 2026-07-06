@@ -22,6 +22,24 @@ npm run msix:build
 
 ## Build for the Microsoft Store
 
+> [!IMPORTANT]
+> The Store rejects apps that update themselves outside the Store (policy
+> 10.2.5). The in-app "Check for updates" flow (Help menu, command palette, About
+> dialog, and the automated startup check) is compiled **out** of the frontend
+> only when the `GEOLIBRE_STORE_BUILD=1` environment variable is set during the
+> Tauri build. `build-msix.ps1` repackages the *already-built* binary, so this
+> variable must be exported before `npm run tauri:build`, not passed to this
+> script. The [`msix-store.yml`](../../.github/workflows/msix-store.yml) workflow
+> sets it automatically; when building a Store package locally, set it yourself:
+>
+> ```powershell
+> $env:GEOLIBRE_STORE_BUILD = "1"
+> npm run tauri:build -- --no-sign
+> ```
+>
+> Leave it unset for the winget / sideload MSIX (`release.yml`) — those keep the
+> updater and are never submitted to the Store.
+
 The Store validates the package identity against the values reserved for the app
 in Partner Center (**Product management -> Product Identity**). Pass them as
 parameters; the Store-required fields differ from the defaults:

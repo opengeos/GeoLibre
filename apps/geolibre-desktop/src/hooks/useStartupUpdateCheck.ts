@@ -7,6 +7,7 @@ import {
 import {
   APP_VERSION,
   fetchLatestRelease,
+  IS_STORE_BUILD,
   meetsNotificationLevel,
   releaseSeverity,
   UpdateCheckError,
@@ -89,6 +90,10 @@ export function useStartupUpdateCheck() {
     // Automated startup checks are a desktop-only feature; the web build
     // refreshes to the latest version on reload and needs no prompt.
     if (!isTauri()) return;
+
+    // The Microsoft Store build must update only through the Store (policy
+    // 10.2.5), so it never reaches out to GitHub to check for a newer release.
+    if (IS_STORE_BUILD) return;
 
     const settings =
       useDesktopSettingsStore.getState().desktopSettings.updates;

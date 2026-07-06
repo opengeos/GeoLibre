@@ -90,6 +90,7 @@ import { KeyboardShortcutsDialog } from "../command/KeyboardShortcutsDialog";
 import { useGlobalShortcuts } from "../../hooks/useGlobalShortcuts";
 import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
+import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
 import { AboutDialog } from "./AboutDialog";
@@ -820,16 +821,22 @@ export function TopToolbar({
       icon: MessageSquare,
       run: () => void openExternalLink(FEEDBACK_URL),
     },
-    {
-      id: "help.updates",
-      title: t("toolbar.command.checkForUpdates"),
-      group: t("toolbar.commandGroup.help"),
-      icon: RefreshCw,
-      run: () => {
-        setAboutOpen(true);
-        setCheckForUpdatesRequest((value) => value + 1);
-      },
-    },
+    // The Microsoft Store build omits the "Check for updates" command so the app
+    // updates only through the Store (policy 10.2.5).
+    ...(IS_STORE_BUILD
+      ? []
+      : [
+          {
+            id: "help.updates",
+            title: t("toolbar.command.checkForUpdates"),
+            group: t("toolbar.commandGroup.help"),
+            icon: RefreshCw,
+            run: () => {
+              setAboutOpen(true);
+              setCheckForUpdatesRequest((value) => value + 1);
+            },
+          },
+        ]),
     {
       id: "help.about",
       title: t("toolbar.command.about"),

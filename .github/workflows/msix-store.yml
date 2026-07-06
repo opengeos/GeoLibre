@@ -36,6 +36,10 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # Strip the in-app "Check for updates" flow from this Store-only build
+          # so the package updates solely through the Store (Microsoft policy
+          # 10.2.5). Set only here — the release.yml installers keep the updater.
+          GEOLIBRE_STORE_BUILD: "1"
         run: npm run tauri:build -- --no-sign
 
       - name: Build MSIX package

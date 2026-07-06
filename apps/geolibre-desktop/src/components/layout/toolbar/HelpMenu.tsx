@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
+import { IS_STORE_BUILD } from "../../../lib/updates";
 import { isMenuItemVisible } from "../../../lib/ui-profile";
 import {
   FEEDBACK_URL,
@@ -51,7 +52,12 @@ export function HelpMenu({
 }: HelpMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
-  const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // The Microsoft Store build strips the "Check for updates" item entirely so the
+  // app only updates through the Store (policy 10.2.5); other builds keep it.
+  const show = (id: string) =>
+    id === "help.checkForUpdates" && IS_STORE_BUILD
+      ? false
+      : isMenuItemVisible(uiProfile, id);
 
   return (
     <DropdownMenu>

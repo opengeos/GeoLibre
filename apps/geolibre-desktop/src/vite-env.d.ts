@@ -3,6 +3,11 @@
 
 declare const __GEOLIBRE_VERSION__: string;
 
+// True only in the Microsoft Store MSIX build (GEOLIBRE_STORE_BUILD=1), where the
+// in-app update checker is removed so the app updates solely through the Store
+// (Microsoft policy 10.2.5). false in every other build. See vite.config.ts.
+declare const __GEOLIBRE_STORE_BUILD__: boolean;
+
 // jsDelivr URLs for the PGlite engine and its PostGIS extension, injected by
 // vite.config.ts. Only the embed (Jupyter wheel) build reads them, from
 // pglite-loader.cdn.ts; web/desktop builds bundle PGlite and never reference

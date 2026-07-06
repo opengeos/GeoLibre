@@ -85,7 +85,7 @@ import {
   normalizeHexColor,
   type ThemeScheme,
 } from "../../lib/theme-schemes";
-import type { UpdateNotificationLevel } from "../../lib/updates";
+import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -410,6 +410,9 @@ export function SettingsDialog({
     // Automated update checks run in the desktop build only, so the section is
     // hidden on the web where its controls would be inert.
     if (id === "updates" && !isTauri()) return false;
+    // The Microsoft Store build has no in-app update flow to configure (policy
+    // 10.2.5), so its settings section is dropped entirely.
+    if (id === "updates" && IS_STORE_BUILD) return false;
     const gate = SECTION_GATE[id];
     return gate ? showSettingsItem(gate) : true;
   };

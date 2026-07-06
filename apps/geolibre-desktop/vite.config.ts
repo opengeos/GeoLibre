@@ -88,6 +88,15 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
 
+// Microsoft Store MSIX build. Strips the in-app "Check for updates" flow (Help
+// menu, command palette, About dialog, and the automated startup check) so the
+// Store package updates only through the Store — Microsoft policy 10.2.5 rejects
+// a Store app that updates itself outside the Store. Set ONLY by the dedicated
+// Store build path (.github/workflows/msix-store.yml); every other build (the
+// GitHub .exe/winget installer, the sideload MSIX, portable, macOS, Linux, web,
+// and the Jupyter embed) leaves it unset, so their update checker is untouched.
+const IS_STORE_BUILD = process.env.GEOLIBRE_STORE_BUILD === "1";
+
 const pgliteCdnRequire = createRequire(import.meta.url);
 // The ESM entry of a package's manifest. Prefer the `module` field and the
 // `import` condition of `exports` (both point at the ESM build); never fall back
@@ -821,6 +830,7 @@ export default defineConfig({
   clearScreen: false,
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
+    __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
