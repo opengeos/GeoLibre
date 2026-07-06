@@ -493,6 +493,52 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.ok(result.warnings.some((w) => /circle radius/.test(w)));
   });
 
+  it("unwraps a simplestyle coalesce wrapper on fill and outline colors", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          paint: {
+            "fill-color": ["coalesce", ["get", "fill"], "#abcdef"],
+            "fill-outline-color": ["coalesce", ["get", "stroke"], "#123456"],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.fillColor, "#abcdef");
+    assert.equal(result.style.strokeColor, "#123456");
+  });
+
+  it("recovers fill opacity from a point layer's circle-opacity", () => {
+    const { style: result } = roundTrip(style({ fillOpacity: 0.5 }), points());
+    assert.equal(result.fillOpacity, 0.5);
+  });
+
+  it("normalizes an inverted zoom range", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          minzoom: 12,
+          maxzoom: 4,
+          paint: { "fill-color": "#ffffff" },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.minZoom, 4);
+    assert.equal(result.style.maxZoom, 12);
+  });
+
   it("does not fold layer opacity when opacity is 1 (round-trip is lossless)", () => {
     // A guard that the roundTrip helper's opacity=1 assumption holds: a distinct
     // fillOpacity survives export+import unchanged.

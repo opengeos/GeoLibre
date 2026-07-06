@@ -80,10 +80,14 @@ export function simpleStyleNumberValue(
   return ["to-number", ["get", property], base];
 }
 
-// Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
-// the Web Mercator projection: earth circumference (2*pi*6378137) over the
-// 512px world at zoom 0. Resolution halves with every zoom level.
-const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
+/**
+ * Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
+ * the Web Mercator projection: earth circumference (2*pi*6378137) over the
+ * 512px world at zoom 0. Resolution halves with every zoom level. Exported so
+ * the Mapbox-style importer can reverse {@link metersWidthExpression} without a
+ * second copy of the magic number.
+ */
+export const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
 
 // Largest zoom MapLibre renders; used as the upper interpolation stop.
 const MAX_MERCATOR_ZOOM = 24;

@@ -968,8 +968,11 @@ export function LayerPanel({
           accept: ".json,application/json",
           readText: true,
         });
-        // A null result means the user dismissed the file dialog; no note.
-        if (!picked?.text) return;
+        // A null result means the user dismissed the file dialog; no note. Guard
+        // on `picked` itself (not `picked.text`) so an empty/whitespace file is
+        // still parsed and surfaces an "invalid JSON" error rather than a
+        // silent no-op that looks like a cancel.
+        if (!picked || picked.text === undefined) return;
         let parsed: unknown;
         try {
           parsed = JSON.parse(picked.text);

@@ -1,18 +1,10 @@
 import {
   DEFAULT_LAYER_STYLE,
+  MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0,
   type LabelStyle,
   type LayerStyle,
   type VectorStyleStop,
 } from "@geolibre/core";
-
-/**
- * Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator for
- * Web Mercator: earth circumference (2*pi*6378137) over the 512px world at zoom
- * 0. The inverse of the constant `metersWidthExpression` uses in
- * `@geolibre/core`; kept local so importing a zoom-driven "map units" stroke
- * width recovers the original ground meters. See {@link parseLineWidth}.
- */
-const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -300,9 +292,15 @@ function applyColorRenderer(
 
 /** Recover the flat stroke color from a line-color paint value. */
 function parseStrokeColor(value: unknown): string | null {
+  const array = asArray(value);
+  // Unwrap the simplestyle per-feature override the exporter wraps line/outline
+  // colors in (`["coalesce", ["get","stroke"], base]`) when simpleStyleEnabled,
+  // matching parseColorValue, so the flat stroke is still recovered.
+  if (array && array[0] === "coalesce" && array.length === 3) {
+    return parseStrokeColor(array[2]);
+  }
   const flat = asString(value);
   if (flat !== null) return flat;
-  const array = asArray(value);
   // The polygon-outline guard keeps the flat stroke in the polygon branch.
   if (
     array &&
@@ -426,6 +424,13 @@ function applyZoomRange(
 ): void {
   const min = clampZoom(layer.minzoom);
   const max = clampZoom(layer.maxzoom);
+  // Normalize so a malformed style with minzoom > maxzoom does not import an
+  // inverted window that hides the layer, matching the exporter's zoomRange().
+  if (min !== null && max !== null) {
+    patch.minZoom = Math.min(min, max);
+    patch.maxZoom = Math.max(min, max);
+    return;
+  }
   if (min !== null) patch.minZoom = min;
   if (max !== null) patch.maxZoom = max;
 }
@@ -642,6 +647,17 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
       } else {
         warnUnreadableNumber(radius, "circle radius", warnings);
       }
+    }
+    // circlePaint writes the layer's fillOpacity into circle-opacity, so a
+    // point-only export (no fill layer) recovers its opacity here.
+    const opacity = paint["circle-opacity"];
+    const flatOpacity = asFiniteNumber(opacity);
+    if (flatOpacity !== null) {
+      patch.fillOpacity = flatOpacity;
+    } else if (opacity !== undefined) {
+      warnings.push(
+        "The circle opacity is data-driven; the layer keeps its current fill opacity.",
+      );
     }
     const strokeColor = asString(paint["circle-stroke-color"]);
     if (strokeColor) patch.strokeColor = strokeColor;
