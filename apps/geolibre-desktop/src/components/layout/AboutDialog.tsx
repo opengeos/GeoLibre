@@ -102,8 +102,9 @@ export function AboutDialog({
   );
 
   const handleCheckForUpdates = async () => {
-    // Belt-and-braces: the Store build hides every trigger for this flow, but
-    // never reach out to GitHub even if one slips through (policy 10.2.5).
+    // Belt-and-braces: the Store build hides every trigger for this flow; this
+    // guard ensures it never reaches out to GitHub even if one slips through
+    // (policy 10.2.5).
     if (IS_STORE_BUILD) return;
     abortRef.current?.abort();
     const controller = new AbortController();
