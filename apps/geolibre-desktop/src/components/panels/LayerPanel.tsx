@@ -28,9 +28,11 @@ import {
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import {
+  applyMapboxStyleImport,
   buildMapboxStyle,
   isPlaceholderLayer,
   mapboxStyleToJson,
+  parseMapboxStyle,
   placeholderMessage,
 } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
@@ -88,6 +90,7 @@ import {
   TableProperties,
   Timer,
   Trash2,
+  Upload,
   ZoomIn,
 } from "lucide-react";
 import { clamp } from "../../lib/clamp";
@@ -111,7 +114,10 @@ import {
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
-import { saveTextFileWithFallback } from "../../lib/tauri-io";
+import {
+  openLocalDataFileWithFallback,
+  saveTextFileWithFallback,
+} from "../../lib/tauri-io";
 import { writeVectorToSource } from "@geolibre/processing";
 import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
@@ -947,6 +953,75 @@ export function LayerPanel({
       }
     },
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
+  // Import a Mapbox GL / MapLibre style JSON and apply its symbology to a vector
+  // layer, so cartography authored elsewhere (or a style exported from GeoLibre)
+  // can be brought back in instead of being rebuilt by hand. Anything the style
+  // could not represent is surfaced as a warning rather than dropped silently.
+  const handleImportStyle = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const picked = await openLocalDataFileWithFallback({
+          filters: [{ name: "Mapbox GL style", extensions: ["json"] }],
+          accept: ".json,application/json",
+          readText: true,
+        });
+        // A null result means the user dismissed the file dialog; no note.
+        if (!picked?.text) return;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(picked.text);
+        } catch {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message: t("layers.importStyleInvalid"),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        const result = parseMapboxStyle(parsed);
+        if (result.matchedLayerCount === 0) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message:
+                result.warnings[0] ?? t("layers.importStyleNoMatch"),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        updateLayer(layer.id, {
+          style: applyMapboxStyleImport(layer.style, result),
+        });
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]:
+            result.warnings.length > 0
+              ? {
+                  type: "warning",
+                  message: `${t("layers.importStyleSuccess")} ${result.warnings.join(" ")}`,
+                }
+              : { type: "success", message: t("layers.importStyleSuccess") },
+        }));
+        scheduleStatusClear(layer.id);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("layers.importStyleError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, scheduleStatusClear, t, updateLayer],
   );
 
   // Commit the layer's current (edited) features back to the local file they
@@ -2142,6 +2217,16 @@ export function LayerPanel({
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
+                      )}
+                      {canExportLayer && (
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void handleImportStyle(layer);
+                          }}
+                        >
+                          <Upload className="mr-2 h-3.5 w-3.5" />
+                          {t("layers.importMapboxStyle")}
+                        </DropdownMenuItem>
                       )}
                       {canWriteBack && (
                         <DropdownMenuItem

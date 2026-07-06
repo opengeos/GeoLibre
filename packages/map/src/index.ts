@@ -31,3 +31,8 @@ export {
   type MapboxStyleExportOptions,
   type MapboxStyleExportResult,
 } from "./mapbox-style-export";
+export {
+  applyMapboxStyleImport,
+  parseMapboxStyle,
+  type MapboxStyleImportResult,
+} from "./mapbox-style-import";
