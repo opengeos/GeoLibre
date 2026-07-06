@@ -17,6 +17,19 @@ const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
 
+/** The `text-anchor` values GeoLibre's {@link LabelStyle.anchor} accepts. */
+const VALID_LABEL_ANCHORS = new Set<string>([
+  "center",
+  "left",
+  "right",
+  "top",
+  "bottom",
+  "top-left",
+  "top-right",
+  "bottom-left",
+  "bottom-right",
+]);
+
 /**
  * Everything a parsed Mapbox GL style contributes to a layer's symbology. The
  * {@link style} patch and {@link labels} patch are kept separate so the caller
@@ -400,27 +413,41 @@ function parseLabelLayer(
   const paint = layer.paint ?? {};
   const labels: Partial<LabelStyle> = { enabled: true };
 
-  const field = wrappedProperty(layout["text-field"]);
+  const textField = layout["text-field"];
+  const field = wrappedProperty(textField);
   if (field) {
     labels.field = field;
     labels.expression = "";
-  } else if (layout["text-field"] !== undefined) {
-    const textField = layout["text-field"];
-    labels.expression = Array.isArray(textField)
-      ? JSON.stringify(textField)
-      : String(textField);
+  } else if (Array.isArray(textField)) {
+    labels.expression = JSON.stringify(textField);
+  } else if (typeof textField === "string") {
+    // A Mapbox token string like "{name}" maps to a single attribute field.
+    // A literal or multi-token string ("{a} ({b})") has no GeoLibre equivalent,
+    // so leave the field unset and fall through to the "no text field" warning
+    // rather than storing a non-expression that would fail JSON.parse later.
+    const token = textField.trim().match(/^\{([^{}]+)\}$/);
+    if (token) {
+      labels.field = token[1];
+      labels.expression = "";
+    }
   }
 
   const size = asFiniteNumber(layout["text-size"]);
   if (size !== null) labels.size = size;
 
-  labels.placement = layout["symbol-placement"] === "line" ? "line" : "point";
+  // MapLibre offers "line" and "line-center"; both are line placement here.
+  const placement = layout["symbol-placement"];
+  labels.placement =
+    placement === "line" || placement === "line-center" ? "line" : "point";
 
   if (typeof layout["text-allow-overlap"] === "boolean") {
     labels.allowOverlap = layout["text-allow-overlap"];
   }
   const anchor = asString(layout["text-anchor"]);
-  if (anchor) labels.anchor = anchor as LabelStyle["anchor"];
+  // Only accept anchors GeoLibre supports; an unknown value keeps the base.
+  if (anchor && VALID_LABEL_ANCHORS.has(anchor)) {
+    labels.anchor = anchor as LabelStyle["anchor"];
+  }
 
   const offset = asArray(layout["text-offset"]);
   if (offset) {
@@ -518,6 +545,10 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const color = parseColorValue(paint["fill-extrusion-color"], warnings);
     if (color.mode && color.mode !== "single") {
       applyColorRenderer(color, patch);
+      // extrusionColorValue() uses extrusionColor as the renderer's fallback, so
+      // route the recovered fallback there too (not just fillColor) or an
+      // extruded categorized/rule layer keeps its old fallback after import.
+      if (color.color !== undefined) patch.extrusionColor = color.color;
       colorClaimed = true;
     } else if (color.color) {
       patch.extrusionColor = color.color;

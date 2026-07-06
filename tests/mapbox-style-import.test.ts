@@ -350,6 +350,72 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.ok(result.warnings.some((w) => /fill opacity is data-driven/.test(w)));
   });
 
+  it("maps a Mapbox token text-field to a label field", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "labels",
+          type: "symbol",
+          source: "s",
+          layout: { "text-field": "{name}", "symbol-placement": "line-center" },
+          paint: { "text-color": "#000000" },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.matchedLayerCount, 1);
+    assert.equal(result.labels?.enabled, true);
+    assert.equal(result.labels?.field, "name");
+    assert.equal(result.labels?.expression, "");
+    // line-center is treated as line placement.
+    assert.equal(result.labels?.placement, "line");
+  });
+
+  it("ignores an unsupported text-anchor and a literal text-field", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "labels",
+          type: "symbol",
+          source: "s",
+          layout: { "text-field": "Static label", "text-anchor": "middle" },
+          paint: {},
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    // Unknown anchor is dropped (base value kept), and a literal (non-token)
+    // text-field is not stored as a field/expression.
+    assert.equal(result.labels?.anchor, undefined);
+    assert.equal(result.labels?.field, undefined);
+    assert.equal(result.labels?.expression, undefined);
+    assert.ok(result.warnings.some((w) => /no text field/.test(w)));
+  });
+
+  it("routes an extruded categorized fallback color to extrusionColor", () => {
+    const original = style({
+      extrusionEnabled: true,
+      extrusionColor: "#654321",
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "category",
+      vectorStyleStops: [
+        { value: "a", color: "#ff0000" },
+        { value: "b", color: "#00ff00" },
+      ],
+    });
+    const { style: result } = roundTrip(original, polygons());
+    assert.equal(result.extrusionEnabled, true);
+    assert.equal(result.vectorStyleMode, "categorized");
+    // extrusionColorValue embeds extrusionColor as the match fallback on export,
+    // so import must route that fallback back into extrusionColor (not only
+    // fillColor) for extrusionColorValue to rebuild the same fallback.
+    assert.equal(result.extrusionColor, "#654321");
+  });
+
   it("does not fold layer opacity when opacity is 1 (round-trip is lossless)", () => {
     // A guard that the roundTrip helper's opacity=1 assumption holds: a distinct
     // fillOpacity survives export+import unchanged.

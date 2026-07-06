@@ -1775,6 +1775,11 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            // Importing a Mapbox GL style only writes the layer's vector
+            // symbology, so it applies to any vector-styled layer (local GeoJSON
+            // and vector tiles), not just the export-capable GeoJSON layers.
+            const canImportStyle =
+              layer.type === "geojson" || layer.type === "vector-tiles";
             // Write-back commits edits to the layer's local source file in place
             // (desktop only, supported formats); Export writes a new file.
             const canWriteBack = canWriteEditsToSource(layer);
@@ -2218,7 +2223,7 @@ export function LayerPanel({
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
-                      {canExportLayer && (
+                      {canImportStyle && (
                         <DropdownMenuItem
                           onSelect={() => {
                             void handleImportStyle(layer);
