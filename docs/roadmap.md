@@ -279,7 +279,7 @@
 - [x] Inline numeric opacity input in the layer control, with a fixed-name notice on the Background layer
 - [x] Windows portable zip build, so the desktop app can run without installation
 
-## v1.9: CAD import, smarter service discovery, and a docked SQL workspace (current)
+## v1.9: CAD import, smarter service discovery, and a docked SQL workspace
 
 - [x] Add CAD drawings (DXF/DWG) as a layer, with a layer picker for choosing which drawing layers to load and a CRS selector for placing the geometry correctly on the map
 - [x] WMS and WFS panels now read the service's GetCapabilities document to list the available layers and feature types, so you pick from a populated dropdown instead of typing layer names by hand
@@ -291,6 +291,13 @@
 - [x] Plugins can now use the maplibre-gl-raster stack and the projection control, expanding what external plugins can render and configure (see [Plugin API](plugin-api.md))
 - [x] Legend populates automatically from a paletted raster's embedded color table, matching the map colors without manual entry
 - [x] Website and GitHub links added to the Help menu for quick access to the project home and source
+
+## v1.10: I3S scene layers, OGC API vector tiles, and local NetCDF/HDF loading (current)
+
+- [x] Add ArcGIS I3S scene layers (Integrated Mesh and 3D Object layers) as a data source, streamed and rendered in 3D on the shared deck.gl instance through a Tile3DLayer with the I3SLoader
+- [x] Add Data now supports OGC API - Tiles vector tile services as a remote source, so standards-based vector tile endpoints can be added alongside XYZ and ArcGIS vector tiles
+- [x] Load local HDF5 and NetCDF-4 files directly from disk, extending the NetCDF/HDF workflow beyond Cloud-Optimized references to files already on your machine
+- [x] GeoEditor plugin can pull the vector features currently visible in the map view into the editor, so you can start editing what you are looking at without re-importing the source data
 
 ## Plugin marketplace and registry (design)
 
