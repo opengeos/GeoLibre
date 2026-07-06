@@ -190,6 +190,25 @@ describe("mergeWasmToolManifests", () => {
     assert.equal(statement?.kind, "string");
   });
 
+  it("never overrides a WASM output param, even if the catalog types it scalar", () => {
+    // A scalar-typed catalog output must not divert a genuine WASM dataset
+    // output into the plain-arg path (which would break its run). Only inputs
+    // and bools are corrected.
+    const catalog: WhiteboxTool = {
+      id: "some_tool",
+      params: [{ name: "output", kind: "string", required: true }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "some_tool",
+      params: [
+        { name: "output", data_kind: "vector", io_role: "output", required: true },
+      ],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    // Kind stays unset so parameterKind resolves the WASM vector_out.
+    assert.equal(tool.params?.[0]?.kind, undefined);
+  });
+
   it("does not append WASM-only Whitebox tools missing from the catalog", () => {
     const wasmOnlyWhitebox: WhiteboxTool = {
       id: "some_wasm_only_whitebox_tool",
@@ -242,7 +261,28 @@ describe("fileOutputTargetExtension", () => {
     assert.equal(fileOutputTargetExtension(tableOutput, ""), "csv");
   });
 
-  it("falls back to an opaque .dat for a non-table output", () => {
+  it("sniffs the format from the description when no path/table is given", () => {
+    // A JSON/HTML report param whose format lives only in its prose must not
+    // fall through to .dat when the output field is blank (would reproduce #1074
+    // for that tool).
+    const jsonReport = {
+      name: "output",
+      description: "Optional output report path (.json or .csv).",
+      data_kind: "file",
+      io_role: "output",
+    };
+    // csv wins over json in the hint order (both are valid for this tool).
+    assert.equal(fileOutputTargetExtension(jsonReport, undefined), "csv");
+    const jsonOnly = {
+      name: "match_report",
+      description: "Optional JSON output path for summary diagnostics.",
+      data_kind: "file",
+      io_role: "output",
+    };
+    assert.equal(fileOutputTargetExtension(jsonOnly, undefined), "json");
+  });
+
+  it("falls back to an opaque .dat for a non-table, non-text output", () => {
     const opaque = { name: "output", data_kind: "file", io_role: "output" };
     assert.equal(fileOutputTargetExtension(opaque, undefined), "dat");
   });

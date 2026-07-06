@@ -13,6 +13,7 @@ import {
   runWhiteboxTool,
   runWhiteboxToolWasm,
   outputBaseName,
+  fileOutputTargetExtension,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxTool,
@@ -467,6 +468,9 @@ export function ProcessingDialog({
   const browsedInputsRef = useRef<
     Map<string, { name: string; bytes: Uint8Array; geojson?: FeatureCollection }>
   >(new Map());
+  // The parameters passed to the most recent run, so output naming can honor the
+  // output path the user actually typed (which the finished job does not carry).
+  const lastRunParametersRef = useRef<Record<string, unknown>>({});
 
   const selectedTool = useMemo(() => {
     const tool =
@@ -906,14 +910,21 @@ export function ProcessingDialog({
         const outKind = param ? parameterKind(param) : "";
         if (outKind === "file_out" || outKind === "vector_out") {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
-          // A vector_out's CRS-preserving format is only recoverable from its
-          // magic bytes; a file_out's format follows the parameter's declared
-          // output extension (e.g. a CSV table), which a byte sniff cannot
-          // recover since CSV/JSON/HTML have no magic signature.
+          // Prefer the content signature: a `vector_out` and most binary
+          // `file_out` formats (GeoParquet/FlatGeobuf/zipped Shapefile/PNG/
+          // PMTiles) are identifiable from their magic bytes. Only signature-less
+          // text formats (CSV/JSON/HTML) return `bin`; for those, fall back to
+          // the extension the tool was actually told to write — the user's typed
+          // output path, else the param's declared format (shared with the WASM
+          // runner via `fileOutputTargetExtension`).
+          const sniffed = fileOutputExtension(value);
           const extension =
-            outKind === "file_out" && param
-              ? outputExtensionForParameter(param).slice(1)
-              : fileOutputExtension(value);
+            sniffed !== "bin" || outKind !== "file_out" || !param
+              ? sniffed
+              : fileOutputTargetExtension(
+                  param,
+                  lastRunParametersRef.current[name],
+                );
           downloadBytes(value, `${label}.${extension}`);
         } else if (onAddRaster) {
           // Display name stays human-readable; the file name matches the actual
@@ -1017,6 +1028,10 @@ export function ProcessingDialog({
     // in the form state (the form only resets on tool change) would otherwise be
     // cast to a bogus format and produce a `..._output.undefined` filename.
     const vectorOutputFormat = normalizeVectorOutputFormat(vectorOutValue);
+
+    // Remember this run's parameters so output-download naming can recover the
+    // output path the user typed once the job finishes.
+    lastRunParametersRef.current = parameters;
 
     try {
       const request = {

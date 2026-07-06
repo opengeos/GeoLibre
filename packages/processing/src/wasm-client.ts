@@ -207,9 +207,13 @@ const CATALOG_SCALAR_KINDS = new Set(["string", "int", "double"]);
  * `expression` is typed as a vector input (rendering a second layer picker),
  * so neither exposes a text field to type the expression (GeoLibre#1073). When
  * the Python sidecar's catalog types the same-named param as a plain scalar
- * (string/int/double) but the WASM manifest makes it a dataset I/O or a bool, we
- * trust the catalog so the dialog renders (and the runner serializes) a text
- * input. Genuine enums/dropdowns and already-matching kinds are left untouched.
+ * (string/int/double) but the WASM manifest makes it a dataset **input** or a
+ * bool, we trust the catalog so the dialog renders (and the runner serializes) a
+ * text input. Genuine enums/dropdowns and already-matching kinds are left
+ * untouched. Output params are deliberately excluded: neither motivating bug
+ * (#1073) involves an output, and diverting a genuine dataset output into the
+ * plain-arg path would break its run, so a scalar-typed catalog output never
+ * overrides a WASM `*_out`.
  *
  * @param wasmKind - The kind derived from the WASM manifest param.
  * @param catalogKind - The kind the catalog declares for the same-named param.
@@ -221,9 +225,7 @@ function shouldPreferCatalogKind(
 ): boolean {
   if (!catalogKind || catalogKind === wasmKind) return false;
   if (!CATALOG_SCALAR_KINDS.has(catalogKind)) return false;
-  return (
-    wasmKind.endsWith("_in") || wasmKind.endsWith("_out") || wasmKind === "bool"
-  );
+  return wasmKind.endsWith("_in") || wasmKind === "bool";
 }
 
 /**
@@ -311,8 +313,9 @@ function paramKind(p: WhiteboxToolParameter): string {
  * Extension (without the dot) the WASM runner should give a `file_out` file so
  * the tool's own format check passes. Whitebox tools infer a table/report
  * format from the output path's extension, so we honor the extension of the
- * user-chosen output path; when none is present we default a `table` output to
- * CSV and anything else to an opaque `.dat`.
+ * user-chosen output path; when none is present we sniff the intended text
+ * format from the parameter's name/description (e.g. an "Output JSON report
+ * path."), default a `table` output to CSV, and fall back to an opaque `.dat`.
  *
  * @param param - The output parameter (carries `data_kind`/`schema`).
  * @param requested - The user-chosen output path, if any.
@@ -326,6 +329,12 @@ export function fileOutputTargetExtension(
     const match = requested.match(/\.([A-Za-z0-9]+)$/);
     if (match) return match[1].toLowerCase();
   }
+  // Mirror ProcessingDialog's `outputExtensionForParameter` hint order so a
+  // blank output field still writes the format the param's prose declares.
+  const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
+  if (/\bcsv\b/i.test(hint)) return "csv";
+  if (/\bhtml\b/i.test(hint)) return "html";
+  if (/\bjson\b/i.test(hint)) return "json";
   const schema =
     param.schema && typeof param.schema === "object"
       ? (param.schema as Record<string, unknown>)
