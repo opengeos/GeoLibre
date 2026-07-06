@@ -129,6 +129,10 @@ def test_wms_layer_version_defaults_to_1_1_1():
     assert project.wms_layer("x", "https://e/wms", "a", version="2.0")[
         "source"
     ]["version"] == "1.1.1"
+    # A None from an untyped caller must not raise.
+    assert project.wms_layer("x", "https://e/wms", "a", version=None)[
+        "source"
+    ]["version"] == "1.1.1"
 
 
 def test_wms_layer_transparent_false():

@@ -68,7 +68,7 @@ export function appendQuery(
 }
 
 /**
- * Normalizes a WMS version to the one of the two protocol variants the GetMap
+ * Normalizes a WMS version to one of the two protocol variants the GetMap
  * builder emits: anything in the 1.3 line is "1.3.0", everything else (or an
  * unset value) falls back to "1.1.1".
  */
@@ -514,11 +514,6 @@ export function parseWmsCapabilities(xmlText: string): WmsCapabilities {
   return { layers, version: root.getAttribute("version") };
 }
 
-/** Backward-compatible wrapper over {@link parseWmsCapabilities}. */
-export function parseWmsCapabilitiesLayers(xmlText: string): WmsLayerOption[] {
-  return parseWmsCapabilities(xmlText).layers;
-}
-
 /**
  * Reads the direct-child element with the given local name and returns its
  * trimmed text. Restricting to direct children keeps a `<Layer>`'s own `<Name>`
@@ -637,7 +632,7 @@ export function parseWfsCapabilitiesFeatureTypes(
   if (doc.querySelector("parsererror")) {
     throw new Error("Could not parse the WFS capabilities document.");
   }
-  // Validate the root element (see parseWmsCapabilitiesLayers) so an exception
+  // Validate the root element (see parseWmsCapabilities) so an exception
   // or HTML error page surfaces an error instead of an empty type list.
   const root = doc.documentElement;
   if (root?.localName !== "WFS_Capabilities") {

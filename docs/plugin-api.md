@@ -292,6 +292,7 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
   styles?: string;
   format?: string; // default "image/png"
   transparent?: boolean; // default true
+  version?: string; // "1.1.1" (default) or "1.3.0" (sends CRS instead of SRS)
 }
 
 export interface GeoLibreCogLayerOptions {

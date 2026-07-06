@@ -352,15 +352,18 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     return f"{base}{separator}{query}{sep}{fragment}"
 
 
-def _normalize_wms_version(version: str) -> str:
+def _normalize_wms_version(version: str | None) -> str:
     """Normalize a WMS version to the "1.1.1"/"1.3.0" pair the builder emits.
 
     Args:
-        version: The requested WMS protocol version.
+        version: The requested WMS protocol version, or None.
 
     Returns:
-        ``"1.3.0"`` for any version in the 1.3 line, ``"1.1.1"`` otherwise.
+        ``"1.3.0"`` for any version in the 1.3 line, ``"1.1.1"`` otherwise
+        (including None or a non-string value).
     """
+    if not isinstance(version, str):
+        return "1.1.1"
     return "1.3.0" if version.strip().startswith("1.3") else "1.1.1"
 
 
