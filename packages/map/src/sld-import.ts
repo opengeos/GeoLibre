@@ -412,7 +412,23 @@ function ogcToMapbox(filterBody: unknown): unknown[] | null {
 
 /** Recover the label patch from a `TextSymbolizer`. */
 function readLabels(text: XmlNode, warnings: string[]): Partial<LabelStyle> {
-  const labels: Partial<LabelStyle> = { enabled: true };
+  // A TextSymbolizer fully describes the label, so an absent optional element
+  // (no <Halo>, <AnchorPoint>, <Displacement>, <Rotation>) means the SLD default,
+  // not "keep the target layer's current value". Seed those presentation fields
+  // with the GeoLibre defaults so importing over a styled layer replaces them
+  // rather than leaving stale values (e.g. a halo the imported label doesn't have).
+  const defaults = DEFAULT_LAYER_STYLE.labels;
+  const labels: Partial<LabelStyle> = {
+    enabled: true,
+    placement: defaults.placement,
+    anchor: defaults.anchor,
+    offsetX: defaults.offsetX,
+    offsetY: defaults.offsetY,
+    rotation: defaults.rotation,
+    // The exporter writes a <Halo> only when haloWidth > 0, so no <Halo> means
+    // no halo (width 0), not the layer's default halo width.
+    haloWidth: 0,
+  };
 
   const label = text.Label;
   const field = isNode(label) ? nodeText(label.PropertyName) : null;

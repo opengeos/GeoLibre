@@ -22,8 +22,11 @@ export function isVectorColorExpression(
  * same validity check the live `match`/`case` expressions use rather than
  * re-deriving the regex.
  */
-export function isHexColor(value: string): boolean {
-  return /^#[0-9a-f]{6}$/i.test(value.trim());
+export function isHexColor(value: unknown): boolean {
+  // Guard the type: `stop.color`/`rule.color` are typed `string`, but the data
+  // can come from a hand-edited or imported .geolibre.json, so a missing/null
+  // value must return false rather than throw on `.trim()`.
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim());
 }
 
 /** A 3- or 6-digit hex color, as emitted by the simplestyle spec. */

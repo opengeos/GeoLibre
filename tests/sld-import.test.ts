@@ -136,6 +136,28 @@ describe("parseSld", () => {
     assert.equal(result.labels?.color, "#333333");
   });
 
+  it("clears a stale halo when the imported label has no Halo", () => {
+    const result = parseSld(
+      sld(`<Rule>
+        <PolygonSymbolizer><Fill><CssParameter name="fill">#ffffff</CssParameter></Fill></PolygonSymbolizer>
+        <TextSymbolizer>
+          <Label><ogc:PropertyName>name</ogc:PropertyName></Label>
+          <Fill><CssParameter name="fill">#333333</CssParameter></Fill>
+        </TextSymbolizer>
+      </Rule>`),
+    );
+    // No <Halo> in the SLD → haloWidth 0, so merging over a haloed base clears it.
+    assert.equal(result.labels?.haloWidth, 0);
+    const merged = applySldImport(
+      {
+        ...DEFAULT_LAYER_STYLE,
+        labels: { ...DEFAULT_LAYER_STYLE.labels, haloWidth: 3 },
+      },
+      result,
+    );
+    assert.equal(merged.labels.haloWidth, 0);
+  });
+
   it("recovers a zoom window from scale denominators", () => {
     const result = parseSld(
       sld(`<Rule>

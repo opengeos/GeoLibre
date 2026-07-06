@@ -751,6 +751,20 @@ export function buildSld(
       "The fill pattern has no portable SLD equivalent; the polygon uses a flat fill instead.",
     );
   }
+  // basePaint writes the flat strokeWidth as a static pixel width. A
+  // "meters"-scaled stroke (zoom-driven on the live map) and a proportional
+  // (attribute-driven) size have no portable SLD equivalent, so warn that they
+  // are exported as a fixed value rather than silently flattening the scaling.
+  if (styleValue(style, "strokeWidthUnit") === "meters") {
+    warnings.push(
+      "The stroke width is in map units (meters); SLD has no portable equivalent, so it is exported as a fixed pixel width.",
+    );
+  }
+  if (styleValue(style, "proportionalSizeEnabled")) {
+    warnings.push(
+      "Proportional (attribute-driven) symbol size has no portable SLD equivalent; a fixed size is exported instead.",
+    );
+  }
 
   const scale = scaleDenominators(style);
   const mode = styleValue(style, "vectorStyleMode");

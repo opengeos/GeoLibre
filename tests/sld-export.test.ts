@@ -442,6 +442,46 @@ describe("buildSld", () => {
     assert.ok(sld.includes(String(Number(minAtZoom12.toFixed(6)))));
   });
 
+  it("warns for meters-scaled and proportional (data-driven) sizing", () => {
+    const meters = buildSld(
+      layer({ style: style({ strokeWidthUnit: "meters" }) }),
+      polygons(),
+    );
+    assert.ok(meters.warnings.some((w) => /map units \(meters\)/.test(w)));
+    const proportional = buildSld(
+      layer({
+        style: style({
+          proportionalSizeEnabled: true,
+          proportionalSizeProperty: "pop",
+        }),
+      }),
+      points(),
+    );
+    assert.ok(
+      proportional.warnings.some((w) => /Proportional .*symbol size/.test(w)),
+    );
+  });
+
+  it("does not crash on an invalid (non-string) stop color", () => {
+    // Reachable via a hand-edited .geolibre.json; the exporter must not throw.
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "zone",
+          vectorStyleStops: [
+            { value: "a", color: "#112233" },
+            // deliberately malformed to exercise the isHexColor guard
+            { value: "b", color: null as unknown as string },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    assert.match(compact(sld), /<ogc:Literal>a<\/ogc:Literal>/);
+    assert.doesNotMatch(compact(sld), /<ogc:Literal>b<\/ogc:Literal>/);
+  });
+
   it("warns for features SLD cannot represent", () => {
     const { warnings } = buildSld(
       layer({
