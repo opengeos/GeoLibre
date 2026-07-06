@@ -90,6 +90,23 @@ function asFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+/**
+ * Warn (rather than silently keep the old value) when a numeric paint property
+ * is present but data-driven in a shape the importer cannot flatten, mirroring
+ * how `fill-opacity` is handled.
+ */
+function warnUnreadableNumber(
+  value: unknown,
+  description: string,
+  warnings: string[],
+): void {
+  if (value !== undefined && asFiniteNumber(value) === null) {
+    warnings.push(
+      `The ${description} is data-driven in a way that could not be read; the layer keeps its current ${description}.`,
+    );
+  }
+}
+
 function asString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }
@@ -191,9 +208,15 @@ function parseMatch(array: unknown[], warnings: string[]): ParsedColor {
     const rawValue = body[index];
     const color = asString(body[index + 1]);
     if (color === null) continue;
-    const value =
-      typeof rawValue === "number" ? rawValue : String(rawValue);
-    stops.push({ value, color });
+    // A match arm's label may be an array of values sharing one output
+    // (`["match", input, [v1, v2], color, ...]`); expand each into its own stop.
+    const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+    for (const raw of values) {
+      stops.push({
+        value: typeof raw === "number" ? raw : String(raw),
+        color,
+      });
+    }
   }
   return { mode: "categorized", property, stops, color: fallback };
 }
@@ -371,7 +394,10 @@ function parseLineWidth(
       interpolation &&
       interpolation[0] === "exponential" &&
       input &&
-      input[0] === "zoom"
+      input[0] === "zoom" &&
+      // The reverse only holds when the first stop is zoom 0 (as the exporter
+      // emits); a different first stop is not a GeoLibre meters width.
+      asFiniteNumber(array[3]) === 0
     ) {
       const widthAtZoom0 = asFiniteNumber(array[4]);
       if (widthAtZoom0 !== null) {
@@ -611,12 +637,17 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
       patch.circleRadius = flatRadius;
     } else {
       const proportional = parseProportional(radius);
-      if (proportional) applyProportional(proportional, patch);
+      if (proportional) {
+        applyProportional(proportional, patch);
+      } else {
+        warnUnreadableNumber(radius, "circle radius", warnings);
+      }
     }
     const strokeColor = asString(paint["circle-stroke-color"]);
     if (strokeColor) patch.strokeColor = strokeColor;
     const strokeWidth = asFiniteNumber(paint["circle-stroke-width"]);
     if (strokeWidth !== null) patch.strokeWidth = strokeWidth;
+    else warnUnreadableNumber(paint["circle-stroke-width"], "point stroke width", warnings);
     applyZoomRange(circle, patch);
   }
 
@@ -626,8 +657,15 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const paint = heatmap.paint ?? {};
     const radius = asFiniteNumber(paint["heatmap-radius"]);
     if (radius !== null) patch.heatmapRadius = radius;
+    else warnUnreadableNumber(paint["heatmap-radius"], "heatmap radius", warnings);
     const intensity = asFiniteNumber(paint["heatmap-intensity"]);
     if (intensity !== null) patch.heatmapIntensity = intensity;
+    else
+      warnUnreadableNumber(
+        paint["heatmap-intensity"],
+        "heatmap intensity",
+        warnings,
+      );
     applyZoomRange(heatmap, patch);
   }
 

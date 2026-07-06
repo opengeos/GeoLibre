@@ -416,6 +416,83 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.extrusionColor, "#654321");
   });
 
+  it("expands a multi-value match arm into one stop per value", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          paint: {
+            "fill-color": [
+              "match",
+              ["to-string", ["get", "region"]],
+              ["east", "south"],
+              "#ff0000",
+              "west",
+              "#0000ff",
+              "#999999",
+            ],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.vectorStyleMode, "categorized");
+    assert.deepEqual(result.style.vectorStyleStops, [
+      { value: "east", color: "#ff0000" },
+      { value: "south", color: "#ff0000" },
+      { value: "west", color: "#0000ff" },
+    ]);
+    assert.equal(result.style.fillColor, "#999999");
+  });
+
+  it("warns instead of misreading a zoom width that does not start at zoom 0", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "line",
+          type: "line",
+          source: "s",
+          paint: {
+            "line-color": "#000000",
+            "line-width": ["interpolate", ["exponential", 2], ["zoom"], 5, 2, 10, 8],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    // A first stop of zoom 5 (not 0) is not a GeoLibre meters width.
+    assert.equal(result.style.strokeWidthUnit, undefined);
+    assert.equal(result.style.strokeWidth, undefined);
+    assert.ok(result.warnings.some((w) => /line width/.test(w)));
+  });
+
+  it("warns on a data-driven circle radius it cannot flatten", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "pts",
+          type: "circle",
+          source: "s",
+          paint: {
+            "circle-color": "#123123",
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 2, 10, 20],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.circleRadius, undefined);
+    assert.ok(result.warnings.some((w) => /circle radius/.test(w)));
+  });
+
   it("does not fold layer opacity when opacity is 1 (round-trip is lossless)", () => {
     // A guard that the roundTrip helper's opacity=1 assumption holds: a distinct
     // fillOpacity survives export+import unchanged.

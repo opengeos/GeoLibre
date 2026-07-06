@@ -997,8 +997,15 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
           return;
         }
+        // The file picker await can block while the user edits the Style panel,
+        // so merge onto the current store style (not the pre-await snapshot) to
+        // avoid clobbering a concurrent edit, matching handleRefreshLayer.
+        const latest = useAppStore
+          .getState()
+          .layers.find((candidate) => candidate.id === layer.id);
+        if (!latest) return;
         updateLayer(layer.id, {
-          style: applyMapboxStyleImport(layer.style, result),
+          style: applyMapboxStyleImport(latest.style, result),
         });
         setRefreshStatuses((current) => ({
           ...current,
