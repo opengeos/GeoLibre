@@ -1034,11 +1034,27 @@ export function LayerPanel({
           // Re-read the table so inserted features pick up their database-
           // assigned primary keys; without this a second save would insert
           // them again as duplicates.
-          const fresh = await readPostgisTable({
-            connection,
-            schema_name: schema,
-            table,
-          });
+          let fresh;
+          try {
+            fresh = await readPostgisTable({
+              connection,
+              schema_name: schema,
+              table,
+            });
+          } catch {
+            // The write committed; only the refresh failed. Reporting this as
+            // a plain failure would invite a retry that re-inserts the still
+            // key-less new features, so surface a distinct warning instead.
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.saveEditsPostgisRefreshWarning"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
           // Merge into the store's current metadata, not the click-time
           // closure: the write/re-read round trip is slow enough for other
           // updates (auto-refresh, time-slider binding) to land in between.

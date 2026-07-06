@@ -108,8 +108,13 @@ export function resolvePostgisConnection(layer: GeoLibreLayer): string | null {
       ? layer.metadata.postgisConnectionLabel
       : "";
   if (!label) return null;
-  const saved = readSavedPostgresConnections().find(
+  // The label masks only the password, so two saved connections differing
+  // just by password (e.g. before/after a rotation) share a label. Resolve
+  // only an unambiguous match: guessing between candidate credentials would
+  // read as an unexplained auth failure (or hit the wrong environment), while
+  // returning null surfaces the explicit "reconnect" message.
+  const matches = readSavedPostgresConnections().filter(
     (connection) => savedPostgresConnectionLabel(connection) === label,
   );
-  return saved ?? null;
+  return matches.length === 1 ? matches[0] : null;
 }

@@ -63,6 +63,17 @@ def test_status_reports_availability() -> None:
     assert "message" in result
 
 
+def test_json_safe_stringifies_unsafe_integers() -> None:
+    """bigint keys beyond JS's safe range must not round through JSON."""
+    from geolibre_server.app.postgis import _json_safe
+
+    assert _json_safe(42) == 42
+    assert _json_safe(2**53 - 1) == 2**53 - 1
+    assert _json_safe(2**60) == str(2**60)
+    assert _json_safe(-(2**60)) == str(-(2**60))
+    assert _json_safe(True) is True
+
+
 def test_sanitize_error_scrubs_passwords() -> None:
     url = "connection to postgresql://alice:hunter2@db.example.com/gis failed"
     assert "hunter2" not in _sanitize_error(url)

@@ -315,8 +315,14 @@ def _json_safe(value: Any) -> Any:
     Recurses into containers so e.g. a ``date[]`` array column serializes as a
     list of ISO strings rather than failing JSON encoding.
     """
-    if value is None or isinstance(value, (bool, int, float, str)):
+    if value is None or isinstance(value, (bool, float, str)):
         return value
+    if isinstance(value, int):
+        # Integers beyond JavaScript's safe range would be silently rounded by
+        # the client's JSON.parse — fatal for a bigint primary key, whose
+        # rounded value would no longer match any row on write-back. Serialize
+        # such values as strings (like uuid/date already are).
+        return value if -(2**53) < value < 2**53 else str(value)
     if isinstance(value, dict):
         return {key: _json_safe(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -557,7 +563,10 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                 # network round trips instead of one per feature. The counters
                 # track the taken branch (a keyed UPDATE matches exactly one
                 # row by construction) because reading rowcount per statement
-                # would force a sync each time.
+                # would force a sync each time. Known gap: a row deleted by
+                # another session after the snapshot above makes its UPDATE
+                # match zero rows yet still count as updated — detecting that
+                # is part of the conflict-detection follow-up (issue #1070).
                 with conn.pipeline():
                     for feature in features:
                         properties = feature.get("properties") or {}

@@ -84,6 +84,18 @@ describe("postgis connection registry", () => {
     });
   });
 
+  it("refuses an ambiguous label match (same connection, rotated password)", () => {
+    const label = savedPostgresConnectionLabel(CONNECTION);
+    const rotated = "postgresql://alice:newpass99@db.example.com:5432/gis";
+    assert.equal(savedPostgresConnectionLabel(rotated), label);
+    withSavedConnections([rotated, CONNECTION], () => {
+      const layer = postgisLayer("layer-amb", {
+        postgisConnectionLabel: label,
+      });
+      assert.equal(resolvePostgisConnection(layer), null);
+    });
+  });
+
   it("prunes registered connections when their layer leaves the store", () => {
     registerPostgisConnection("layer-gone", CONNECTION);
     registerPostgisConnection("layer-kept", CONNECTION);
