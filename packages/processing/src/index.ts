@@ -148,6 +148,7 @@ export {
   mergeWasmToolManifests,
   outputBaseName,
   fileOutputTargetExtension,
+  outputTextFormatHint,
   isTiff,
 } from "./wasm-client";
 export {

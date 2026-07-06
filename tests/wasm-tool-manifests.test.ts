@@ -190,6 +190,24 @@ describe("mergeWasmToolManifests", () => {
     assert.equal(statement?.kind, "string");
   });
 
+  it("does not downgrade a genuine dataset input the catalog mistyped scalar", () => {
+    // Only expression/statement-named inputs are corrected; a real raster/vector
+    // input whose name is not an expression must keep its WASM dataset kind even
+    // if the catalog snapshot mistypes it as a string.
+    const catalog: WhiteboxTool = {
+      id: "some_tool",
+      params: [{ name: "input", kind: "string", required: true }],
+    };
+    const wasm: WhiteboxTool = {
+      id: "some_tool",
+      params: [
+        { name: "input", data_kind: "raster", io_role: "input", required: true },
+      ],
+    };
+    const [tool] = mergeWasmToolManifests([catalog], [wasm]);
+    assert.equal(tool.params?.[0]?.kind, undefined);
+  });
+
   it("never overrides a WASM output param, even if the catalog types it scalar", () => {
     // A scalar-typed catalog output must not divert a genuine WASM dataset
     // output into the plain-arg path (which would break its run). Only inputs

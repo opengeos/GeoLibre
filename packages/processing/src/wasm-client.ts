@@ -207,25 +207,36 @@ const CATALOG_SCALAR_KINDS = new Set(["string", "int", "double"]);
  * `expression` is typed as a vector input (rendering a second layer picker),
  * so neither exposes a text field to type the expression (GeoLibre#1073). When
  * the Python sidecar's catalog types the same-named param as a plain scalar
- * (string/int/double) but the WASM manifest makes it a dataset **input** or a
- * bool, we trust the catalog so the dialog renders (and the runner serializes) a
- * text input. Genuine enums/dropdowns and already-matching kinds are left
- * untouched. Output params are deliberately excluded: neither motivating bug
- * (#1073) involves an output, and diverting a genuine dataset output into the
- * plain-arg path would break its run, so a scalar-typed catalog output never
- * overrides a WASM `*_out`.
+ * (string/int/double) but the WASM manifest makes it a `bool` (any name) or a
+ * dataset **input** whose *name* marks it as a free-text expression, we trust
+ * the catalog so the dialog renders (and the runner serializes) a text input.
  *
+ * The scope is deliberately tight:
+ * - A `bool` mislabel is always safe to correct (no dataset is involved), which
+ *   covers `extract_by_attribute.statement`.
+ * - A dataset **input** is only downgraded when its name is `expression`/
+ *   `statement` (mirroring the upstream wbcore `looks_like_expression` fix),
+ *   which covers `field_calculator.expression` without downgrading a genuine
+ *   raster/vector/lidar input that the catalog merely mistyped as a scalar.
+ * - Outputs are never touched: diverting a real dataset output into the
+ *   plain-arg path would break its run.
+ *
+ * Enums/dropdowns and already-matching kinds are left untouched.
+ *
+ * @param param - The WASM manifest param (its name gates the input case).
  * @param wasmKind - The kind derived from the WASM manifest param.
  * @param catalogKind - The kind the catalog declares for the same-named param.
  * @returns `true` when the catalog kind should replace the WASM kind.
  */
 function shouldPreferCatalogKind(
+  param: WhiteboxToolParameter,
   wasmKind: string,
   catalogKind: string | undefined,
 ): boolean {
   if (!catalogKind || catalogKind === wasmKind) return false;
   if (!CATALOG_SCALAR_KINDS.has(catalogKind)) return false;
-  return wasmKind.endsWith("_in") || wasmKind === "bool";
+  if (wasmKind === "bool") return true;
+  return wasmKind.endsWith("_in") && /\b(expression|statement)\b/i.test(param.name);
 }
 
 /**
@@ -244,7 +255,7 @@ function reconcileToolParams(
     const catalogParam = catalogByName.get(param.name);
     if (!catalogParam) return param;
     const catalogKind = paramKind(catalogParam);
-    if (shouldPreferCatalogKind(paramKind(param), catalogKind)) {
+    if (shouldPreferCatalogKind(param, paramKind(param), catalogKind)) {
       return { ...param, kind: catalogKind as WhiteboxToolParameter["kind"] };
     }
     return param;
@@ -329,8 +340,22 @@ export function fileOutputTargetExtension(
     const match = requested.match(/\.([A-Za-z0-9]+)$/);
     if (match) return match[1].toLowerCase();
   }
-  // Mirror ProcessingDialog's `outputExtensionForParameter` hint order so a
-  // blank output field still writes the format the param's prose declares.
+  return outputTextFormatHint(param) ?? "dat";
+}
+
+/**
+ * The text/tabular output format a `file_out` parameter declares through its
+ * name, description, or `table` data kind, as a bare extension (`csv`/`html`/
+ * `json`), or `null` when nothing recognizable is found. Shared by the WASM
+ * runner's {@link fileOutputTargetExtension} and the dialog's default-name and
+ * download-naming code so the two hint lists cannot drift apart.
+ *
+ * @param param - The output parameter.
+ * @returns `"csv" | "html" | "json"`, or `null` if no text format is implied.
+ */
+export function outputTextFormatHint(
+  param: WhiteboxToolParameter,
+): string | null {
   const hint = `${param.name ?? ""} ${param.description ?? ""} ${param.type ?? ""}`;
   if (/\bcsv\b/i.test(hint)) return "csv";
   if (/\bhtml\b/i.test(hint)) return "html";
@@ -346,7 +371,7 @@ export function fileOutputTargetExtension(
   const dataKind = String(
     param.data_kind ?? dataset.kind ?? param.type ?? "",
   ).toLowerCase();
-  return dataKind === "table" ? "csv" : "dat";
+  return dataKind === "table" ? "csv" : null;
 }
 
 function isFeatureCollection(value: unknown): value is FeatureCollection {
