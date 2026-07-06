@@ -18,12 +18,6 @@ import {
  */
 const connectionsByLayerId = new Map<string, string>();
 
-// Primary-key values the layer's edit session started from (set at load and
-// refreshed after each save). Sent with a save so the sidecar scopes deletions
-// to rows this session actually read, leaving concurrently inserted rows
-// alone. Session-only, like the connection itself.
-const baselineKeysByLayerId = new Map<string, Array<string | number>>();
-
 /** Remember the connection string an editable PostGIS layer was loaded with. */
 export function registerPostgisConnection(
   layerId: string,
@@ -32,28 +26,30 @@ export function registerPostgisConnection(
   connectionsByLayerId.set(layerId, connection);
 }
 
-/** Remember the primary-key values the layer's edit session started from. */
-export function setPostgisBaselineKeys(
-  layerId: string,
-  keys: Array<string | number>,
-): void {
-  baselineKeysByLayerId.set(layerId, keys);
-}
-
-/** The session's baseline primary-key values for the layer, if known. */
-export function getPostgisBaselineKeys(
-  layerId: string,
-): Array<string | number> | null {
-  return baselineKeysByLayerId.get(layerId) ?? null;
-}
-
 /**
- * Drop the layer's session state (connection string and baseline keys), e.g.
- * when the layer is removed, so credentials do not outlive the layer.
+ * Drop the layer's session state (its connection string), e.g. when the layer
+ * is removed, so credentials do not outlive the layer.
  */
 export function unregisterPostgisConnection(layerId: string): void {
   connectionsByLayerId.delete(layerId);
-  baselineKeysByLayerId.delete(layerId);
+}
+
+/**
+ * The primary-key values the layer's edit session started from, persisted on
+ * the layer metadata (`postgisBaselineKeys`) so the protection survives a
+ * project reload — unlike the connection string, keys are not credentials.
+ * Sent with a save so the sidecar scopes deletions to rows this session
+ * actually read, leaving concurrently inserted rows alone.
+ */
+export function postgisBaselineKeys(
+  layer: GeoLibreLayer,
+): Array<string | number> | undefined {
+  const keys = layer.metadata.postgisBaselineKeys;
+  if (!Array.isArray(keys)) return undefined;
+  return keys.filter(
+    (key): key is string | number =>
+      typeof key === "string" || typeof key === "number",
+  );
 }
 
 /**

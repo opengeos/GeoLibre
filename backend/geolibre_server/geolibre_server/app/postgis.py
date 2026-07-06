@@ -198,16 +198,20 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
 
         cur.execute(
             """
-            SELECT column_name
+            SELECT column_name, data_type
             FROM information_schema.columns
             WHERE table_schema = %s AND table_name = %s
             ORDER BY ordinal_position
             """,
             (schema, table),
         )
-        columns = [
-            row[0] for row in cur.fetchall() if row[0] not in all_geometry_columns
+        column_rows = [
+            row for row in cur.fetchall() if row[0] not in all_geometry_columns
         ]
+        columns = [name for name, _ in column_rows]
+        # data_type distinguishes native arrays ('ARRAY') from json/jsonb, so
+        # the write path can bind a Python list correctly for each.
+        column_types = dict(column_rows)
 
     return {
         "geometry_column": geometry_column,
@@ -216,6 +220,7 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
         "pk_is_generated": pk_is_generated,
         "pk_always_identity": pk_always_identity,
         "columns": columns,
+        "column_types": column_types,
     }
 
 
@@ -305,11 +310,17 @@ def postgis_tables(request: PostgisTablesRequest) -> dict[str, Any]:
 
 
 def _json_safe(value: Any) -> Any:
-    """Convert a database cell to a JSON-serializable value."""
+    """Convert a database cell to a JSON-serializable value.
+
+    Recurses into containers so e.g. a ``date[]`` array column serializes as a
+    list of ISO strings rather than failing JSON encoding.
+    """
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
-    if isinstance(value, (list, dict)):
-        return value
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
     if isinstance(value, (bytes, memoryview)):
         return bytes(value).hex()
     # datetime/date/time/Decimal/UUID and anything else stringify cleanly.
@@ -528,8 +539,14 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                             if key not in writable_set and key != pk
                         )
                         columns = [c for c in writable if c in properties]
+                        # dicts and lists bind as json/jsonb — except a list
+                        # aimed at a native array column (data_type 'ARRAY'),
+                        # which psycopg's array adapter must handle instead.
                         values = [
-                            psycopg.types.json.Json(properties[c])
+                            properties[c]
+                            if isinstance(properties[c], list)
+                            and info["column_types"].get(c) == "ARRAY"
+                            else psycopg.types.json.Json(properties[c])
                             if isinstance(properties[c], (dict, list))
                             else properties[c]
                             for c in columns

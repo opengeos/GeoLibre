@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import type { GeoLibreLayer } from "@geolibre/core";
 import {
+  postgisBaselineKeys,
   registerPostgisConnection,
   resolvePostgisConnection,
   unregisterPostgisConnection,
@@ -80,5 +81,13 @@ describe("postgis connection registry", () => {
     withSavedConnections([CONNECTION], () => {
       assert.equal(resolvePostgisConnection(postgisLayer("layer-d")), null);
     });
+  });
+
+  it("reads baseline keys from layer metadata, dropping junk entries", () => {
+    const layer = postgisLayer("layer-e", {
+      postgisBaselineKeys: [1, "two", null, { bad: true }, 3],
+    });
+    assert.deepEqual(postgisBaselineKeys(layer), [1, "two", 3]);
+    assert.equal(postgisBaselineKeys(postgisLayer("layer-f")), undefined);
   });
 });

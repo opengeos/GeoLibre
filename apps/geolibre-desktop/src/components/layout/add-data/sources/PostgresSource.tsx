@@ -5,7 +5,7 @@ import {
   type PostgisTableInfo,
 } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ensureMartinBinary,
@@ -18,7 +18,6 @@ import {
 import {
   postgisFeatureKeys,
   registerPostgisConnection,
-  setPostgisBaselineKeys,
 } from "../../../../lib/postgis-connections";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import { isTauri } from "../../../../lib/tauri-io";
@@ -56,6 +55,10 @@ export function PostgresSource() {
   // this snapshot (not the live input) so editing the field after a Connect
   // cannot silently read a same-named table from a different database.
   const [postgisConnection, setPostgisConnection] = useState("");
+  // Invalidation token for the async table listing: editing the connection
+  // string bumps it, so an in-flight listing for the previous string cannot
+  // repopulate the dropdown after its results stopped being relevant.
+  const listRequestRef = useRef(0);
 
   // Reset the (shell-owned) Martin connection when the source opens, matching
   // the original dialog: a running server is preserved across reopens only
@@ -71,6 +74,7 @@ export function PostgresSource() {
   // endpoints (psycopg) for the editable-layer mode. Martin is not involved:
   // the features are loaded as GeoJSON so edits can be written back.
   const handleConnectEditable = async () => {
+    const requestToken = ++listRequestRef.current;
     source.setError(null);
     setPostgisStatus(null);
     source.shell.setIsSubmitting(true);
@@ -101,6 +105,11 @@ export function PostgresSource() {
         throw new Error(t("addData.postgres.errorRuntimeMissing"));
       }
       const listed = await listPostgisTables(connectionString);
+      if (listRequestRef.current !== requestToken) {
+        // The connection string changed while the listing was in flight; do
+        // not revive a table list that belongs to the previous string.
+        return;
+      }
       // geometry_columns lists one row per geometry column, so a table with
       // several geometry columns appears several times; keep the first entry
       // (the /postgis/read endpoint edits that table's first geometry column)
@@ -127,8 +136,10 @@ export function PostgresSource() {
           : t("addData.postgres.statusNoTables"),
       );
     } catch (err) {
-      source.setError(errorMessage(err, t("addData.postgres.errorConnect")));
-      setPostgisStatus(null);
+      if (listRequestRef.current === requestToken) {
+        source.setError(errorMessage(err, t("addData.postgres.errorConnect")));
+        setPostgisStatus(null);
+      }
     } finally {
       source.shell.setIsSubmitting(false);
     }
@@ -287,12 +298,14 @@ export function PostgresSource() {
           postgisGeometryColumn: result.geometry_column,
           postgisSrid: result.srid,
           postgisConnectionLabel: savedPostgresConnectionLabel(connectionString),
+          // Persisted with the project so the deletion-scoping baseline
+          // survives a reload (keys are not credentials).
+          postgisBaselineKeys: postgisFeatureKeys(result.geojson),
         },
       ),
       geojson: result.geojson,
     };
     registerPostgisConnection(layer.id, connectionString);
-    setPostgisBaselineKeys(layer.id, postgisFeatureKeys(result.geojson));
     source.addAndClose(layer, { fit: true });
   };
 
@@ -374,6 +387,7 @@ export function PostgresSource() {
               onChange={(event) => {
                 setPostgresConnectionString(event.target.value);
                 if (event.target.value.trim() !== postgisConnection) {
+                  listRequestRef.current += 1;
                   setPostgisTables([]);
                   setSelectedTableKey("");
                   setPostgisConnection("");
@@ -405,9 +419,10 @@ export function PostgresSource() {
             onChange={(event) => {
               setPostgresConnectionString(event.target.value);
               // The fetched table list belongs to the previous connection
-              // string; invalidate it so a stale selection cannot be submitted
-              // against a different database.
+              // string; invalidate it (and any in-flight listing) so a stale
+              // selection cannot be submitted against a different database.
               if (event.target.value.trim() !== postgisConnection) {
+                listRequestRef.current += 1;
                 setPostgisTables([]);
                 setSelectedTableKey("");
                 setPostgisConnection("");

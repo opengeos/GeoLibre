@@ -494,6 +494,55 @@ def test_write_rejects_tables_beyond_feature_cap(live_table, monkeypatch) -> Non
 
 
 @requires_live_postgis
+def test_native_array_and_jsonb_columns_round_trip(live_table) -> None:
+    """text[] binds as an array and jsonb as JSON on write-back."""
+    table = "geolibre_writeback_arrays"
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {table}")
+            cur.execute(
+                f"""
+                CREATE TABLE {table} (
+                    gid integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                    tags text[],
+                    attrs jsonb,
+                    geom geometry(Point, 4326)
+                )
+                """
+            )
+            cur.execute(
+                f"INSERT INTO {table} (tags, attrs, geom) VALUES "
+                "(%s, %s, ST_SetSRID(ST_MakePoint(0, 0), 4326))",
+                (["a", "b"], '{"k": 1}'),
+            )
+        conn.commit()
+    try:
+        read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=table))
+        properties = read["geojson"]["features"][0]["properties"]
+        assert properties["tags"] == ["a", "b"]
+        assert properties["attrs"] == {"k": 1}
+        properties["tags"] = ["a", "b", "c"]
+        properties["attrs"] = {"k": 2}
+        result = postgis_write(
+            PostgisWriteRequest(
+                connection=LIVE_DSN,
+                table=table,
+                geojson=read["geojson"],
+            )
+        )
+        assert result["updated"] == 1
+        rows = _rows(
+            f"SELECT tags[3], attrs->>'k', pg_typeof(tags)::text FROM {table}"
+        )
+        assert rows == [("c", "2", "text[]")]
+    finally:
+        with psycopg.connect(LIVE_DSN) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"DROP TABLE IF EXISTS {table}")
+            conn.commit()
+
+
+@requires_live_postgis
 def test_write_requires_single_column_primary_key(live_table) -> None:
     feature = {
         "type": "Feature",

@@ -118,10 +118,9 @@ import {
   writeVectorToSource,
 } from "@geolibre/processing";
 import {
-  getPostgisBaselineKeys,
+  postgisBaselineKeys,
   postgisFeatureKeys,
   resolvePostgisConnection,
-  setPostgisBaselineKeys,
   unregisterPostgisConnection,
 } from "../../lib/postgis-connections";
 import { isTauri } from "../../lib/is-tauri";
@@ -1028,7 +1027,9 @@ export function LayerPanel({
             geojson,
             // Scope deletions to the rows this session actually read so a
             // save cannot sweep away rows inserted concurrently elsewhere.
-            baseline_keys: getPostgisBaselineKeys(layer.id) ?? undefined,
+            // The baseline lives on the layer metadata, so it survives a
+            // project reload.
+            baseline_keys: postgisBaselineKeys(layer),
           });
           // Re-read the table so inserted features pick up their database-
           // assigned primary keys; without this a second save would insert
@@ -1038,7 +1039,6 @@ export function LayerPanel({
             schema_name: schema,
             table,
           });
-          setPostgisBaselineKeys(layer.id, postgisFeatureKeys(fresh.geojson));
           // Merge into the store's current metadata, not the click-time
           // closure: the write/re-read round trip is slow enough for other
           // updates (auto-refresh, time-slider binding) to land in between.
@@ -1047,7 +1047,11 @@ export function LayerPanel({
               ?.metadata ?? layer.metadata;
           updateLayer(layer.id, {
             geojson: fresh.geojson,
-            metadata: { ...currentMetadata, featureCount: fresh.feature_count },
+            metadata: {
+              ...currentMetadata,
+              featureCount: fresh.feature_count,
+              postgisBaselineKeys: postgisFeatureKeys(fresh.geojson),
+            },
           });
           message = t("layers.saveEditsPostgisSuccess", {
             table: `${schema}.${table}`,
