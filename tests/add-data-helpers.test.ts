@@ -7,7 +7,9 @@ import {
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
   fileNameFromPath,
+  normalizeWmsVersion,
   stripOgcOperationParams,
+  wmsVersionFromEndpoint,
   geoJsonToPointRows,
   inferDelimitedTextField,
   layerNameFromPath,
@@ -83,6 +85,76 @@ describe("createWmsTileUrl", () => {
     });
     assert.ok(url.includes("TRANSPARENT=FALSE"));
     assert.ok(url.includes("HEIGHT=512"));
+  });
+
+  it("defaults to WMS 1.1.1 with an SRS parameter", () => {
+    const url = createWmsTileUrl({
+      endpoint: "https://x.test/wms",
+      layers: "a",
+      styles: "",
+      format: "image/png",
+      transparent: true,
+      tileSize: 256,
+    });
+    assert.ok(url.includes("VERSION=1.1.1"));
+    assert.ok(url.includes("SRS=EPSG%3A3857"));
+    assert.ok(!url.includes("CRS="));
+  });
+
+  it("switches to CRS for a WMS 1.3.0 request", () => {
+    // A 1.3.0-only server (e.g. the IGN Géoplateforme raster endpoint) rejects
+    // a 1.1.1 GetMap with VersionNegotiationFailed, so the version must be
+    // honored and the SRS parameter renamed to CRS.
+    const url = createWmsTileUrl({
+      endpoint: "https://x.test/wms",
+      layers: "a",
+      styles: "",
+      format: "image/png",
+      transparent: true,
+      tileSize: 256,
+      version: "1.3.0",
+    });
+    assert.ok(url.includes("VERSION=1.3.0"));
+    assert.ok(url.includes("CRS=EPSG%3A3857"));
+    assert.ok(!url.includes("SRS="));
+    assert.ok(url.includes("BBOX={bbox-epsg-3857}"));
+  });
+});
+
+describe("normalizeWmsVersion", () => {
+  it("collapses versions to the 1.1.1/1.3.0 pair", () => {
+    assert.equal(normalizeWmsVersion(undefined), "1.1.1");
+    assert.equal(normalizeWmsVersion(null), "1.1.1");
+    assert.equal(normalizeWmsVersion("1.1.1"), "1.1.1");
+    assert.equal(normalizeWmsVersion("1.3.0"), "1.3.0");
+    assert.equal(normalizeWmsVersion("1.3"), "1.3.0");
+    assert.equal(normalizeWmsVersion("garbage"), "1.1.1");
+    // An untyped JS plugin can pass a non-string; it must not throw.
+    assert.equal(normalizeWmsVersion(1.3), "1.1.1");
+    assert.equal(normalizeWmsVersion({}), "1.1.1");
+  });
+});
+
+describe("wmsVersionFromEndpoint", () => {
+  it("reads the VERSION parameter from a pasted service URL", () => {
+    assert.equal(
+      wmsVersionFromEndpoint("https://data.geopf.fr/wms-r?VERSION=1.3.0"),
+      "1.3.0",
+    );
+    assert.equal(
+      wmsVersionFromEndpoint("https://x.test/wms?version=1.1.1&foo=1"),
+      "1.1.1",
+    );
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=1.0.0"), "1.1.1");
+    // Any 1.x value is bucketed the same way normalizeWmsVersion buckets it.
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=1.2.0"), "1.1.1");
+  });
+
+  it("returns null when no usable version is present", () => {
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms"), null);
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=abc"), null);
+    // An undecodable value must not throw.
+    assert.equal(wmsVersionFromEndpoint("https://x.test/wms?VERSION=%E0%A4%A"), null);
   });
 });
 

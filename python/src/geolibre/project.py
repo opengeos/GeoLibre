@@ -352,6 +352,21 @@ def _append_query(endpoint: str, params: list[tuple[str, str]]) -> str:
     return f"{base}{separator}{query}{sep}{fragment}"
 
 
+def _normalize_wms_version(version: str | None) -> str:
+    """Normalize a WMS version to the "1.1.1"/"1.3.0" pair the builder emits.
+
+    Args:
+        version: The requested WMS protocol version, or None.
+
+    Returns:
+        ``"1.3.0"`` for any version in the 1.3 line, ``"1.1.1"`` otherwise
+        (including None or a non-string value).
+    """
+    if not isinstance(version, str):
+        return "1.1.1"
+    return "1.3.0" if version.strip().startswith("1.3") else "1.1.1"
+
+
 def wms_layer(
     name: str,
     endpoint: str,
@@ -361,6 +376,7 @@ def wms_layer(
     image_format: str = "image/png",
     transparent: bool = True,
     tile_size: int = 256,
+    version: str | None = "1.1.1",
     **style: Any,
 ) -> dict[str, Any]:
     """Build a WMS layer rendered as tiled raster (a WMS GetMap request).
@@ -377,22 +393,27 @@ def wms_layer(
         image_format: WMS image format (e.g. ``"image/png"``).
         transparent: Whether to request transparent tiles.
         tile_size: Tile size in pixels.
+        version: WMS protocol version, ``"1.1.1"`` (default) or ``"1.3.0"``.
+            Version 1.3.0 sends ``CRS`` instead of ``SRS``; some servers accept
+            only one version. EPSG:3857 keeps its axis order in both, so the
+            BBOX template is unchanged. None falls back to ``"1.1.1"``.
         **style: Style overrides merged into the default layer style.
 
     Returns:
         A layer dict for the project's ``layers`` array.
     """
+    wms_version = _normalize_wms_version(version)
     tile_url = _append_query(
         endpoint,
         [
             ("SERVICE", "WMS"),
             ("REQUEST", "GetMap"),
-            ("VERSION", "1.1.1"),
+            ("VERSION", wms_version),
             ("LAYERS", layers),
             ("STYLES", styles),
             ("FORMAT", image_format),
             ("TRANSPARENT", "TRUE" if transparent else "FALSE"),
-            ("SRS", "EPSG:3857"),
+            ("CRS" if wms_version == "1.3.0" else "SRS", "EPSG:3857"),
             ("BBOX", "{bbox-epsg-3857}"),
             ("WIDTH", str(tile_size)),
             ("HEIGHT", str(tile_size)),
@@ -408,6 +429,7 @@ def wms_layer(
         "styles": styles,
         "format": image_format,
         "transparent": transparent,
+        "version": wms_version,
     }
     layer["metadata"] = {"service": "wms"}
     return layer

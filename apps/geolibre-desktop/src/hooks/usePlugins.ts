@@ -72,7 +72,10 @@ import {
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
-import { createWmsTileUrl } from "../components/layout/add-data/helpers";
+import {
+  createWmsTileUrl,
+  normalizeWmsVersion,
+} from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
 import {
@@ -664,6 +667,7 @@ export function createAppAPI(
         styles,
         format,
         transparent,
+        version,
         ...tileOptions
       } = options;
       // TypeScript enforces these, but an untyped JS plugin can pass "" — an
@@ -682,6 +686,19 @@ export function createAppAPI(
       const resolvedStyles = styles ?? "";
       const resolvedFormat = format ?? "image/png";
       const resolvedTransparent = transparent ?? true;
+      const resolvedVersion = normalizeWmsVersion(version);
+      // Mirror setMapProjection's unrecognized-value warning so a typo'd
+      // version from an untyped JS plugin is visible instead of silently
+      // coerced. Valid shorthand in a recognized 1.x family (e.g. "1.3") is
+      // not warned about — it normalizes cleanly.
+      if (
+        version !== undefined &&
+        (typeof version !== "string" || !/^1\.\d/.test(version.trim()))
+      ) {
+        console.warn(
+          `[GeoLibre] addWmsLayer: unsupported WMS version "${String(version)}"; using "${resolvedVersion}".`,
+        );
+      }
       const tileUrl = createWmsTileUrl({
         endpoint: url,
         layers,
@@ -689,6 +706,7 @@ export function createAppAPI(
         format: resolvedFormat,
         transparent: resolvedTransparent,
         tileSize,
+        version: resolvedVersion,
       });
       return store.addTileLayer(
         name,
@@ -703,6 +721,7 @@ export function createAppAPI(
             styles: resolvedStyles,
             format: resolvedFormat,
             transparent: resolvedTransparent,
+            version: resolvedVersion,
           },
           ...tileOptions,
         },

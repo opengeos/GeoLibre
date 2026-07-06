@@ -67,6 +67,18 @@ export function appendQuery(
   return `${endpoint}${separator}${query}`;
 }
 
+/**
+ * Normalizes a WMS version to one of the two protocol variants the GetMap
+ * builder emits: anything in the 1.3 line is "1.3.0", everything else (an
+ * unset value, or a non-string from an untyped JS plugin) falls back to
+ * "1.1.1".
+ */
+export function normalizeWmsVersion(version: unknown): string {
+  return typeof version === "string" && version.trim().startsWith("1.3")
+    ? "1.3.0"
+    : "1.1.1";
+}
+
 export function createWmsTileUrl(options: {
   endpoint: string;
   layers: string;
@@ -74,20 +86,49 @@ export function createWmsTileUrl(options: {
   format: string;
   transparent: boolean;
   tileSize: number;
+  /** WMS protocol version, "1.1.1" (default) or "1.3.0". */
+  version?: string;
 }): string {
+  // WMS 1.3.0 renames the SRS parameter to CRS; a 1.3.0-only server (e.g. the
+  // IGN Géoplateforme raster endpoint) rejects a 1.1.1 request outright with
+  // VersionNegotiationFailed. EPSG:3857 keeps easting/northing axis order in
+  // both versions, so the BBOX template is unchanged.
+  const version = normalizeWmsVersion(options.version);
   return appendQuery(options.endpoint, [
     ["SERVICE", "WMS"],
     ["REQUEST", "GetMap"],
-    ["VERSION", "1.1.1"],
+    ["VERSION", version],
     ["LAYERS", options.layers],
     ["STYLES", options.styles],
     ["FORMAT", options.format],
     ["TRANSPARENT", options.transparent ? "TRUE" : "FALSE"],
-    ["SRS", "EPSG:3857"],
+    [version === "1.3.0" ? "CRS" : "SRS", "EPSG:3857"],
     ["BBOX", "{bbox-epsg-3857}"],
     ["WIDTH", String(options.tileSize)],
     ["HEIGHT", String(options.tileSize)],
   ]);
+}
+
+/**
+ * Reads the WMS version from a `VERSION` query parameter the user left on a
+ * pasted service URL, so the Add Data form can preselect it before the
+ * parameter is stripped from the endpoint. Returns null when the URL carries
+ * no recognizable version.
+ */
+export function wmsVersionFromEndpoint(endpoint: string): string | null {
+  const match = /[?&]version=([^&#]+)/i.exec(endpoint);
+  if (!match) return null;
+  let value: string;
+  try {
+    value = decodeURIComponent(match[1]).trim();
+  } catch {
+    return null;
+  }
+  // Recognize any 1.x value so detection agrees with normalizeWmsVersion's
+  // bucketing (e.g. a rare VERSION=1.2.0 lands in the 1.1.1 bucket rather
+  // than being silently ignored).
+  if (!/^1\.\d/.test(value)) return null;
+  return normalizeWmsVersion(value);
 }
 
 export function parseRequiredNumber(value: string, label: string): number {
@@ -424,17 +465,30 @@ export function createWmsGetCapabilitiesUrl(endpoint: string): string {
   return buildCapabilitiesUrl(endpoint, "WMS", WMS_OPERATION_PARAMS);
 }
 
+/** The parts of a WMS GetCapabilities document the Add Data dialog uses. */
+export interface WmsCapabilities {
+  /** The named layers in document order, deduplicated by name. */
+  layers: WmsLayerOption[];
+  /**
+   * The service's negotiated WMS version (the root element's `version`
+   * attribute), or null when the document does not carry one. A 1.3.0-only
+   * server reports it here, letting the form switch the GetMap version.
+   */
+  version: string | null;
+}
+
 /**
- * Extracts the requestable (named) layers from a WMS GetCapabilities document.
- * Only `<Layer>` elements that carry their own `<Name>` are requestable; the
- * container layers that merely group others (a `<Title>` but no `<Name>`) are
- * skipped. Traversal is namespace-agnostic so it handles both WMS 1.1.1
- * (`WMT_MS_Capabilities`) and 1.3.0 (`WMS_Capabilities`, default namespace).
+ * Extracts the requestable (named) layers and the negotiated version from a
+ * WMS GetCapabilities document. Only `<Layer>` elements that carry their own
+ * `<Name>` are requestable; the container layers that merely group others (a
+ * `<Title>` but no `<Name>`) are skipped. Traversal is namespace-agnostic so
+ * it handles both WMS 1.1.1 (`WMT_MS_Capabilities`) and 1.3.0
+ * (`WMS_Capabilities`, default namespace).
  *
  * @param xmlText - The raw GetCapabilities XML response body.
- * @returns The named layers in document order, deduplicated by name.
+ * @returns The named layers plus the document's version attribute.
  */
-export function parseWmsCapabilitiesLayers(xmlText: string): WmsLayerOption[] {
+export function parseWmsCapabilities(xmlText: string): WmsCapabilities {
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   if (doc.querySelector("parsererror")) {
     throw new Error("Could not parse the WMS capabilities document.");
@@ -463,7 +517,7 @@ export function parseWmsCapabilitiesLayers(xmlText: string): WmsLayerOption[] {
     seen.add(name);
     layers.push({ name, title: directChildText(layer, "Title") || name });
   }
-  return layers;
+  return { layers, version: root.getAttribute("version") };
 }
 
 /**
@@ -504,17 +558,18 @@ function capabilitiesRootError(
 
 /**
  * Fetches a WMS service's GetCapabilities document and returns its requestable
- * layers. Works cross-origin in the desktop app and dev server; in the hosted
- * web build it relies on the service's own CORS headers.
+ * layers plus the negotiated version. Works cross-origin in the desktop app
+ * and dev server; in the hosted web build it relies on the service's own CORS
+ * headers.
  *
  * @param endpoint - The WMS service base URL.
  * @param options - Optional abort signal.
- * @returns The named layers advertised by the service.
+ * @returns The named layers and version advertised by the service.
  */
-export async function fetchWmsLayers(
+export async function fetchWmsCapabilities(
   endpoint: string,
   options: { signal?: AbortSignal } = {},
-): Promise<WmsLayerOption[]> {
+): Promise<WmsCapabilities> {
   const requestUrl = createWmsGetCapabilitiesUrl(endpoint.trim());
   const { ok, status, text } = await fetchCapabilitiesText(
     requestUrl,
@@ -526,7 +581,7 @@ export async function fetchWmsLayers(
   if (!ok && !/^\s*</.test(text)) {
     throw new Error(`Request failed with status ${status}`);
   }
-  return parseWmsCapabilitiesLayers(text);
+  return parseWmsCapabilities(text);
 }
 
 /** A single feature type advertised by a WFS GetCapabilities. */
@@ -583,7 +638,7 @@ export function parseWfsCapabilitiesFeatureTypes(
   if (doc.querySelector("parsererror")) {
     throw new Error("Could not parse the WFS capabilities document.");
   }
-  // Validate the root element (see parseWmsCapabilitiesLayers) so an exception
+  // Validate the root element (see parseWmsCapabilities) so an exception
   // or HTML error page surfaces an error instead of an empty type list.
   const root = doc.documentElement;
   if (root?.localName !== "WFS_Capabilities") {

@@ -7,8 +7,10 @@ import {
   createBaseLayer,
   createWmsTileUrl,
   errorMessage,
-  fetchWmsLayers,
+  fetchWmsCapabilities,
+  normalizeWmsVersion,
   stripOgcOperationParams,
+  wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
@@ -31,6 +33,8 @@ interface WmsFormCache {
   format: string;
   transparent: boolean;
   tileSize: string;
+  version: string;
+  versionTouched: boolean;
   options: WmsLayerOption[];
 }
 let wmsFormCache: WmsFormCache | null = null;
@@ -46,6 +50,20 @@ export function WmsSource() {
     wmsFormCache?.transparent ?? true,
   );
   const [wmsTileSize, setWmsTileSize] = useState(wmsFormCache?.tileSize ?? "256");
+  const [wmsVersion, setWmsVersion] = useState(wmsFormCache?.version ?? "1.1.1");
+  // True while the version has an explicit source — the selector, a pasted
+  // URL's VERSION parameter, or a saved service entry. Capabilities
+  // auto-detection only fills the version in when no explicit source exists.
+  // Mirrored in a ref so the async retrieve handler reads the value current at
+  // response time, not the one captured when the button was clicked.
+  const [versionTouched, setVersionTouched] = useState(
+    wmsFormCache?.versionTouched ?? false,
+  );
+  const versionTouchedRef = useRef(versionTouched);
+  const markVersionTouched = (touched: boolean) => {
+    versionTouchedRef.current = touched;
+    setVersionTouched(touched);
+  };
   const [layerOptions, setLayerOptions] = useState<WmsLayerOption[]>(
     wmsFormCache?.options ?? [],
   );
@@ -63,6 +81,8 @@ export function WmsSource() {
       format: wmsFormat,
       transparent: wmsTransparent,
       tileSize: wmsTileSize,
+      version: wmsVersion,
+      versionTouched,
       options: layerOptions,
     };
   }, [
@@ -72,6 +92,8 @@ export function WmsSource() {
     wmsFormat,
     wmsTransparent,
     wmsTileSize,
+    wmsVersion,
+    versionTouched,
     layerOptions,
   ]);
   // Guards against a stale in-flight retrieval overwriting the form after the
@@ -111,7 +133,7 @@ export function WmsSource() {
     setIsRetrieving(true);
     setRetrieveError(null);
     try {
-      const options = await fetchWmsLayers(endpoint, {
+      const { layers: options, version } = await fetchWmsCapabilities(endpoint, {
         signal: controller.signal,
       });
       if (isStale()) return;
@@ -121,6 +143,15 @@ export function WmsSource() {
         return;
       }
       setLayerOptions(options);
+      // Adopt the service's negotiated version so a 1.3.0-only server (e.g.
+      // the IGN Géoplateforme raster endpoint) gets a GetMap it accepts —
+      // unless the user already picked a version explicitly, since a server
+      // can negotiate GetCapabilities and GetMap differently. Read the ref,
+      // not the state: the user may have touched the selector while this
+      // request was in flight.
+      if (version && !versionTouchedRef.current) {
+        setWmsVersion(normalizeWmsVersion(version));
+      }
       // Preselect the first layer when the field is empty so a single click
       // leaves the form ready to submit.
       if (!wmsLayers.trim()) setWmsLayers(options[0].name);
@@ -140,15 +171,28 @@ export function WmsSource() {
     format: wmsFormat,
     transparent: wmsTransparent,
     tileSize: wmsTileSize,
+    // Only persist the version when it has an explicit source; an untouched
+    // default stays eligible for URL/capabilities auto-detection on reload.
+    ...(versionTouched ? { version: wmsVersion } : {}),
   });
 
   const applyFields = (fields: ServiceFields) => {
-    setWmsEndpoint(serviceFieldString(fields, "endpoint"));
+    const endpoint = serviceFieldString(fields, "endpoint");
+    setWmsEndpoint(endpoint);
     setWmsLayers(serviceFieldString(fields, "layers"));
     setWmsStyles(serviceFieldString(fields, "styles"));
     setWmsFormat(serviceFieldString(fields, "format", "image/png"));
     setWmsTransparent(serviceFieldBoolean(fields, "transparent", true));
     setWmsTileSize(serviceFieldString(fields, "tileSize", "256"));
+    // A saved service predating the version field falls back to the endpoint's
+    // own VERSION parameter (if any) rather than silently resetting to 1.1.1.
+    // Normalize whatever was stored so a hand-edited value (e.g. "1.3") still
+    // matches the selector's option pair. Either source is an explicit prior
+    // choice, so capabilities auto-detection must not override it later.
+    const savedVersion = serviceFieldString(fields, "version");
+    const detectedVersion = wmsVersionFromEndpoint(endpoint);
+    setWmsVersion(normalizeWmsVersion(savedVersion || detectedVersion || "1.1.1"));
+    markVersionTouched(Boolean(savedVersion || detectedVersion));
     // The new endpoint's layers must be re-retrieved, so drop the old list and
     // cancel any retrieval still in flight for the previous endpoint.
     cancelRetrieve();
@@ -166,6 +210,7 @@ export function WmsSource() {
     // Strip any leftover operation params (a pasted GetCapabilities URL) so the
     // GetMap request is not built with a conflicting duplicate REQUEST.
     const endpoint = stripOgcOperationParams(wmsEndpoint.trim(), "WMS");
+    const version = normalizeWmsVersion(wmsVersion);
     const tileUrl = createWmsTileUrl({
       endpoint,
       layers: wmsLayers.trim(),
@@ -173,6 +218,7 @@ export function WmsSource() {
       format: wmsFormat,
       transparent: wmsTransparent,
       tileSize,
+      version,
     });
     source.addAndClose(
       createBaseLayer(
@@ -187,6 +233,7 @@ export function WmsSource() {
           styles: wmsStyles.trim(),
           format: wmsFormat,
           transparent: wmsTransparent,
+          version,
         },
         { service: "wms" },
       ),
@@ -222,7 +269,33 @@ export function WmsSource() {
               placeholder={t("addData.wms.urlPlaceholder")}
               value={wmsEndpoint}
               onChange={(event) => {
-                setWmsEndpoint(event.target.value);
+                const value = event.target.value;
+                const previous = wmsEndpoint;
+                setWmsEndpoint(value);
+                // A pasted URL often carries the service's VERSION (stripped
+                // before the GetMap is built); adopt it so a 1.3.0-only server
+                // works without a manual version change, and treat it as an
+                // explicit source that capabilities auto-detection must not
+                // override. A different service (origin + path changed) always
+                // re-derives the version from its own URL — or the default —
+                // so a choice made for the previous service cannot leak onto
+                // it. Within the same service, only an actual change to the
+                // URL's declared VERSION is adopted; fixing an unrelated typo
+                // must not clobber a manual selection.
+                const detected = wmsVersionFromEndpoint(value);
+                const serviceChanged =
+                  value.trim().split(/[?#]/)[0] !==
+                  previous.trim().split(/[?#]/)[0];
+                if (serviceChanged) {
+                  setWmsVersion(detected ?? "1.1.1");
+                  markVersionTouched(detected != null);
+                } else if (
+                  detected &&
+                  detected !== wmsVersionFromEndpoint(previous)
+                ) {
+                  setWmsVersion(detected);
+                  markVersionTouched(true);
+                }
                 // Layers belong to the previous endpoint; clear them (and cancel
                 // any in-flight retrieval) so the list never reflects a
                 // different service.
@@ -324,6 +397,20 @@ export function WmsSource() {
               value={wmsTileSize}
               onChange={(event) => setWmsTileSize(event.target.value)}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="wms-version">{t("addData.wms.version")}</Label>
+            <Select
+              id="wms-version"
+              value={wmsVersion}
+              onChange={(event) => {
+                setWmsVersion(event.target.value);
+                markVersionTouched(true);
+              }}
+            >
+              <option value="1.1.1">1.1.1</option>
+              <option value="1.3.0">1.3.0</option>
+            </Select>
           </div>
         </div>
         <label className="flex items-center gap-2 text-sm">

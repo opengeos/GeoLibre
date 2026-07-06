@@ -80,6 +80,11 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
   format?: string;
   /** Request transparent tiles (default true). */
   transparent?: boolean;
+  /**
+   * WMS protocol version: `"1.1.1"` (default) or `"1.3.0"`. Version 1.3.0
+   * sends `CRS` instead of `SRS`; some servers accept only one version.
+   */
+  version?: string;
 }
 
 /**
