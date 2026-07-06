@@ -114,9 +114,13 @@ function getProperty(node: unknown): string | null {
  * Match the field text-field / categorized input shapes the exporter emits,
  * returning the underlying property name:
  * `["to-string", ["get", p]]`, `["to-string", ["coalesce", ["get", p], ""]]`,
- * or `["to-number", ["get", p], fallback]`.
+ * or `["to-number", ["get", p], fallback]`. Also accepts a bare `["get", p]`,
+ * which a hand-written or third-party style commonly uses as a match/interpolate
+ * input or a text-field.
  */
 function wrappedProperty(node: unknown): string | null {
+  const bare = getProperty(node);
+  if (bare) return bare;
   const array = asArray(node);
   if (!array) return null;
   const op = array[0];
@@ -156,6 +160,9 @@ function parseColorValue(value: unknown, warnings: string[]): ParsedColor {
   // (`["case", ["==", ["geometry-type"], "Polygon"], stroke, vectorColor]`) so a
   // line-only categorized/graduated layer recovers its renderer from the else
   // branch. Only this specific 4-element shape, not a real rule-based `case`.
+  // Accepted ambiguity: a genuine one-rule rule-based `case` whose sole rule
+  // filters on `geometry-type == "Polygon"` would be read as this guard; that
+  // exact shape is vanishingly rare and structurally indistinguishable.
   if (
     array[0] === "case" &&
     array.length === 4 &&
@@ -767,6 +774,13 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
 
   if (heatmap) {
     matchedLayerCount += 1;
+    // GeoLibre has a single point renderer, so a style with both a circle and a
+    // heatmap layer (e.g. split by zoom) collapses to the heatmap; flag the loss.
+    if (circle) {
+      warnings.push(
+        "The style has both circle and heatmap point layers; imported as a heatmap.",
+      );
+    }
     patch.pointRenderer = "heatmap";
     const paint = heatmap.paint ?? {};
     const radius = asFiniteNumber(paint["heatmap-radius"]);

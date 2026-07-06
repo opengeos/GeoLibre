@@ -712,6 +712,66 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.fillColor, "#111111");
   });
 
+  it("recognizes a bare [get] match input and text-field", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill",
+          source: "s",
+          paint: {
+            "fill-color": [
+              "match",
+              ["get", "region"],
+              "east",
+              "#ff0000",
+              "#000000",
+            ],
+          },
+        },
+        {
+          id: "labels",
+          type: "symbol",
+          source: "s",
+          layout: { "text-field": ["get", "name"] },
+          paint: {},
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.vectorStyleMode, "categorized");
+    assert.equal(result.style.vectorStyleProperty, "region");
+    assert.equal(result.labels?.field, "name");
+  });
+
+  it("warns when a style has both circle and heatmap point layers", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "pts",
+          type: "circle",
+          source: "s",
+          paint: { "circle-color": "#111111", "circle-radius": 5 },
+        },
+        {
+          id: "heat",
+          type: "heatmap",
+          source: "s",
+          paint: { "heatmap-radius": 20 },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.pointRenderer, "heatmap");
+    assert.ok(
+      result.warnings.some((w) => /both circle and heatmap/.test(w)),
+    );
+  });
+
   it("does not fold layer opacity when opacity is 1 (round-trip is lossless)", () => {
     // A guard that the roundTrip helper's opacity=1 assumption holds: a distinct
     // fillOpacity survives export+import unchanged.
