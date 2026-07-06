@@ -205,12 +205,12 @@ function pointSymbolizer(
     "<PointSymbolizer><Graphic><Mark>",
     `<WellKnownName>${wellKnownName}</WellKnownName>`,
     fillElement(markPaint),
-    // A hairline outline keeps the mark visible on same-colored basemaps. It
-    // carries the same folded stroke-opacity as the polygon/line symbolizers so
-    // a reduced layer opacity fades the point outline too.
+    // The mark outline uses the layer's real stroke width and folded opacity,
+    // matching GeoLibre's own point rendering (circle-stroke-width is the full
+    // strokeWidth) so the width round-trips instead of being clamped on import.
     `<Stroke>${cssParam("stroke", paint.strokeColor)}${cssParam(
       "stroke-width",
-      num(Math.min(paint.strokeWidth, 1)),
+      num(paint.strokeWidth),
     )}${cssParam("stroke-opacity", num(paint.strokeOpacity))}</Stroke>`,
     "</Mark>",
     `<Size>${num(Math.max(1, size))}</Size>`,

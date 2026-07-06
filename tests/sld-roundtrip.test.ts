@@ -66,6 +66,27 @@ describe("SLD round-trip (style → SLD → style)", () => {
     assert.equal(out.fillColor, "#457b9d");
   });
 
+  it("preserves a point stroke width (not clamped to a hairline)", () => {
+    const input = style({ circleRadius: 6, strokeWidth: 5, strokeColor: "#222222" });
+    const out = roundTrip(input, "point");
+    assert.equal(out.strokeWidth, 5);
+    assert.equal(out.strokeColor, "#222222");
+  });
+
+  it("preserves a shape marker", () => {
+    const input = style({
+      markerEnabled: true,
+      markerShape: "star",
+      markerColor: "#ff8800",
+      markerSize: 22,
+    });
+    const out = roundTrip(input, "point");
+    assert.equal(out.markerEnabled, true);
+    assert.equal(out.markerShape, "star");
+    assert.equal(out.markerColor, "#ff8800");
+    assert.equal(out.markerSize, 22);
+  });
+
   it("preserves a categorized renderer", () => {
     const input = style({
       vectorStyleMode: "categorized",

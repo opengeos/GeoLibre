@@ -159,6 +159,45 @@ describe("parseSld", () => {
     assert.equal(result.style.fillColor, "#abcdef");
   });
 
+  it("keeps the polygon stroke width over the point Mark in a mixed rule", () => {
+    const result = parseSld(
+      sld(`<Rule>
+        <PolygonSymbolizer><Fill><CssParameter name="fill">#eeeeee</CssParameter></Fill>
+          <Stroke><CssParameter name="stroke">#333333</CssParameter><CssParameter name="stroke-width">4</CssParameter></Stroke></PolygonSymbolizer>
+        <PointSymbolizer><Graphic><Mark><WellKnownName>circle</WellKnownName>
+          <Stroke><CssParameter name="stroke">#333333</CssParameter><CssParameter name="stroke-width">1</CssParameter></Stroke>
+        </Mark><Size>10</Size></Graphic></PointSymbolizer>
+      </Rule>`),
+    );
+    // The polygon border width wins; the point Mark outline does not clobber it.
+    assert.equal(result.style.strokeWidth, 4);
+  });
+
+  it("recovers a shape marker from a WellKnownName", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic><Mark>
+        <WellKnownName>star</WellKnownName>
+        <Fill><CssParameter name="fill">#ff8800</CssParameter></Fill>
+      </Mark><Size>18</Size></Graphic></PointSymbolizer></Rule>`),
+    );
+    assert.equal(result.style.markerEnabled, true);
+    assert.equal(result.style.markerShape, "star");
+    assert.equal(result.style.markerColor, "#ff8800");
+    assert.equal(result.style.markerSize, 18);
+  });
+
+  it("warns when a WellKnownName has no GeoLibre marker equivalent", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic><Mark>
+        <WellKnownName>shape://slash</WellKnownName>
+        <Fill><CssParameter name="fill">#123456</CssParameter></Fill>
+      </Mark><Size>12</Size></Graphic></PointSymbolizer></Rule>`),
+    );
+    // Falls back to a plain circle (no marker enabled) and warns.
+    assert.notEqual(result.style.markerEnabled, true);
+    assert.ok(result.warnings.some((w) => /no GeoLibre equivalent/.test(w)));
+  });
+
   it("reports a clear error for a non-SLD document", () => {
     const result = parseSld("<html><body>not sld</body></html>");
     assert.equal(result.matchedRuleCount, 0);

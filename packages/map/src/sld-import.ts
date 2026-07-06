@@ -2,6 +2,7 @@ import {
   DEFAULT_LAYER_STYLE,
   type LabelStyle,
   type LayerStyle,
+  type MarkerShape,
   type VectorRule,
   type VectorStyleStop,
 } from "@geolibre/core";
@@ -119,6 +120,20 @@ function paramMap(container: unknown): Map<string, string> {
   return map;
 }
 
+/**
+ * SLD `WellKnownName` values that map back onto a GeoLibre {@link MarkerShape}.
+ * The inverse of the exporter's `MARKER_WELL_KNOWN_NAME`; `circle` is the plain
+ * default and is handled separately (it is not a shape marker).
+ */
+const WELL_KNOWN_NAME_TO_SHAPE: Record<string, MarkerShape> = {
+  square: "square",
+  triangle: "triangle",
+  star: "star",
+  cross: "cross",
+  // SLD's alternate name for a cross/plus mark.
+  x: "cross",
+};
+
 /** The fill/stroke/point fields one symbolizer contributes. */
 interface RulePaint {
   fillColor?: string;
@@ -126,6 +141,8 @@ interface RulePaint {
   strokeColor?: string;
   strokeWidth?: number;
   pointSize?: number;
+  /** The point `Mark`'s `WellKnownName`, used to recover a shape marker. */
+  wellKnownName?: string;
 }
 
 /** Read `fill`/`fill-opacity` from a `Fill` element into the paint. */
@@ -149,25 +166,30 @@ function readStroke(stroke: unknown, paint: RulePaint): void {
 /** Extract the flat paint from one rule's render symbolizers. */
 function readRulePaint(rule: XmlNode): RulePaint {
   const paint: RulePaint = {};
-  const polygon = toArray(rule.PolygonSymbolizer)[0];
-  if (isNode(polygon)) {
-    readFill(polygon.Fill, paint);
-    readStroke(polygon.Stroke, paint);
-  }
-  const line = toArray(rule.LineSymbolizer)[0];
-  if (isNode(line)) readStroke(line.Stroke, paint);
+  // Read the point Mark first so that in a mixed-geometry rule the polygon/line
+  // stroke width (read afterwards) wins for the shared strokeWidth field rather
+  // than being overwritten by the point outline.
   const point = toArray(rule.PointSymbolizer)[0];
   if (isNode(point)) {
     const graphic = point.Graphic;
     if (isNode(graphic)) {
       const mark = toArray(graphic.Mark)[0];
       if (isNode(mark)) {
+        const name = nodeText(mark.WellKnownName);
+        if (name) paint.wellKnownName = name;
         readFill(mark.Fill, paint);
         readStroke(mark.Stroke, paint);
       }
       const size = toNum(nodeText(graphic.Size));
       if (size !== null) paint.pointSize = size;
     }
+  }
+  const line = toArray(rule.LineSymbolizer)[0];
+  if (isNode(line)) readStroke(line.Stroke, paint);
+  const polygon = toArray(rule.PolygonSymbolizer)[0];
+  if (isNode(polygon)) {
+    readFill(polygon.Fill, paint);
+    readStroke(polygon.Stroke, paint);
   }
   return paint;
 }
@@ -412,6 +434,7 @@ function applyScale(rule: XmlNode, patch: Partial<Omit<LayerStyle, "labels">>): 
 function applyPaint(
   paint: RulePaint,
   patch: Partial<Omit<LayerStyle, "labels">>,
+  warnings: string[],
 ): void {
   if (paint.fillColor !== undefined) patch.fillColor = paint.fillColor;
   if (paint.fillOpacity !== undefined) patch.fillOpacity = paint.fillOpacity;
@@ -423,6 +446,25 @@ function applyPaint(
   }
   // SLD graphic Size is the mark diameter; GeoLibre circleRadius is the radius.
   if (paint.pointSize !== undefined) patch.circleRadius = paint.pointSize / 2;
+
+  // Recover a shape marker from the point Mark's WellKnownName (`circle` is the
+  // plain default and needs no marker). An unrecognized name (a GeoServer
+  // `shape://…` or an SLD graphic GeoLibre has no shape for) degrades to a
+  // circle with a warning rather than silently dropping the intended symbol.
+  const name = paint.wellKnownName;
+  if (name && name !== "circle") {
+    const shape = WELL_KNOWN_NAME_TO_SHAPE[name];
+    if (shape) {
+      patch.markerEnabled = true;
+      patch.markerShape = shape;
+      if (paint.fillColor !== undefined) patch.markerColor = paint.fillColor;
+      if (paint.pointSize !== undefined) patch.markerSize = paint.pointSize;
+    } else {
+      warnings.push(
+        `The "${name}" point mark has no GeoLibre equivalent; it was imported as a circle.`,
+      );
+    }
+  }
 }
 
 /** A render rule paired with its parsed filter body (null for else/plain). */
@@ -547,7 +589,7 @@ function classifyRenderRules(
 
   // The first render rule supplies the flat style (stroke/width/opacity/size are
   // constant across an exported renderer's rules).
-  applyPaint(renderRules[0].paint, patch);
+  applyPaint(renderRules[0].paint, patch, warnings);
 
   // No filtered rules ⇒ a plain single-symbol style.
   if (filtered.length === 0) {
