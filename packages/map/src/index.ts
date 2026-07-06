@@ -27,7 +27,6 @@ export { setExternalDeckLayerOrderHandler } from "./layer-sync";
 export {
   buildMapboxStyle,
   mapboxStyleToJson,
-  isVectorStyleLayer,
   type ExportableLayer,
   type MapboxStyleExportOptions,
   type MapboxStyleExportResult,

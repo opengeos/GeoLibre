@@ -76,11 +76,6 @@ export interface MapboxStyleExportOptions {
   glyphsUrl?: string;
 }
 
-/** Layer types whose symbology is driven by the vector {@link LayerStyle}. */
-export function isVectorStyleLayer(type: GeoLibreLayer["type"]): boolean {
-  return type === "geojson";
-}
-
 /** Turn a layer name into a stable, style-spec-safe source/layer id prefix. */
 function styleIdBase(name: string): string {
   const base = name
@@ -402,6 +397,21 @@ export function buildMapboxStyle(
   );
   if (labelLayer) layers.push(labelLayer);
 
+  // Text labels need a glyphs (font) endpoint, so reference one only when a
+  // label layer is emitted.
+  const glyphs = labelLayer
+    ? options.glyphsUrl ?? DEFAULT_GLYPHS_URL
+    : undefined;
+  // Flag the default third-party dependency so the user can point `glyphs` at
+  // their own font server for a production style.
+  if (labelLayer && !options.glyphsUrl) {
+    warnings.push(
+      "Text labels reference MapLibre's public demo font server " +
+        "(demotiles.maplibre.org); replace the style's `glyphs` URL with " +
+        "your own font server for production use.",
+    );
+  }
+
   const style_: StyleSpecification = {
     version: 8,
     name: layer.name,
@@ -412,21 +422,8 @@ export function buildMapboxStyle(
       },
     },
     layers,
+    ...(glyphs ? { glyphs } : {}),
   };
-  // Text labels need a glyphs (font) endpoint. Only reference one when a label
-  // layer is emitted, and flag the default third-party dependency so the user
-  // can point `glyphs` at their own font server for a production style.
-  if (labelLayer) {
-    const glyphsUrl = options.glyphsUrl ?? DEFAULT_GLYPHS_URL;
-    (style_ as { glyphs?: string }).glyphs = glyphsUrl;
-    if (!options.glyphsUrl) {
-      warnings.push(
-        "Text labels reference MapLibre's public demo font server " +
-          "(demotiles.maplibre.org); replace the style's `glyphs` URL with " +
-          "your own font server for production use.",
-      );
-    }
-  }
 
   return { style: style_, warnings };
 }

@@ -4,7 +4,6 @@ import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   buildMapboxStyle,
-  isVectorStyleLayer,
   mapboxStyleToJson,
   type ExportableLayer,
 } from "../packages/map/src/mapbox-style-export";
@@ -80,17 +79,6 @@ function mixedGeom(): FeatureCollection {
 function layerById(style_: ReturnType<typeof buildMapboxStyle>["style"], id: string) {
   return style_.layers.find((l) => l.id === id);
 }
-
-describe("isVectorStyleLayer", () => {
-  it("accepts geojson vector layers", () => {
-    assert.equal(isVectorStyleLayer("geojson"), true);
-  });
-  it("rejects raster/tile layers", () => {
-    assert.equal(isVectorStyleLayer("raster"), false);
-    assert.equal(isVectorStyleLayer("cog"), false);
-    assert.equal(isVectorStyleLayer("3d-tiles"), false);
-  });
-});
 
 describe("buildMapboxStyle base document", () => {
   it("emits a version 8 style with the layer's features embedded", () => {
