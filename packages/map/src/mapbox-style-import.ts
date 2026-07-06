@@ -196,10 +196,16 @@ function parseMatch(array: unknown[], warnings: string[]): ParsedColor {
     return { mode: "expression", expression: JSON.stringify(array) };
   }
   const stops: VectorStyleStop[] = [];
+  let droppedArm = false;
   for (let index = 0; index < body.length - 1; index += 2) {
     const rawValue = body[index];
     const color = asString(body[index + 1]);
-    if (color === null) continue;
+    // A non-string arm color (an expression or rgba object) has no flat-color
+    // equivalent; skip it but flag the loss rather than dropping it silently.
+    if (color === null) {
+      droppedArm = true;
+      continue;
+    }
     // A match arm's label may be an array of values sharing one output
     // (`["match", input, [v1, v2], color, ...]`); expand each into its own stop.
     const values = Array.isArray(rawValue) ? rawValue : [rawValue];
@@ -209,6 +215,11 @@ function parseMatch(array: unknown[], warnings: string[]): ParsedColor {
         color,
       });
     }
+  }
+  if (droppedArm) {
+    warnings.push(
+      "Some categorized categories used a non-flat color and were skipped.",
+    );
   }
   return { mode: "categorized", property, stops, color: fallback };
 }
@@ -229,11 +240,20 @@ function parseInterpolateColor(
   }
   const body = array.slice(3);
   const stops: VectorStyleStop[] = [];
+  let droppedStop = false;
   for (let index = 0; index + 1 < body.length; index += 2) {
     const value = asFiniteNumber(body[index]);
     const color = asString(body[index + 1]);
-    if (value === null || color === null) continue;
+    if (value === null || color === null) {
+      droppedStop = true;
+      continue;
+    }
     stops.push({ value, color });
+  }
+  if (droppedStop && stops.length >= 2) {
+    warnings.push(
+      "Some graduated stops used a non-flat color and were skipped.",
+    );
   }
   if (stops.length < 2) {
     warnings.push(
@@ -421,9 +441,20 @@ function parseLineWidth(
 function parseExtrusionHeight(
   value: unknown,
   patch: Partial<Omit<LayerStyle, "labels">>,
+  warnings: string[],
 ): void {
   const array = asArray(value);
-  if (!array) return;
+  if (!array) {
+    // GeoLibre has no constant-height field (height is attribute-driven), so a
+    // flat non-zero height cannot be represented; warn rather than drop silently.
+    const flat = asFiniteNumber(value);
+    if (flat !== null && flat !== 0) {
+      warnings.push(
+        "A constant extrusion height could not be represented; the layer keeps its current height.",
+      );
+    }
+    return;
+  }
   if (array[0] === "*" && array.length === 3) {
     const property = wrappedProperty(array[1]);
     const scale = asFiniteNumber(array[2]);
@@ -554,9 +585,15 @@ function parseLabelLayer(
  * than dropped silently.
  *
  * When several render layers share a color renderer (a mixed-geometry export),
- * the first geometry that carries the renderer wins: a polygon `fill` before a
- * `line`, and a `line` before a `circle`, matching how the exporter derives
- * each from the same style.
+ * the geometry whose baked fallback color matches GeoLibre's field wins: a
+ * polygon `fill` first, then a `circle` (its fallback is `fillColor`), then a
+ * `line` (whose fallback is `strokeColor`, recovered separately).
+ *
+ * Note: the exporter folds the layer's opacity into the paint opacity, and a
+ * Mapbox style has no separate layer-opacity field, so the recovered
+ * `fillOpacity`/`extrusionOpacity` reproduce the same rendered opacity with the
+ * layer at full opacity. Re-importing a style from a layer whose opacity was not
+ * 1 collapses the two into one value (the visual result is unchanged).
  *
  * @param input Parsed style JSON (an object with a `layers` array).
  * @returns The recovered {@link LayerStyle} patch, label patch, and warnings.
@@ -589,6 +626,17 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
   // stroke/radius. Track whether the color mode has been claimed.
   let colorClaimed = false;
 
+  // Only the first render layer of each type feeds the single GeoLibre style, so
+  // warn when a style stacks several (a sub-styled fill, multiple label configs)
+  // rather than dropping the extras silently.
+  for (const type of ["fill", "fill-extrusion", "line", "circle", "symbol"]) {
+    if (byType(type).length > 1) {
+      warnings.push(
+        `The style has multiple ${type} layers; only the first was imported.`,
+      );
+    }
+  }
+
   const [fill] = byType("fill");
   const [extrusion] = byType("fill-extrusion");
   const [line] = byType("line");
@@ -614,7 +662,7 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const opacity = asFiniteNumber(paint["fill-extrusion-opacity"]);
     if (opacity !== null) patch.extrusionOpacity = opacity;
     if (paint["fill-extrusion-height"] !== undefined) {
-      parseExtrusionHeight(paint["fill-extrusion-height"], patch);
+      parseExtrusionHeight(paint["fill-extrusion-height"], patch, warnings);
     }
     const base = asFiniteNumber(paint["fill-extrusion-base"]);
     if (base !== null) patch.extrusionBase = base;
@@ -623,8 +671,12 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     matchedLayerCount += 1;
     patch.extrusionEnabled = false;
     const paint = fill.paint ?? {};
-    applyColorRenderer(parseColorValue(paint["fill-color"], warnings), patch);
-    colorClaimed = true;
+    const fillColor = parseColorValue(paint["fill-color"], warnings);
+    applyColorRenderer(fillColor, patch);
+    // Only claim the shared renderer when fill-color actually yielded one, so a
+    // fill layer with a missing/unparseable color does not block a later
+    // line/circle layer from contributing the color.
+    if (fillColor.mode) colorClaimed = true;
     const opacity = paint["fill-opacity"];
     const flatOpacity = asFiniteNumber(opacity);
     if (flatOpacity !== null) {
@@ -702,8 +754,14 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const strokeColor = asString(paint["circle-stroke-color"]);
     if (strokeColor) patch.strokeColor = strokeColor;
     const strokeWidth = asFiniteNumber(paint["circle-stroke-width"]);
-    if (strokeWidth !== null) patch.strokeWidth = strokeWidth;
-    else warnUnreadableNumber(paint["circle-stroke-width"], "point stroke width", warnings);
+    if (strokeWidth !== null) {
+      patch.strokeWidth = strokeWidth;
+      // circle-stroke-width is always literal pixels, so reset the shared unit in
+      // case a line layer in the same style set it to "meters".
+      patch.strokeWidthUnit = "pixels";
+    } else {
+      warnUnreadableNumber(paint["circle-stroke-width"], "point stroke width", warnings);
+    }
     applyZoomRange(circle, patch);
   }
 

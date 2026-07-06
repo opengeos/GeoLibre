@@ -624,6 +624,94 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.style.maxZoom, 12);
   });
 
+  it("lets a later layer claim color when fill-color is absent", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        { id: "poly", type: "fill", source: "s", paint: {} },
+        {
+          id: "pts",
+          type: "circle",
+          source: "s",
+          paint: {
+            "circle-color": [
+              "match",
+              ["to-string", ["get", "cat"]],
+              "a",
+              "#ff0000",
+              "#000000",
+            ],
+          },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    // The empty fill layer must not block the circle from claiming the renderer.
+    assert.equal(result.style.vectorStyleMode, "categorized");
+    assert.equal(result.style.vectorStyleProperty, "cat");
+  });
+
+  it("resets strokeWidthUnit to pixels for a circle stroke after a meters line", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "line",
+          type: "line",
+          source: "s",
+          paint: {
+            "line-color": "#000000",
+            "line-width": ["interpolate", ["exponential", 2], ["zoom"], 0, 1, 24, 100],
+          },
+        },
+        {
+          id: "pts",
+          type: "circle",
+          source: "s",
+          paint: { "circle-color": "#111111", "circle-stroke-width": 3 },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.strokeWidth, 3);
+    assert.equal(result.style.strokeWidthUnit, "pixels");
+  });
+
+  it("warns on a constant extrusion height it cannot represent", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "poly",
+          type: "fill-extrusion",
+          source: "s",
+          paint: { "fill-extrusion-color": "#888888", "fill-extrusion-height": 30 },
+        },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.equal(result.style.extrusionHeightProperty, undefined);
+    assert.ok(result.warnings.some((w) => /constant extrusion height/.test(w)));
+  });
+
+  it("warns when the style stacks multiple layers of one type", () => {
+    const external = {
+      version: 8,
+      sources: {},
+      layers: [
+        { id: "f1", type: "fill", source: "s", paint: { "fill-color": "#111111" } },
+        { id: "f2", type: "fill", source: "s", paint: { "fill-color": "#222222" } },
+      ],
+    };
+    const result = parseMapboxStyle(external);
+    assert.ok(result.warnings.some((w) => /multiple fill layers/.test(w)));
+    // The first layer still wins.
+    assert.equal(result.style.fillColor, "#111111");
+  });
+
   it("does not fold layer opacity when opacity is 1 (round-trip is lossless)", () => {
     // A guard that the roundTrip helper's opacity=1 assumption holds: a distinct
     // fillOpacity survives export+import unchanged.
