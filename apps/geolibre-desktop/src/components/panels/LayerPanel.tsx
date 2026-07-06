@@ -118,7 +118,17 @@ import {
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
-import { writeVectorToSource } from "@geolibre/processing";
+import {
+  readPostgisTable,
+  writePostgisTable,
+  writeVectorToSource,
+} from "@geolibre/processing";
+import {
+  postgisBaselineKeys,
+  postgisFeatureKeys,
+  resolvePostgisConnection,
+  unregisterPostgisConnection,
+} from "../../lib/postgis-connections";
 import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
@@ -211,13 +221,28 @@ function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
 const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json"];
 
 /**
- * Whether the layer's edits can be committed back to its source file: a
- * desktop-only, geojson-backed layer loaded from a local file in a supported
- * format. The sidecar needs real filesystem access to the layer's `sourcePath`,
- * so this is false on the web build.
+ * Whether the layer is an editable PostGIS table with a usable primary key
+ * (loaded via Add Data > PostgreSQL in editable mode). The sidecar diffs the
+ * features against the source table by that key on save.
+ */
+function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "geojson" &&
+    layer.metadata.sourceKind === "postgis-table" &&
+    typeof layer.metadata.postgisTable === "string" &&
+    typeof layer.metadata.postgisPrimaryKey === "string"
+  );
+}
+
+/**
+ * Whether the layer's edits can be committed back to its source: a
+ * desktop-only, geojson-backed layer loaded either from a local file in a
+ * supported format or from a PostGIS table with a primary key. The sidecar
+ * needs real filesystem/database access, so this is false on the web build.
  */
 function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
   if (!isTauri() || layer.type !== "geojson") return false;
+  if (isPostgisEditableLayer(layer)) return true;
   const path =
     typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
   if (!path) return false;
@@ -1034,15 +1059,17 @@ export function LayerPanel({
     [clearRefreshStatusTimer, scheduleStatusClear, t, updateLayer],
   );
 
-  // Commit the layer's current (edited) features back to the local file they
-  // were loaded from, overwriting it in place via the sidecar. Unlike Export,
-  // there is no save dialog: write-back targets the known `sourcePath`.
+  // Commit the layer's current (edited) features back to the source they were
+  // loaded from, via the sidecar: either overwriting the local file in place,
+  // or diffing against the PostGIS table by primary key. Unlike Export, there
+  // is no save dialog: write-back targets the known source.
   const handleSaveEditsToSource = useCallback(
     async (layer: GeoLibreLayer) => {
       clearRefreshStatusTimer(layer.id);
+      const isPostgis = isPostgisEditableLayer(layer);
       const path =
         typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
-      if (!path) return;
+      if (!isPostgis && !path) return;
       try {
         const geojson = await resolveLayerGeojson(
           layer,
@@ -1059,15 +1086,89 @@ export function LayerPanel({
           scheduleStatusClear(layer.id);
           return;
         }
-        const result = await writeVectorToSource({ path, geojson });
+        let message: string;
+        if (isPostgis) {
+          const connection = resolvePostgisConnection(layer);
+          if (!connection) {
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.saveEditsPostgisNoConnection"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
+          const schema =
+            typeof layer.metadata.postgisSchema === "string"
+              ? layer.metadata.postgisSchema
+              : "public";
+          const table = layer.metadata.postgisTable as string;
+          const result = await writePostgisTable({
+            connection,
+            schema_name: schema,
+            table,
+            geojson,
+            // Scope deletions to the rows this session actually read so a
+            // save cannot sweep away rows inserted concurrently elsewhere.
+            // The baseline lives on the layer metadata, so it survives a
+            // project reload.
+            baseline_keys: postgisBaselineKeys(layer),
+          });
+          // Re-read the table so inserted features pick up their database-
+          // assigned primary keys; without this a second save would insert
+          // them again as duplicates.
+          let fresh;
+          try {
+            fresh = await readPostgisTable({
+              connection,
+              schema_name: schema,
+              table,
+            });
+          } catch {
+            // The write committed; only the refresh failed. Reporting this as
+            // a plain failure would invite a retry that re-inserts the still
+            // key-less new features, so surface a distinct warning instead.
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.saveEditsPostgisRefreshWarning"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
+          // Merge into the store's current metadata, not the click-time
+          // closure: the write/re-read round trip is slow enough for other
+          // updates (auto-refresh, time-slider binding) to land in between.
+          const currentMetadata =
+            useAppStore.getState().layers.find((l) => l.id === layer.id)
+              ?.metadata ?? layer.metadata;
+          updateLayer(layer.id, {
+            geojson: fresh.geojson,
+            metadata: {
+              ...currentMetadata,
+              featureCount: fresh.feature_count,
+              postgisBaselineKeys: postgisFeatureKeys(fresh.geojson),
+            },
+          });
+          message = t("layers.saveEditsPostgisSuccess", {
+            table: `${schema}.${table}`,
+            inserted: result.inserted,
+            updated: result.updated,
+            deleted: result.deleted,
+          });
+        } else {
+          const result = await writeVectorToSource({ path, geojson });
+          message = t("layers.saveEditsSuccess", {
+            count: result.feature_count,
+          });
+        }
         setRefreshStatuses((current) => ({
           ...current,
-          [layer.id]: {
-            type: "success",
-            message: t("layers.saveEditsSuccess", {
-              count: result.feature_count,
-            }),
-          },
+          [layer.id]: { type: "success", message },
         }));
         scheduleStatusClear(layer.id);
       } catch (error) {
@@ -1082,7 +1183,13 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+    [
+      clearRefreshStatusTimer,
+      mapControllerRef,
+      scheduleStatusClear,
+      t,
+      updateLayer,
+    ],
   );
 
   // Close the bind dialog and invalidate any in-flight scan/confirm so a late
@@ -2250,7 +2357,9 @@ export function LayerPanel({
                           }}
                         >
                           <Save className="mr-2 h-3.5 w-3.5" />
-                          {t("layers.saveEditsToSource")}
+                          {isPostgisEditableLayer(layer)
+                            ? t("layers.saveEditsToPostgis")
+                            : t("layers.saveEditsToSource")}
                         </DropdownMenuItem>
                       )}
                       {canEditRasterStyle && (
@@ -2677,6 +2786,9 @@ export function LayerPanel({
               variant="destructive"
               onClick={() => {
                 if (!layerPendingRemoval) return;
+                // Drop the removed layer's PostGIS session state (connection
+                // string, baseline keys) so credentials don't outlive it.
+                unregisterPostgisConnection(layerPendingRemoval.id);
                 removeLayer(layerPendingRemoval.id);
                 setLayerPendingRemoval(null);
               }}

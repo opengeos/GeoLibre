@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from .conversion import router as conversion_router
 from .ml import router as ml_router
 from .ml import stop_child_server
+from .postgis import router as postgis_router
 from .raster import router as raster_router
 from .sql import router as sql_router
 from .vector import router as vector_router
@@ -47,6 +48,7 @@ app.include_router(whitebox_router)
 app.include_router(conversion_router)
 app.include_router(raster_router)
 app.include_router(vector_router)
+app.include_router(postgis_router)
 app.include_router(sql_router)
 app.include_router(ml_router)
 
