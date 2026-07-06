@@ -287,6 +287,87 @@ def test_write_rolls_back_on_failure(live_table) -> None:
 
 
 @requires_live_postgis
+def test_write_null_pk_property_falls_back_to_feature_id(live_table) -> None:
+    """A nulled primary-key property must not turn an update into an insert."""
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    features = read["geojson"]["features"]
+    features[0]["properties"]["gid"] = None  # feature["id"] still carries the key
+    result = postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN, table=TABLE, geojson=_collection(features)
+        )
+    )
+    assert result["inserted"] == 0
+    assert result["deleted"] == 0
+    assert result["updated"] == 3
+    assert _rows(f"SELECT count(*) FROM {TABLE}")[0][0] == 3
+
+
+@requires_live_postgis
+def test_write_keyless_insert_needs_pk_default(live_table) -> None:
+    """Fail fast when the key column cannot generate a value for an insert."""
+    table = "geolibre_writeback_nodefault"
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {table}")
+            cur.execute(
+                f"""
+                CREATE TABLE {table} (
+                    gid integer PRIMARY KEY,
+                    name text,
+                    geom geometry(Point, 4326)
+                )
+                """
+            )
+        conn.commit()
+    try:
+        feature = {
+            "type": "Feature",
+            "properties": {"name": "keyless"},
+            "geometry": _point(0, 0),
+        }
+        with pytest.raises(HTTPException) as exc:
+            postgis_write(
+                PostgisWriteRequest(
+                    connection=LIVE_DSN,
+                    table=table,
+                    geojson=_collection([feature]),
+                )
+            )
+        assert exc.value.status_code == 400
+        assert "default or identity" in str(exc.value.detail)
+    finally:
+        with psycopg.connect(LIVE_DSN) as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"DROP TABLE IF EXISTS {table}")
+            conn.commit()
+
+
+@requires_live_postgis
+def test_read_excludes_secondary_geometry_columns(live_table) -> None:
+    """Extra geometry columns must not surface as (hex WKB) attributes."""
+    with psycopg.connect(LIVE_DSN) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"ALTER TABLE {TABLE} ADD COLUMN geom2 geometry(Point, 4326)"
+            )
+            cur.execute(f"UPDATE {TABLE} SET geom2 = ST_Transform(geom, 4326)")
+        conn.commit()
+    read = postgis_read(PostgisReadRequest(connection=LIVE_DSN, table=TABLE))
+    properties = read["geojson"]["features"][0]["properties"]
+    assert "geom2" not in properties
+    # And a round-trip write must leave the secondary geometry untouched.
+    postgis_write(
+        PostgisWriteRequest(
+            connection=LIVE_DSN,
+            table=TABLE,
+            geojson=read["geojson"],
+        )
+    )
+    assert _rows(f"SELECT count(*) FROM {TABLE} WHERE geom2 IS NOT NULL")[0][0] == 3
+
+
+@requires_live_postgis
 def test_write_requires_single_column_primary_key(live_table) -> None:
     feature = {
         "type": "Feature",

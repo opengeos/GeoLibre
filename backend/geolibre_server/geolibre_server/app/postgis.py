@@ -164,6 +164,10 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
                 detail=f"Spatial table not found: {schema}.{table}",
             )
         geometry_column, srid = geom_rows[0][0], int(geom_rows[0][1] or 0)
+        # A table can register several geometry columns; the layer edits only
+        # the first, and the others must not leak into the attribute list (they
+        # would be read as WKB hex and written back as text).
+        all_geometry_columns = {row[0] for row in geom_rows}
 
         # Single-column primary key, if any. Composite keys are unsupported for
         # write-back (reported as no key), matching the issue's MVP scope.
@@ -192,7 +196,9 @@ def _table_info(conn: Any, schema: str, table: str) -> dict[str, Any]:
             """,
             (schema, table),
         )
-        columns = [row[0] for row in cur.fetchall() if row[0] != geometry_column]
+        columns = [
+            row[0] for row in cur.fetchall() if row[0] not in all_geometry_columns
+        ]
 
     return {
         "geometry_column": geometry_column,
@@ -462,7 +468,21 @@ def postgis_write(request: PostgisWriteRequest) -> dict[str, Any]:
                     geometry = feature.get("geometry")
                     geometry_value = json.dumps(geometry) if geometry else None
 
-                    key = properties.get(pk, feature.get("id"))
+                    # A null primary-key property must not shadow feature.id
+                    # (the read endpoint sets both, but editors may blank the
+                    # property while the feature id survives).
+                    key = properties.get(pk)
+                    if key is None:
+                        key = feature.get("id")
+                    if key is None and not info["pk_is_generated"]:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=(
+                                f"Feature without a '{pk}' value cannot be "
+                                f"inserted: {request.schema_name}.{request.table}'s "
+                                "primary key has no default or identity."
+                            ),
+                        )
                     if key is not None and key in existing_keys:
                         kept_keys.add(key)
                         assignments = [

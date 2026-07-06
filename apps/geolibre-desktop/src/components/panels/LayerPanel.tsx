@@ -1029,7 +1029,10 @@ export function LayerPanel({
             schema_name: schema,
             table,
           });
-          updateLayer(layer.id, { geojson: fresh.geojson });
+          updateLayer(layer.id, {
+            geojson: fresh.geojson,
+            metadata: { ...layer.metadata, featureCount: fresh.feature_count },
+          });
           message = t("layers.saveEditsPostgisSuccess", {
             table: `${schema}.${table}`,
             inserted: result.inserted,

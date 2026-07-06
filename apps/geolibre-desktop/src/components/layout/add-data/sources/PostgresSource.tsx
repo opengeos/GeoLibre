@@ -87,7 +87,11 @@ export function PostgresSource() {
       const tables = await listPostgisTables(connectionString);
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisTables(tables);
-      setSelectedTableKey(tables[0] ? postgisTableKey(tables[0]) : "");
+      // Default to the first writable table (single-column primary key) so
+      // "Editable layer" does not preselect a read-only one.
+      const defaultTable =
+        tables.find((table) => table.primary_key) ?? tables[0];
+      setSelectedTableKey(defaultTable ? postgisTableKey(defaultTable) : "");
       setPostgisStatus(
         tables.length > 0
           ? t("addData.postgres.statusTablesFound", { count: tables.length })
