@@ -69,6 +69,30 @@ function polygons(): FeatureCollection {
   };
 }
 
+function lineAndPoint(): FeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        properties: { category: "a" },
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [0, 0],
+            [1, 1],
+          ],
+        },
+      },
+      {
+        type: "Feature",
+        properties: { category: "b" },
+        geometry: { type: "Point", coordinates: [2, 2] },
+      },
+    ],
+  };
+}
+
 /**
  * Export a style to Mapbox GL and re-import it, returning the recovered
  * LayerStyle applied over the defaults so the represented symbology can be
@@ -235,16 +259,41 @@ describe("parseMapboxStyle round-trips exported symbology", () => {
     assert.equal(result.heatmapIntensity, 2);
   });
 
-  it("recovers 3D extrusion", () => {
+  it("recovers 3D extrusion including height, scale, and base", () => {
     const original = style({
       extrusionEnabled: true,
       extrusionColor: "#654321",
       extrusionOpacity: 0.7,
+      extrusionHeightProperty: "levels",
+      extrusionHeightScale: 3,
+      extrusionBase: 5,
     });
     const { style: result } = roundTrip(original, polygons());
     assert.equal(result.extrusionEnabled, true);
     assert.equal(result.extrusionColor, "#654321");
     assert.equal(result.extrusionOpacity, 0.7);
+    assert.equal(result.extrusionHeightProperty, "levels");
+    assert.equal(result.extrusionHeightScale, 3);
+    assert.equal(result.extrusionBase, 5);
+  });
+
+  it("keeps the point fallback color on a mixed line+point categorized layer", () => {
+    const original = style({
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "category",
+      fillColor: "#00aa00",
+      strokeColor: "#aa0000",
+      vectorStyleStops: [
+        { value: "a", color: "#ff0000" },
+        { value: "b", color: "#0000ff" },
+      ],
+    });
+    const { style: result } = roundTrip(original, lineAndPoint());
+    assert.equal(result.vectorStyleMode, "categorized");
+    // The circle (point) fallback wins for fillColor; strokeColor comes from the
+    // line-color's polygon-outline guard, so neither is set to the other.
+    assert.equal(result.fillColor, "#00aa00");
+    assert.equal(result.strokeColor, "#aa0000");
   });
 
   it("recovers a map-units (meters) stroke width", () => {

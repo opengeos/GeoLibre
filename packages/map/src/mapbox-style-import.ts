@@ -411,6 +411,33 @@ function parseLineWidth(
   );
 }
 
+/**
+ * Recover the extrusion height config from a `fill-extrusion-height` value. The
+ * exporter emits `["*", ["to-number", ["get", p], 0], scale]` (property +
+ * scale) in the common case, or an arbitrary advanced expression; reverse each.
+ * A flat number (e.g. the `0` emitted when no property is set) leaves the
+ * defaults untouched.
+ */
+function parseExtrusionHeight(
+  value: unknown,
+  patch: Partial<Omit<LayerStyle, "labels">>,
+): void {
+  const array = asArray(value);
+  if (!array) return;
+  if (array[0] === "*" && array.length === 3) {
+    const property = wrappedProperty(array[1]);
+    const scale = asFiniteNumber(array[2]);
+    if (property && scale !== null) {
+      patch.extrusionHeightProperty = property;
+      patch.extrusionHeightScale = scale;
+      return;
+    }
+  }
+  // Any other expression round-trips through the advanced height expression.
+  patch.extrusionAdvancedStyleEnabled = true;
+  patch.extrusionHeightExpression = JSON.stringify(value);
+}
+
 function clampZoom(value: unknown): number | null {
   const number = asFiniteNumber(value);
   if (number === null) return null;
@@ -586,6 +613,11 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     }
     const opacity = asFiniteNumber(paint["fill-extrusion-opacity"]);
     if (opacity !== null) patch.extrusionOpacity = opacity;
+    if (paint["fill-extrusion-height"] !== undefined) {
+      parseExtrusionHeight(paint["fill-extrusion-height"], patch);
+    }
+    const base = asFiniteNumber(paint["fill-extrusion-base"]);
+    if (base !== null) patch.extrusionBase = base;
     applyZoomRange(extrusion, patch);
   } else if (fill) {
     matchedLayerCount += 1;
@@ -612,7 +644,12 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     const paint = line.paint ?? {};
     const stroke = parseStrokeColor(paint["line-color"]);
     if (stroke) patch.strokeColor = stroke;
-    if (!colorClaimed) {
+    // Defer the color-renderer claim to the circle layer when one is present:
+    // line-color's baked fallback is strokeColor, but applyColorRenderer routes
+    // a fallback into fillColor, which is the point (circle) fallback. Letting a
+    // point+line export's circle claim the renderer keeps fillColor correct; a
+    // line-only layer still claims here (its fillColor is not rendered anyway).
+    if (!colorClaimed && !circle) {
       const color = parseColorValue(paint["line-color"], warnings);
       if (color.mode && color.mode !== "single") {
         applyColorRenderer(color, patch);
