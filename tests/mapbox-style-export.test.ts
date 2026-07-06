@@ -268,6 +268,21 @@ describe("geometry-gated warnings", () => {
     const pointsOnly = buildMapboxStyle(layer({ style: style({ labels }) }), points());
     assert.ok(pointsOnly.warnings.some((w) => w.toLowerCase().includes("duplicate-label")));
   });
+
+  it("does not warn about dedupe when labeling by expression (no field)", () => {
+    const labels = {
+      ...DEFAULT_LAYER_STYLE.labels,
+      enabled: true,
+      field: "",
+      expression: JSON.stringify(["get", "name"]),
+      dedupe: "unique" as const,
+    };
+    const { warnings } = buildMapboxStyle(
+      layer({ style: style({ labels }) }),
+      points(),
+    );
+    assert.ok(!warnings.some((w) => w.toLowerCase().includes("duplicate-label")));
+  });
 });
 
 describe("glyphs dependency", () => {
@@ -298,6 +313,21 @@ describe("glyphs dependency", () => {
       "https://fonts.example.com/{fontstack}/{range}.pbf",
     );
     assert.ok(!warnings.some((w) => w.toLowerCase().includes("font server")));
+  });
+
+  it("treats a blank glyphsUrl as absent and keeps the default", () => {
+    const { style: doc, warnings } = buildMapboxStyle(
+      layer({
+        style: style({
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "category" },
+        }),
+      }),
+      points(),
+      { glyphsUrl: "  " },
+    );
+    // Never writes an invalid empty glyphs; falls back to the default and warns.
+    assert.ok((doc as { glyphs?: string }).glyphs?.startsWith("https://"));
+    assert.ok(warnings.some((w) => w.toLowerCase().includes("font server")));
   });
 });
 

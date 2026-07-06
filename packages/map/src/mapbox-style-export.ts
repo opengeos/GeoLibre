@@ -176,9 +176,10 @@ function buildLabelLayer(
   const textField = labelTextField(style, warnings);
   if (textField === null) return null;
 
-  // Live dedup only applies to point-only layers, so only warn when it would
-  // actually have taken effect (mirrors the map's dedupe gating).
-  if (labels.dedupe !== "off" && pointOnly) {
+  // Live dedup only applies to point-only layers that label by a field (not a
+  // bare expression), so only warn when it would actually have taken effect
+  // (mirrors the map's dedupe gating).
+  if (labels.dedupe !== "off" && pointOnly && labels.field) {
     warnings.push(
       "Duplicate-label handling (unique/concatenate) is applied live in " +
         "GeoLibre and is not carried into the exported style; every feature is " +
@@ -404,13 +405,15 @@ export function buildMapboxStyle(
   if (labelLayer) layers.push(labelLayer);
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a
-  // label layer is emitted.
+  // label layer is emitted. Treat a blank glyphsUrl as "not provided" so a
+  // caller cannot write an invalid empty `glyphs: ""`.
+  const customGlyphs = options.glyphsUrl?.trim();
   const glyphs = labelLayer
-    ? options.glyphsUrl ?? DEFAULT_GLYPHS_URL
+    ? customGlyphs || DEFAULT_GLYPHS_URL
     : undefined;
   // Flag the default third-party dependency so the user can point `glyphs` at
   // their own font server for a production style.
-  if (labelLayer && !options.glyphsUrl) {
+  if (labelLayer && !customGlyphs) {
     warnings.push(
       "Text labels reference MapLibre's public demo font server " +
         "(demotiles.maplibre.org); replace the style's `glyphs` URL with " +
