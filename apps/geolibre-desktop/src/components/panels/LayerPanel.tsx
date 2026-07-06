@@ -27,7 +27,13 @@ import {
   type TimePropertyCandidate,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
-import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
+import {
+  buildMapboxStyle,
+  isPlaceholderLayer,
+  isVectorStyleLayer,
+  mapboxStyleToJson,
+  placeholderMessage,
+} from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
@@ -105,6 +111,7 @@ import {
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
+import { saveTextFileWithFallback } from "../../lib/tauri-io";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 
@@ -836,6 +843,63 @@ export function LayerPanel({
           error instanceof Error
             ? error.message
             : "Could not export this layer.";
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
+  );
+
+  // Export a vector layer's symbology as a self-contained Mapbox GL / MapLibre
+  // style document, so the cartography can be reused in another map or handed to
+  // a teammate instead of being locked inside the .geolibre.json project.
+  const handleExportStyle = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        const result = buildMapboxStyle(layer, geojson);
+        const savedPath = await saveTextFileWithFallback(
+          mapboxStyleToJson(result),
+          {
+            defaultName: `${sanitizeExportFileName(layer.name)}.style.json`,
+            filters: [
+              { name: "Mapbox GL style", extensions: ["json"] },
+            ],
+            browserTypes: [
+              {
+                description: "Mapbox GL style",
+                accept: { "application/json": [".json"] },
+              },
+            ],
+            mimeType: "application/json",
+          },
+        );
+        // A null path means the user cancelled the save dialog, so no note.
+        if (savedPath !== null) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]:
+              result.warnings.length > 0
+                ? {
+                    type: "warning",
+                    message: `Style exported. ${result.warnings.join(" ")}`,
+                  }
+                : { type: "success", message: "Style exported." },
+          }));
+          scheduleStatusClear(layer.id);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Could not export this layer's style.";
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -1974,6 +2038,14 @@ export function LayerPanel({
                               }}
                             >
                               CSV (attributes only)
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                void handleExportStyle(layer);
+                              }}
+                            >
+                              Mapbox GL style (symbology)
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
