@@ -13,7 +13,6 @@ import type {
 import { detectGeometryProfile } from "./geojson-loader";
 import {
   circlePaint,
-  clusterCirclePaint,
   fillExtrusionPaint,
   fillPaint,
   heatmapPaint,
@@ -182,11 +181,21 @@ function buildLabelLayer(
     );
   }
 
+  // Labels at the default 0/24 inherit the layer's own zoom window, so
+  // intersect the label range with the style range (tighter bound on each end),
+  // matching the live map's intersectZoomRange behavior.
   const labelMin = clampZoom(labels.minZoom, MIN_LAYER_ZOOM);
   const labelMax = clampZoom(labels.maxZoom, MAX_LAYER_ZOOM);
+  const styleMin = clampZoom(styleValue(style, "minZoom"), MIN_LAYER_ZOOM);
+  const styleMax = clampZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
+  const intersectedMin = Math.max(labelMin, styleMin);
+  const intersectedMax = Math.min(labelMax, styleMax);
+  // Swap if the two ranges do not overlap so the spec never gets min > max.
+  const zoomMin = Math.min(intersectedMin, intersectedMax);
+  const zoomMax = Math.max(intersectedMin, intersectedMax);
   const range: { minzoom?: number; maxzoom?: number } = {};
-  if (labelMin > MIN_LAYER_ZOOM) range.minzoom = labelMin;
-  if (labelMax < MAX_LAYER_ZOOM) range.maxzoom = labelMax;
+  if (zoomMin > MIN_LAYER_ZOOM) range.minzoom = zoomMin;
+  if (zoomMax < MAX_LAYER_ZOOM) range.maxzoom = zoomMax;
 
   return {
     id: `${idBase}-label`,
@@ -334,9 +343,9 @@ export function buildMapboxStyle(
         layout: { visibility },
       } as LayerSpecification);
     } else if (effectiveRenderer === "cluster") {
-      // Clustering is a GeoJSON source option; without recreating the source we
-      // cannot cluster in a static export, so warn and fall back to plain points
-      // while still exporting the cluster bubble styling for reference.
+      // Clustering is a GeoJSON source option; without a clustered source a
+      // static export cannot reproduce it, so warn and fall back to a plain
+      // circle layer for the individual points.
       warnings.push(
         "Point clustering requires a clustered GeoJSON source; enable " +
           "`cluster: true` on the source to reproduce it. Exported as plain " +

@@ -236,6 +236,29 @@ describe("labels", () => {
     assert.ok(typeof (doc as { glyphs?: string }).glyphs === "string");
   });
 
+  it("intersects the label zoom range with the layer's own zoom window", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          maxZoom: 10,
+          labels: {
+            ...DEFAULT_LAYER_STYLE.labels,
+            enabled: true,
+            field: "category",
+            // default label range is 0/24, which should inherit the layer's max.
+          },
+        }),
+      }),
+      points(),
+    );
+    const label = layerById(doc, "my-layer-label") as {
+      maxzoom?: number;
+      minzoom?: number;
+    };
+    assert.equal(label.maxzoom, 10);
+    assert.equal(label.minzoom, undefined);
+  });
+
   it("omits the label layer (and glyphs) when labels are disabled", () => {
     const { style: doc } = buildMapboxStyle(layer(), points());
     assert.equal(layerById(doc, "my-layer-label"), undefined);

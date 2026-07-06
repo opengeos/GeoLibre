@@ -30,7 +30,6 @@ import type { MapController } from "@geolibre/map";
 import {
   buildMapboxStyle,
   isPlaceholderLayer,
-  isVectorStyleLayer,
   mapboxStyleToJson,
   placeholderMessage,
 } from "@geolibre/map";
