@@ -107,9 +107,8 @@ export const WMS_PROXY_PATH = "/__geolibre_wms_proxy";
 // Keep in sync with WFS_PROXY_PATH in vite.config.ts. Used to fetch a WFS
 // GetCapabilities document (and GetFeature responses) without tripping CORS.
 export const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
-export const POSTGRES_CONNECTIONS_STORAGE_KEY =
-  "geolibre.postgres.connectionStrings";
-export const MAX_SAVED_POSTGRES_CONNECTIONS = 10;
+// PostgreSQL connection persistence constants moved to
+// lib/saved-postgres-connections.ts alongside the helpers that use them.
 // Cross-project catalog of reusable web-service layer definitions (see
 // service-library.ts). Bumping the key would orphan a user's saved services.
 export const SERVICE_LIBRARY_STORAGE_KEY = "geolibre.serviceLibrary";

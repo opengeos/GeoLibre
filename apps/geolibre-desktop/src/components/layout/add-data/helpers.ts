@@ -9,8 +9,6 @@ import { isTauri } from "../../../lib/is-tauri";
 import {
   DELIMITED_TEXT_DELIMITERS,
   GPX_PROXY_PATH,
-  MAX_SAVED_POSTGRES_CONNECTIONS,
-  POSTGRES_CONNECTIONS_STORAGE_KEY,
   WFS_PROXY_PATH,
   WMS_PROXY_PATH,
 } from "./constants";
@@ -164,58 +162,15 @@ export function parseVideoCorner(value: string, label: string): [number, number]
   return [lng, lat];
 }
 
-export function uniquePostgresConnections(connections: string[]): string[] {
-  return Array.from(new Set(connections));
-}
-
-export function readSavedPostgresConnections(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const value = window.localStorage.getItem(POSTGRES_CONNECTIONS_STORAGE_KEY);
-    if (!value) return [];
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? uniquePostgresConnections(
-          parsed.filter((item): item is string => typeof item === "string"),
-        )
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-export function rememberPostgresConnection(connectionString: string): string[] {
-  const trimmed = connectionString.trim();
-  if (!trimmed || typeof window === "undefined") return [];
-
-  const connections = uniquePostgresConnections([
-    trimmed,
-    ...readSavedPostgresConnections().filter((value) => value !== trimmed),
-  ]).slice(0, MAX_SAVED_POSTGRES_CONNECTIONS);
-
-  try {
-    window.localStorage.setItem(
-      POSTGRES_CONNECTIONS_STORAGE_KEY,
-      JSON.stringify(connections),
-    );
-  } catch {
-    // Best-effort persistence: a quota/private-mode failure must not abort the
-    // connect flow (mirrors readSavedPostgresConnections' guard).
-  }
-  return connections;
-}
-
-export function savedPostgresConnectionLabel(connectionString: string): string {
-  try {
-    const url = new URL(connectionString);
-    if (url.password) url.password = "****";
-    return url.toString();
-  } catch {
-    return connectionString
-      .replace(/(:\/\/[^:\s/@]+:)[^@\s]+@/, "$1****@")
-      .replace(/(password\s*=\s*)('[^']*'|[^\s]+)/gi, "$1****");
-  }
-}
+// PostgreSQL connection persistence lives in lib/ (pure data utilities also
+// consumed by the PostGIS layer connection registry); re-exported here so the
+// Add Data sources keep a single helpers import.
+export {
+  readSavedPostgresConnections,
+  rememberPostgresConnection,
+  savedPostgresConnectionLabel,
+  uniquePostgresConnections,
+} from "../../../lib/saved-postgres-connections";
 
 export function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
