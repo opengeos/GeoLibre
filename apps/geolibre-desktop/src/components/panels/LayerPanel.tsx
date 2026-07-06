@@ -82,6 +82,7 @@ import {
   Pencil,
   PencilRuler,
   RefreshCw,
+  Save,
   SquarePen,
   Table2,
   TableProperties,
@@ -111,6 +112,8 @@ import {
   type VectorExportFormat,
 } from "../../lib/vector-export";
 import { saveTextFileWithFallback } from "../../lib/tauri-io";
+import { writeVectorToSource } from "@geolibre/processing";
+import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 
@@ -195,6 +198,25 @@ function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
     (value): value is string =>
       typeof value === "string" && value.trim().length > 0,
   );
+}
+
+// Source formats whose in-place write-back the sidecar supports today. Kept in
+// sync with the backend gate in `app/vector.py` (_WRITABLE_EXTENSIONS).
+const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json"];
+
+/**
+ * Whether the layer's edits can be committed back to its source file: a
+ * desktop-only, geojson-backed layer loaded from a local file in a supported
+ * format. The sidecar needs real filesystem access to the layer's `sourcePath`,
+ * so this is false on the web build.
+ */
+function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
+  if (!isTauri() || layer.type !== "geojson") return false;
+  const path =
+    typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+  if (!path) return false;
+  const ext = path.split(".").pop()?.toLowerCase();
+  return ext ? WRITEBACK_EXTENSIONS.includes(ext) : false;
 }
 
 function layerMetadataPayload(layer: GeoLibreLayer): Record<string, unknown> {
@@ -927,6 +949,57 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
   );
 
+  // Commit the layer's current (edited) features back to the local file they
+  // were loaded from, overwriting it in place via the sidecar. Unlike Export,
+  // there is no save dialog: write-back targets the known `sourcePath`.
+  const handleSaveEditsToSource = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      const path =
+        typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+      if (!path) return;
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        if (!geojson || geojson.features.length === 0) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message: t("layers.saveEditsNoFeatures"),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        const result = await writeVectorToSource({ path, geojson });
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: {
+            type: "success",
+            message: t("layers.saveEditsSuccess", {
+              count: result.feature_count,
+            }),
+          },
+        }));
+        scheduleStatusClear(layer.id);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : t("layers.saveEditsError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
   // Close the bind dialog and invalidate any in-flight scan/confirm so a late
   // async result cannot reopen it, write stale candidates, or bind after cancel.
   const closeBindTimeSliderDialog = useCallback(() => {
@@ -1627,6 +1700,9 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            // Write-back commits edits to the layer's local source file in place
+            // (desktop only, supported formats); Export writes a new file.
+            const canWriteBack = canWriteEditsToSource(layer);
             // Vector layers with a date/timestamp property can be driven by the
             // Time Slider; the binding (if any) lives on the layer metadata.
             const canBindTimeSlider = layer.type === "geojson";
@@ -2066,6 +2142,16 @@ export function LayerPanel({
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
+                      )}
+                      {canWriteBack && (
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void handleSaveEditsToSource(layer);
+                          }}
+                        >
+                          <Save className="mr-2 h-3.5 w-3.5" />
+                          {t("layers.saveEditsToSource")}
+                        </DropdownMenuItem>
                       )}
                       {canEditRasterStyle && (
                         <DropdownMenuItem

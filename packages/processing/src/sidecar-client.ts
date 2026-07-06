@@ -692,6 +692,53 @@ export async function runVectorTool(
   return (await res.json()) as VectorToolResult;
 }
 
+export interface WriteVectorToSourceRequest {
+  /** Absolute local path of the source file to overwrite (`.gpkg`/`.geojson`). */
+  path: string;
+  /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
+  geojson: FeatureCollection;
+  /** Target table within a multi-layer GeoPackage; omit for single-layer files. */
+  layer?: string;
+}
+
+export interface WriteVectorToSourceResult {
+  /** The resolved path that was written. */
+  path: string;
+  /** The GeoPackage table that was written, or null for single-layer formats. */
+  layer: string | null;
+  /** Number of features committed. */
+  feature_count: number;
+  /** Human-readable log lines describing what was saved. */
+  messages: string[];
+}
+
+/**
+ * Commit an edited layer back to its local source file via the sidecar.
+ *
+ * Overwrites the original GeoPackage or GeoJSON file in place (CRS- and
+ * sibling-table-preserving, atomic). Desktop only: the sidecar needs real
+ * filesystem access to the layer's `sourcePath`.
+ */
+export async function writeVectorToSource(
+  request: WriteVectorToSourceRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<WriteVectorToSourceResult> {
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl}/vector/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not save edits to source"));
+  }
+  return (await res.json()) as WriteVectorToSourceResult;
+}
+
 // --- AI segmentation (SamGeo / SAM3) ---------------------------------------
 
 export interface MlStatus {
