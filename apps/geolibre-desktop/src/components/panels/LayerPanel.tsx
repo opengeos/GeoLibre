@@ -2423,33 +2423,51 @@ export function LayerPanel({
                             >
                               CSV (attributes only)
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                void handleExportStyle(layer);
-                              }}
-                            >
-                              {t("layers.exportMapboxStyle")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                void handleExportSldStyle(layer);
-                              }}
-                            >
-                              {t("layers.exportSldStyle")}
-                            </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
-                      {canImportStyle && (
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            void handleImportStyle(layer);
-                          }}
-                        >
-                          <Upload className="mr-2 h-3.5 w-3.5" />
-                          {t("layers.importStyle")}
-                        </DropdownMenuItem>
+                      {/* Symbology import/export live in their own Styles menu,
+                          separate from the feature-data Export menu above. */}
+                      {(canExportLayer || canImportStyle) && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Palette className="h-3.5 w-3.5" />
+                            {t("layers.stylesMenu")}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {canExportLayer && (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportStyle(layer);
+                                  }}
+                                >
+                                  {t("layers.exportMapboxStyle")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportSldStyle(layer);
+                                  }}
+                                >
+                                  {t("layers.exportSldStyle")}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {canExportLayer && canImportStyle && (
+                              <DropdownMenuSeparator />
+                            )}
+                            {canImportStyle && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleImportStyle(layer);
+                                }}
+                              >
+                                <Upload className="mr-2 h-3.5 w-3.5" />
+                                {t("layers.importStyle")}
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
                       )}
                       {canWriteBack && (
                         <DropdownMenuItem
