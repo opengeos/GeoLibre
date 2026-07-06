@@ -243,14 +243,35 @@ function acceptForParameter(param: WhiteboxToolParameter): string {
     .join(",");
 }
 
+/** The raw `data_kind` of a parameter (e.g. `raster`, `table`), lowercased. */
+function parameterDataKind(param: WhiteboxToolParameter): string {
+  const schema =
+    param.schema && typeof param.schema === "object"
+      ? (param.schema as Record<string, unknown>)
+      : {};
+  const dataset =
+    schema.dataset && typeof schema.dataset === "object"
+      ? (schema.dataset as Record<string, unknown>)
+      : {};
+  return String(
+    param.data_kind ?? dataset.kind ?? param.type ?? "",
+  ).toLowerCase();
+}
+
 function outputExtensionForParameter(param: WhiteboxToolParameter): string {
   const kind = parameterKind(param);
   if (kind === "raster_out") return ".tif";
   if (kind === "vector_out") return ".shp";
   if (kind === "lidar_out") return ".laz";
-  if (/\bcsv\b/i.test(`${param.name} ${param.type ?? ""}`)) return ".csv";
-  if (/\bhtml\b/i.test(`${param.name} ${param.type ?? ""}`)) return ".html";
-  if (/\bjson\b/i.test(`${param.name} ${param.type ?? ""}`)) return ".json";
+  // Sniff the intended text format from the parameter's name, description, and
+  // type (e.g. vector_summary_statistics' output is an "Output CSV path"). A
+  // `table` output with no explicit format word defaults to CSV, matching how
+  // Whitebox writes tabular results.
+  const hint = `${param.name} ${param.description ?? ""} ${param.type ?? ""}`;
+  if (/\bcsv\b/i.test(hint)) return ".csv";
+  if (/\bhtml\b/i.test(hint)) return ".html";
+  if (/\bjson\b/i.test(hint)) return ".json";
+  if (parameterDataKind(param) === "table") return ".csv";
   return ".txt";
 }
 
@@ -885,7 +906,15 @@ export function ProcessingDialog({
         const outKind = param ? parameterKind(param) : "";
         if (outKind === "file_out" || outKind === "vector_out") {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
-          downloadBytes(value, `${label}.${fileOutputExtension(value)}`);
+          // A vector_out's CRS-preserving format is only recoverable from its
+          // magic bytes; a file_out's format follows the parameter's declared
+          // output extension (e.g. a CSV table), which a byte sniff cannot
+          // recover since CSV/JSON/HTML have no magic signature.
+          const extension =
+            outKind === "file_out" && param
+              ? outputExtensionForParameter(param).slice(1)
+              : fileOutputExtension(value);
+          downloadBytes(value, `${label}.${extension}`);
         } else if (onAddRaster) {
           // Display name stays human-readable; the file name matches the actual
           // WASM output path (e.g. fill_depressions_wang_and_liu_output.tif), so
