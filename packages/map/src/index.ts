@@ -36,3 +36,15 @@ export {
   parseMapboxStyle,
   type MapboxStyleImportResult,
 } from "./mapbox-style-import";
+export {
+  buildSld,
+  OGC_SCALE_DENOMINATOR_AT_ZOOM_0,
+  type SldExportableLayer,
+  type SldExportOptions,
+  type SldExportResult,
+} from "./sld-export";
+export {
+  applySldImport,
+  parseSld,
+  type SldImportResult,
+} from "./sld-import";

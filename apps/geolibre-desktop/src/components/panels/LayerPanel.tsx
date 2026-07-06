@@ -29,10 +29,13 @@ import {
 import type { MapController } from "@geolibre/map";
 import {
   applyMapboxStyleImport,
+  applySldImport,
   buildMapboxStyle,
+  buildSld,
   isPlaceholderLayer,
   mapboxStyleToJson,
   parseMapboxStyle,
+  parseSld,
   placeholderMessage,
 } from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
@@ -980,46 +983,128 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
   );
 
-  // Import a Mapbox GL / MapLibre style JSON and apply its symbology to a vector
-  // layer, so cartography authored elsewhere (or a style exported from GeoLibre)
-  // can be brought back in instead of being rebuilt by hand. Anything the style
-  // could not represent is surfaced as a warning rather than dropped silently.
+  // Export a vector layer's symbology as an OGC SLD document, the interchange
+  // format QGIS, GeoServer, MapServer, and ArcGIS speak, so GeoLibre cartography
+  // can be handed off to a desktop-GIS or WMS workflow.
+  const handleExportSldStyle = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        // Unlike the Mapbox export, SLD carries no data, so a layer whose
+        // features are not readable can still export (geometry detection just
+        // falls back to a symbolizer superset); pass whatever we resolved.
+        const result = buildSld(layer, geojson ?? null);
+        const savedPath = await saveTextFileWithFallback(result.sld, {
+          defaultName: `${sanitizeExportFileName(layer.name)}.sld`,
+          filters: [{ name: "OGC SLD", extensions: ["sld", "xml"] }],
+          browserTypes: [
+            {
+              description: "OGC SLD",
+              accept: { "application/xml": [".sld", ".xml"] },
+            },
+          ],
+          mimeType: "application/xml",
+        });
+        if (savedPath !== null) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]:
+              result.warnings.length > 0
+                ? {
+                    type: "warning",
+                    message: `${t("layers.exportStyleSuccess")} ${result.warnings.join(" ")}`,
+                  }
+                : {
+                    type: "success",
+                    message: t("layers.exportStyleSuccess"),
+                  },
+          }));
+          scheduleStatusClear(layer.id);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("layers.exportStyleError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
+  // Import a symbology file (Mapbox GL / MapLibre style JSON or an OGC SLD) and
+  // apply it to a vector layer, so cartography authored elsewhere (QGIS,
+  // GeoServer, another map, or a style exported from GeoLibre) can be brought
+  // back in instead of being rebuilt by hand. The format is detected from the
+  // file content (XML vs JSON). Anything the style could not represent is
+  // surfaced as a warning rather than dropped silently.
   const handleImportStyle = useCallback(
     async (layer: GeoLibreLayer) => {
       clearRefreshStatusTimer(layer.id);
       try {
         const picked = await openLocalDataFileWithFallback({
-          filters: [{ name: "Mapbox GL style", extensions: ["json"] }],
-          accept: ".json,application/json",
+          filters: [
+            { name: "Style (Mapbox GL / SLD)", extensions: ["json", "sld", "xml"] },
+          ],
+          accept: ".json,.sld,.xml,application/json,application/xml,text/xml",
           readText: true,
         });
         // A null result means the user dismissed the file dialog; no note. Guard
         // on `picked` itself (not `picked.text`) so an empty/whitespace file is
-        // still parsed and surfaces an "invalid JSON" error rather than a
-        // silent no-op that looks like a cancel.
+        // still parsed and surfaces an "invalid" error rather than a silent
+        // no-op that looks like a cancel.
         if (!picked || picked.text === undefined) return;
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(picked.text);
-        } catch {
-          setRefreshStatuses((current) => ({
-            ...current,
-            [layer.id]: {
-              type: "error",
-              message: t("layers.importStyleInvalid"),
-            },
-          }));
-          scheduleStatusClear(layer.id);
-          return;
+
+        // Detect the format from the content: a leading `<` is XML (SLD),
+        // everything else is parsed as a Mapbox GL style JSON. This is more
+        // reliable than the file extension (a `.xml` can hold either).
+        const trimmed = picked.text.trimStart();
+        const isSld = trimmed.startsWith("<");
+
+        let result:
+          | ReturnType<typeof parseMapboxStyle>
+          | ReturnType<typeof parseSld>;
+        let matched: number;
+        let applyImport: (base: GeoLibreLayer["style"]) => GeoLibreLayer["style"];
+
+        if (isSld) {
+          const sldResult = parseSld(picked.text);
+          result = sldResult;
+          matched = sldResult.matchedRuleCount;
+          applyImport = (base) => applySldImport(base, sldResult);
+        } else {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(picked.text);
+          } catch {
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.importStyleInvalid"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
+          const mapboxResult = parseMapboxStyle(parsed);
+          result = mapboxResult;
+          matched = mapboxResult.matchedLayerCount;
+          applyImport = (base) => applyMapboxStyleImport(base, mapboxResult);
         }
-        const result = parseMapboxStyle(parsed);
-        if (result.matchedLayerCount === 0) {
+
+        if (matched === 0) {
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: {
               type: "error",
-              message:
-                result.warnings[0] ?? t("layers.importStyleNoMatch"),
+              message: result.warnings[0] ?? t("layers.importStyleNoMatch"),
             },
           }));
           scheduleStatusClear(layer.id);
@@ -1033,7 +1118,7 @@ export function LayerPanel({
           .layers.find((candidate) => candidate.id === layer.id);
         if (!latest) return;
         updateLayer(layer.id, {
-          style: applyMapboxStyleImport(latest.style, result),
+          style: applyImport(latest.style),
         });
         setRefreshStatuses((current) => ({
           ...current,
@@ -1900,9 +1985,10 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
-            // Importing a Mapbox GL style only writes the layer's vector
-            // symbology, so it applies to any vector-styled layer (local GeoJSON
-            // and vector tiles), not just the export-capable GeoJSON layers.
+            // Importing a style (Mapbox GL or SLD) only writes the layer's
+            // vector symbology, so it applies to any vector-styled layer (local
+            // GeoJSON and vector tiles), not just the export-capable GeoJSON
+            // layers.
             const canImportStyle =
               layer.type === "geojson" || layer.type === "vector-tiles";
             // Write-back commits edits to the layer's local source file in place
@@ -2345,6 +2431,13 @@ export function LayerPanel({
                             >
                               {t("layers.exportMapboxStyle")}
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                void handleExportSldStyle(layer);
+                              }}
+                            >
+                              {t("layers.exportSldStyle")}
+                            </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
@@ -2355,7 +2448,7 @@ export function LayerPanel({
                           }}
                         >
                           <Upload className="mr-2 h-3.5 w-3.5" />
-                          {t("layers.importMapboxStyle")}
+                          {t("layers.importStyle")}
                         </DropdownMenuItem>
                       )}
                       {canWriteBack && (
