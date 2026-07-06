@@ -344,6 +344,33 @@ describe("labels", () => {
     assert.equal(label.minzoom, undefined);
   });
 
+  it("suppresses labels on extruded layers, matching the live map", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          extrusionEnabled: true,
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "category" },
+        }),
+      }),
+      polygons(),
+    );
+    assert.equal(layerById(doc, "my-layer-label"), undefined);
+    assert.equal((doc as { glyphs?: string }).glyphs, undefined);
+  });
+
+  it("suppresses labels on heatmap layers, matching the live map", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          pointRenderer: "heatmap",
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true, field: "category" },
+        }),
+      }),
+      points(),
+    );
+    assert.equal(layerById(doc, "my-layer-label"), undefined);
+  });
+
   it("omits the label layer (and glyphs) when labels are disabled", () => {
     const { style: doc } = buildMapboxStyle(layer(), points());
     assert.equal(layerById(doc, "my-layer-label"), undefined);

@@ -134,7 +134,7 @@ const POINT_FILTER = [
 function labelTextField(
   style: LayerStyle,
   warnings: string[],
-): ExpressionSpecification | string | null {
+): ExpressionSpecification | null {
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
   const expression = labels.expression.trim();
   if (expression) {
@@ -174,7 +174,7 @@ function buildLabelLayer(
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
   if (!labels.enabled) return null;
   const textField = labelTextField(style, warnings);
-  if (textField === null || textField === "") return null;
+  if (textField === null) return null;
 
   // Live dedup only applies to point-only layers, so only warn when it would
   // actually have taken effect (mirrors the map's dedupe gating).
@@ -281,6 +281,9 @@ export function buildMapboxStyle(
   // the live map.
   const pointOnly =
     profile.hasPoint && !profile.hasLine && !profile.hasPolygon;
+  const effectiveRenderer = pointOnly
+    ? styleValue(style, "pointRenderer")
+    : "single";
 
   const layers: LayerSpecification[] = [];
   const zoom = zoomRange(style);
@@ -336,9 +339,6 @@ export function buildMapboxStyle(
   }
 
   if (!style.extrusionEnabled && profile.hasPoint) {
-    const renderer = styleValue(style, "pointRenderer");
-    const effectiveRenderer = pointOnly ? renderer : "single";
-
     if (style.markerEnabled) {
       warnings.push(
         "Custom marker symbol is not exported (it relies on a generated " +
@@ -387,14 +387,20 @@ export function buildMapboxStyle(
     }
   }
 
-  const labelLayer = buildLabelLayer(
-    layer,
-    sourceKey,
-    idBase,
-    visibility,
-    pointOnly,
-    warnings,
-  );
+  // The live map suppresses labels on extruded and heatmap layers, so the
+  // export must too (otherwise an extruded/heatmap layer gains labels it never
+  // shows in GeoLibre).
+  const labelLayer =
+    style.extrusionEnabled || effectiveRenderer === "heatmap"
+      ? null
+      : buildLabelLayer(
+          layer,
+          sourceKey,
+          idBase,
+          visibility,
+          pointOnly,
+          warnings,
+        );
   if (labelLayer) layers.push(labelLayer);
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a

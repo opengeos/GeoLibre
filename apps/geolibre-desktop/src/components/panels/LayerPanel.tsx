@@ -869,8 +869,8 @@ export function LayerPanel({
           // source, so surface that rather than exporting a style with no data.
           const message =
             geojsonVectorSourceId(layer) !== null
-              ? "Layer data is not ready yet. Try again in a moment."
-              : "Style export requires a vector layer with features.";
+              ? t("layers.exportStyleDataNotReady")
+              : t("layers.exportStyleNeedsFeatures");
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: { type: "error", message },
@@ -903,9 +903,12 @@ export function LayerPanel({
               result.warnings.length > 0
                 ? {
                     type: "warning",
-                    message: `Style exported. ${result.warnings.join(" ")}`,
+                    message: `${t("layers.exportStyleSuccess")} ${result.warnings.join(" ")}`,
                   }
-                : { type: "success", message: "Style exported." },
+                : {
+                    type: "success",
+                    message: t("layers.exportStyleSuccess"),
+                  },
           }));
           scheduleStatusClear(layer.id);
         }
@@ -913,7 +916,7 @@ export function LayerPanel({
         const message =
           error instanceof Error
             ? error.message
-            : "Could not export this layer's style.";
+            : t("layers.exportStyleError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -921,7 +924,7 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
   );
 
   // Close the bind dialog and invalidate any in-flight scan/confirm so a late
