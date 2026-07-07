@@ -1532,7 +1532,7 @@ fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Re
 // anything derived from the clock/pid.
 fn generate_jupyter_token() -> String {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
+    getrandom::fill(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
     let mut token = String::with_capacity(32);
     for byte in bytes {
         use std::fmt::Write;
