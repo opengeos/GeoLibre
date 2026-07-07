@@ -2506,11 +2506,24 @@ fn create_oauth_popup_window(
 
 #[cfg(target_os = "linux")]
 fn configure_linux_webkit() {
-    // WebKitGTK's DMABUF renderer can fail to allocate GBM buffers on some
-    // Linux graphics stacks, leaving the Tauri window blank. Only set the
-    // default when unset so an explicit user/distributor value wins.
+    // WebKitGTK's DMABUF renderer could fail to allocate GBM buffers on older
+    // graphics stacks, leaving the Tauri window blank, so it used to be
+    // disabled here unconditionally. Disabling it also forces a slow readback
+    // compositing path that visibly drops MapLibre pan/zoom FPS, and the
+    // allocation bugs are fixed in current WebKitGTK, so keep the workaround
+    // only for versions older than 2.48. An explicit user/distributor value
+    // always wins (per WebKit semantics, "0" keeps DMABUF on and any other
+    // value disables it). Only set the default when unset.
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        let webkit_version = unsafe {
+            (
+                webkit2gtk_sys::webkit_get_major_version(),
+                webkit2gtk_sys::webkit_get_minor_version(),
+            )
+        };
+        if webkit_version < (2, 48) {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
     }
     // Prefer portal-backed native dialogs on Linux. This avoids GTK/GIO file
     // metadata warnings that can appear around file and folder pickers.

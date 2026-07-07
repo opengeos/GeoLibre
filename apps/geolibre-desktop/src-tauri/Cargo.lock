@@ -1692,6 +1692,7 @@ dependencies = [
  "tauri-plugin-fs",
  "tauri-plugin-http",
  "tauri-plugin-opener",
+ "webkit2gtk-sys",
  "zip 2.4.2",
 ]
 
