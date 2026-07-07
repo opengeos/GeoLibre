@@ -208,9 +208,20 @@ describe("parseQml", () => {
         <symbols>${fillSymbol("0", "255,0,0,255")}</symbols>
       </renderer-v2>`),
     );
-    // The invalid entity is kept as raw text; the import still succeeds.
-    assert.ok(result.matchedRuleCount >= 0);
+    // The invalid entity is kept as raw text; the categorized renderer still
+    // parses (one category), so the import succeeds without crashing.
+    assert.equal(result.matchedRuleCount, 1);
     assert.equal(result.style.vectorStyleProperty, "t");
+    assert.equal(result.style.vectorStyleMode, "categorized");
+  });
+
+  it("warns for a non-simple labeling type", () => {
+    const result = parseQml(
+      qgis(`<renderer-v2 type="singleSymbol"><symbols>${fillSymbol("0", "255,255,255,255")}</symbols></renderer-v2>
+      <labeling type="rule-based"><rules><rule><settings/></rule></rules></labeling>`),
+    );
+    assert.equal(result.labels, null);
+    assert.ok(result.warnings.some((w) => /"rule-based" labeling has no GeoLibre equivalent/.test(w)));
   });
 
   it("reports a clear error for a non-QML document", () => {

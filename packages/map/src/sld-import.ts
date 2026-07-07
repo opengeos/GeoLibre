@@ -96,7 +96,7 @@ function isNode(value: unknown): value is XmlNode {
  * exporter's `xmlEscape` (e.g. `A &amp; B`) round-trips back to `A & B`.
  */
 function decodeXmlEntities(value: string): string {
-  return value.replace(/&(#x?[0-9a-fA-F]+|amp|lt|gt|quot|apos);/g, (match, body) => {
+  return value.replace(/&(#(?:[0-9]+|[xX][0-9a-fA-F]+)|amp|lt|gt|quot|apos);/g, (match, body) => {
     switch (body) {
       case "amp":
         return "&";

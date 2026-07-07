@@ -44,7 +44,7 @@ type XmlNode = Record<string, unknown>;
 
 /** Decode the five predefined XML entities and numeric character references. */
 function decodeXmlEntities(value: string): string {
-  return value.replace(/&(#x?[0-9a-fA-F]+|amp|lt|gt|quot|apos);/g, (match, body) => {
+  return value.replace(/&(#(?:[0-9]+|[xX][0-9a-fA-F]+)|amp|lt|gt|quot|apos);/g, (match, body) => {
     switch (body) {
       case "amp":
         return "&";
@@ -484,8 +484,19 @@ function applySymbol(
 /** Build the label patch from a `<labeling type="simple">` block. */
 function readLabeling(labeling: unknown, warnings: string[]): Partial<LabelStyle> | null {
   if (!isNode(labeling)) return null;
+  const type = attr(labeling, "type");
   const settings = toArray(labeling.settings)[0];
-  if (!isNode(settings)) return null;
+  if (!isNode(settings)) {
+    // Rule-based/categorized labeling nests settings under <rules>, which
+    // GeoLibre's single label config cannot represent; flag it rather than
+    // dropping the labels silently.
+    if (type && type !== "simple") {
+      warnings.push(
+        `The "${type}" labeling has no GeoLibre equivalent; labels were not imported.`,
+      );
+    }
+    return null;
+  }
   const isExpression = attr(settings, "isExpression") === "1";
   const field = attr(settings, "fieldName");
   const defaults = DEFAULT_LAYER_STYLE.labels;

@@ -383,8 +383,10 @@ function categorizedRenderer(
   const categories: string[] = [];
   const symbols: string[] = [];
   let index = 0;
+  let dropped = false;
   for (const stop of stops) {
     if (String(stop.value).trim().length === 0 || !isHexColor(stop.color)) {
+      dropped = true;
       continue;
     }
     const value = xmlEscape(String(stop.value));
@@ -394,6 +396,11 @@ function categorizedRenderer(
     );
     symbols.push(symbolXml(geometry, String(index), stop.color, paint, opacity, warnings));
     index += 1;
+  }
+  if (dropped) {
+    warnings.push(
+      "Some categorized categories had a blank value or invalid color and were skipped.",
+    );
   }
   // The empty-value default category is QGIS's catch-all (the match fallback);
   // its color is the layer's single-symbol color for the geometry (markerColor
@@ -432,6 +439,11 @@ function graduatedRenderer(
     }))
     .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
+  if (numeric.length < stops.length) {
+    warnings.push(
+      "Some graduated stops had a non-numeric value or invalid color and were skipped.",
+    );
+  }
 
   warnings.push(
     "The graduated color ramp was written as discrete QML class ranges (QGIS graduated convention); the continuous interpolation is approximated and features below the lowest class are left unclassified.",
@@ -475,7 +487,13 @@ function ruleRenderer(
   const elseRule = rules.find((entry) => entry.isElse);
   let index = 0;
   for (const entry of rules) {
-    if (entry.isElse || !isHexColor(entry.color)) continue;
+    if (entry.isElse) continue;
+    if (!isHexColor(entry.color)) {
+      warnings.push(
+        `The rule "${entry.label || entry.filter}" has an invalid color and was skipped.`,
+      );
+      continue;
+    }
     const parsed = parseJsonExpression(entry.filter);
     const filter = parsed ? mapboxFilterToQgis(parsed) : null;
     if (filter === null) {

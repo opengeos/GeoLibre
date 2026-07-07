@@ -209,6 +209,52 @@ describe("buildQml", () => {
     assert.doesNotMatch(compact(qml), /<category value="b"/);
   });
 
+  it("warns when a categorized stop is skipped for an invalid color", () => {
+    const { warnings } = buildQml(
+      layer({
+        style: style({
+          vectorStyleMode: "categorized",
+          vectorStyleProperty: "z",
+          vectorStyleStops: [
+            { value: "a", color: "#112233" },
+            { value: "b", color: "nope" },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    assert.ok(warnings.some((w) => /categories had a blank value or invalid color/.test(w)));
+  });
+
+  it("warns when a rule is skipped for an invalid color", () => {
+    const { warnings } = buildQml(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "bad",
+              filter: JSON.stringify([">", ["get", "p"], 1]),
+              color: "notacolor",
+              isElse: false,
+            },
+            {
+              id: "r2",
+              label: "",
+              filter: JSON.stringify([">", ["get", "p"], 2]),
+              color: "#00ff00",
+              isElse: false,
+            },
+            { id: "else", label: "", filter: "", color: "#dddddd", isElse: true },
+          ],
+        }),
+      }),
+      polygons(),
+    );
+    assert.ok(warnings.some((w) => /invalid color and was skipped/.test(w)));
+  });
+
   it("escapes XML-special characters in the layer attribute", () => {
     const { qml } = buildQml(
       layer({
