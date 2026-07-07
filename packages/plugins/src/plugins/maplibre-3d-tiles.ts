@@ -29,7 +29,7 @@ import {
   arcgisI3sSceneLayerName,
   isArcgisI3sSceneLayerUrl,
   restoreArcgisI3sTilesLayers,
-  THREE_D_TILES_TILESET_LOAD_LIMITS,
+  THREE_D_TILES_DECK_LOAD_OPTIONS,
 } from "./arcgis-i3s-tiles";
 
 const threeDTilesControlPosition: GeoLibreMapControlPosition = "top-left";
@@ -1467,15 +1467,12 @@ function buildGooglePhotorealisticTilesDeckLayer(
     id: googlePhotorealisticTilesDeckLayerId(layer),
     data: GOOGLE_PHOTOREALISTIC_TILES_URL,
     altitudeOffset,
+    // Tileset caps + main-thread parsing shared with the I3S overlay (see
+    // THREE_D_TILES_DECK_LOAD_OPTIONS for why workers are disabled), plus this
+    // layer's per-request auth headers.
     loadOptions: {
+      ...THREE_D_TILES_DECK_LOAD_OPTIONS,
       fetch: requestHeaders ? { headers: requestHeaders } : undefined,
-      tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
-      // Decode glTF tile content on the main thread. loaders.gl otherwise
-      // fetches its draco/basis-texture workers from the unpkg CDN at runtime,
-      // which the Tauri desktop CSP blocks (and which breaks offline use); this
-      // keeps parsing in-process on every platform. See the matching note in
-      // arcgis-i3s-tiles.ts.
-      worker: false,
     },
     opacity: layer.opacity,
     pickable: false,
