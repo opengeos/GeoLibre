@@ -143,27 +143,34 @@ export function DelimitedTextSource() {
       const { text } = await readDelimitedTextSource();
       const fields = parseDelimitedTextFields(text, delimiter);
       setDelimitedTextFields(fields);
-      // Keep a manually chosen column if it still exists in the freshly
-      // retrieved header (e.g. after tweaking the delimiter); otherwise
-      // auto-detect. When neither survives, default to "(None)" so the file
-      // imports as a non-spatial attribute table instead of misparsing an
-      // arbitrary column as a coordinate.
+      // Resolve the coordinate columns as an all-or-nothing pair so the file is
+      // always in a coherent state (both set = points, both blank = attribute
+      // table), never the mixed state that parseDelimitedTextLayer rejects.
+      // Prefer keeping the current manual choices when both still exist in the
+      // freshly retrieved header (e.g. after tweaking the delimiter); otherwise
+      // auto-detect; otherwise leave both as "(None)" so the file imports as a
+      // non-spatial attribute table instead of misparsing an arbitrary column.
       const keepIfValid = (current: string): string | undefined => {
         const normalized = current.trim().toLowerCase();
         if (!normalized) return undefined;
         return fields.find((field) => field.trim().toLowerCase() === normalized);
       };
+      const keptLongitude = keepIfValid(delimitedTextLongitudeField);
+      const keptLatitude = keepIfValid(delimitedTextLatitudeField);
       const detected = detectCoordinateFields(fields);
-      const nextLongitude =
-        keepIfValid(delimitedTextLongitudeField) ??
-        detected?.longitudeField ??
-        "";
-      const nextLatitude =
-        keepIfValid(delimitedTextLatitudeField) ?? detected?.latitudeField ?? "";
+      let nextLongitude = "";
+      let nextLatitude = "";
+      if (keptLongitude && keptLatitude) {
+        nextLongitude = keptLongitude;
+        nextLatitude = keptLatitude;
+      } else if (detected) {
+        nextLongitude = detected.longitudeField;
+        nextLatitude = detected.latitudeField;
+      }
       setDelimitedTextLongitudeField(nextLongitude);
       setDelimitedTextLatitudeField(nextLatitude);
       setDelimitedTextColumnsStatus(
-        nextLongitude || nextLatitude
+        nextLongitude && nextLatitude
           ? t("addData.delimitedText.retrievedColumns", { count: fields.length })
           : t("addData.delimitedText.retrievedColumnsTable", {
               count: fields.length,
