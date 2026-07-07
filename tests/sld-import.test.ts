@@ -254,6 +254,17 @@ describe("parseSld", () => {
     assert.equal(result.labels?.field, "A & B");
   });
 
+  it("warns for an ExternalGraphic (image) point marker", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic>
+        <ExternalGraphic><OnlineResource xlink:href="marker.png"/><Format>image/png</Format></ExternalGraphic>
+        <Size>16</Size>
+      </Graphic></PointSymbolizer></Rule>`),
+    );
+    assert.notEqual(result.style.markerEnabled, true);
+    assert.ok(result.warnings.some((w) => /image\/icon marker/.test(w)));
+  });
+
   it("warns when a WellKnownName has no GeoLibre marker equivalent", () => {
     const result = parseSld(
       sld(`<Rule><PointSymbolizer><Graphic><Mark>

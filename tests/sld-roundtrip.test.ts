@@ -268,6 +268,22 @@ describe("SLD round-trip (style → SLD → style)", () => {
     );
   });
 
+  it("round-trips a circle marker as a plain circle without corrupting the stroke", () => {
+    const input = style({
+      markerEnabled: true,
+      markerShape: "circle",
+      markerColor: "#ff8800",
+      strokeColor: "#123456",
+      strokeWidth: 2,
+    });
+    const out = roundTrip(input, "point");
+    // A circle marker is indistinguishable from a plain circle in SLD, so it
+    // comes back as a plain circle — but the real stroke is not clobbered with
+    // the white marker halo.
+    assert.equal(out.strokeColor, "#123456");
+    assert.notEqual(out.strokeColor, "#ffffff");
+  });
+
   it("preserves labels", () => {
     const input = style({
       labels: {

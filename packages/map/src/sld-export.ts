@@ -194,7 +194,11 @@ function pointSymbolizer(
         fillColor: styleValue(style, "markerColor"),
       };
       size = styleValue(style, "markerSize");
-      shapeMarker = true;
+      // A circle-shape marker is indistinguishable from the plain circle
+      // renderer in SLD, so keep the real layer stroke (not the white halo) for
+      // it — that way a round-trip recovers a plain circle without corrupting
+      // strokeColor. Only non-circle shapes use the drawBuiltinMarker halo.
+      shapeMarker = shape !== "circle";
     } else {
       warnings.push(
         `The "${shape}" marker has no SLD equivalent; points use a circle instead.`,

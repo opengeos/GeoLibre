@@ -593,6 +593,12 @@ function applyPaint(
         warnings.push(
           `The "${name}" point mark has no GeoLibre equivalent; it was imported as a circle.`,
         );
+      } else if (name === undefined) {
+        // The Graphic had no Mark (e.g. an <ExternalGraphic> image/icon marker,
+        // common in QGIS/GeoServer SLDs), which GeoLibre cannot represent.
+        warnings.push(
+          "A point graphic (image/icon marker) has no GeoLibre equivalent; it was imported as a circle.",
+        );
       }
     }
   }
