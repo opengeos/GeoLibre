@@ -162,11 +162,13 @@ describe("buildArcgisI3sTilesDeckLayer", () => {
 
   it("passes the shared main-thread load options to the Tile3DLayer", () => {
     // The whole point of the CSP fix: the constructed layer must carry
-    // core.worker === false so parsing never falls back to a CDN worker.
-    assert.equal(build()?.loadOptions, THREE_D_TILES_DECK_LOAD_OPTIONS);
+    // core.worker === false so parsing never falls back to a CDN worker. The
+    // call site spreads the shared constant into a fresh object, so compare by
+    // value rather than reference.
+    const props = build();
+    assert.deepEqual(props?.loadOptions, THREE_D_TILES_DECK_LOAD_OPTIONS);
     assert.equal(
-      (build()?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core
-        .worker,
+      (props?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core.worker,
       false,
     );
   });

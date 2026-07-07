@@ -392,7 +392,9 @@ export function buildArcgisI3sTilesDeckLayer(
     loader,
     // Tile detail/memory caps + main-thread parsing, shared with the Google
     // overlay. See THREE_D_TILES_DECK_LOAD_OPTIONS for why workers are disabled.
-    loadOptions: THREE_D_TILES_DECK_LOAD_OPTIONS,
+    // Spread into a fresh object per layer (matching the Google call site) so no
+    // two layers share one loadOptions reference.
+    loadOptions: { ...THREE_D_TILES_DECK_LOAD_OPTIONS },
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",
