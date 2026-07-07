@@ -84,7 +84,7 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-i18next": "^16.6.6",
+    "react-i18next": "^17.0.8",
     "shpjs": "^6.2.0",
     "sql.js": "^1.14.0",
     "three": "^0.184.0",
