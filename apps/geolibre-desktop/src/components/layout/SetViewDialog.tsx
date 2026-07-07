@@ -497,7 +497,7 @@ export function SetViewDialog({
               aria-controls={pasteOpen ? "set-view-paste-panel" : undefined}
               onClick={() => setPasteOpen((isOpen) => !isOpen)}
               className={cn(
-                "w-full justify-start font-medium",
+                "w-full justify-start",
                 pasteOpen ? "text-foreground" : "text-muted-foreground",
               )}
             >
