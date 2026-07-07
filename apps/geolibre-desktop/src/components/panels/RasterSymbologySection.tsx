@@ -508,9 +508,13 @@ export function RasterSymbologySection({
     const a = clamp(
       guessBandForRole(preset.roleA, bandNames) ?? state.bands[0] ?? 1,
     );
-    const b = clamp(
+    let b = clamp(
       guessBandForRole(preset.roleB, bandNames) ?? (a === 2 ? 1 : 2),
     );
+    // Both roles can resolve to the same band (ambiguous band names, or a
+    // single-band clamp); (A - B) / (A + B) with A === B is a constant 0, so
+    // nudge B to a distinct band when the image has one.
+    if (b === a) b = clamp(a === 1 ? 2 : 1);
     return {
       mode: "index",
       index: preset.id,
@@ -695,31 +699,33 @@ export function RasterSymbologySection({
         <IndexControls
           state={state}
           bandOptions={bandOptions}
-          onPreset={(id) => commit({ statePatch: indexPatchFor(id) })}
+          onPreset={(id) =>
+            commit({ statePatch: indexPatchFor(id), symbology: null })
+          }
           onBands={(bands) => commit({ statePatch: { bands } })}
         />
       ) : (
-      <div className="space-y-2">
-        <Label htmlFor="rasterBand">Band</Label>
-        <Select
-          id="rasterBand"
-          value={String(band)}
-          disabled={bandOptions.length === 0}
-          onChange={(event) =>
-            commit({ statePatch: { bands: [Number(event.target.value)] } })
-          }
-        >
-          {bandOptions.length === 0 ? (
-            <option value={String(band)}>{`Band ${band}`}</option>
-          ) : (
-            bandOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))
-          )}
-        </Select>
-      </div>
+        <div className="space-y-2">
+          <Label htmlFor="rasterBand">Band</Label>
+          <Select
+            id="rasterBand"
+            value={String(band)}
+            disabled={bandOptions.length === 0}
+            onChange={(event) =>
+              commit({ statePatch: { bands: [Number(event.target.value)] } })
+            }
+          >
+            {bandOptions.length === 0 ? (
+              <option value={String(band)}>{`Band ${band}`}</option>
+            ) : (
+              bandOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))
+            )}
+          </Select>
+        </div>
       )}
 
       <div className="space-y-2">
@@ -951,9 +957,9 @@ function IndexControls({
       <div className="space-y-2">
         <Label>{`Bands (${preset.roleA}, ${preset.roleB})`}</Label>
         <div className="grid grid-cols-2 gap-2">
-          {operands.map(({ role, slot, value }) => (
+          {operands.map(({ slot, value }) => (
             <Select
-              key={role}
+              key={slot}
               aria-label={`index-band-${slot === 0 ? "a" : "b"}`}
               value={String(value)}
               disabled={bandOptions.length === 0}
@@ -971,6 +977,12 @@ function IndexControls({
             </Select>
           ))}
         </div>
+        {bandA === bandB && (
+          <p className="text-[10px] text-amber-600 dark:text-amber-500">
+            Operands A and B are the same band; the index is 0 everywhere. Pick
+            two different bands.
+          </p>
+        )}
       </div>
     </>
   );
