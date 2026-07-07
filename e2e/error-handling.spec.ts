@@ -1,16 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { dropGeoJson, layerRow, waitForMap } from "./helpers";
+import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
-const VALID_TEXT = readFileSync(
-  join(__dirname, "fixtures", "smoke.geojson"),
-  "utf8",
-);
-const MALFORMED_TEXT = readFileSync(
-  join(__dirname, "fixtures", "malformed.geojson"),
-  "utf8",
-);
+const VALID_TEXT = readFixture("smoke.geojson");
+const MALFORMED_TEXT = readFixture("malformed.geojson");
 
 /**
  * The E2E suite only ever exercised valid inputs, so a regression that turned a
@@ -24,8 +16,14 @@ test("rejects a malformed GeoJSON drop and stays usable", async ({ page }) => {
 
   await dropGeoJson(page, "malformed", MALFORMED_TEXT);
 
-  // No layer row should ever appear for the bad file. Give the async parse path
-  // time to run and fail rather than racing it.
+  // Synchronize on a positive signal: the drop-status banner reports the failure
+  // (`data-drop-error="true"`) once the async parse pipeline has actually run and
+  // failed. Asserting the negative row count only after this avoids the trivial
+  // "passes because the row never existed yet" race the reviewers flagged.
+  await expect(page.getByTestId("drop-status")).toHaveAttribute(
+    "data-drop-error",
+    "true",
+  );
   await expect(layerRow(page, "malformed")).toHaveCount(0);
   // The app shell survived the failure — the map is still mounted.
   await expect(page.getByTestId("map-canvas")).toBeVisible();

@@ -1,12 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { dropGeoJson, layerRow, waitForMap } from "./helpers";
+import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
-const FIXTURE_TEXT = readFileSync(
-  join(__dirname, "fixtures", "smoke.geojson"),
-  "utf8",
-);
+const FIXTURE_TEXT = readFixture("smoke.geojson");
 
 /** Ordered `data-layer-name` values of the layer rows currently in the panel. */
 async function layerOrder(page: Page): Promise<string[]> {

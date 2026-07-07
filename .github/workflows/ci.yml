@@ -179,11 +179,20 @@ jobs:
       # tree whose transitive advisories are often upstream and not immediately
       # fixable, so this surfaces them without halting the release cadence.
       # Dependabot opens the fix PRs; this step keeps the signal visible in CI.
+      #
+      # pip-audit runs in a throwaway venv against a frozen snapshot of the test
+      # environment (--exclude-editable drops the local geolibre_server checkout,
+      # which isn't on PyPI). This keeps its own dependency resolution from
+      # mutating the environment the "Run CI gate" step below tests against.
       - name: Audit Python dependencies (advisory, non-blocking)
         continue-on-error: true
         run: |
-          python -m pip install pip-audit
-          python -m pip_audit --progress-spinner off
+          python -m pip freeze --exclude-editable > /tmp/backend-freeze.txt
+          python -m venv /tmp/pip-audit-venv
+          /tmp/pip-audit-venv/bin/pip install --quiet pip-audit
+          /tmp/pip-audit-venv/bin/pip-audit \
+            --progress-spinner off \
+            --requirement /tmp/backend-freeze.txt
 
       # Drive the documented `npm run ci` gate directly (lint -> build ->
       # frontend+worker+backend coverage -> rust) so this workflow cannot drift

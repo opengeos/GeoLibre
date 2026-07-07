@@ -81,6 +81,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      actions:
+      actions-security:
+        applies-to: security-updates
         patterns:
           - "*"
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch

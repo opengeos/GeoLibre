@@ -1,12 +1,7 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { dropGeoJson, layerRow, waitForMap } from "./helpers";
+import { dropGeoJson, layerRow, readFixture, waitForMap } from "./helpers";
 
-const FIXTURE_TEXT = readFileSync(
-  join(__dirname, "fixtures", "smoke.geojson"),
-  "utf8",
-);
+const FIXTURE_TEXT = readFixture("smoke.geojson");
 const FIXTURE_FEATURE_COUNT = (
   JSON.parse(FIXTURE_TEXT) as { features: unknown[] }
 ).features.length;

@@ -1966,6 +1966,8 @@ export function DesktopShell({
       ) : null}
       {dropMessage || dropError ? (
         <div
+          data-testid="drop-status"
+          data-drop-error={dropError ? "true" : undefined}
           aria-live="polite"
           className={`pointer-events-none absolute bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-md border bg-background px-3 py-2 text-sm shadow-lg ${
             dropError ? "text-destructive" : "text-foreground"

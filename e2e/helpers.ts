@@ -1,9 +1,13 @@
 import { expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
-/**
- * Shared E2E helpers for driving the built web app. `smoke.spec.ts` predates
- * this module and keeps its own copies; new specs import from here.
- */
+/** Shared E2E helpers for driving the built web app. */
+
+/** Reads a fixture file from `e2e/fixtures/` as UTF-8 text. */
+export function readFixture(name: string): string {
+  return readFileSync(join(__dirname, "fixtures", name), "utf8");
+}
 
 /** Waits for MapLibre to mount its WebGL canvas — the app's "map ready" signal. */
 export async function waitForMap(page: Page, path = "/"): Promise<void> {
