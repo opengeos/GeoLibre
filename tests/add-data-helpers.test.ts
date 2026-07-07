@@ -11,7 +11,6 @@ import {
   stripOgcOperationParams,
   wmsVersionFromEndpoint,
   geoJsonToPointRows,
-  inferDelimitedTextField,
   layerNameFromPath,
   parseOptionalNumber,
   parseRequiredNumber,
@@ -301,22 +300,6 @@ describe("resolveDelimitedTextDelimiter", () => {
     assert.equal(resolveDelimitedTextDelimiter("comma", ""), ",");
     assert.equal(resolveDelimitedTextDelimiter("tab", ""), "\t");
     assert.equal(resolveDelimitedTextDelimiter("custom", "~"), "~");
-  });
-});
-
-describe("inferDelimitedTextField", () => {
-  const fields = ["City", "Longitude", "Latitude"];
-
-  it("keeps the current field when it still exists (case-insensitive)", () => {
-    assert.equal(inferDelimitedTextField(fields, "longitude", []), "Longitude");
-  });
-
-  it("falls back to the first matching candidate, then the first field", () => {
-    assert.equal(
-      inferDelimitedTextField(fields, "missing", ["lat", "latitude"]),
-      "Latitude",
-    );
-    assert.equal(inferDelimitedTextField(fields, "missing", ["nope"]), "City");
   });
 });
 

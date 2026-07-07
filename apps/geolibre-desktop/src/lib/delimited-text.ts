@@ -27,6 +27,15 @@ export interface DelimitedTextLayerResult {
 export const NO_VALID_COORDINATES_MESSAGE =
   "No rows contained valid longitude and latitude values.";
 
+/**
+ * Thrown by {@link parseDelimitedTextLayer} when exactly one coordinate field is
+ * left blank. Points need both a longitude and a latitude, and an attribute
+ * table needs neither, so a half-specified pair is always a mistake. Exported so
+ * callers can recognize this failure without matching a duplicated literal.
+ */
+export const MIXED_COORDINATE_FIELDS_MESSAGE =
+  "Select both a longitude and a latitude field, or leave both as None to add an attribute table.";
+
 export function parseDelimitedTextFields(
   text: string,
   delimiter: string,
@@ -69,6 +78,12 @@ export function parseDelimitedTextLayer(
   // in an attribute join without inventing coordinates.
   const wantsLatitude = options.latitudeField.trim() !== "";
   const wantsLongitude = options.longitudeField.trim() !== "";
+  // A half-specified coordinate pair (one field chosen, the other left as
+  // "None") can neither build points nor a table, so fail with a clear message
+  // instead of falling through to a raw `field "" was not found` error.
+  if (wantsLatitude !== wantsLongitude) {
+    throw new Error(MIXED_COORDINATE_FIELDS_MESSAGE);
+  }
   if (!wantsLatitude && !wantsLongitude) {
     const tableFeatures: Feature<Geometry | null, GeoJsonProperties>[] = rows
       .slice(1)

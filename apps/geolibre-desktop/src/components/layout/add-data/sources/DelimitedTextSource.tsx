@@ -143,14 +143,27 @@ export function DelimitedTextSource() {
       const { text } = await readDelimitedTextSource();
       const fields = parseDelimitedTextFields(text, delimiter);
       setDelimitedTextFields(fields);
-      // Auto-detect the coordinate columns. When none are found, default both
-      // selects to "(None)" so the file imports as a non-spatial attribute
-      // table instead of misparsing an arbitrary column as a coordinate.
+      // Keep a manually chosen column if it still exists in the freshly
+      // retrieved header (e.g. after tweaking the delimiter); otherwise
+      // auto-detect. When neither survives, default to "(None)" so the file
+      // imports as a non-spatial attribute table instead of misparsing an
+      // arbitrary column as a coordinate.
+      const keepIfValid = (current: string): string | undefined => {
+        const normalized = current.trim().toLowerCase();
+        if (!normalized) return undefined;
+        return fields.find((field) => field.trim().toLowerCase() === normalized);
+      };
       const detected = detectCoordinateFields(fields);
-      setDelimitedTextLongitudeField(detected?.longitudeField ?? "");
-      setDelimitedTextLatitudeField(detected?.latitudeField ?? "");
+      const nextLongitude =
+        keepIfValid(delimitedTextLongitudeField) ??
+        detected?.longitudeField ??
+        "";
+      const nextLatitude =
+        keepIfValid(delimitedTextLatitudeField) ?? detected?.latitudeField ?? "";
+      setDelimitedTextLongitudeField(nextLongitude);
+      setDelimitedTextLatitudeField(nextLatitude);
       setDelimitedTextColumnsStatus(
-        detected
+        nextLongitude || nextLatitude
           ? t("addData.delimitedText.retrievedColumns", { count: fields.length })
           : t("addData.delimitedText.retrievedColumnsTable", {
               count: fields.length,

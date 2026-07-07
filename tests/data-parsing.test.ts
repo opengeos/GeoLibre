@@ -118,6 +118,33 @@ describe("delimited text parsing", () => {
     assert.deepEqual(result.fields, ["code", "name", "chapter"]);
   });
 
+  it("rejects a mixed selection where only one coordinate field is blank", () => {
+    assert.throws(
+      () =>
+        parseDelimitedTextLayer(
+          ["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"),
+          {
+            delimiter: ",",
+            longitudeField: "longitude",
+            latitudeField: "",
+          },
+        ),
+      /Select both a longitude and a latitude field/,
+    );
+    assert.throws(
+      () =>
+        parseDelimitedTextLayer(
+          ["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"),
+          {
+            delimiter: ",",
+            longitudeField: "",
+            latitudeField: "latitude",
+          },
+        ),
+      /Select both a longitude and a latitude field/,
+    );
+  });
+
   it("still builds point features (isTable false) when coordinates are provided", () => {
     const result = parseDelimitedTextLayer(
       ["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"),
