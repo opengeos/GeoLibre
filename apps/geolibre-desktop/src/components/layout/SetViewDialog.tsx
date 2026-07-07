@@ -490,7 +490,10 @@ export function SetViewDialog({
             <button
               type="button"
               aria-expanded={pasteOpen}
-              aria-controls="set-view-paste-panel"
+              // Only reference the panel while it is actually mounted: it is
+              // conditionally rendered below, so pointing aria-controls at a
+              // missing id when collapsed would be a dangling reference.
+              aria-controls={pasteOpen ? "set-view-paste-panel" : undefined}
               onClick={() => setPasteOpen((open) => !open)}
               className={cn(
                 "flex w-full cursor-pointer items-center gap-2 rounded-md border border-input px-3 py-2 text-sm font-medium transition-colors",
