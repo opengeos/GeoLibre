@@ -4,7 +4,7 @@
   "private": true,
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260707.1",
-    "wrangler": "^4.99.0"
+    "wrangler": "^4.107.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

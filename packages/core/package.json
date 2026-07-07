@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "uuid": "^14.0.0",
+    "uuid": "^14.0.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.14"
   },
