@@ -59,6 +59,18 @@ if (isTauri()) {
       // silent unhandled rejection.
       console.error("[GeoLibre] Failed to install native geocoding fetch", error);
     });
+  // Likewise route share.geolibre.app (project Share + gallery) through the
+  // native HTTP client: the share server's CORS policy allows the web origin but
+  // not the Tauri WebView origin, so a browser fetch fails as "Could not reach
+  // share.geolibre.app." Lazy + desktop-only so web/embedded never import the
+  // Tauri HTTP plugin.
+  void import("./lib/share-fetch")
+    .then(({ installNativeShareFetch }) => installNativeShareFetch())
+    .catch((error: unknown) => {
+      // On failure the share client stays on the browser fetch (the CORS-blocked
+      // path this fixes); surface it rather than swallow the rejection.
+      console.error("[GeoLibre] Failed to install native share fetch", error);
+    });
 }
 // Recover from chunks orphaned by a web redeploy (stale lazy import → 404). A
 // no-op in the desktop build, whose chunks are bundled locally.

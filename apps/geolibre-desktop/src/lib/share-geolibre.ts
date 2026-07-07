@@ -3,6 +3,7 @@
 // user created on the website. Used by the Project > Share action.
 
 import { DEFAULT_PROJECT_NAME } from "@geolibre/core";
+import { getShareFetch } from "./share-fetch";
 
 export type ShareVisibility = "public" | "unlisted" | "private";
 
@@ -54,7 +55,7 @@ export interface ShareUploadOptions {
   /** Override the share host; defaults to the configured/production URL. */
   baseUrl?: string;
   signal?: AbortSignal;
-  /** Injected for testing; defaults to the global fetch. */
+  /** Injected for testing; defaults to the share fetch (see share-fetch.ts). */
   fetchImpl?: typeof fetch;
 }
 
@@ -140,7 +141,9 @@ export async function uploadProjectToShare(
   }
 
   const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
-  const fetchImpl = options.fetchImpl ?? fetch;
+  // Defaults to the share fetch, which the desktop build routes through Tauri's
+  // native HTTP client to bypass WebView CORS (see share-fetch.ts).
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
 
   // Bound the request so a stalled server can't leave the dialog spinning
   // forever; combine it with the caller's abort signal (dialog close).
