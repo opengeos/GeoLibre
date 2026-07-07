@@ -487,17 +487,17 @@ export function SetViewDialog({
                 obvious affordance rather than hiding it behind a hover-only icon
                 (#1033). Clicking toggles the panel, which expands inline (not as
                 a floating overlay) so it never covers the controls below it. */}
-            <button
+            <Button
               type="button"
+              variant="outline"
               aria-expanded={pasteOpen}
               // Only reference the panel while it is actually mounted: it is
               // conditionally rendered below, so pointing aria-controls at a
               // missing id when collapsed would be a dangling reference.
               aria-controls={pasteOpen ? "set-view-paste-panel" : undefined}
-              onClick={() => setPasteOpen((open) => !open)}
+              onClick={() => setPasteOpen((isOpen) => !isOpen)}
               className={cn(
-                "flex w-full cursor-pointer items-center gap-2 rounded-md border border-input px-3 py-2 text-sm font-medium transition-colors",
-                "hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "w-full justify-start font-medium",
                 pasteOpen ? "text-foreground" : "text-muted-foreground",
               )}
             >
@@ -512,7 +512,7 @@ export function SetViewDialog({
                 )}
                 aria-hidden="true"
               />
-            </button>
+            </Button>
             {pasteOpen && (
               <div
                 id="set-view-paste-panel"
