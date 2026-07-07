@@ -2442,6 +2442,7 @@ export function LayerPanel({
                                     void handleExportStyle(layer);
                                   }}
                                 >
+                                  <Download className="mr-2 h-3.5 w-3.5" />
                                   {t("layers.exportMapboxStyle")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
@@ -2449,6 +2450,7 @@ export function LayerPanel({
                                     void handleExportSldStyle(layer);
                                   }}
                                 >
+                                  <Download className="mr-2 h-3.5 w-3.5" />
                                   {t("layers.exportSldStyle")}
                                 </DropdownMenuItem>
                               </>
