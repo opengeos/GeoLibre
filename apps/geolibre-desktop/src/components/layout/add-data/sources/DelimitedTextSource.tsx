@@ -3,6 +3,7 @@ import { Columns3, FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  detectCoordinateFields,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "../../../../lib/delimited-text";
@@ -16,7 +17,6 @@ import {
   createBaseLayer,
   errorMessage,
   fileNameFromPath,
-  inferDelimitedTextField,
   layerNameFromPath,
   resolveDelimitedTextDelimiter,
 } from "../helpers";
@@ -143,28 +143,18 @@ export function DelimitedTextSource() {
       const { text } = await readDelimitedTextSource();
       const fields = parseDelimitedTextFields(text, delimiter);
       setDelimitedTextFields(fields);
-      setDelimitedTextLongitudeField((current) =>
-        inferDelimitedTextField(fields, current, [
-          "longitude",
-          "lon",
-          "lng",
-          "long",
-          "x",
-          "xcoord",
-          "x_coord",
-        ]),
-      );
-      setDelimitedTextLatitudeField((current) =>
-        inferDelimitedTextField(fields, current, [
-          "latitude",
-          "lat",
-          "y",
-          "ycoord",
-          "y_coord",
-        ]),
-      );
+      // Auto-detect the coordinate columns. When none are found, default both
+      // selects to "(None)" so the file imports as a non-spatial attribute
+      // table instead of misparsing an arbitrary column as a coordinate.
+      const detected = detectCoordinateFields(fields);
+      setDelimitedTextLongitudeField(detected?.longitudeField ?? "");
+      setDelimitedTextLatitudeField(detected?.latitudeField ?? "");
       setDelimitedTextColumnsStatus(
-        t("addData.delimitedText.retrievedColumns", { count: fields.length }),
+        detected
+          ? t("addData.delimitedText.retrievedColumns", { count: fields.length })
+          : t("addData.delimitedText.retrievedColumnsTable", {
+              count: fields.length,
+            }),
       );
     } catch (err) {
       source.setError(
@@ -204,6 +194,7 @@ export function DelimitedTextSource() {
             delimiter,
             featureCount: result.data.features.length,
             fields: result.fields,
+            isTable: result.isTable,
             latitudeField: delimitedTextLatitudeField.trim(),
             longitudeField: delimitedTextLongitudeField.trim(),
             skippedRows: result.skippedRows,
@@ -214,7 +205,8 @@ export function DelimitedTextSource() {
         geojson: result.data,
         sourcePath,
       },
-      { fit: true },
+      // A non-spatial attribute table has no geometry to fit the map to.
+      { fit: !result.isTable },
     );
   });
 
@@ -389,6 +381,9 @@ export function DelimitedTextSource() {
                 setDelimitedTextLongitudeField(event.target.value)
               }
             >
+              <option value="">
+                {t("addData.delimitedText.noneField")}
+              </option>
               {delimitedTextFieldOptions.map((field) => (
                 <option key={field} value={field}>
                   {field}
@@ -407,6 +402,9 @@ export function DelimitedTextSource() {
                 setDelimitedTextLatitudeField(event.target.value)
               }
             >
+              <option value="">
+                {t("addData.delimitedText.noneField")}
+              </option>
               {delimitedTextFieldOptions.map((field) => (
                 <option key={field} value={field}>
                   {field}
@@ -415,6 +413,9 @@ export function DelimitedTextSource() {
             </Select>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          {t("addData.delimitedText.tableHint")}
+        </p>
         <SampleDataSelect
           samples={[
             { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },

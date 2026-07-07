@@ -90,6 +90,47 @@ describe("delimited text parsing", () => {
     assert.equal(result.data.features.length, 1);
     assert.deepEqual(result.data.features[0].geometry.coordinates, [4.9, 52.37]);
   });
+
+  it("builds a non-spatial attribute table when both coordinate fields are blank", () => {
+    const result = parseDelimitedTextLayer(
+      [
+        "code;name;chapter",
+        "AVH;Avoine d'hiver;1.1",
+        "BDP;Ble dur de printemps;1.1",
+      ].join("\n"),
+      {
+        delimiter: ";",
+        longitudeField: "",
+        latitudeField: "",
+      },
+    );
+
+    assert.equal(result.isTable, true);
+    assert.equal(result.totalRows, 2);
+    assert.equal(result.skippedRows, 0);
+    assert.equal(result.data.features.length, 2);
+    assert.equal(result.data.features[0].geometry, null);
+    assert.deepEqual(result.data.features[0].properties, {
+      code: "AVH",
+      name: "Avoine d'hiver",
+      chapter: "1.1",
+    });
+    assert.deepEqual(result.fields, ["code", "name", "chapter"]);
+  });
+
+  it("still builds point features (isTable false) when coordinates are provided", () => {
+    const result = parseDelimitedTextLayer(
+      ["name,longitude,latitude", "Raleigh,-78.638,35.779"].join("\n"),
+      {
+        delimiter: ",",
+        longitudeField: "longitude",
+        latitudeField: "latitude",
+      },
+    );
+
+    assert.equal(result.isTable, false);
+    assert.equal(result.data.features.length, 1);
+  });
 });
 
 describe("parseCoordinate", () => {

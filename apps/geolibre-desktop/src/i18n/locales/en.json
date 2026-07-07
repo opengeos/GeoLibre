@@ -144,7 +144,7 @@
       },
       "delimitedText": {
         "label": "Add Delimited Text Layer",
-        "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields."
+        "description": "Add a delimited text file or URL as a point layer using longitude and latitude fields, or as a non-spatial attribute table when no coordinates are available."
       },
       "cad": {
         "label": "Add CAD (DXF/DWG) Layer",
@@ -365,6 +365,8 @@
       "errorDataMissing": "Delimited text data is missing.",
       "retrievedColumns_one": "Retrieved {{count}} column.",
       "retrievedColumns_other": "Retrieved {{count}} columns.",
+      "retrievedColumnsTable_one": "Retrieved {{count}} column. No coordinate columns detected; it will be added as an attribute table.",
+      "retrievedColumnsTable_other": "Retrieved {{count}} columns. No coordinate columns detected; it will be added as an attribute table.",
       "errorRetrieveColumns": "Could not retrieve column names.",
       "url": "Delimited text URL",
       "file": "Delimited text file",
@@ -379,7 +381,9 @@
       "delimiterCustom": "Custom",
       "customDelimiter": "Custom delimiter",
       "longitudeField": "Longitude field",
-      "latitudeField": "Latitude field"
+      "latitudeField": "Latitude field",
+      "noneField": "None (attribute table)",
+      "tableHint": "Leave both coordinate fields as None to add the file as a non-spatial attribute table (for use in an attribute join)."
     },
     "photos": {
       "defaultName": "Photos",
