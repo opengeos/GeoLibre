@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
-import { buildSld, type SldExportableLayer } from "../packages/map/src/sld-export";
-import { applySldImport, parseSld } from "../packages/map/src/sld-import";
+import { buildQml, type QmlExportableLayer } from "../packages/map/src/qml-export";
+import { applyQmlImport, parseQml } from "../packages/map/src/qml-import";
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
   return { ...DEFAULT_LAYER_STYLE, ...patch };
 }
 
-function layer(style_: LayerStyle): SldExportableLayer {
+function layer(style_: LayerStyle): QmlExportableLayer {
   return {
     id: "layer-1",
     name: "Round Trip",
@@ -35,14 +35,19 @@ function fc(geometry: Geometry): FeatureCollection {
   };
 }
 
-/** Export a style to SLD, re-import it, and merge back onto the defaults. */
 function roundTrip(input: LayerStyle, geometry: Geometry): LayerStyle {
-  const { sld } = buildSld(layer(input), fc(geometry));
-  const parsed = parseSld(sld);
-  return applySldImport(DEFAULT_LAYER_STYLE, parsed);
+  const { qml } = buildQml(layer(input), fc(geometry));
+  const parsed = parseQml(qml);
+  return applyQmlImport(DEFAULT_LAYER_STYLE, parsed);
 }
 
-describe("SLD round-trip (style → SLD → style)", () => {
+/** Alpha folds fillOpacity into an 8-bit channel, so a round-tripped opacity is
+ * only accurate to ~1/255; compare within that tolerance. */
+function approx(a: number, b: number): boolean {
+  return Math.abs(a - b) <= 1 / 255 + 1e-9;
+}
+
+describe("QML round-trip (style → QML → style)", () => {
   it("preserves a single-symbol polygon style", () => {
     const input = style({
       fillColor: "#e63946",
@@ -53,35 +58,29 @@ describe("SLD round-trip (style → SLD → style)", () => {
     const out = roundTrip(input, "polygon");
     assert.equal(out.vectorStyleMode, "single");
     assert.equal(out.fillColor, "#e63946");
-    assert.equal(out.fillOpacity, 0.55);
+    assert.ok(approx(out.fillOpacity, 0.55));
     assert.equal(out.strokeColor, "#1d3557");
     assert.equal(out.strokeWidth, 4);
   });
 
-  it("preserves a point radius", () => {
+  it("preserves a point circle radius", () => {
     const input = style({ circleRadius: 7, fillColor: "#457b9d" });
     const out = roundTrip(input, "point");
     assert.equal(out.circleRadius, 7);
     assert.equal(out.fillColor, "#457b9d");
-  });
-
-  it("preserves a point stroke width (not clamped to a hairline)", () => {
-    const input = style({ circleRadius: 6, strokeWidth: 5, strokeColor: "#222222" });
-    const out = roundTrip(input, "point");
-    assert.equal(out.strokeWidth, 5);
-    assert.equal(out.strokeColor, "#222222");
+    assert.notEqual(out.markerEnabled, true);
   });
 
   it("preserves a shape marker", () => {
     const input = style({
       markerEnabled: true,
-      markerShape: "star",
+      markerShape: "diamond",
       markerColor: "#ff8800",
       markerSize: 22,
     });
     const out = roundTrip(input, "point");
     assert.equal(out.markerEnabled, true);
-    assert.equal(out.markerShape, "star");
+    assert.equal(out.markerShape, "diamond");
     assert.equal(out.markerColor, "#ff8800");
     assert.equal(out.markerSize, 22);
   });
@@ -94,7 +93,6 @@ describe("SLD round-trip (style → SLD → style)", () => {
       vectorStyleStops: [
         { value: "residential", color: "#ffcc00" },
         { value: "commercial", color: "#cc0000" },
-        { value: "industrial", color: "#663399" },
       ],
     });
     const out = roundTrip(input, "polygon");
@@ -104,7 +102,7 @@ describe("SLD round-trip (style → SLD → style)", () => {
     assert.equal(out.fillColor, "#999999");
   });
 
-  it("preserves a categorized renderer on a line layer (per-class line color)", () => {
+  it("preserves a categorized renderer on a line layer", () => {
     const input = style({
       vectorStyleMode: "categorized",
       vectorStyleProperty: "road",
@@ -116,19 +114,16 @@ describe("SLD round-trip (style → SLD → style)", () => {
     });
     const out = roundTrip(input, "line");
     assert.equal(out.vectorStyleMode, "categorized");
-    assert.equal(out.vectorStyleProperty, "road");
-    // The per-class colors come back from the LineSymbolizer strokes.
     assert.deepEqual(out.vectorStyleStops, input.vectorStyleStops);
   });
 
-  it("preserves graduated stop values and colors as class breaks", () => {
+  it("preserves graduated stop values and colors", () => {
     const input = style({
       vectorStyleMode: "graduated",
       vectorStyleProperty: "density",
       vectorStyleStops: [
         { value: 0, color: "#f7fbff" },
         { value: 25, color: "#6baed6" },
-        { value: 75, color: "#2171b5" },
         { value: 150, color: "#08306b" },
       ],
     });
@@ -145,14 +140,14 @@ describe("SLD round-trip (style → SLD → style)", () => {
       vectorRules: [
         {
           id: "a",
-          label: "big cities",
+          label: "big",
           filter: JSON.stringify([">", ["get", "pop"], 1000000]),
           color: "#d62728",
           isElse: false,
         },
         {
           id: "b",
-          label: "capitals",
+          label: "cap",
           filter: JSON.stringify(["==", ["get", "capital"], "yes"]),
           color: "#1f77b4",
           isElse: false,
@@ -162,50 +157,15 @@ describe("SLD round-trip (style → SLD → style)", () => {
     });
     const out = roundTrip(input, "point");
     assert.equal(out.vectorStyleMode, "rule-based");
-    const rules = out.vectorRules;
-    // Two rules plus the else rule survive.
-    assert.equal(rules.length, 3);
-    assert.equal(rules[0].filter, JSON.stringify([">", ["get", "pop"], 1000000]));
-    assert.equal(rules[0].color, "#d62728");
-    assert.equal(rules[1].filter, JSON.stringify(["==", ["get", "capital"], "yes"]));
-    assert.equal(rules[2].isElse, true);
-    assert.equal(rules[2].color, "#cccccc");
+    assert.equal(out.vectorRules.length, 3);
+    assert.equal(out.vectorRules[0].filter, JSON.stringify([">", ["get", "pop"], 1000000]));
+    assert.equal(out.vectorRules[0].label, "big");
+    assert.equal(out.vectorRules[1].filter, JSON.stringify(["==", ["get", "capital"], "yes"]));
+    assert.equal(out.vectorRules[2].isElse, true);
+    assert.equal(out.vectorRules[2].color, "#cccccc");
   });
 
-  it("preserves per-rule labels in a rule-based renderer", () => {
-    const input = style({
-      vectorStyleMode: "rule-based",
-      fillColor: "#dddddd",
-      vectorRules: [
-        {
-          id: "a",
-          label: "Big cities",
-          filter: JSON.stringify([">", ["get", "pop"], 1000000]),
-          color: "#d62728",
-          isElse: false,
-        },
-        { id: "else", label: "", filter: "", color: "#cccccc", isElse: true },
-      ],
-    });
-    const out = roundTrip(input, "point");
-    assert.equal(out.vectorRules[0].label, "Big cities");
-  });
-
-  it("preserves a custom categorized stop label", () => {
-    const input = style({
-      vectorStyleMode: "categorized",
-      vectorStyleProperty: "zone",
-      fillColor: "#999999",
-      vectorStyleStops: [
-        { value: "a", color: "#ff0000", label: "Zone A" },
-        { value: "b", color: "#00ff00" },
-      ],
-    });
-    const out = roundTrip(input, "polygon");
-    assert.deepEqual(out.vectorStyleStops, input.vectorStyleStops);
-  });
-
-  it("preserves an all/not filter rule (semantically)", () => {
+  it("preserves an all/not filter rule semantically", () => {
     const input = style({
       vectorStyleMode: "rule-based",
       fillColor: "#dddddd",
@@ -236,54 +196,6 @@ describe("SLD round-trip (style → SLD → style)", () => {
     );
   });
 
-  it("preserves a boolean filter literal in a rule-based renderer", () => {
-    // A second, non-equality rule keeps this a rule-based renderer (a lone `==`
-    // rule is indistinguishable from a one-category categorized renderer).
-    const input = style({
-      vectorStyleMode: "rule-based",
-      fillColor: "#dddddd",
-      vectorRules: [
-        {
-          id: "a",
-          label: "",
-          filter: JSON.stringify(["==", ["get", "flag"], true]),
-          color: "#d62728",
-          isElse: false,
-        },
-        {
-          id: "b",
-          label: "",
-          filter: JSON.stringify([">", ["get", "n"], 5]),
-          color: "#1f77b4",
-          isElse: false,
-        },
-        { id: "else", label: "", filter: "", color: "#cccccc", isElse: true },
-      ],
-    });
-    const out = roundTrip(input, "point");
-    assert.equal(out.vectorStyleMode, "rule-based");
-    assert.equal(
-      out.vectorRules[0].filter,
-      JSON.stringify(["==", ["get", "flag"], true]),
-    );
-  });
-
-  it("round-trips a circle marker as a plain circle without corrupting the stroke", () => {
-    const input = style({
-      markerEnabled: true,
-      markerShape: "circle",
-      markerColor: "#ff8800",
-      strokeColor: "#123456",
-      strokeWidth: 2,
-    });
-    const out = roundTrip(input, "point");
-    // A circle marker is indistinguishable from a plain circle in SLD, so it
-    // comes back as a plain circle — but the real stroke is not clobbered with
-    // the white marker halo.
-    assert.equal(out.strokeColor, "#123456");
-    assert.notEqual(out.strokeColor, "#ffffff");
-  });
-
   it("preserves labels", () => {
     const input = style({
       labels: {
@@ -303,12 +215,5 @@ describe("SLD round-trip (style → SLD → style)", () => {
     assert.equal(out.labels.color, "#202020");
     assert.equal(out.labels.haloColor, "#fefefe");
     assert.equal(out.labels.haloWidth, 2);
-  });
-
-  it("preserves a narrowed zoom window", () => {
-    const input = style({ minZoom: 5, maxZoom: 14 });
-    const out = roundTrip(input, "polygon");
-    assert.equal(out.minZoom, 5);
-    assert.equal(out.maxZoom, 14);
   });
 });

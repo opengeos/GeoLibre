@@ -29,12 +29,15 @@ import {
 import type { MapController } from "@geolibre/map";
 import {
   applyMapboxStyleImport,
+  applyQmlImport,
   applySldImport,
   buildMapboxStyle,
+  buildQml,
   buildSld,
   isPlaceholderLayer,
   mapboxStyleToJson,
   parseMapboxStyle,
+  parseQml,
   parseSld,
   placeholderMessage,
 } from "@geolibre/map";
@@ -1038,6 +1041,58 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
   );
 
+  // Export a vector layer's symbology as a QGIS QML style, the native style
+  // format QGIS users have on disk, so GeoLibre cartography can be opened in
+  // QGIS without rebuilding it by hand.
+  const handleExportQmlStyle = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        const result = buildQml(layer, geojson ?? null);
+        const savedPath = await saveTextFileWithFallback(result.qml, {
+          defaultName: `${sanitizeExportFileName(layer.name)}.qml`,
+          filters: [{ name: "QGIS QML", extensions: ["qml"] }],
+          browserTypes: [
+            {
+              description: "QGIS QML",
+              accept: { "application/xml": [".qml"] },
+            },
+          ],
+          mimeType: "application/xml",
+        });
+        if (savedPath !== null) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]:
+              result.warnings.length > 0
+                ? {
+                    type: "warning",
+                    message: `${t("layers.exportStyleSuccess")} ${result.warnings.join(" ")}`,
+                  }
+                : {
+                    type: "success",
+                    message: t("layers.exportStyleSuccess"),
+                  },
+          }));
+          scheduleStatusClear(layer.id);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("layers.exportStyleError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
   // Import a symbology file (Mapbox GL / MapLibre style JSON or an OGC SLD) and
   // apply it to a vector layer, so cartography authored elsewhere (QGIS,
   // GeoServer, another map, or a style exported from GeoLibre) can be brought
@@ -1050,9 +1105,13 @@ export function LayerPanel({
       try {
         const picked = await openLocalDataFileWithFallback({
           filters: [
-            { name: "Style (Mapbox GL / SLD)", extensions: ["json", "sld", "xml"] },
+            {
+              name: "Style (Mapbox GL / SLD / QML)",
+              extensions: ["json", "sld", "qml", "xml"],
+            },
           ],
-          accept: ".json,.sld,.xml,application/json,application/xml,text/xml",
+          accept:
+            ".json,.sld,.qml,.xml,application/json,application/xml,text/xml",
           readText: true,
         });
         // A null result means the user dismissed the file dialog; no note. Guard
@@ -1061,19 +1120,28 @@ export function LayerPanel({
         // no-op that looks like a cancel.
         if (!picked || picked.text === undefined) return;
 
-        // Detect the format from the content: a leading `<` is XML (SLD),
-        // everything else is parsed as a Mapbox GL style JSON. This is more
-        // reliable than the file extension (a `.xml` can hold either).
+        // Detect the format from the content, which is more reliable than the
+        // file extension (a `.xml` can hold either XML dialect): a QGIS QML has
+        // a `<qgis>`/`renderer-v2` root, an SLD a `StyledLayerDescriptor` root,
+        // and everything else is parsed as a Mapbox GL style JSON.
         const trimmed = picked.text.trimStart();
-        const isSld = trimmed.startsWith("<");
+        const isXml = trimmed.startsWith("<");
+        const isQml = isXml && /<qgis[\s>]|<renderer-v2[\s>]/.test(picked.text);
+        const isSld = isXml && !isQml;
 
         let result:
           | ReturnType<typeof parseMapboxStyle>
-          | ReturnType<typeof parseSld>;
+          | ReturnType<typeof parseSld>
+          | ReturnType<typeof parseQml>;
         let matched: number;
         let applyImport: (base: GeoLibreLayer["style"]) => GeoLibreLayer["style"];
 
-        if (isSld) {
+        if (isQml) {
+          const qmlResult = parseQml(picked.text);
+          result = qmlResult;
+          matched = qmlResult.matchedRuleCount;
+          applyImport = (base) => applyQmlImport(base, qmlResult);
+        } else if (isSld) {
           const sldResult = parseSld(picked.text);
           result = sldResult;
           matched = sldResult.matchedRuleCount;
@@ -2452,6 +2520,14 @@ export function LayerPanel({
                                 >
                                   <Download className="mr-2 h-3.5 w-3.5" />
                                   {t("layers.exportSldStyle")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportQmlStyle(layer);
+                                  }}
+                                >
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  {t("layers.exportQmlStyle")}
                                 </DropdownMenuItem>
                               </>
                             )}
