@@ -73,7 +73,7 @@
     "maplibre-gl-nasa-earthdata": "^0.1.4",
     "maplibre-gl-national-map": "^0.1.1",
     "maplibre-gl-planetary-computer": "^0.3.0",
-    "maplibre-gl-raster": "^0.7.0",
+    "maplibre-gl-raster": "^0.8.0",
     "maplibre-gl-splat": "^0.2.8",
     "maplibre-gl-streetview": "^0.7.0",
     "maplibre-gl-swipe": "^0.10.1",

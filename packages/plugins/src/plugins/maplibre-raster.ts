@@ -43,6 +43,12 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
     label: "Elevation (DEM)",
     url: "https://data.source.coop/giswqs/opengeos/dem.tif",
   },
+  {
+    // A multiband Sentinel-2 L2A scene: good for RGB composites and the
+    // normalized-difference index mode (NDVI and friends).
+    label: "Sentinel-2 (multiband)",
+    url: "https://data.source.coop/opengeos/geoai/S2C-MSIL2A-20250920T162001-subset.tif",
+  },
 ];
 
 // This type mirrors undocumented private members of RasterControl from

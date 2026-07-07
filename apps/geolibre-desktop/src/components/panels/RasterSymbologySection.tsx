@@ -30,14 +30,22 @@ import {
   Separator,
   Textarea,
 } from "@geolibre/ui";
-import { COLORMAP_OPTIONS } from "maplibre-gl-raster";
+import {
+  COLORMAP_OPTIONS,
+  CUSTOM_NORMALIZED_DIFFERENCE,
+  guessBandForRole,
+  indexById,
+  NORMALIZED_DIFFERENCE_INDICES,
+} from "maplibre-gl-raster";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createAppAPI } from "../../hooks/usePlugins";
 
 type RasterStateRecord = {
-  mode: "single" | "rgb";
+  mode: "single" | "rgb" | "index";
   bands: number[];
+  /** Normalized-difference preset id (index mode only), e.g. "ndvi". */
+  index?: string;
   colormap: string;
   reversed: boolean;
   rescale: [number, number][] | null;
@@ -100,8 +108,10 @@ function readRasterState(layer: GeoLibreLayer): RasterStateRecord {
       ? (raw.rescale as [number, number][])
       : null;
   return {
-    mode: raw.mode === "rgb" ? "rgb" : "single",
+    mode:
+      raw.mode === "rgb" ? "rgb" : raw.mode === "index" ? "index" : "single",
     bands: bands.length > 0 ? bands : [1],
+    index: typeof raw.index === "string" ? raw.index : undefined,
     colormap: typeof raw.colormap === "string" ? raw.colormap : DEFAULT_RAMP,
     // Reverse lives on rasterState now; migrate projects saved before that move
     // (the flag used to live on rasterSymbology) so they keep their reversal.
@@ -487,6 +497,29 @@ export function RasterSymbologySection({
     </div>
   ) : null;
 
+  // Builds the state patch for a normalized-difference index preset: assigns
+  // each operand a band (guessed from band names, else 1 and 2), applies the
+  // preset's default colormap, and resets rescale to the [-1, 1] auto range.
+  // Mirrors the upstream control's own preset seeding so the two panels agree.
+  function indexPatchFor(presetId: string): Partial<RasterStateRecord> {
+    const preset = indexById(presetId) ?? NORMALIZED_DIFFERENCE_INDICES[0];
+    const max = bandCount ?? Math.max(2, ...state.bands);
+    const clamp = (b: number) => Math.min(Math.max(1, b), Math.max(1, max));
+    const a = clamp(
+      guessBandForRole(preset.roleA, bandNames) ?? state.bands[0] ?? 1,
+    );
+    const b = clamp(
+      guessBandForRole(preset.roleB, bandNames) ?? (a === 2 ? 1 : 2),
+    );
+    return {
+      mode: "index",
+      index: preset.id,
+      bands: [a, b],
+      colormap: preset.colormap,
+      rescale: null,
+    };
+  }
+
   // --- Mode ---
   const modeControl = (
     <div className="space-y-2">
@@ -496,17 +529,25 @@ export function RasterSymbologySection({
         value={state.mode}
         disabled={bandCount === null}
         onChange={(event) => {
-          const mode = event.target.value as "single" | "rgb";
+          const mode = event.target.value as "single" | "rgb" | "index";
           if (mode === "rgb") {
             const bands =
               state.bands.length >= 3 ? state.bands.slice(0, 3) : [1, 2, 3];
             commit({ statePatch: { mode, bands }, symbology: null });
+          } else if (mode === "index") {
+            commit({
+              statePatch: indexPatchFor(state.index ?? "ndvi"),
+              symbology: null,
+            });
           } else {
             commit({ statePatch: { mode } });
           }
         }}
       >
         <option value="single">Single band (pseudocolor)</option>
+        {(bandCount === null || bandCount >= 2) && (
+          <option value="index">Index (normalized difference)</option>
+        )}
         {(bandCount === null || bandCount >= 3) && (
           <option value="rgb">RGB composite</option>
         )}
@@ -650,6 +691,14 @@ export function RasterSymbologySection({
       <p className="text-xs font-semibold">Raster symbology</p>
       {modeControl}
 
+      {state.mode === "index" ? (
+        <IndexControls
+          state={state}
+          bandOptions={bandOptions}
+          onPreset={(id) => commit({ statePatch: indexPatchFor(id) })}
+          onBands={(bands) => commit({ statePatch: { bands } })}
+        />
+      ) : (
       <div className="space-y-2">
         <Label htmlFor="rasterBand">Band</Label>
         <Select
@@ -671,6 +720,7 @@ export function RasterSymbologySection({
           )}
         </Select>
       </div>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="rasterRamp">Color ramp</Label>
@@ -850,6 +900,79 @@ function RgbControls({
         </div>
       ))}
     </div>
+  );
+}
+
+/** Index-mode operand editor: a normalized-difference preset selector plus a
+ * band picker for each operand (A, B) of `(A - B) / (A + B)`, labelled with
+ * the preset's roles. Mirrors the upstream control's index UI so editing an
+ * index layer works from either panel; the color ramp / rescale below apply to
+ * the computed [-1, 1] result. */
+function IndexControls({
+  state,
+  bandOptions,
+  onPreset,
+  onBands,
+}: {
+  state: RasterStateRecord;
+  bandOptions: { value: number; label: string }[];
+  onPreset: (presetId: string) => void;
+  onBands: (bands: number[]) => void;
+}) {
+  const preset = indexById(state.index) ?? NORMALIZED_DIFFERENCE_INDICES[0];
+  const presets = [...NORMALIZED_DIFFERENCE_INDICES, CUSTOM_NORMALIZED_DIFFERENCE];
+  const bandA = state.bands[0] ?? 1;
+  const bandB = state.bands[1] ?? 2;
+  const operands: { role: string; slot: 0 | 1; value: number }[] = [
+    { role: preset.roleA, slot: 0, value: bandA },
+    { role: preset.roleB, slot: 1, value: bandB },
+  ];
+  const setOperand = (slot: 0 | 1, value: number) => {
+    const next = [bandA, bandB];
+    next[slot] = value;
+    onBands(next);
+  };
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="rasterIndexPreset">Index</Label>
+        <Select
+          id="rasterIndexPreset"
+          value={preset.id}
+          onChange={(event) => onPreset(event.target.value)}
+        >
+          {presets.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>{`Bands (${preset.roleA}, ${preset.roleB})`}</Label>
+        <div className="grid grid-cols-2 gap-2">
+          {operands.map(({ role, slot, value }) => (
+            <Select
+              key={role}
+              aria-label={`index-band-${slot === 0 ? "a" : "b"}`}
+              value={String(value)}
+              disabled={bandOptions.length === 0}
+              onChange={(event) => setOperand(slot, Number(event.target.value))}
+            >
+              {bandOptions.length === 0 ? (
+                <option value={String(value)}>{`Band ${value}`}</option>
+              ) : (
+                bandOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))
+              )}
+            </Select>
+          ))}
+        </div>
+      </div>
+    </>
   );
 }
 

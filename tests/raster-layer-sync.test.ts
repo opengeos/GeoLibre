@@ -549,6 +549,23 @@ describe("savedRasterState", () => {
     assert.equal(savedRasterState(layer).rescale, null);
   });
 
+  it("round-trips index mode and the preset id", () => {
+    const state = rasterState({
+      mode: "index",
+      bands: [4, 3],
+      index: "ndvi",
+      colormap: "rdylgn",
+      rescale: [[-1, 1]],
+    });
+    const layer = createRasterStoreLayer(rasterInfo({ state }));
+
+    const saved = savedRasterState(layer);
+    assert.equal(saved.mode, "index");
+    assert.equal(saved.index, "ndvi");
+    assert.deepEqual(saved.bands, [4, 3]);
+    assert.equal(saved.colormap, "rdylgn");
+  });
+
   it("drops malformed fields from hand-edited project files", () => {
     const layer = createRasterStoreLayer(rasterInfo());
     layer.metadata.rasterState = {

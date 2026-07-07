@@ -272,6 +272,7 @@ export function wireRasterStoreSync(control: RasterSyncableControl): void {
 const SYNCED_RASTER_STATE_KEYS = [
   "mode",
   "bands",
+  "index",
   "colormap",
   "reversed",
   "rescale",
@@ -401,8 +402,17 @@ export function savedRasterState(
   const candidate = raw as Record<string, unknown>;
   const state: Partial<RasterLayerState> = {};
 
-  if (candidate.mode === "rgb" || candidate.mode === "single") {
+  if (
+    candidate.mode === "rgb" ||
+    candidate.mode === "single" ||
+    candidate.mode === "index"
+  ) {
     state.mode = candidate.mode;
+  }
+  // The normalized-difference preset id (index mode). The control tolerates
+  // unknown ids (falls back to the first preset), so no allowlist here.
+  if (typeof candidate.index === "string" && candidate.index) {
+    state.index = candidate.index;
   }
   if (
     Array.isArray(candidate.bands) &&
