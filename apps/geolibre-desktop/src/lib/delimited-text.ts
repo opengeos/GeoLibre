@@ -2,6 +2,7 @@ import type {
   Feature,
   FeatureCollection,
   GeoJsonProperties,
+  Geometry,
   Point,
 } from "geojson";
 
@@ -10,6 +11,12 @@ export interface DelimitedTextLayerResult {
   fields: string[];
   skippedRows: number;
   totalRows: number;
+  /**
+   * True when the layer was built as a non-spatial attribute table (both the
+   * latitude and longitude fields were left blank), so every feature carries a
+   * `null` geometry. Callers use this to skip fitting the map to empty bounds.
+   */
+  isTable: boolean;
 }
 
 /**
@@ -19,6 +26,15 @@ export interface DelimitedTextLayerResult {
  */
 export const NO_VALID_COORDINATES_MESSAGE =
   "No rows contained valid longitude and latitude values.";
+
+/**
+ * Thrown by {@link parseDelimitedTextLayer} when exactly one coordinate field is
+ * left blank. Points need both a longitude and a latitude, and an attribute
+ * table needs neither, so a half-specified pair is always a mistake. Exported so
+ * callers can recognize this failure without matching a duplicated literal.
+ */
+export const MIXED_COORDINATE_FIELDS_MESSAGE =
+  "Select both a longitude and a latitude field, or leave both as None to add an attribute table.";
 
 export function parseDelimitedTextFields(
   text: string,
@@ -55,6 +71,43 @@ export function parseDelimitedTextLayer(
   }
 
   const fields = uniqueFieldNames(rows[0].map((field) => field.trim()));
+
+  // When both coordinate fields are left blank the file is imported as a
+  // non-spatial attribute table: every row becomes a feature with a null
+  // geometry, so it can back the attribute table and be used as the join layer
+  // in an attribute join without inventing coordinates.
+  const wantsLatitude = options.latitudeField.trim() !== "";
+  const wantsLongitude = options.longitudeField.trim() !== "";
+  // A half-specified coordinate pair (one field chosen, the other left as
+  // "None") can neither build points nor a table, so fail with a clear message
+  // instead of falling through to a raw `field "" was not found` error.
+  if (wantsLatitude !== wantsLongitude) {
+    throw new Error(MIXED_COORDINATE_FIELDS_MESSAGE);
+  }
+  if (!wantsLatitude && !wantsLongitude) {
+    const tableFeatures: Feature<Geometry | null, GeoJsonProperties>[] = rows
+      .slice(1)
+      .map((row) => ({
+        type: "Feature",
+        geometry: null,
+        properties: buildRowProperties(fields, row),
+      }));
+
+    return {
+      // GeoJSON Features may legally carry a null geometry; the app's layer
+      // model treats these as a regular FeatureCollection (the map ignores
+      // nulls), so the cast to FeatureCollection is safe here.
+      data: {
+        type: "FeatureCollection",
+        features: tableFeatures,
+      } as FeatureCollection,
+      fields,
+      skippedRows: 0,
+      totalRows: rows.length - 1,
+      isTable: true,
+    };
+  }
+
   const latitudeIndex = findFieldIndex(fields, options.latitudeField);
   const longitudeIndex = findFieldIndex(fields, options.longitudeField);
 
@@ -82,18 +135,13 @@ export function parseDelimitedTextLayer(
       continue;
     }
 
-    const properties: GeoJsonProperties = {};
-    fields.forEach((field, index) => {
-      properties[field] = row[index] ?? "";
-    });
-
     features.push({
       type: "Feature",
       geometry: {
         type: "Point",
         coordinates: [longitude, latitude],
       },
-      properties,
+      properties: buildRowProperties(fields, row),
     });
   }
 
@@ -109,6 +157,7 @@ export function parseDelimitedTextLayer(
     fields,
     skippedRows,
     totalRows: rows.length - 1,
+    isTable: false,
   };
 }
 
@@ -195,6 +244,23 @@ function parseDelimitedRows(text: string, delimiter: string): string[][] {
   }
 
   return rows;
+}
+
+/**
+ * Builds a feature's properties object by pairing each (de-duplicated) header
+ * name with its raw column value, defaulting to an empty string for short rows.
+ * Shared by the point and attribute-table paths so their property shape cannot
+ * drift apart.
+ */
+function buildRowProperties(
+  fields: string[],
+  row: string[],
+): GeoJsonProperties {
+  const properties: GeoJsonProperties = {};
+  fields.forEach((field, index) => {
+    properties[field] = row[index] ?? "";
+  });
+  return properties;
 }
 
 function uniqueFieldNames(fields: string[]): string[] {

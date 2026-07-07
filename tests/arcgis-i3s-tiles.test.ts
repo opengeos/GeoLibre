@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   arcgisI3sSceneLayerName,
+  buildArcgisI3sTilesDeckLayer,
   i3sTilesetLngLat,
   isArcgisI3sSceneLayerUrl,
   isArcgisI3sTilesLayer,
   persistI3sTilesetCenter,
   ARCGIS_I3S_SOURCE_KIND,
+  THREE_D_TILES_DECK_LOAD_OPTIONS,
 } from "../packages/plugins/src/plugins/arcgis-i3s-tiles";
+import type { GeoLibreDeckGL } from "../packages/plugins/src/types";
 import { useAppStore } from "../packages/core/src/store";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 
@@ -113,6 +116,71 @@ describe("arcgisI3sSceneLayerName", () => {
     assert.equal(
       arcgisI3sSceneLayerName("https://host/rest/services/Bad%ZZName/SceneServer"),
       "Bad%ZZName",
+    );
+  });
+});
+
+describe("THREE_D_TILES_DECK_LOAD_OPTIONS", () => {
+  // Regression guard: @loaders.gl otherwise fetches its parsing workers from the
+  // unpkg CDN at runtime, which the Tauri desktop CSP blocks. Workers must stay
+  // disabled, and `worker` must be nested under `core` (the documented shape; a
+  // top-level `worker` only works via a deprecated backwards-compat alias).
+  it("disables loaders.gl workers via core.worker", () => {
+    assert.equal(THREE_D_TILES_DECK_LOAD_OPTIONS.core.worker, false);
+  });
+});
+
+describe("buildArcgisI3sTilesDeckLayer", () => {
+  const layer = {
+    id: "i3s-1",
+    name: "Scene",
+    type: "3d-tiles",
+    source: {
+      sourceId: "i3s-1",
+      type: ARCGIS_I3S_SOURCE_KIND,
+      url: "https://host/City/SceneServer",
+    },
+    visible: true,
+    opacity: 0.5,
+    style: {},
+    metadata: { sourceKind: ARCGIS_I3S_SOURCE_KIND },
+  } as unknown as GeoLibreLayer;
+
+  function build() {
+    const props: Record<string, unknown>[] = [];
+    class FakeTile3DLayer {
+      constructor(p: Record<string, unknown>) {
+        props.push(p);
+      }
+    }
+    const deckGL = {
+      geoLayers: { Tile3DLayer: FakeTile3DLayer },
+    } as unknown as GeoLibreDeckGL;
+    buildArcgisI3sTilesDeckLayer(layer, { deckGL, loader: {} });
+    return props[0];
+  }
+
+  it("passes the shared main-thread load options to the Tile3DLayer", () => {
+    // The whole point of the CSP fix: the constructed layer must carry
+    // core.worker === false so parsing never falls back to a CDN worker. The
+    // call site spreads the shared constant into a fresh object, so compare by
+    // value rather than reference.
+    const props = build();
+    assert.deepEqual(props?.loadOptions, THREE_D_TILES_DECK_LOAD_OPTIONS);
+    assert.equal(
+      (props?.loadOptions as typeof THREE_D_TILES_DECK_LOAD_OPTIONS).core.worker,
+      false,
+    );
+  });
+
+  it("returns null when the deck.gl class or loader is missing", () => {
+    assert.equal(buildArcgisI3sTilesDeckLayer(layer, { deckGL: null, loader: {} }), null);
+    assert.equal(
+      buildArcgisI3sTilesDeckLayer(layer, {
+        deckGL: { geoLayers: { Tile3DLayer: class {} } } as unknown as GeoLibreDeckGL,
+        loader: null,
+      }),
+      null,
     );
   });
 });

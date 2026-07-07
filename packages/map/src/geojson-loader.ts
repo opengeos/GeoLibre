@@ -50,6 +50,12 @@ export function getLayerBounds(
 ): [number, number, number, number] | null {
   if (!layer.geojson?.features?.length) return null;
   const box = bbox(layer.geojson);
+  // A collection whose features all carry a null geometry (e.g. a delimited
+  // text file imported as an attribute table, or a non-spatial SQL result)
+  // yields a degenerate ±Infinity box. Report "no bounds" so callers such as
+  // fitLayer/"Zoom to layer" fall back or no-op instead of flying to an
+  // invalid extent.
+  if (!box.every((value) => Number.isFinite(value))) return null;
   return box as [number, number, number, number];
 }
 

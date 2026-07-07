@@ -3,6 +3,7 @@ import { Columns3, FileUp } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  detectCoordinateFields,
   parseDelimitedTextFields,
   parseDelimitedTextLayer,
 } from "../../../../lib/delimited-text";
@@ -16,7 +17,6 @@ import {
   createBaseLayer,
   errorMessage,
   fileNameFromPath,
-  inferDelimitedTextField,
   layerNameFromPath,
   resolveDelimitedTextDelimiter,
 } from "../helpers";
@@ -143,28 +143,38 @@ export function DelimitedTextSource() {
       const { text } = await readDelimitedTextSource();
       const fields = parseDelimitedTextFields(text, delimiter);
       setDelimitedTextFields(fields);
-      setDelimitedTextLongitudeField((current) =>
-        inferDelimitedTextField(fields, current, [
-          "longitude",
-          "lon",
-          "lng",
-          "long",
-          "x",
-          "xcoord",
-          "x_coord",
-        ]),
-      );
-      setDelimitedTextLatitudeField((current) =>
-        inferDelimitedTextField(fields, current, [
-          "latitude",
-          "lat",
-          "y",
-          "ycoord",
-          "y_coord",
-        ]),
-      );
+      // Resolve the coordinate columns as an all-or-nothing pair so the file is
+      // always in a coherent state (both set = points, both blank = attribute
+      // table), never the mixed state that parseDelimitedTextLayer rejects.
+      // Prefer keeping the current manual choices when both still exist in the
+      // freshly retrieved header (e.g. after tweaking the delimiter); otherwise
+      // auto-detect; otherwise leave both as "(None)" so the file imports as a
+      // non-spatial attribute table instead of misparsing an arbitrary column.
+      const keepIfValid = (current: string): string | undefined => {
+        const normalized = current.trim().toLowerCase();
+        if (!normalized) return undefined;
+        return fields.find((field) => field.trim().toLowerCase() === normalized);
+      };
+      const keptLongitude = keepIfValid(delimitedTextLongitudeField);
+      const keptLatitude = keepIfValid(delimitedTextLatitudeField);
+      const detected = detectCoordinateFields(fields);
+      let nextLongitude = "";
+      let nextLatitude = "";
+      if (keptLongitude && keptLatitude) {
+        nextLongitude = keptLongitude;
+        nextLatitude = keptLatitude;
+      } else if (detected) {
+        nextLongitude = detected.longitudeField;
+        nextLatitude = detected.latitudeField;
+      }
+      setDelimitedTextLongitudeField(nextLongitude);
+      setDelimitedTextLatitudeField(nextLatitude);
       setDelimitedTextColumnsStatus(
-        t("addData.delimitedText.retrievedColumns", { count: fields.length }),
+        nextLongitude && nextLatitude
+          ? t("addData.delimitedText.retrievedColumns", { count: fields.length })
+          : t("addData.delimitedText.retrievedColumnsTable", {
+              count: fields.length,
+            }),
       );
     } catch (err) {
       source.setError(
@@ -204,6 +214,7 @@ export function DelimitedTextSource() {
             delimiter,
             featureCount: result.data.features.length,
             fields: result.fields,
+            isTable: result.isTable,
             latitudeField: delimitedTextLatitudeField.trim(),
             longitudeField: delimitedTextLongitudeField.trim(),
             skippedRows: result.skippedRows,
@@ -214,7 +225,8 @@ export function DelimitedTextSource() {
         geojson: result.data,
         sourcePath,
       },
-      { fit: true },
+      // A non-spatial attribute table has no geometry to fit the map to.
+      { fit: !result.isTable },
     );
   });
 
@@ -389,6 +401,9 @@ export function DelimitedTextSource() {
                 setDelimitedTextLongitudeField(event.target.value)
               }
             >
+              <option value="">
+                {t("addData.delimitedText.noneField")}
+              </option>
               {delimitedTextFieldOptions.map((field) => (
                 <option key={field} value={field}>
                   {field}
@@ -407,6 +422,9 @@ export function DelimitedTextSource() {
                 setDelimitedTextLatitudeField(event.target.value)
               }
             >
+              <option value="">
+                {t("addData.delimitedText.noneField")}
+              </option>
               {delimitedTextFieldOptions.map((field) => (
                 <option key={field} value={field}>
                   {field}
@@ -415,6 +433,9 @@ export function DelimitedTextSource() {
             </Select>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          {t("addData.delimitedText.tableHint")}
+        </p>
         <SampleDataSelect
           samples={[
             { label: t("addData.delimitedText.sampleLabel"), value: DEFAULT_DELIMITED_TEXT_URL },

@@ -36,6 +36,27 @@ export const THREE_D_TILES_TILESET_LOAD_LIMITS = {
   maximumMemoryUsage: 512,
   memoryAdjustedScreenSpaceError: true,
 } as const;
+
+/**
+ * loaders.gl load options shared by the deck.gl 3D-tiles overlays (this I3S
+ * overlay and the Google Photorealistic one).
+ *
+ * `core.worker: false` parses tile content on the main thread instead of a
+ * loaders.gl worker. By default @loaders.gl fetches its worker scripts (the
+ * i3s-content worker here, draco/basis-texture workers for glTF content) from
+ * the unpkg CDN at runtime, which the Tauri desktop CSP (`worker-src 'self'
+ * blob:`, no unpkg in `script-src`) blocks — so tiles never render in the
+ * packaged app, and it would fail offline too. Disabling workers removes that
+ * external CDN dependency entirely; parsing runs in-process on every platform.
+ * The same restrictive `worker-src` applies to the nginx-served web build, so
+ * this is applied unconditionally rather than gated to Tauri. `worker` must be
+ * nested under `core` — that is the documented loaders.gl option shape; a
+ * top-level `worker` only works via a deprecated backwards-compat alias.
+ */
+export const THREE_D_TILES_DECK_LOAD_OPTIONS = {
+  tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
+  core: { worker: false },
+} as const;
 // ~1s at 60fps, matching GOOGLE_TILES_MAX_MOUNT_RETRIES so a slow project
 // restore has the same budget to wait for the map before giving up.
 const I3S_MAX_MOUNT_RETRIES = 60;
@@ -345,24 +366,35 @@ function i3sLayerSignature(layers: GeoLibreLayer[]): string {
     .join("|");
 }
 
-function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
-  if (!i3sDeckGL || !i3sLoader) return null;
+// The deck.gl class + I3SLoader are injectable so a unit test can assert the
+// constructed Tile3DLayer's props (e.g. the CSP-critical loadOptions) without a
+// live map/overlay. Defaults are evaluated per call, so production callers pick
+// up the lazily-populated module globals.
+export function buildArcgisI3sTilesDeckLayer(
+  layer: GeoLibreLayer,
+  deps: { deckGL: GeoLibreDeckGL | null; loader: unknown } = {
+    deckGL: i3sDeckGL,
+    loader: i3sLoader,
+  },
+): Layer | null {
+  const { deckGL, loader } = deps;
+  if (!deckGL || !loader) return null;
   const url = typeof layer.source.url === "string" ? layer.source.url : "";
   if (!url) return null;
 
-  const Tile3DLayer = i3sDeckGL.geoLayers.Tile3DLayer as unknown as new (
+  const Tile3DLayer = deckGL.geoLayers.Tile3DLayer as unknown as new (
     props: Record<string, unknown>,
   ) => Layer;
 
   return new Tile3DLayer({
     id: `${layer.id}-deck`,
     data: url,
-    loader: i3sLoader,
-    // Cap tile detail/memory so a large textured-mesh scene doesn't load with
-    // deck.gl's unbounded defaults (shared with the Google overlay).
-    loadOptions: {
-      tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
-    },
+    loader,
+    // Tile detail/memory caps + main-thread parsing, shared with the Google
+    // overlay. See THREE_D_TILES_DECK_LOAD_OPTIONS for why workers are disabled.
+    // Spread into a fresh object per layer (matching the Google call site) so no
+    // two layers share one loadOptions reference.
+    loadOptions: { ...THREE_D_TILES_DECK_LOAD_OPTIONS },
     opacity: layer.opacity,
     pickable: false,
     operation: "draw",

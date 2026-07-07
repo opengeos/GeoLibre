@@ -646,27 +646,6 @@ export function resolveDelimitedTextDelimiter(
   return customDelimiter;
 }
 
-export function inferDelimitedTextField(
-  fields: string[],
-  currentField: string,
-  candidates: string[],
-): string {
-  const current = currentField.trim().toLowerCase();
-  const currentMatch = fields.find(
-    (field) => field.trim().toLowerCase() === current,
-  );
-  if (currentMatch) return currentMatch;
-
-  for (const candidate of candidates) {
-    const match = fields.find(
-      (field) => field.trim().toLowerCase() === candidate,
-    );
-    if (match) return match;
-  }
-
-  return fields[0] ?? currentField;
-}
-
 /** Recursively finds the first `[lng, lat]` pair in a GeoJSON coordinate array. */
 function firstCoordinate(coords: unknown): [number, number] | null {
   if (!Array.isArray(coords)) return null;
