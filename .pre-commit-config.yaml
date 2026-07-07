@@ -6,6 +6,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: check-json
+        # This E2E fixture is intentionally malformed JSON — it drives the
+        # error-handling spec that asserts the app rejects a broken drop.
+        exclude: ^e2e/fixtures/malformed\.geojson$
       - id: check-added-large-files
         args: ["--maxkb=1024", "--enforce-all"]
       - id: check-merge-conflict

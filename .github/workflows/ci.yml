@@ -15,6 +15,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      # Reads package-lock.json and queries the registry — no install needed, so
+      # this stays fast. Blocking at `high` catches high/critical advisories
+      # without reddening CI for the moderate/low noise Dependabot handles via PR.
+      - name: Audit npm dependencies (high and critical)
+        run: npm audit --audit-level=high
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-22.04
@@ -153,6 +173,17 @@ jobs:
         # The full test suite needs the optional engines; without them the
         # vector/raster/SQL/ML tests skip themselves and CI is green but hollow.
         run: python -m pip install -e "backend/geolibre_server[test]"
+
+      # Audit the resolved backend environment for known advisories. Non-blocking
+      # (continue-on-error): the sidecar pulls a heavy geospatial/ML dependency
+      # tree whose transitive advisories are often upstream and not immediately
+      # fixable, so this surfaces them without halting the release cadence.
+      # Dependabot opens the fix PRs; this step keeps the signal visible in CI.
+      - name: Audit Python dependencies (advisory, non-blocking)
+        continue-on-error: true
+        run: |
+          python -m pip install pip-audit
+          python -m pip_audit --progress-spinner off
 
       # Drive the documented `npm run ci` gate directly (lint -> build ->
       # frontend+worker+backend coverage -> rust) so this workflow cannot drift
