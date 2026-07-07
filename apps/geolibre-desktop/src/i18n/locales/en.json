@@ -1311,6 +1311,7 @@
       "description": "Move the map to an exact camera.",
       "sectionCoordinates": "Coordinates",
       "smartPaste": "Paste coordinates",
+      "smartPasteInputLabel": "Coordinate string",
       "smartPastePlaceholder": "e.g. 51.5074, -0.1278 or 51°30'26\"N, 0°07'39\"W",
       "smartPasteInfo": "Type or paste a full coordinate string in DD, DMS, or DDM, then run Process input. GeoLibre detects the format and fills the longitude and latitude fields below. Adjust zoom, pitch, and bearing separately before going.",
       "smartPasteInfoLabel": "About pasting coordinates",
