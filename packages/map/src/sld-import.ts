@@ -88,13 +88,44 @@ function isNode(value: unknown): value is XmlNode {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Decode the five predefined XML entities and numeric character references. The
+ * parser runs with `processEntities: false` (so a hostile DOCTYPE cannot trigger
+ * entity-expansion), which also turns off decoding of the predefined entities;
+ * this restores it for text content so a field/label/name written by the
+ * exporter's `xmlEscape` (e.g. `A &amp; B`) round-trips back to `A & B`.
+ */
+function decodeXmlEntities(value: string): string {
+  return value.replace(/&(#x?[0-9a-fA-F]+|amp|lt|gt|quot|apos);/g, (match, body) => {
+    switch (body) {
+      case "amp":
+        return "&";
+      case "lt":
+        return "<";
+      case "gt":
+        return ">";
+      case "quot":
+        return '"';
+      case "apos":
+        return "'";
+      default: {
+        const code =
+          body[1] === "x" || body[1] === "X"
+            ? Number.parseInt(body.slice(2), 16)
+            : Number.parseInt(body.slice(1), 10);
+        return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+      }
+    }
+  });
+}
+
 /** The text content of an element (string leaf, or an object's `#text`). */
 function nodeText(value: unknown): string | null {
-  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "string") return decodeXmlEntities(value.trim()) || null;
   if (typeof value === "number") return String(value);
   if (isNode(value)) {
     const text = value["#text"];
-    if (typeof text === "string") return text.trim() || null;
+    if (typeof text === "string") return decodeXmlEntities(text.trim()) || null;
     if (typeof text === "number") return String(text);
   }
   return null;
@@ -531,19 +562,25 @@ function applyPaint(
     // SLD stroke widths are pixel widths, so reset any prior "meters" unit.
     patch.strokeWidthUnit = "pixels";
   }
-  // SLD graphic Size is the mark diameter; GeoLibre circleRadius is the radius.
-  if (paint.pointSize !== undefined) patch.circleRadius = paint.pointSize / 2;
-
   // Recover a shape marker from the point Mark's WellKnownName. Only act when the
   // rule actually has a point Mark so a polygon/line import never touches the
   // marker fields. A recognized non-circle name enables the shape marker; a
   // plain `circle` (or an unrecognized name that degrades to one) explicitly
   // disables it so a stale `markerEnabled` from the base style is cleared when
   // the patch is merged over it.
+  const name = paint.hasPointMark ? paint.wellKnownName : undefined;
+  const shape = name && name !== "circle" ? WELL_KNOWN_NAME_TO_SHAPE[name] : undefined;
+  const isShapeMarker = paint.hasPointMark && !!shape;
+
+  // SLD graphic Size is the mark diameter, so a plain circle's Size maps to
+  // circleRadius. For a shape marker the Size is the marker size (handled
+  // below), not a circle diameter, so it must not overwrite circleRadius.
+  if (paint.pointSize !== undefined && !isShapeMarker) {
+    patch.circleRadius = paint.pointSize / 2;
+  }
+
   if (paint.hasPointMark) {
-    const name = paint.wellKnownName;
-    const shape = name ? WELL_KNOWN_NAME_TO_SHAPE[name] : undefined;
-    if (name && name !== "circle" && shape) {
+    if (isShapeMarker) {
       patch.markerEnabled = true;
       patch.markerShape = shape;
       // markerColor comes from the mark's own fill, not the shared fillColor a
@@ -552,7 +589,7 @@ function applyPaint(
       if (paint.pointSize !== undefined) patch.markerSize = paint.pointSize;
     } else {
       patch.markerEnabled = false;
-      if (name && name !== "circle" && !shape) {
+      if (name && name !== "circle") {
         warnings.push(
           `The "${name}" point mark has no GeoLibre equivalent; it was imported as a circle.`,
         );
@@ -673,6 +710,16 @@ export function parseSld(xml: string): SldImportResult {
 }
 
 /** Classify the render rules and write the renderer fields onto the patch. */
+/**
+ * The per-rule color of an attribute-driven renderer: the fill for a
+ * polygon/point layer, or the line stroke for a line-only layer (where the
+ * exporter writes the varying color into the LineSymbolizer's stroke and there
+ * is no fill).
+ */
+function renderRuleColor(paint: RulePaint): string | undefined {
+  return paint.fillColor ?? paint.strokeColor;
+}
+
 function classifyRenderRules(
   renderRules: RenderRule[],
   patch: Partial<Omit<LayerStyle, "labels">>,
@@ -710,7 +757,7 @@ function classifyRenderRules(
     const property = comparisons[0]!.property;
     const stops: VectorStyleStop[] = [];
     for (let index = 0; index < filtered.length; index += 1) {
-      const color = filtered[index].paint.fillColor;
+      const color = renderRuleColor(filtered[index].paint);
       if (color === undefined) continue;
       const literal = comparisons[index]!.literal;
       // Recover a custom stop label from the Title, but only when it differs
@@ -729,7 +776,8 @@ function classifyRenderRules(
       patch.vectorStyleProperty = property;
       patch.vectorStyleStops = stops;
       // The ElseFilter rule's fill is the `match` fallback color.
-      if (elseRule?.paint.fillColor) patch.fillColor = elseRule.paint.fillColor;
+      const elseColor = elseRule ? renderRuleColor(elseRule.paint) : undefined;
+      if (elseColor) patch.fillColor = elseColor;
       return;
     }
   }
@@ -757,7 +805,7 @@ function classifyRenderRules(
   for (const index of rangeIndices) {
     if (ranges[index]!.lower < minLower) {
       minLower = ranges[index]!.lower;
-      minColor = filtered[index].paint.fillColor;
+      minColor = renderRuleColor(filtered[index].paint);
     }
   }
   const everyRuleIsRangeOrGuard =
@@ -769,13 +817,13 @@ function classifyRenderRules(
         below !== null &&
         below.property === gradProperty &&
         below.value === minLower &&
-        rule.paint.fillColor === minColor
+        renderRuleColor(rule.paint) === minColor
       );
     });
   if (everyRuleIsRangeOrGuard) {
     const stops: VectorStyleStop[] = [];
     for (const index of rangeIndices) {
-      const color = filtered[index].paint.fillColor;
+      const color = renderRuleColor(filtered[index].paint);
       if (color === undefined) continue;
       const label = readTitle(filtered[index].node) ?? undefined;
       stops.push({
@@ -811,11 +859,13 @@ function classifyRenderRules(
       // per-rule legend labels survive the round trip.
       label: readTitle(rule.node) ?? "",
       filter: JSON.stringify(expression),
-      color: rule.paint.fillColor ?? DEFAULT_LAYER_STYLE.fillColor,
+      color: renderRuleColor(rule.paint) ?? DEFAULT_LAYER_STYLE.fillColor,
       isElse: false,
     });
   }
-  const elseColor = elseRule?.paint.fillColor ?? DEFAULT_LAYER_STYLE.fillColor;
+  const elseColor =
+    (elseRule ? renderRuleColor(elseRule.paint) : undefined) ??
+    DEFAULT_LAYER_STYLE.fillColor;
   vectorRules.push({
     id: "sld-rule-else",
     label: elseRule ? (readTitle(elseRule.node) ?? "") : "",

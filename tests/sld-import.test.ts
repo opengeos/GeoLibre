@@ -231,6 +231,29 @@ describe("parseSld", () => {
     assert.notEqual(result.style.strokeColor, "#ffffff");
   });
 
+  it("does not overwrite circleRadius from a shape marker's Size", () => {
+    const result = parseSld(
+      sld(`<Rule><PointSymbolizer><Graphic><Mark>
+        <WellKnownName>star</WellKnownName>
+        <Fill><CssParameter name="fill">#ff0000</CssParameter></Fill>
+      </Mark><Size>40</Size></Graphic></PointSymbolizer></Rule>`),
+    );
+    // Size 40 is the marker size, not a circle diameter.
+    assert.equal(result.style.markerSize, 40);
+    assert.equal(result.style.circleRadius, undefined);
+  });
+
+  it("decodes XML entities in a label field", () => {
+    const result = parseSld(
+      sld(`<Rule>
+        <PolygonSymbolizer><Fill><CssParameter name="fill">#ffffff</CssParameter></Fill></PolygonSymbolizer>
+        <TextSymbolizer><Label><ogc:PropertyName>A &amp; B</ogc:PropertyName></Label>
+          <Fill><CssParameter name="fill">#000000</CssParameter></Fill></TextSymbolizer>
+      </Rule>`),
+    );
+    assert.equal(result.labels?.field, "A & B");
+  });
+
   it("warns when a WellKnownName has no GeoLibre marker equivalent", () => {
     const result = parseSld(
       sld(`<Rule><PointSymbolizer><Graphic><Mark>

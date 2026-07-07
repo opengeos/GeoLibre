@@ -335,13 +335,21 @@ function renderSymbolizers(
   paint: SymbolPaint,
   profile: GeometryProfile,
   warnings: string[],
+  lineColor?: string,
 ): string {
   const parts: string[] = [];
   if (profile.hasPolygon) parts.push(polygonSymbolizer(paint));
   // A LineSymbolizer is only emitted for real line geometry; a polygon's border
   // is already drawn by the PolygonSymbolizer's own Stroke, so adding one here
-  // would draw the boundary twice in a spec-compliant SLD renderer.
-  if (profile.hasLine) parts.push(lineSymbolizer(paint));
+  // would draw the boundary twice in a spec-compliant SLD renderer. Line
+  // geometry takes the per-rule color for an attribute-driven renderer
+  // (matching vectorLineColorValue, which colors lines by the data value while
+  // polygon outlines keep the flat stroke), falling back to the flat stroke.
+  if (profile.hasLine) {
+    const linePaint =
+      lineColor !== undefined ? { ...paint, strokeColor: lineColor } : paint;
+    parts.push(lineSymbolizer(linePaint));
+  }
   if (profile.hasPoint) parts.push(pointSymbolizer(style, paint, warnings));
   return parts.join("");
 }
@@ -527,12 +535,13 @@ function categorizedRules(
         stop.label || String(stop.value),
         comparisonFilter("PropertyIsEqualTo", property, stop.value),
         scale,
-        renderSymbolizers(style, paint, profile, warnings),
+        renderSymbolizers(style, paint, profile, warnings, stop.color),
       ),
     );
   }
   // The `match` fallback color becomes an ElseFilter rule so unmatched features
-  // still draw (mirrors vectorColorExpression's trailing fallback).
+  // still draw (mirrors vectorColorExpression's trailing fallback). Its line
+  // color stays the flat stroke (the match fallback the live map uses for lines).
   rules.push(
     rule(
       "Other",
@@ -596,6 +605,7 @@ function graduatedRules(
           { ...base, fillColor: numeric[0].color },
           profile,
           warnings,
+          numeric[0].color,
         ),
       ),
     );
@@ -613,7 +623,7 @@ function graduatedRules(
         stop.label ?? null,
         rangeFilter(property, stop.value, upper),
         scale,
-        renderSymbolizers(style, paint, profile, warnings),
+        renderSymbolizers(style, paint, profile, warnings, stop.color),
       ),
     );
   }
@@ -655,6 +665,7 @@ function ruleBasedRules(
           { ...base, fillColor: entry.color },
           profile,
           warnings,
+          entry.color,
         ),
       ),
     );
@@ -674,7 +685,15 @@ function ruleBasedRules(
       elseRule?.label || null,
       "<ElseFilter/>",
       scale,
-      renderSymbolizers(style, { ...base, fillColor: elseColor }, profile, warnings),
+      // The rule-based line color's fallback is the else color (see
+      // ruleBasedColorExpression), so the else rule's line uses it too.
+      renderSymbolizers(
+        style,
+        { ...base, fillColor: elseColor },
+        profile,
+        warnings,
+        elseColor,
+      ),
     ),
   );
   return out.join("");

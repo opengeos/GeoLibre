@@ -20,24 +20,23 @@ function layer(style_: LayerStyle): SldExportableLayer {
   };
 }
 
-function fc(geometry: "point" | "polygon"): FeatureCollection {
+type Geometry = "point" | "polygon" | "line";
+
+function fc(geometry: Geometry): FeatureCollection {
+  const geom: FeatureCollection["features"][number]["geometry"] =
+    geometry === "point"
+      ? { type: "Point", coordinates: [0, 0] }
+      : geometry === "line"
+        ? { type: "LineString", coordinates: [[0, 0], [1, 1]] }
+        : { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] };
   return {
     type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: {},
-        geometry:
-          geometry === "point"
-            ? { type: "Point", coordinates: [0, 0] }
-            : { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 0]]] },
-      },
-    ],
+    features: [{ type: "Feature", properties: {}, geometry }],
   };
 }
 
 /** Export a style to SLD, re-import it, and merge back onto the defaults. */
-function roundTrip(input: LayerStyle, geometry: "point" | "polygon"): LayerStyle {
+function roundTrip(input: LayerStyle, geometry: Geometry): LayerStyle {
   const { sld } = buildSld(layer(input), fc(geometry));
   const parsed = parseSld(sld);
   return applySldImport(DEFAULT_LAYER_STYLE, parsed);
@@ -103,6 +102,23 @@ describe("SLD round-trip (style → SLD → style)", () => {
     assert.equal(out.vectorStyleProperty, "landuse");
     assert.deepEqual(out.vectorStyleStops, input.vectorStyleStops);
     assert.equal(out.fillColor, "#999999");
+  });
+
+  it("preserves a categorized renderer on a line layer (per-class line color)", () => {
+    const input = style({
+      vectorStyleMode: "categorized",
+      vectorStyleProperty: "road",
+      fillColor: "#999999",
+      vectorStyleStops: [
+        { value: "primary", color: "#e41a1c" },
+        { value: "secondary", color: "#377eb8" },
+      ],
+    });
+    const out = roundTrip(input, "line");
+    assert.equal(out.vectorStyleMode, "categorized");
+    assert.equal(out.vectorStyleProperty, "road");
+    // The per-class colors come back from the LineSymbolizer strokes.
+    assert.deepEqual(out.vectorStyleStops, input.vectorStyleStops);
   });
 
   it("preserves graduated stop values and colors as class breaks", () => {
