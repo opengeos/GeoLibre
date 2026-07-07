@@ -215,7 +215,12 @@ export const ColorField = React.forwardRef<HTMLInputElement, ColorFieldProps>(
         <div
           className={cn(
             "relative inline-flex",
-            supportsEyeDropper && fill && "flex-1",
+            // Grow to fill the row whenever the field is full-width, so the
+            // `w-full` swatch has a real width to fill. Gating this on
+            // `supportsEyeDropper` collapsed the swatch to a thin vertical line
+            // in browsers/webviews without the EyeDropper API (Firefox, Safari,
+            // the desktop webview), where the eyedropper button is absent.
+            fill && "flex-1",
           )}
         >
           {/* While transparent, the visible color input is left unnamed and a
