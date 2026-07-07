@@ -26,7 +26,7 @@
     "@deck.gl/mesh-layers": "^9.3.3",
     "@developmentseed/deck.gl-geotiff": "^0.7.0",
     "@developmentseed/deck.gl-raster": "^0.7.0",
-    "@duckdb/duckdb-wasm": "1.33.1-dev45.0",
+    "@duckdb/duckdb-wasm": "1.33.1-dev57.0",
     "@dvt3d/maplibre-three-plugin": "^1.6.0",
     "@electric-sql/pglite": "^0.5.2",
     "@electric-sql/pglite-postgis": "^0.2.2",
