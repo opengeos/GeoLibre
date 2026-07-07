@@ -63,6 +63,14 @@ describe("QML round-trip (style → QML → style)", () => {
     assert.equal(out.strokeWidth, 4);
   });
 
+  it("preserves a line layer's stroke color and width", () => {
+    const input = style({ strokeColor: "#e63946", strokeWidth: 3 });
+    const out = roundTrip(input, "line");
+    // A line symbol's color must round-trip through strokeColor, not fillColor.
+    assert.equal(out.strokeColor, "#e63946");
+    assert.equal(out.strokeWidth, 3);
+  });
+
   it("preserves a point circle radius", () => {
     const input = style({ circleRadius: 7, fillColor: "#457b9d" });
     const out = roundTrip(input, "point");

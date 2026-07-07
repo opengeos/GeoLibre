@@ -171,6 +171,48 @@ describe("parseQml", () => {
     assert.equal(result.labels?.haloColor, "#000000");
   });
 
+  it("routes a line symbol's color to strokeColor", () => {
+    const result = parseQml(
+      qgis(`<renderer-v2 type="singleSymbol"><symbols>
+        <symbol type="line" name="0"><layer class="SimpleLine"><Option type="Map">
+          <Option name="line_color" type="QString" value="230,57,70,255"/>
+          <Option name="line_width" type="QString" value="3"/>
+        </Option></layer></symbol>
+      </symbols></renderer-v2>`),
+    );
+    assert.equal(result.style.strokeColor, "#e63946");
+    assert.equal(result.style.strokeWidth, 3);
+  });
+
+  it("rejects an unsupported arithmetic rule expression", () => {
+    const result = parseQml(
+      qgis(`<renderer-v2 type="RuleRenderer">
+        <rules>
+          <rule filter="&quot;a&quot; = 1-2" symbol="0"/>
+          <rule filter="ELSE" symbol="0"/>
+        </rules>
+        <symbols>${fillSymbol("0", "255,0,0,255")}</symbols>
+      </renderer-v2>`),
+    );
+    // The `1-2` arithmetic is not a supported literal, so the rule is skipped and
+    // (with no translatable rules) the layer falls back to a single symbol.
+    assert.equal(result.style.vectorStyleMode, "single");
+    assert.ok(result.warnings.some((w) => /could not be read/.test(w)));
+  });
+
+  it("does not crash on an out-of-range numeric entity", () => {
+    // &#x110000; is above the max Unicode code point; import must not throw.
+    const result = parseQml(
+      qgis(`<renderer-v2 type="categorizedSymbol" attr="t">
+        <categories><category value="a&#x110000;b" symbol="0" label=""/></categories>
+        <symbols>${fillSymbol("0", "255,0,0,255")}</symbols>
+      </renderer-v2>`),
+    );
+    // The invalid entity is kept as raw text; the import still succeeds.
+    assert.ok(result.matchedRuleCount >= 0);
+    assert.equal(result.style.vectorStyleProperty, "t");
+  });
+
   it("reports a clear error for a non-QML document", () => {
     const result = parseQml("<StyledLayerDescriptor/>");
     assert.equal(result.matchedRuleCount, 0);

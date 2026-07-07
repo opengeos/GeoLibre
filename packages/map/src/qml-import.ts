@@ -61,7 +61,12 @@ function decodeXmlEntities(value: string): string {
           body[1] === "x" || body[1] === "X"
             ? Number.parseInt(body.slice(2), 16)
             : Number.parseInt(body.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+        // fromCodePoint throws on out-of-range/negative values, so validate the
+        // code point (untrusted input) before decoding and keep the raw text
+        // otherwise instead of crashing the import.
+        return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
+          ? String.fromCodePoint(code)
+          : match;
       }
     }
   });
@@ -288,6 +293,9 @@ function tokenize(input: string): Token[] | null {
         value += input[i];
         i += 1;
       }
+      // Only accept a well-formed numeric literal; a run like `1-2` (arithmetic,
+      // unsupported) must be rejected rather than mis-parsed as a single number.
+      if (!/^-?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(value)) return null;
       const parsed = Number.parseFloat(value);
       if (!Number.isFinite(parsed)) return null;
       tokens.push({ kind: "number", value: parsed });
@@ -439,8 +447,15 @@ function applySymbol(
   patch: Partial<Omit<LayerStyle, "labels">>,
   warnings: string[],
 ): void {
-  if (info.color !== undefined) patch.fillColor = info.color;
-  if (info.opacity !== undefined) patch.fillOpacity = info.opacity;
+  // A line symbol's color is the line stroke (GeoLibre renders lines from
+  // strokeColor), so route it there; a fill/marker symbol's color is the fill.
+  if (info.color !== undefined) {
+    if (info.geometry === "line") patch.strokeColor = info.color;
+    else patch.fillColor = info.color;
+  }
+  if (info.opacity !== undefined && info.geometry !== "line") {
+    patch.fillOpacity = info.opacity;
+  }
   if (info.strokeColor !== undefined) patch.strokeColor = info.strokeColor;
   if (info.strokeWidth !== undefined) {
     patch.strokeWidth = info.strokeWidth;
@@ -582,18 +597,21 @@ function classifyRenderer(
   const type = attr(renderer, "type");
   const symbols = readSymbols(renderer);
   const first = symbols.values().next().value as SymbolInfo | undefined;
+  // A line renderer's per-class color drives the stroke; every other geometry's
+  // drives the fill. This routes the categorized/rule fallback color correctly.
+  const isLine = first?.geometry === "line";
   // The flat style always comes from the first symbol (stroke/width/size are
   // constant across an exported renderer's symbols).
   if (first) applySymbol(first, patch, warnings);
 
   if (type === "categorizedSymbol") {
-    return classifyCategorized(renderer, symbols, patch);
+    return classifyCategorized(renderer, symbols, patch, isLine);
   }
   if (type === "graduatedSymbol") {
     return classifyGraduated(renderer, symbols, patch);
   }
   if (type === "RuleRenderer") {
-    return classifyRules(renderer, symbols, patch, warnings);
+    return classifyRules(renderer, symbols, patch, isLine, warnings);
   }
   // singleSymbol (or unknown with symbols): a plain single style.
   if (first) {
@@ -613,6 +631,7 @@ function classifyCategorized(
   renderer: XmlNode,
   symbols: Map<string, SymbolInfo>,
   patch: Partial<Omit<LayerStyle, "labels">>,
+  isLine: boolean,
 ): number {
   const property = attr(renderer, "attr");
   const categoriesRoot = toArray(renderer.categories)[0];
@@ -643,7 +662,11 @@ function classifyCategorized(
   patch.vectorStyleMode = "categorized";
   patch.vectorStyleProperty = property;
   patch.vectorStyleStops = stops;
-  if (fallback) patch.fillColor = fallback;
+  // The fallback drives the stroke for a line renderer, the fill otherwise.
+  if (fallback) {
+    if (isLine) patch.strokeColor = fallback;
+    else patch.fillColor = fallback;
+  }
   return stops.length;
 }
 
@@ -679,6 +702,7 @@ function classifyRules(
   renderer: XmlNode,
   symbols: Map<string, SymbolInfo>,
   patch: Partial<Omit<LayerStyle, "labels">>,
+  isLine: boolean,
   warnings: string[],
 ): number {
   const rulesRoot = toArray(renderer.rules)[0];
@@ -717,7 +741,13 @@ function classifyRules(
     index += 1;
     matched += 1;
   }
-  if (vectorRules.length === 0) return matched;
+  if (vectorRules.length === 0) {
+    // No rule translated, so a rule-based renderer cannot be built. The flat
+    // style from the first symbol was already applied, so fall back to a single
+    // symbol rather than reporting the renderer as applied when it was not.
+    patch.vectorStyleMode = "single";
+    return 1;
+  }
   const fallback = elseColor ?? DEFAULT_LAYER_STYLE.fillColor;
   vectorRules.push({
     id: "qml-rule-else",
@@ -728,7 +758,9 @@ function classifyRules(
   });
   patch.vectorStyleMode = "rule-based";
   patch.vectorRules = vectorRules;
-  patch.fillColor = fallback;
+  // The else fallback drives the stroke for a line renderer, the fill otherwise.
+  if (isLine) patch.strokeColor = fallback;
+  else patch.fillColor = fallback;
   return matched;
 }
 

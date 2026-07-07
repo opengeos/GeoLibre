@@ -322,9 +322,9 @@ function labelingXml(
         )}"/>`
       : '<text-buffer bufferDraw="0"/>';
 
-  // placement: QGIS placement code 1 = "around point" for points, 2 = "over
-  // point"; for line placement 3 = "curved"/"line". Keep it simple: line
-  // placement -> 2 (Line), otherwise 6 (Cartographic/Around).
+  // QGIS `placement` is a small enum. GeoLibre only distinguishes point vs line
+  // placement, so this uses a simplified encoding: 2 for line placement, 1
+  // otherwise. The importer only checks for "2" to recover line placement.
   const placementCode = labels.placement === "line" ? "2" : "1";
 
   return [
@@ -395,21 +395,14 @@ function categorizedRenderer(
     symbols.push(symbolXml(geometry, String(index), stop.color, paint, opacity, warnings));
     index += 1;
   }
-  // The empty-value default category is QGIS's catch-all (the match fallback).
+  // The empty-value default category is QGIS's catch-all (the match fallback);
+  // its color is the layer's single-symbol color for the geometry (markerColor
+  // for a shape-marker point layer, stroke for lines, otherwise fill).
   categories.push(
     `<category value="" symbol="${index}" label="" render="true"/>`,
   );
   symbols.push(
-    symbolXml(
-      geometry,
-      String(index),
-      geometry === "line"
-        ? styleValue(style, "strokeColor")
-        : styleValue(style, "fillColor"),
-      paint,
-      opacity,
-      warnings,
-    ),
+    symbolXml(geometry, String(index), singleColor(style, geometry), paint, opacity, warnings),
   );
   return `<renderer-v2 type="categorizedSymbol" attr="${xmlEscape(
     property,
@@ -441,7 +434,7 @@ function graduatedRenderer(
     .sort((a, b) => a.value - b.value);
 
   warnings.push(
-    "The graduated color ramp was written as discrete QML class ranges; the continuous interpolation is approximated.",
+    "The graduated color ramp was written as discrete QML class ranges (QGIS graduated convention); the continuous interpolation is approximated and features below the lowest class are left unclassified.",
   );
 
   const ranges: string[] = [];
@@ -499,13 +492,13 @@ function ruleRenderer(
     symbols.push(symbolXml(geometry, String(index), entry.color, paint, opacity, warnings));
     index += 1;
   }
-  // The ELSE rule catches features no other rule matched.
+  // The ELSE rule catches features no other rule matched; its color falls back
+  // to the layer's single-symbol color for the geometry when the else rule has
+  // no valid color.
   const elseColor =
     elseRule && isHexColor(elseRule.color)
       ? elseRule.color
-      : geometry === "line"
-        ? styleValue(style, "strokeColor")
-        : styleValue(style, "fillColor");
+      : singleColor(style, geometry);
   ruleXml.push(
     `<rule filter="ELSE" symbol="${index}" label="${xmlEscape(
       elseRule?.label || "",

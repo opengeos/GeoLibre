@@ -911,71 +911,58 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
   );
 
-  // Export a vector layer's symbology as a self-contained Mapbox GL / MapLibre
-  // style document, so the cartography can be reused in another map or handed to
-  // a teammate instead of being locked inside the .geolibre.json project.
-  const handleExportStyle = useCallback(
-    async (layer: GeoLibreLayer) => {
+  // Shared symbology-export flow: resolve the layer's features, build the style
+  // text via `build`, save it, and set the success/warning/error status. Each
+  // format (Mapbox GL / SLD / QML) supplies only its builder and file metadata,
+  // so the three export handlers stay in sync as more formats are added. A
+  // builder returns `{ error }` to abort with a message (e.g. the Mapbox
+  // exporter needs embedded features), or `{ text, warnings }` to save.
+  const exportLayerStyle = useCallback(
+    async (
+      layer: GeoLibreLayer,
+      build: (
+        geojson: FeatureCollection | null,
+      ) => { text: string; warnings: string[] } | { error: string },
+      fileMeta: {
+        defaultName: string;
+        filters: { name: string; extensions: string[] }[];
+        browserTypes: { description: string; accept: Record<string, string[]> }[];
+        mimeType: string;
+      },
+    ) => {
       clearRefreshStatusTimer(layer.id);
       try {
         const geojson = await resolveLayerGeojson(
           layer,
           mapControllerRef.current?.getMap() ?? undefined,
         );
-        if (!geojson) {
-          // Mirror handleExportLayer: a source-backed (Add Vector Layer) layer
-          // whose features are not readable yet is usually a not-yet-ready map
-          // source, so surface that rather than exporting a style with no data.
-          const message =
-            geojsonVectorSourceId(layer) !== null
-              ? t("layers.exportStyleDataNotReady")
-              : t("layers.exportStyleNeedsFeatures");
+        const built = build(geojson ?? null);
+        if ("error" in built) {
           setRefreshStatuses((current) => ({
             ...current,
-            [layer.id]: { type: "error", message },
+            [layer.id]: { type: "error", message: built.error },
           }));
           scheduleStatusClear(layer.id);
           return;
         }
-        const result = buildMapboxStyle(layer, geojson);
-        const savedPath = await saveTextFileWithFallback(
-          mapboxStyleToJson(result),
-          {
-            defaultName: `${sanitizeExportFileName(layer.name)}.style.json`,
-            filters: [
-              { name: "Mapbox GL style", extensions: ["json"] },
-            ],
-            browserTypes: [
-              {
-                description: "Mapbox GL style",
-                accept: { "application/json": [".json"] },
-              },
-            ],
-            mimeType: "application/json",
-          },
-        );
+        const savedPath = await saveTextFileWithFallback(built.text, fileMeta);
         // A null path means the user cancelled the save dialog, so no note.
         if (savedPath !== null) {
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]:
-              result.warnings.length > 0
+              built.warnings.length > 0
                 ? {
                     type: "warning",
-                    message: `${t("layers.exportStyleSuccess")} ${result.warnings.join(" ")}`,
+                    message: `${t("layers.exportStyleSuccess")} ${built.warnings.join(" ")}`,
                   }
-                : {
-                    type: "success",
-                    message: t("layers.exportStyleSuccess"),
-                  },
+                : { type: "success", message: t("layers.exportStyleSuccess") },
           }));
           scheduleStatusClear(layer.id);
         }
       } catch (error) {
         const message =
-          error instanceof Error
-            ? error.message
-            : t("layers.exportStyleError");
+          error instanceof Error ? error.message : t("layers.exportStyleError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -986,22 +973,56 @@ export function LayerPanel({
     [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
   );
 
+  // Export a vector layer's symbology as a self-contained Mapbox GL / MapLibre
+  // style document, so the cartography can be reused in another map or handed to
+  // a teammate instead of being locked inside the .geolibre.json project.
+  const handleExportStyle = useCallback(
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          if (!geojson) {
+            // A source-backed (Add Vector Layer) layer whose features are not
+            // readable yet is usually a not-yet-ready map source; the Mapbox
+            // export embeds the data, so it cannot proceed without it.
+            return {
+              error:
+                geojsonVectorSourceId(layer) !== null
+                  ? t("layers.exportStyleDataNotReady")
+                  : t("layers.exportStyleNeedsFeatures"),
+            };
+          }
+          const result = buildMapboxStyle(layer, geojson);
+          return { text: mapboxStyleToJson(result), warnings: result.warnings };
+        },
+        {
+          defaultName: `${sanitizeExportFileName(layer.name)}.style.json`,
+          filters: [{ name: "Mapbox GL style", extensions: ["json"] }],
+          browserTypes: [
+            {
+              description: "Mapbox GL style",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+          mimeType: "application/json",
+        },
+      ),
+    [exportLayerStyle, t],
+  );
+
   // Export a vector layer's symbology as an OGC SLD document, the interchange
-  // format QGIS, GeoServer, MapServer, and ArcGIS speak, so GeoLibre cartography
-  // can be handed off to a desktop-GIS or WMS workflow.
+  // format QGIS, GeoServer, MapServer, and ArcGIS speak. Unlike the Mapbox
+  // export, SLD carries no data, so a layer whose features are not readable can
+  // still export (geometry detection falls back to a symbolizer superset).
   const handleExportSldStyle = useCallback(
-    async (layer: GeoLibreLayer) => {
-      clearRefreshStatusTimer(layer.id);
-      try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
-        // Unlike the Mapbox export, SLD carries no data, so a layer whose
-        // features are not readable can still export (geometry detection just
-        // falls back to a symbolizer superset); pass whatever we resolved.
-        const result = buildSld(layer, geojson ?? null);
-        const savedPath = await saveTextFileWithFallback(result.sld, {
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          const result = buildSld(layer, geojson);
+          return { text: result.sld, warnings: result.warnings };
+        },
+        {
           defaultName: `${sanitizeExportFileName(layer.name)}.sld`,
           filters: [{ name: "OGC SLD", extensions: ["sld", "xml"] }],
           browserTypes: [
@@ -1011,86 +1032,32 @@ export function LayerPanel({
             },
           ],
           mimeType: "application/xml",
-        });
-        if (savedPath !== null) {
-          setRefreshStatuses((current) => ({
-            ...current,
-            [layer.id]:
-              result.warnings.length > 0
-                ? {
-                    type: "warning",
-                    message: `${t("layers.exportStyleSuccess")} ${result.warnings.join(" ")}`,
-                  }
-                : {
-                    type: "success",
-                    message: t("layers.exportStyleSuccess"),
-                  },
-          }));
-          scheduleStatusClear(layer.id);
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : t("layers.exportStyleError");
-        setRefreshStatuses((current) => ({
-          ...current,
-          [layer.id]: { type: "error", message },
-        }));
-        scheduleStatusClear(layer.id);
-      }
-    },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+        },
+      ),
+    [exportLayerStyle],
   );
 
   // Export a vector layer's symbology as a QGIS QML style, the native style
   // format QGIS users have on disk, so GeoLibre cartography can be opened in
   // QGIS without rebuilding it by hand.
   const handleExportQmlStyle = useCallback(
-    async (layer: GeoLibreLayer) => {
-      clearRefreshStatusTimer(layer.id);
-      try {
-        const geojson = await resolveLayerGeojson(
-          layer,
-          mapControllerRef.current?.getMap() ?? undefined,
-        );
-        const result = buildQml(layer, geojson ?? null);
-        const savedPath = await saveTextFileWithFallback(result.qml, {
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          const result = buildQml(layer, geojson);
+          return { text: result.qml, warnings: result.warnings };
+        },
+        {
           defaultName: `${sanitizeExportFileName(layer.name)}.qml`,
           filters: [{ name: "QGIS QML", extensions: ["qml"] }],
           browserTypes: [
-            {
-              description: "QGIS QML",
-              accept: { "application/xml": [".qml"] },
-            },
+            { description: "QGIS QML", accept: { "application/xml": [".qml"] } },
           ],
           mimeType: "application/xml",
-        });
-        if (savedPath !== null) {
-          setRefreshStatuses((current) => ({
-            ...current,
-            [layer.id]:
-              result.warnings.length > 0
-                ? {
-                    type: "warning",
-                    message: `${t("layers.exportStyleSuccess")} ${result.warnings.join(" ")}`,
-                  }
-                : {
-                    type: "success",
-                    message: t("layers.exportStyleSuccess"),
-                  },
-          }));
-          scheduleStatusClear(layer.id);
-        }
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : t("layers.exportStyleError");
-        setRefreshStatuses((current) => ({
-          ...current,
-          [layer.id]: { type: "error", message },
-        }));
-        scheduleStatusClear(layer.id);
-      }
-    },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+        },
+      ),
+    [exportLayerStyle],
   );
 
   // Import a symbology file (Mapbox GL / MapLibre style JSON or an OGC SLD) and

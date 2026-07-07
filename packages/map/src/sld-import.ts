@@ -113,7 +113,11 @@ function decodeXmlEntities(value: string): string {
           body[1] === "x" || body[1] === "X"
             ? Number.parseInt(body.slice(2), 16)
             : Number.parseInt(body.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+        // fromCodePoint throws on out-of-range values, so validate the code
+        // point (untrusted input) and keep the raw text otherwise.
+        return Number.isInteger(code) && code >= 0 && code <= 0x10ffff
+          ? String.fromCodePoint(code)
+          : match;
       }
     }
   });
