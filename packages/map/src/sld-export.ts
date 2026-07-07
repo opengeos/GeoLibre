@@ -676,27 +676,31 @@ function ruleBasedRules(
   }
   // Catch-all rule so features matched by no rule still draw. The Title is only
   // written when the else rule has a real label, so an unlabeled else round-trips
-  // back to an empty label instead of a synthetic "Other". The else color falls
-  // back to the layer fill when the rule's own color is invalid, matching
-  // ruleBasedColorExpression.
-  const elseColor =
+  // back to an empty label instead of a synthetic "Other". When the else rule
+  // has no valid color, the live map falls the fill channel back to the layer
+  // fill and the line channel back to the layer stroke (ruleBasedColorExpression
+  // is seeded with fillColor for fills and strokeColor for lines), so mirror
+  // both here rather than using one color for both channels.
+  const elseFillColor =
     elseRule && isHexColor(elseRule.color)
       ? elseRule.color
       : styleValue(style, "fillColor");
+  const elseLineColor =
+    elseRule && isHexColor(elseRule.color)
+      ? elseRule.color
+      : styleValue(style, "strokeColor");
   out.push(
     rule(
       "Other",
       elseRule?.label || null,
       "<ElseFilter/>",
       scale,
-      // The rule-based line color's fallback is the else color (see
-      // ruleBasedColorExpression), so the else rule's line uses it too.
       renderSymbolizers(
         style,
-        { ...base, fillColor: elseColor },
+        { ...base, fillColor: elseFillColor },
         profile,
         warnings,
-        elseColor,
+        elseLineColor,
       ),
     ),
   );

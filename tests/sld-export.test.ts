@@ -392,6 +392,41 @@ describe("buildSld", () => {
     assert.match(sld, /<ElseFilter\/>/);
   });
 
+  it("uses the layer stroke (not fill) for the rule-based else line color", () => {
+    const lines: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+        },
+      ],
+    };
+    const { sld } = buildSld(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          fillColor: "#111111",
+          strokeColor: "#222222",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "",
+              filter: JSON.stringify(["==", ["get", "a"], "x"]),
+              color: "#ff0000",
+              isElse: false,
+            },
+            // No else rule, so the else line color must fall back to strokeColor.
+          ],
+        }),
+      }),
+      lines,
+    );
+    // The Other rule's LineSymbolizer uses strokeColor (#222222), not fillColor.
+    assert.match(compact(sld), /<CssParameter name="stroke">#222222<\/CssParameter>/);
+  });
+
   it("degrades an expression renderer to a single symbol with a warning", () => {
     const { sld, warnings } = buildSld(
       layer({

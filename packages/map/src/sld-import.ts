@@ -539,13 +539,21 @@ function scaleToZoom(denominator: number): number {
   return Math.min(MAX_LAYER_ZOOM, Math.max(MIN_LAYER_ZOOM, Math.round(zoom)));
 }
 
-/** Apply a rule's `Min`/`MaxScaleDenominator` to the patch's zoom window. */
+/**
+ * Apply a rule's `Min`/`MaxScaleDenominator` to the patch's zoom window. An
+ * absent bound resets that end to the full-range default (0 / 24) rather than
+ * leaving the target layer's prior window, so importing a full-range SLD over a
+ * zoom-limited layer clears the limit — consistent with how {@link readLabels}
+ * treats absent label presentation elements.
+ */
 function applyScale(rule: XmlNode, patch: Partial<Omit<LayerStyle, "labels">>): void {
   // Higher zoom ⇒ smaller scale denominator, so MinScaleDenominator sets maxZoom.
   const minScale = toNum(nodeText(rule.MinScaleDenominator));
-  if (minScale !== null && minScale > 0) patch.maxZoom = scaleToZoom(minScale);
+  patch.maxZoom =
+    minScale !== null && minScale > 0 ? scaleToZoom(minScale) : MAX_LAYER_ZOOM;
   const maxScale = toNum(nodeText(rule.MaxScaleDenominator));
-  if (maxScale !== null && maxScale > 0) patch.minZoom = scaleToZoom(maxScale);
+  patch.minZoom =
+    maxScale !== null && maxScale > 0 ? scaleToZoom(maxScale) : MIN_LAYER_ZOOM;
 }
 
 /** Apply a rule's recovered flat paint to the style patch. */
@@ -715,7 +723,6 @@ export function parseSld(xml: string): SldImportResult {
   return { style: patch, labels, warnings, matchedRuleCount };
 }
 
-/** Classify the render rules and write the renderer fields onto the patch. */
 /**
  * The per-rule color of an attribute-driven renderer: the fill for a
  * polygon/point layer, or the line stroke for a line-only layer (where the
@@ -726,6 +733,7 @@ function renderRuleColor(paint: RulePaint): string | undefined {
   return paint.fillColor ?? paint.strokeColor;
 }
 
+/** Classify the render rules and write the renderer fields onto the patch. */
 function classifyRenderRules(
   renderRules: RenderRule[],
   patch: Partial<Omit<LayerStyle, "labels">>,

@@ -158,6 +158,30 @@ describe("parseSld", () => {
     assert.equal(merged.labels.haloWidth, 0);
   });
 
+  it("resets the zoom window to the full range when no scale denominators", () => {
+    const result = parseSld(
+      sld(`<Rule>
+        <PolygonSymbolizer><Fill><CssParameter name="fill">#ffffff</CssParameter></Fill></PolygonSymbolizer>
+      </Rule>`),
+    );
+    // Absent Min/MaxScaleDenominator ⇒ default 0/24, clearing any prior limit.
+    assert.equal(result.style.minZoom, 0);
+    assert.equal(result.style.maxZoom, 24);
+  });
+
+  it("decodes XML entities in a rule Title (label)", () => {
+    const result = parseSld(
+      sld(`
+        <Rule><Title>Bars &amp; Grills</Title>
+          <ogc:Filter><ogc:PropertyIsGreaterThan><ogc:PropertyName>n</ogc:PropertyName><ogc:Literal>1</ogc:Literal></ogc:PropertyIsGreaterThan></ogc:Filter>
+          <PolygonSymbolizer><Fill><CssParameter name="fill">#ff0000</CssParameter></Fill></PolygonSymbolizer></Rule>
+        <Rule><ElseFilter/><PolygonSymbolizer><Fill><CssParameter name="fill">#dddddd</CssParameter></Fill></PolygonSymbolizer></Rule>
+      `),
+    );
+    assert.equal(result.style.vectorStyleMode, "rule-based");
+    assert.equal((result.style.vectorRules ?? [])[0].label, "Bars & Grills");
+  });
+
   it("recovers a zoom window from scale denominators", () => {
     const result = parseSld(
       sld(`<Rule>
