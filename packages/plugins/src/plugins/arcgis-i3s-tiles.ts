@@ -362,6 +362,14 @@ function buildArcgisI3sTilesDeckLayer(layer: GeoLibreLayer): Layer | null {
     // deck.gl's unbounded defaults (shared with the Google overlay).
     loadOptions: {
       tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
+      // Parse I3S content on the main thread instead of a loaders.gl worker.
+      // By default @loaders.gl/i3s pulls its i3s-content worker from the unpkg
+      // CDN at runtime (https://unpkg.com/@loaders.gl/i3s@x/dist/…-worker.js),
+      // which the Tauri desktop CSP (worker-src 'self' blob:, no unpkg in
+      // script-src) blocks — so tiles never render on the packaged app (and it
+      // would fail offline too). Disabling workers removes that external CDN
+      // dependency entirely; parsing runs in-process on every platform.
+      worker: false,
     },
     opacity: layer.opacity,
     pickable: false,

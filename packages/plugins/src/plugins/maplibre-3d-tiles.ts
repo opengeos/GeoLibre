@@ -1470,6 +1470,12 @@ function buildGooglePhotorealisticTilesDeckLayer(
     loadOptions: {
       fetch: requestHeaders ? { headers: requestHeaders } : undefined,
       tileset: THREE_D_TILES_TILESET_LOAD_LIMITS,
+      // Decode glTF tile content on the main thread. loaders.gl otherwise
+      // fetches its draco/basis-texture workers from the unpkg CDN at runtime,
+      // which the Tauri desktop CSP blocks (and which breaks offline use); this
+      // keeps parsing in-process on every platform. See the matching note in
+      // arcgis-i3s-tiles.ts.
+      worker: false,
     },
     opacity: layer.opacity,
     pickable: false,
