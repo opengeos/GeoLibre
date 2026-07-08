@@ -33,7 +33,9 @@ export function GpxSource() {
     Record<GpxLayerKind, boolean>
   >({
     routes: true,
+    routePoints: false,
     tracks: true,
+    trackPoints: false,
     waypoints: true,
   });
 
@@ -136,9 +138,19 @@ export function GpxSource() {
         label: t("addData.gpx.tracks"),
       },
       {
+        featureCollection: result.trackPoints,
+        kind: "trackPoints",
+        label: t("addData.gpx.trackPoints"),
+      },
+      {
         featureCollection: result.routes,
         kind: "routes",
         label: t("addData.gpx.routes"),
+      },
+      {
+        featureCollection: result.routePoints,
+        kind: "routePoints",
+        label: t("addData.gpx.routePoints"),
       },
     ];
     const layers = gpxLayerGroups
@@ -159,8 +171,10 @@ export function GpxSource() {
             featureCount: group.featureCollection.features.length,
             gpxLayerKind: group.kind,
             routeCount: result.routeCount,
+            routePointCount: result.routePointCount,
             sourceKind: "gpx",
             trackCount: result.trackCount,
+            trackPointCount: result.trackPointCount,
             waypointCount: result.waypointCount,
           },
         ),
@@ -271,12 +285,32 @@ export function GpxSource() {
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
+                checked={selectedGpxLayerKinds.trackPoints}
+                onChange={(event) =>
+                  setGpxLayerKindSelected("trackPoints", event.target.checked)
+                }
+              />
+              {t("addData.gpx.trackPoints")}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
                 checked={selectedGpxLayerKinds.routes}
                 onChange={(event) =>
                   setGpxLayerKindSelected("routes", event.target.checked)
                 }
               />
               {t("addData.gpx.routes")}
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selectedGpxLayerKinds.routePoints}
+                onChange={(event) =>
+                  setGpxLayerKindSelected("routePoints", event.target.checked)
+                }
+              />
+              {t("addData.gpx.routePoints")}
             </label>
           </div>
         </div>

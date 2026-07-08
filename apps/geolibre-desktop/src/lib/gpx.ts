@@ -11,6 +11,9 @@ export interface GpxLayerResult {
   routes: FeatureCollection<LineString>;
   /** Number of route features produced (routes with at least 2 valid points). */
   routeCount: number;
+  routePoints: FeatureCollection<Point>;
+  /** Number of individual route-point features produced (one per `<rtept>`). */
+  routePointCount: number;
   tracks: FeatureCollection<LineString>;
   /**
    * Number of track features produced. Each `<trkseg>` becomes its own
@@ -18,6 +21,9 @@ export interface GpxLayerResult {
    * than one to this count.
    */
   trackCount: number;
+  trackPoints: FeatureCollection<Point>;
+  /** Number of individual track-point features produced (one per `<trkpt>`). */
+  trackPointCount: number;
   waypoints: FeatureCollection<Point>;
   /** Number of waypoint features produced (waypoints with valid coordinates). */
   waypointCount: number;
@@ -80,7 +86,9 @@ export function parseGpxLayer(text: string): GpxLayerResult {
 
   const waypointFeatures: Feature<Point, GeoJsonProperties>[] = [];
   const routeFeatures: Feature<LineString, GeoJsonProperties>[] = [];
+  const routePointFeatures: Feature<Point, GeoJsonProperties>[] = [];
   const trackFeatures: Feature<LineString, GeoJsonProperties>[] = [];
+  const trackPointFeatures: Feature<Point, GeoJsonProperties>[] = [];
   const waypoints = directChildren(gpx, "wpt");
   const routes = directChildren(gpx, "rte");
   const tracks = directChildren(gpx, "trk");
@@ -104,6 +112,25 @@ export function parseGpxLayer(text: string): GpxLayerResult {
 
   for (const [index, route] of routes.entries()) {
     const routePoints = directChildren(route, "rtept");
+    let pointIndex = 0;
+    for (const point of routePoints) {
+      const coordinate = coordinateFromPoint(point);
+      if (!coordinate) continue;
+      pointIndex += 1;
+      routePointFeatures.push({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: coordinate,
+        },
+        properties: {
+          ...pointProperties(point),
+          gpx_index: pointIndex,
+          gpx_kind: "route_point",
+          route_index: index + 1,
+        },
+      } satisfies Feature<Point, GeoJsonProperties>);
+    }
     const coordinates = coordinatesFromPoints(routePoints);
     if (coordinates.length < 2) continue;
     routeFeatures.push({
@@ -125,6 +152,26 @@ export function parseGpxLayer(text: string): GpxLayerResult {
     const segments = directChildren(track, "trkseg");
     for (const [segmentIndex, segment] of segments.entries()) {
       const trackPoints = directChildren(segment, "trkpt");
+      let pointIndex = 0;
+      for (const point of trackPoints) {
+        const coordinate = coordinateFromPoint(point);
+        if (!coordinate) continue;
+        pointIndex += 1;
+        trackPointFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: coordinate,
+          },
+          properties: {
+            ...pointProperties(point),
+            gpx_index: pointIndex,
+            gpx_kind: "track_point",
+            track_index: trackIndex + 1,
+            segment_index: segmentIndex + 1,
+          },
+        } satisfies Feature<Point, GeoJsonProperties>);
+      }
       const coordinates = coordinatesFromPoints(trackPoints);
       if (coordinates.length < 2) continue;
       trackFeatures.push({
@@ -148,7 +195,9 @@ export function parseGpxLayer(text: string): GpxLayerResult {
   if (
     waypointFeatures.length === 0 &&
     routeFeatures.length === 0 &&
-    trackFeatures.length === 0
+    routePointFeatures.length === 0 &&
+    trackFeatures.length === 0 &&
+    trackPointFeatures.length === 0
   ) {
     throw new Error("No valid GPX waypoints, routes, or tracks were found.");
   }
@@ -159,11 +208,21 @@ export function parseGpxLayer(text: string): GpxLayerResult {
       features: routeFeatures,
     },
     routeCount: routeFeatures.length,
+    routePoints: {
+      type: "FeatureCollection",
+      features: routePointFeatures,
+    },
+    routePointCount: routePointFeatures.length,
     tracks: {
       type: "FeatureCollection",
       features: trackFeatures,
     },
     trackCount: trackFeatures.length,
+    trackPoints: {
+      type: "FeatureCollection",
+      features: trackPointFeatures,
+    },
+    trackPointCount: trackPointFeatures.length,
     waypoints: {
       type: "FeatureCollection",
       features: waypointFeatures,
