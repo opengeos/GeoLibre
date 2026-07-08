@@ -16,6 +16,18 @@ describe("parseKmlDate", () => {
     assert.equal(parseKmlDate("2020"), Date.parse("2020-01-01"));
   });
 
+  it("clamps Google Earth's YYYY-MM-00 month granularity to the 1st", () => {
+    // Google Earth Pro exports month-level dates as `2011-01-00`, which is not
+    // valid ISO and would otherwise parse to NaN (the Flood.kmz case).
+    assert.equal(parseKmlDate("2011-01-00"), Date.parse("2011-01-01"));
+    assert.equal(parseKmlDate("2011-07-00"), Date.parse("2011-07-01"));
+    assert.equal(parseKmlDate("2011-00-00"), Date.parse("2011-01-01"));
+  });
+
+  it("parses a year-month value", () => {
+    assert.equal(parseKmlDate("2011-07"), Date.parse("2011-07-01"));
+  });
+
   it("trims surrounding whitespace", () => {
     assert.equal(parseKmlDate("  2020-01-02  "), Date.parse("2020-01-02"));
   });

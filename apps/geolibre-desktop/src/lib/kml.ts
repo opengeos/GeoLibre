@@ -223,12 +223,25 @@ function parseKmlTime(element: Element): KmlTimeBounds | null {
 /**
  * Parse a KML date/dateTime string to epoch milliseconds, or null when missing
  * or unparseable. A bare year (`YYYY`) is normalized to `YYYY-01-01` so engines
- * that would otherwise read it as a millisecond count do not misinterpret it.
+ * that would otherwise read it as a millisecond count do not misinterpret it,
+ * and a `00` month or day component (Google Earth Pro exports month granularity
+ * as `YYYY-MM-00`, which is not valid ISO) is clamped to `01`.
  */
 export function parseKmlDate(value: string | undefined): number | null {
   if (!value) return null;
   const trimmed = value.trim();
-  const normalized = /^\d{4}$/.test(trimmed) ? `${trimmed}-01-01` : trimmed;
+  let normalized = trimmed;
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})(.*)$/.exec(trimmed);
+  const ym = /^(\d{4})-(\d{2})$/.exec(trimmed);
+  if (/^\d{4}$/.test(trimmed)) {
+    normalized = `${trimmed}-01-01`;
+  } else if (ym) {
+    normalized = `${ym[1]}-${ym[2] === "00" ? "01" : ym[2]}-01`;
+  } else if (ymd) {
+    const month = ymd[2] === "00" ? "01" : ymd[2];
+    const day = ymd[3] === "00" ? "01" : ymd[3];
+    normalized = `${ymd[1]}-${month}-${day}${ymd[4]}`;
+  }
   const ms = Date.parse(normalized);
   return Number.isNaN(ms) ? null : ms;
 }
