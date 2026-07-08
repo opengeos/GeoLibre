@@ -1,7 +1,8 @@
 // Pure SQL/geometry-column helpers shared by the DuckDB vector loader and the
 // GeoParquet writer. Kept free of `@duckdb/duckdb-wasm` (and its Vite `?url`
 // imports) so the detection logic can be unit-tested under plain Node.
-import type { FeatureCollection } from "geojson";
+import type { Feature, FeatureCollection, Geometry } from "geojson";
+import { decodeWkb } from "./geometry-wkb";
 
 const TARGET_CRS = "EPSG:4326";
 
@@ -21,6 +22,110 @@ export const WKB_GEOMETRY_COLUMN_NAMES = new Set([
 
 export function quoteSqlString(value: string): string {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+// ISO WKB base type codes of the surface geometries decodeWkb can now turn into
+// a MultiPolygon/Polygon: PolyhedralSurface (15), TIN (16), Triangle (17). The
+// Z/M variants (1015-1017, 2015-2017, 3015-3017) share these `code % 1000`.
+const SURFACE_WKB_TYPE_CODES = new Set([15, 16, 17]);
+
+/**
+ * True when a DuckDB query failed specifically because its Spatial WKB reader
+ * cannot represent a **surface** geometry (TIN / PolyhedralSurface / Triangle) —
+ * the encoding GDAL emits for ESRI MultiPatch shapefiles (3D buildings), e.g.
+ * `Could not parse WKB input: WKB type 'TIN Z' is not supported! (type id: 1016,
+ * SRID: 0)`. Only these surfaces trigger the (more expensive) raw-WKB fallback,
+ * which {@link decodeWkb} can decode.
+ *
+ * Curved geometries (CircularString, CompoundCurve, CurvePolygon, MultiCurve,
+ * MultiSurface — codes 8-12) raise the same "WKB type ... is not supported"
+ * template but stay undecodable, so they are deliberately excluded: routing them
+ * into the fallback would silently produce an empty (all-null-geometry) layer
+ * instead of failing loudly. The match therefore requires a surface type name or
+ * a surface type id (15/16/17) in the message, not just the generic error shape.
+ *
+ * @param error The thrown value from a DuckDB query.
+ */
+export function isUnsupportedSurfaceWkbError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const lower = message.toLowerCase();
+  const isUnsupportedWkb =
+    lower.includes("could not parse wkb") ||
+    (lower.includes("wkb type") && lower.includes("not supported"));
+  if (!isUnsupportedWkb) return false;
+  // Prefer the numeric type id when present (unambiguous); otherwise fall back
+  // to the type name DuckDB quotes in the message.
+  const idMatch = message.match(/type id:\s*(\d+)/i);
+  if (idMatch) {
+    return SURFACE_WKB_TYPE_CODES.has(Number(idMatch[1]) % 1000);
+  }
+  // Match the type name DuckDB quotes (e.g. 'TIN Z', 'PolyhedralSurface Z',
+  // 'Triangle'). `tin` needs word boundaries so it does not match substrings
+  // like "casting"; `polyhedral`/`triangle` are distinctive enough as-is (and
+  // "PolyhedralSurface" has no boundary before "Surface").
+  return /\btin\b|polyhedral|triangle/i.test(message);
+}
+
+/**
+ * Normalize a DuckDB cell value into a JSON-serializable GeoJSON property:
+ * BigInt to a safe number (or string when it would lose precision), Date to an
+ * ISO string, and arrays/objects recursively.
+ */
+export function normalizePropertyValue(value: unknown): unknown {
+  if (typeof value === "bigint") {
+    const numberValue = Number(value);
+    return Number.isSafeInteger(numberValue) ? numberValue : value.toString();
+  }
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(normalizePropertyValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        normalizePropertyValue(item),
+      ]),
+    );
+  }
+  return value;
+}
+
+/**
+ * Build a FeatureCollection from `keep_wkb=true` rows, decoding each row's raw
+ * WKB blob with {@link decodeWkb} (which maps TIN / PolyhedralSurface surfaces
+ * to a MultiPolygon). A blob that cannot be decoded yields a null geometry
+ * rather than aborting the whole file, and the WKB column is dropped from the
+ * feature's properties.
+ *
+ * @param rows Rows from a `SELECT * FROM ST_Read(..., keep_wkb=true)` query.
+ * @param wkbColumn The name of the WKB BLOB geometry column.
+ */
+export function wkbRowsToFeatureCollection(
+  rows: Record<string, unknown>[],
+  wkbColumn: string,
+): FeatureCollection<Geometry | null> {
+  const features = rows.map((row) => {
+    const rawWkb = row[wkbColumn];
+    let geometry: Geometry | null = null;
+    if (rawWkb instanceof Uint8Array && rawWkb.length > 0) {
+      try {
+        geometry = decodeWkb(rawWkb);
+      } catch (error) {
+        // One malformed/unrepresentable geometry must not fail the whole layer.
+        console.warn("[GeoLibre] Skipped an undecodable WKB geometry.", error);
+      }
+    }
+    const properties: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (key === wkbColumn || value instanceof Uint8Array) continue;
+      properties[key] = normalizePropertyValue(value);
+    }
+    return {
+      type: "Feature",
+      geometry,
+      properties,
+    } satisfies Feature<Geometry | null>;
+  });
+  return { type: "FeatureCollection", features };
 }
 
 export function quoteIdentifier(value: string): string {
