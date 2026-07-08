@@ -175,6 +175,15 @@ export function ControlsMenu({
               onCommit={onCommitEffectsSettings}
             />
           )}
+          {show("controls.sun") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.sunTooltip")}
+              onSelect={panels.sun.toggle}
+            >
+              {t("toolbar.item.sun")}
+              {panels.sun.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
           {show("controls.spinGlobe") && (
             <DropdownMenuItem onSelect={handleSpinGlobe}>
               {t("toolbar.item.spinGlobe")}
@@ -185,15 +194,6 @@ export function ControlsMenu({
             <DropdownMenuItem onClick={onToggleGraticule}>
               {t("toolbar.item.graticule")}
               {graticuleActive ? " ✓" : ""}
-            </DropdownMenuItem>
-          )}
-          {show("controls.sun") && (
-            <DropdownMenuItem
-              title={t("toolbar.item.sunTooltip")}
-              onSelect={panels.sun.toggle}
-            >
-              {t("toolbar.item.sun")}
-              {panels.sun.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.directions") && (

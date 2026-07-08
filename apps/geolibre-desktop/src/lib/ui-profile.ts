@@ -265,9 +265,9 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Basic so Beginners keep the toggle: Atmospheric Effects is activeByDefault,
   // so hiding it would leave the effect on with no way to turn it off.
   { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "basic" },
+  { id: "controls.sun", menuId: "controls", labelKey: "toolbar.item.sun", tier: "intermediate" },
   { id: "controls.spinGlobe", menuId: "controls", labelKey: "toolbar.item.spinGlobe", tier: "intermediate" },
   { id: "controls.graticule", menuId: "controls", labelKey: "toolbar.item.graticule", tier: "intermediate" },
-  { id: "controls.sun", menuId: "controls", labelKey: "toolbar.item.sun", tier: "intermediate" },
   { id: "controls.directions", menuId: "controls", labelKey: "toolbar.item.directions", tier: "intermediate" },
   { id: "controls.reverseGeocode", menuId: "controls", labelKey: "toolbar.item.reverseGeocode", tier: "intermediate" },
   { id: "controls.search", menuId: "controls", labelKey: "toolbar.item.search", tier: "basic" },
