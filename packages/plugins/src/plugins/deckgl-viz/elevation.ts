@@ -81,13 +81,20 @@ export function buildElevation3dLayer(
   const rawOffset = styleValue(style, "elevation3dOffset");
   const verticalScale = Number.isFinite(rawScale) ? rawScale : 1;
   const offset = Number.isFinite(rawOffset) ? rawOffset : 0;
+  const geojson = layer.geojson as FeatureCollection;
+  // GeoJsonLayer forwards getLineWidth/lineWidthUnits to the point sublayer's
+  // circle outline too, but the Style panel treats point-only layers as
+  // always pixel-stroked (its meters semantics only cover line/polygon
+  // outlines, matching the 2D MapLibre render). Force pixels for point-only
+  // data so a stale "meters" unit cannot render outlines at map scale.
+  const pointOnly = geojson.features.every(
+    (feature) =>
+      feature.geometry?.type === "Point" ||
+      feature.geometry?.type === "MultiPoint",
+  );
   return new deckGL.layers.GeoJsonLayer({
     id: layer.id,
-    data: elevationData(
-      layer.geojson as FeatureCollection,
-      verticalScale,
-      offset,
-    ),
+    data: elevationData(geojson, verticalScale, offset),
     filled: true,
     stroked: true,
     extruded: false,
@@ -98,7 +105,9 @@ export function buildElevation3dLayer(
     getLineColor: colorToRgba(styleValue(style, "strokeColor"), 1),
     getLineWidth: styleValue(style, "strokeWidth"),
     lineWidthUnits:
-      styleValue(style, "strokeWidthUnit") === "meters" ? "meters" : "pixels",
+      !pointOnly && styleValue(style, "strokeWidthUnit") === "meters"
+        ? "meters"
+        : "pixels",
     lineWidthMinPixels: 1,
     lineBillboard: true,
     getPointRadius: styleValue(style, "circleRadius"),

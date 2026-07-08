@@ -365,6 +365,31 @@ describe("buildElevation3dLayer", () => {
     assert.equal(built.props.lineWidthUnits, "meters");
   });
 
+  it("forces pixel widths for point-only data even with a meters unit", () => {
+    const layer = geojsonLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        elevation3dEnabled: true,
+        strokeWidthUnit: "meters",
+      },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [6.86, 45.83, 1035] },
+          },
+        ],
+      },
+    });
+    const built = buildElevation3dLayer(
+      fakeDeckGL,
+      layer,
+    ) as unknown as FakeGeoJsonLayer;
+    assert.equal(built.props.lineWidthUnits, "pixels");
+  });
+
   it("rescales Z values when exaggeration or offset are set", () => {
     const layer = geojsonLayer({
       style: {
