@@ -1469,8 +1469,26 @@ export class MapController {
     const nextSignature = this.createLayerControlSignature(layerControlConfig);
     if (nextSignature === this.layerControlSignature) return;
 
+    // Capture the control's spot in its corner before the remove/re-add. The
+    // LayerControl's layer list is fixed at construction, so a refresh must
+    // rebuild it — but MapLibre's addControl re-appends to the end of the
+    // corner, which would drop the control below any controls inserted after it
+    // (e.g. a terrain control the user enabled post-load), visibly reordering
+    // the stack on every basemap/style change. Re-anchor it to its old sibling.
+    const container = this.map.getContainer();
+    const previous = container.querySelector(".maplibregl-ctrl-layer-control");
+    const anchor = previous?.nextElementSibling ?? null;
+    const parent = previous?.parentElement ?? null;
+
     this.removeLayerControl();
     this.addLayerControl();
+
+    if (parent && (anchor === null || anchor.parentElement === parent)) {
+      const refreshed = container.querySelector(".maplibregl-ctrl-layer-control");
+      if (refreshed && refreshed !== anchor) {
+        parent.insertBefore(refreshed, anchor);
+      }
+    }
   }
 
   private syncLayerControlState(): void {
