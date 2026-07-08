@@ -314,7 +314,7 @@ export function syncLayer(
     // the flag never leaves a layer invisible; the Z scan is cached per
     // GeoJSON object.
     if (
-      styleValue(layer.style, "elevation3dEnabled") &&
+      styleValue(layer.style, "elevation3dEnabled") === true &&
       geojsonHasZCoordinates(layer.geojson)
     ) {
       removeLayerFromMap(map, layer.id, layer);
