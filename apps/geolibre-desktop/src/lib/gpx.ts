@@ -12,7 +12,10 @@ export interface GpxLayerResult {
   /** Number of route features produced (routes with at least 2 valid points). */
   routeCount: number;
   routePoints: FeatureCollection<Point>;
-  /** Number of individual route-point features produced (one per `<rtept>`). */
+  /**
+   * Number of individual route-point features produced (one per `<rtept>` with
+   * valid coordinates; points with missing/invalid lat/lon are skipped).
+   */
   routePointCount: number;
   tracks: FeatureCollection<LineString>;
   /**
@@ -22,7 +25,10 @@ export interface GpxLayerResult {
    */
   trackCount: number;
   trackPoints: FeatureCollection<Point>;
-  /** Number of individual track-point features produced (one per `<trkpt>`). */
+  /**
+   * Number of individual track-point features produced (one per `<trkpt>` with
+   * valid coordinates; points with missing/invalid lat/lon are skipped).
+   */
   trackPointCount: number;
   waypoints: FeatureCollection<Point>;
   /** Number of waypoint features produced (waypoints with valid coordinates). */
@@ -199,7 +205,9 @@ export function parseGpxLayer(text: string): GpxLayerResult {
     trackFeatures.length === 0 &&
     trackPointFeatures.length === 0
   ) {
-    throw new Error("No valid GPX waypoints, routes, or tracks were found.");
+    throw new Error(
+      "No valid GPX waypoints, routes, tracks, or track/route points were found.",
+    );
   }
 
   return {
