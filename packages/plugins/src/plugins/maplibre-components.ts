@@ -1207,6 +1207,19 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       return null;
     }),
   ]).then(([components, splat]) => {
+    // A `vite:preloadError` handler that calls preventDefault() makes the
+    // failed dynamic import RESOLVE to `undefined` instead of rejecting. The
+    // stale-chunk reload guard (installStaleChunkReload) does exactly this when
+    // it defers a reload to protect unsaved work: a chunk orphaned by a
+    // redeploy then fails, but the reload is withheld. Destructuring that
+    // `undefined` module throws the cryptic "Cannot destructure property
+    // 'AddVectorControl' of 'undefined'"; turn it into a clear, actionable
+    // error (the .catch below keeps it from poisoning the shared singleton).
+    if (!components) {
+      throw new Error(
+        "The map controls could not be loaded, most likely because the app was updated in the background. Reload the page to finish loading them."
+      );
+    }
     const {
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
@@ -1259,6 +1272,15 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
     };
+  }).catch((error: unknown) => {
+    // Never memoize a failure. This shared singleton backs every component
+    // control (COG, FlatGeobuf, PMTiles, Zarr, Bookmark, Measure, Minimap,
+    // Search, Print, ...), so a cached rejection would break all of them for
+    // the life of the page. Clearing it lets the next action retry the import
+    // once the cause clears (a transient chunk-load hiccup, or a reload after a
+    // redeploy).
+    componentsConstructorsPromise = null;
+    throw error;
   });
   return componentsConstructorsPromise;
 };
