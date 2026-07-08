@@ -143,29 +143,17 @@ export function parseGpxLayer(
 
   for (const [index, route] of routes.entries()) {
     const routePointElements = directChildren(route, "rtept");
-    // Parse each coordinate once, reusing it for both the line and (when
-    // requested) the per-point features. `gpx_index` mirrors the point's
-    // position in the source `<rtept>` list (index + 1), matching waypoints.
-    const coordinates: Position[] = [];
-    for (const [pointIndex, point] of routePointElements.entries()) {
-      const coordinate = coordinateFromPoint(point);
-      if (!coordinate) continue;
-      coordinates.push(coordinate);
-      if (!includeRoutePoints) continue;
-      routePointFeatures.push({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: coordinate,
-        },
-        properties: {
-          ...pointProperties(point),
-          gpx_index: pointIndex + 1,
-          gpx_kind: "route_point",
-          route_index: index + 1,
-        },
-      } satisfies Feature<Point, GeoJsonProperties>);
-    }
+    const { coordinates, pointFeatures } = collectLinePoints(
+      routePointElements,
+      includeRoutePoints,
+      (point, pointIndex) => ({
+        ...pointProperties(point),
+        gpx_index: pointIndex + 1,
+        gpx_kind: "route_point",
+        route_index: index + 1,
+      }),
+    );
+    routePointFeatures.push(...pointFeatures);
     validRoutePointCount += coordinates.length;
     if (coordinates.length < 2) continue;
     routeFeatures.push({
@@ -187,30 +175,18 @@ export function parseGpxLayer(
     const segments = directChildren(track, "trkseg");
     for (const [segmentIndex, segment] of segments.entries()) {
       const trackPointElements = directChildren(segment, "trkpt");
-      // Parse each coordinate once, reusing it for both the line and (when
-      // requested) the per-point features. `gpx_index` mirrors the point's
-      // position in the source `<trkpt>` list (index + 1), matching waypoints.
-      const coordinates: Position[] = [];
-      for (const [pointIndex, point] of trackPointElements.entries()) {
-        const coordinate = coordinateFromPoint(point);
-        if (!coordinate) continue;
-        coordinates.push(coordinate);
-        if (!includeTrackPoints) continue;
-        trackPointFeatures.push({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: coordinate,
-          },
-          properties: {
-            ...pointProperties(point),
-            gpx_index: pointIndex + 1,
-            gpx_kind: "track_point",
-            track_index: trackIndex + 1,
-            segment_index: segmentIndex + 1,
-          },
-        } satisfies Feature<Point, GeoJsonProperties>);
-      }
+      const { coordinates, pointFeatures } = collectLinePoints(
+        trackPointElements,
+        includeTrackPoints,
+        (point, pointIndex) => ({
+          ...pointProperties(point),
+          gpx_index: pointIndex + 1,
+          gpx_kind: "track_point",
+          track_index: trackIndex + 1,
+          segment_index: segmentIndex + 1,
+        }),
+      );
+      trackPointFeatures.push(...pointFeatures);
       validTrackPointCount += coordinates.length;
       if (coordinates.length < 2) continue;
       trackFeatures.push({
@@ -326,6 +302,40 @@ function coordinateFromPoint(point: GpxPointElement): Position | null {
   const elevation = Number(childText(point, "ele"));
   if (Number.isFinite(elevation)) return [longitude, latitude, elevation];
   return [longitude, latitude];
+}
+
+/**
+ * Walk a list of GPX point elements (`<rtept>` or `<trkpt>`) once, collecting
+ * the valid coordinates for the line geometry and, when `includePoints` is set,
+ * a Point feature per valid element. `pointIndex` passed to `makeProperties` is
+ * the element's original position in the list (0-based), so callers can mirror
+ * the source ordering (gaps included) the way waypoints do.
+ */
+function collectLinePoints(
+  elements: Element[],
+  includePoints: boolean,
+  makeProperties: (point: Element, pointIndex: number) => GeoJsonProperties,
+): {
+  coordinates: Position[];
+  pointFeatures: Feature<Point, GeoJsonProperties>[];
+} {
+  const coordinates: Position[] = [];
+  const pointFeatures: Feature<Point, GeoJsonProperties>[] = [];
+  for (const [pointIndex, point] of elements.entries()) {
+    const coordinate = coordinateFromPoint(point);
+    if (!coordinate) continue;
+    coordinates.push(coordinate);
+    if (!includePoints) continue;
+    pointFeatures.push({
+      type: "Feature",
+      geometry: {
+        type: "Point",
+        coordinates: coordinate,
+      },
+      properties: makeProperties(point, pointIndex),
+    } satisfies Feature<Point, GeoJsonProperties>);
+  }
+  return { coordinates, pointFeatures };
 }
 
 function numericValue(value: string): string | number {
