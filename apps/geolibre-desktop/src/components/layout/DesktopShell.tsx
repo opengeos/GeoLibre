@@ -29,6 +29,7 @@ import {
   setViewStateLabels,
   startLayerGeometryEdit,
   subscribeGeometryEdit,
+  TIME_SLIDER_PLUGIN_ID,
 } from "@geolibre/plugins";
 import { convertGeoTiffToCog, isTiff, readGeoTiffInfo } from "@geolibre/processing";
 import {
@@ -77,6 +78,7 @@ import {
   createAppAPI,
   getPluginManager,
   useExternalPluginsReady,
+  usePluginRegistry,
   useProjectPluginTrust,
   useSwipeSplitViewExclusivity,
 } from "../../hooks/usePlugins";
@@ -476,6 +478,8 @@ export function DesktopShell({
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
   const addLayerGroup = useAppStore((s) => s.addLayerGroup);
+  const { isActive: isPluginActive, toggle: togglePlugin } =
+    usePluginRegistry();
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
@@ -1023,8 +1027,17 @@ export function DesktopShell({
 
       // Gather each time-animated overlay's frames into one collapsible group so
       // the sequence reads as a single timeline entry, not N stacked layers.
+      let hasTimeAnimation = false;
       for (const ids of frameGroups.values()) {
-        if (ids.length > 1) addLayerGroup(t("kml.timeOverlayGroup"), ids);
+        if (ids.length > 1) {
+          addLayerGroup(t("kml.timeOverlayGroup"), ids);
+          hasTimeAnimation = true;
+        }
+      }
+      // Auto-open the Time Slider so a time-animated overlay sequence can be
+      // stepped through immediately, without the user hunting for the plugin.
+      if (hasTimeAnimation && !isPluginActive(TIME_SLIDER_PLUGIN_ID)) {
+        togglePlugin(TIME_SLIDER_PLUGIN_ID, createAppAPI(mapControllerRef));
       }
 
       const importedLayer = useAppStore
@@ -1032,7 +1045,14 @@ export function DesktopShell({
         .layers.find((layer) => layer.id === lastLayerId);
       if (importedLayer) mapControllerRef.current?.fitLayer(importedLayer);
     },
-    [addGeoJsonLayer, addImageOverlayLayer, addLayerGroup, t],
+    [
+      addGeoJsonLayer,
+      addImageOverlayLayer,
+      addLayerGroup,
+      isPluginActive,
+      togglePlugin,
+      t,
+    ],
   );
 
   const addDroppedPhotos = useCallback(
