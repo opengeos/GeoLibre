@@ -1018,6 +1018,23 @@ export class MapController {
         return;
       }
     }
+    // A glTF scenegraph model (e.g. a KML `<Model>`) is a 3D object: viewed
+    // straight down it is edge-on and effectively invisible (a vertical
+    // geological cross-section shows as a hairline). Frame it at a tilt so it
+    // reads as a 3D object on load, pulling back slightly so its vertical extent
+    // fits. The user can flatten the pitch afterward.
+    if (layer.metadata.customLayerType === "scenegraph") {
+      const camera = this.map.cameraForBounds(box, { padding: 40 });
+      if (camera?.center && typeof camera.zoom === "number") {
+        this.map.flyTo({
+          center: camera.center,
+          zoom: Math.max(camera.zoom - 0.75, 0),
+          pitch: 60,
+          duration: 800,
+        });
+        return;
+      }
+    }
     this.map.fitBounds(box, { padding: 40, duration: 800 });
   }
 
