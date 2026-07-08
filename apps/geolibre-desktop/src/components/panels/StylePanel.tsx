@@ -1235,14 +1235,16 @@ export function StylePanel({
   );
   // Whether the layer's coordinates carry real Z values (e.g. GPX track
   // elevations), which unlocks the "3D (Z values)" visualization mode.
-  // Memoized because the scan touches every coordinate when no Z is present.
-  // Kept before the early returns below so the hook order stays stable.
+  // Memoized on the geojson reference (not the layer object, which is
+  // recreated on every style edit) because the scan touches every coordinate
+  // when no Z is present. Kept before the early returns below so the hook
+  // order stays stable.
   const supportsElevation3d = useMemo(
     () =>
       layer?.type === "geojson" && layer.geojson
         ? geojsonHasZCoordinates(layer.geojson)
         : false,
-    [layer],
+    [layer?.type, layer?.geojson],
   );
 
   const resizeHandle = (
@@ -3004,7 +3006,7 @@ export function StylePanel({
   const elevation3dControls = (
     <>
       <div className="space-y-2">
-        <Label htmlFor="fillColor">Fill color</Label>
+        <Label htmlFor="fillColor">{t("style.elevation3d.fillColor")}</Label>
         <ColorField
           id="fillColor"
           value={style.fillColor}
@@ -3016,7 +3018,9 @@ export function StylePanel({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="strokeColor">Outline color</Label>
+        <Label htmlFor="strokeColor">
+          {t("style.elevation3d.outlineColor")}
+        </Label>
         <ColorField
           id="strokeColor"
           value={style.strokeColor}
@@ -3029,7 +3033,7 @@ export function StylePanel({
       </div>
       <NumericStyleInput
         id="strokeWidth"
-        label="Stroke width"
+        label={t("style.elevation3d.strokeWidth")}
         min={0}
         max={20}
         step={0.5}
@@ -3038,7 +3042,7 @@ export function StylePanel({
       />
       <NumericStyleInput
         id="fillOpacity"
-        label="Fill opacity"
+        label={t("style.elevation3d.fillOpacity")}
         min={0}
         max={1}
         step={0.05}
@@ -3048,7 +3052,7 @@ export function StylePanel({
       {geometryFlags.hasPoint ? (
         <NumericStyleInput
           id="circleRadius"
-          label="Circle radius"
+          label={t("style.elevation3d.circleRadius")}
           min={1}
           max={50}
           step={1}
@@ -3291,7 +3295,10 @@ export function StylePanel({
             right edge of a control (e.g. the "Transparent" label). */}
         <div className="space-y-4 p-3 pr-5">
           {beforeIdControl}
-          {zoomRangeControls}
+          {/* The 3D Z-value render (deck.gl) does not honor the MapLibre
+              min/max zoom range, so hide the controls rather than show a
+              silently-ignored setting. */}
+          {!elevation3dEnabled && zoomRangeControls}
           {hasExtrusionControls && (
             <div className="space-y-2">
               <Label>Visualization</Label>

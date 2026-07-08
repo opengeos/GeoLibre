@@ -216,6 +216,21 @@ describe("buildElevation3dLayer", () => {
     assert.equal(built.props.data, layer.geojson);
   });
 
+  it("honors a meter-based stroke width unit", () => {
+    const layer = geojsonLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        elevation3dEnabled: true,
+        strokeWidthUnit: "meters",
+      },
+    });
+    const built = buildElevation3dLayer(
+      fakeDeckGL,
+      layer,
+    ) as unknown as FakeGeoJsonLayer;
+    assert.equal(built.props.lineWidthUnits, "meters");
+  });
+
   it("rescales Z values when exaggeration or offset are set", () => {
     const layer = geojsonLayer({
       style: {

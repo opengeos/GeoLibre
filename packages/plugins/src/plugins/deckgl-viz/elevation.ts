@@ -91,7 +91,8 @@ export function buildElevation3dLayer(
     ),
     getLineColor: colorToRgba(styleValue(style, "strokeColor"), 1),
     getLineWidth: styleValue(style, "strokeWidth"),
-    lineWidthUnits: "pixels",
+    lineWidthUnits:
+      styleValue(style, "strokeWidthUnit") === "meters" ? "meters" : "pixels",
     lineWidthMinPixels: 1,
     lineBillboard: true,
     getPointRadius: styleValue(style, "circleRadius"),

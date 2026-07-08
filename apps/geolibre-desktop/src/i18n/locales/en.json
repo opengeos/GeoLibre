@@ -2381,6 +2381,11 @@
     },
     "elevation3d": {
       "mode": "3D (Z values)",
+      "fillColor": "Fill color",
+      "outlineColor": "Outline color",
+      "strokeWidth": "Stroke width",
+      "fillOpacity": "Fill opacity",
+      "circleRadius": "Circle radius",
       "verticalScale": "Vertical exaggeration",
       "verticalScaleTooltip": "Multiplies each coordinate's Z value. 1 renders true elevations; larger values emphasize relief.",
       "offset": "Altitude offset (m)",
