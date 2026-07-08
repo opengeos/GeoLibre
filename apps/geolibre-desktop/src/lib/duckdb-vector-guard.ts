@@ -57,6 +57,14 @@ export interface DuckDbVectorLoadOptions {
    * falls back to the file's own CRS.
    */
   overrideSourceCrs?: string;
+  /**
+   * Skip the KML/KMZ `<Model>` (COLLADA→GLB) conversion, returning only the
+   * vector features. Set by callers that discard models anyway — e.g. re-reading
+   * a referenced (not embedded) local layer's features on project reopen — so
+   * they don't pay for the expensive conversion (or a remote-mesh fetch) they
+   * never use.
+   */
+  skipModels?: boolean;
 }
 
 /**

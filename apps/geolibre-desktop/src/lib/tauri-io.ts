@@ -845,7 +845,9 @@ async function modelsFromKmz(
   path: string,
 ): Promise<LoadedModel[]> {
   const parsed = kmlDocs
-    .filter((doc) => /<model[\s/>]/i.test(doc.text))
+    // `(?:\w+:)?` so a namespace-prefixed `<kml:Model>` (valid but rare) isn't
+    // filtered out before `parseKmlModels` (which matches by localName) runs.
+    .filter((doc) => /<(?:\w+:)?model[\s/>]/i.test(doc.text))
     .flatMap((doc) =>
       parseKmlModels(doc.text).map((model) => ({
         model,
@@ -913,6 +915,16 @@ async function fetchDaeAsGlbDataUrl(
       );
       return null;
     }
+    // Best-effort size guard before buffering the whole body (mirrors the
+    // Content-Length pre-check in `openRecentProjectFile`). A chunked response
+    // with no Content-Length still falls through to the post-read check below.
+    const contentLength = response.headers.get("content-length");
+    if (contentLength !== null && Number(contentLength) > MAX_DAE_SOURCE_BYTES) {
+      console.warn(
+        `Skipping a KML model: "${href}" is ${Math.round(Number(contentLength) / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+      );
+      return null;
+    }
     const daeText = await response.text();
     // Measure real byte size (not UTF-16 code units) so the cap matches the
     // archive path's `Uint8Array.length` check.
@@ -937,7 +949,9 @@ async function modelsFromKml(
   text: string,
   path: string,
 ): Promise<LoadedModel[]> {
-  if (!/<model[\s/>]/i.test(text)) return [];
+  // `(?:\w+:)?` so a namespace-prefixed `<kml:Model>` isn't skipped before
+  // `parseKmlModels` (which matches by localName) runs.
+  if (!/<(?:\w+:)?model[\s/>]/i.test(text)) return [];
   const parsed = parseKmlModels(text);
   const models: LoadedModel[] = [];
   for (const [index, model] of parsed.entries()) {
@@ -1021,7 +1035,9 @@ async function loadKmzLayers(
   // does not affect stacking.
   const layers: LoadedLayer[] = [
     ...(await groundOverlaysFromKmz(entries, kmlDocs, path)),
-    ...(await modelsFromKmz(entries, kmlDocs, path)),
+    // Skip the expensive COLLADA→GLB conversion when the caller only wants
+    // vector features (e.g. re-reading a referenced local layer on reopen).
+    ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
   ];
 
   // Declining the oversized-vector prompt must not throw away the archive's
@@ -2170,7 +2186,9 @@ export async function loadDroppedVectorFiles(
       // placemarks (which makes the vector load throw).
       const text = await file.text();
       const overlays = groundOverlaysFromKml(text, file.name);
-      const models = await modelsFromKml(text, file.name);
+      const models = options?.skipModels
+        ? []
+        : await modelsFromKml(text, file.name);
       // Overlays go under the placemarks (added first), matching the KMZ path.
       layers.push(...overlays, ...models);
       try {
@@ -2398,7 +2416,9 @@ export async function loadDroppedVectorPaths(
       // KML still contributes its overlays when the vector load throws.
       const kmlText = await readLocalFileText(path);
       const overlays = groundOverlaysFromKml(kmlText, path);
-      const models = await modelsFromKml(kmlText, path);
+      const models = options?.skipModels
+        ? []
+        : await modelsFromKml(kmlText, path);
       // Overlays go under the placemarks (added first), matching the KMZ path.
       layers.push(...overlays, ...models);
       try {
