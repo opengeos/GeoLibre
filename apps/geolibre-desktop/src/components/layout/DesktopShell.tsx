@@ -95,6 +95,7 @@ import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
+import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { MapContextMenu } from "./MapContextMenu";
 import { MapGrid } from "./MapGrid";
 import { RemoteCursorsOverlay } from "./RemoteCursorsOverlay";
@@ -945,6 +946,12 @@ export function DesktopShell({
     );
   }, [t, mapReadyGeneration]);
 
+  // Keep the on-map terrain control's tooltip translated (it lives outside
+  // React). Re-runs on controller (re)init and language change.
+  useEffect(() => {
+    mapControllerRef.current?.setTerrainLabel(t("terrainSettings.controlLabel"));
+  }, [t, mapReadyGeneration]);
+
   // Keep the Layer Swipe panel's grouped base-layer label translated. That
   // panel lives outside React and reads labels from the controller bridge, so
   // re-push on language change (t identity) and controller (re)init.
@@ -1735,6 +1742,7 @@ export function DesktopShell({
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>
           </SectionErrorBoundary>

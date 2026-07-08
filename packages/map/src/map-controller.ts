@@ -41,6 +41,7 @@ import {
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { ResetBearingControl } from "./reset-bearing-control";
+import { TerrainControl } from "./terrain-control";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -85,10 +86,17 @@ const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   attribution:
     'Elevation tiles by <a href="https://registry.opendata.aws/terrain-tiles/">AWS Open Data Terrain Tiles</a>',
 };
+const DEFAULT_TERRAIN_EXAGGERATION = 1;
 const TERRAIN_OPTIONS: maplibregl.TerrainSpecification = {
   source: TERRAIN_SOURCE_ID,
-  exaggeration: 1,
+  exaggeration: DEFAULT_TERRAIN_EXAGGERATION,
 };
+/**
+ * Window event dispatched when the terrain control is double-clicked, so the
+ * React layer can open the vertical-exaggeration dialog. The controller lives
+ * outside React, so it signals through a window event rather than a callback.
+ */
+export const TERRAIN_SETTINGS_EVENT = "geolibre:terrain-settings-open";
 const EMPTY_HIGHLIGHT: FeatureCollection = {
   type: "FeatureCollection",
   features: [],
@@ -254,7 +262,9 @@ export class MapController {
   private backgroundLabel = "Background";
   private geolocateControl: maplibregl.GeolocateControl | null = null;
   private globeControl: maplibregl.GlobeControl | null = null;
-  private terrainControl: maplibregl.TerrainControl | null = null;
+  private terrainControl: TerrainControl | null = null;
+  private terrainExaggeration = DEFAULT_TERRAIN_EXAGGERATION;
+  private terrainLabel = "Toggle terrain (double-click for exaggeration)";
   private scaleControl: maplibregl.ScaleControl | null = null;
   private attributionControl: maplibregl.AttributionControl | null = null;
   private logoControl: maplibregl.LogoControl | null = null;
@@ -2130,7 +2140,16 @@ export class MapController {
       return false;
     }
     this.addTerrainSource();
-    this.terrainControl = new maplibregl.TerrainControl(TERRAIN_OPTIONS);
+    this.terrainControl = new TerrainControl({
+      source: TERRAIN_SOURCE_ID,
+      exaggeration: this.terrainExaggeration,
+      label: this.terrainLabel,
+      // Double-clicking the button asks the React layer to open the
+      // vertical-exaggeration dialog (see TERRAIN_SETTINGS_EVENT).
+      onOpenSettings: () => {
+        window.dispatchEvent(new CustomEvent(TERRAIN_SETTINGS_EVENT));
+      },
+    });
     this.map.addControl(this.terrainControl, this.controlPositions.terrain);
     return true;
   }
@@ -2142,6 +2161,40 @@ export class MapController {
     if (!this.terrainControl) return;
     this.removeControl(this.terrainControl);
     this.terrainControl = null;
+  }
+
+  /** Whether 3D terrain is currently active. */
+  isTerrainEnabled(): boolean {
+    return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
+  }
+
+  /** Enable or disable 3D terrain (matches a single click on the control). */
+  setTerrainEnabled(enabled: boolean): void {
+    this.terrainControl?.setEnabled(enabled);
+  }
+
+  /** The current terrain vertical exaggeration. */
+  getTerrainExaggeration(): number {
+    return this.terrainExaggeration;
+  }
+
+  /**
+   * Set the terrain vertical exaggeration. Cached so it survives the control
+   * being re-added (Controls menu toggle, style reload) and applied live when
+   * terrain is already enabled.
+   */
+  setTerrainExaggeration(exaggeration: number): void {
+    this.terrainExaggeration = exaggeration;
+    this.terrainControl?.setExaggeration(exaggeration);
+  }
+
+  /**
+   * Update the terrain control's tooltip/aria label, e.g. after a UI language
+   * change. Cached so a re-added control picks up the latest translation.
+   */
+  setTerrainLabel(label: string): void {
+    this.terrainLabel = label;
+    this.terrainControl?.setLabel(label);
   }
 
   private addScaleControl(): boolean {

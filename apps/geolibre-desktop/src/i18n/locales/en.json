@@ -1046,6 +1046,14 @@
       "exit": "Stop"
     }
   },
+  "terrainSettings": {
+    "title": "Terrain exaggeration",
+    "description": "Adjust the vertical exaggeration of the 3D terrain. Higher values make hills and mountains appear steeper.",
+    "label": "Vertical exaggeration",
+    "controlLabel": "Toggle terrain (double-click for exaggeration)",
+    "reset": "Reset",
+    "done": "Done"
+  },
   "pixelTimeSeries": {
     "title": "Pixel time series",
     "empty": "Click a pixel on the map to plot its value over time. Add more pixels to compare.",

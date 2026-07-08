@@ -1,0 +1,167 @@
+import type maplibregl from "maplibre-gl";
+
+/**
+ * Clicks landing within this window of the previous one are treated as a
+ * double-click (open the exaggeration dialog) rather than two toggles.
+ */
+const DOUBLE_CLICK_MS = 250;
+
+export interface TerrainControlOptions {
+  /** The raster-DEM source id used to drive terrain. */
+  source: string;
+  /** Initial vertical exaggeration applied when terrain is enabled. */
+  exaggeration?: number;
+  /** Tooltip/aria label for the button. */
+  label?: string;
+  /**
+   * Invoked when the user double-clicks the button. Terrain is enabled first,
+   * so the caller can open a settings dialog whose exaggeration edits are
+   * immediately visible on the map.
+   */
+  onOpenSettings?: () => void;
+}
+
+/**
+ * A MapLibre control that toggles hillshaded 3D terrain, mirroring the built-in
+ * `maplibregl.TerrainControl` (it reuses the same icon classes) but adding a
+ * double-click gesture that opens a vertical-exaggeration dialog.
+ *
+ * A single click toggles terrain on/off; a double-click opens the exaggeration
+ * settings. Clicks are debounced by {@link DOUBLE_CLICK_MS} so a double-click
+ * never flickers terrain on and back off before the dialog appears.
+ */
+export class TerrainControl implements maplibregl.IControl {
+  private map: maplibregl.Map | null = null;
+  private container: HTMLDivElement | null = null;
+  private button: HTMLButtonElement | null = null;
+  private readonly source: string;
+  private exaggeration: number;
+  private label: string;
+  private readonly onOpenSettings?: () => void;
+  private clickTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(options: TerrainControlOptions) {
+    this.source = options.source;
+    this.exaggeration = options.exaggeration ?? 1;
+    this.label =
+      options.label ?? "Toggle terrain (double-click for exaggeration)";
+    this.onOpenSettings = options.onOpenSettings;
+  }
+
+  /** Keep the active (enabled) styling in sync when terrain changes elsewhere. */
+  private readonly handleTerrainChange = () => this.updateActiveState();
+
+  onAdd(map: maplibregl.Map): HTMLElement {
+    this.map = map;
+
+    const container = document.createElement("div");
+    container.className =
+      "maplibregl-ctrl maplibregl-ctrl-group geolibre-terrain-ctrl";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    // Reuse MapLibre's own class so the built-in terrain (mountain) icon and its
+    // enabled-state styling apply without shipping a duplicate icon.
+    button.className = "maplibregl-ctrl-terrain";
+    const icon = document.createElement("span");
+    icon.className = "maplibregl-ctrl-icon";
+    icon.setAttribute("aria-hidden", "true");
+    button.appendChild(icon);
+    button.addEventListener("click", this.handleClick);
+
+    container.appendChild(button);
+    this.container = container;
+    this.button = button;
+
+    map.on("terrain", this.handleTerrainChange);
+    this.applyLabel();
+    this.updateActiveState();
+
+    return container;
+  }
+
+  onRemove(): void {
+    if (this.clickTimer !== null) {
+      clearTimeout(this.clickTimer);
+      this.clickTimer = null;
+    }
+    this.map?.off("terrain", this.handleTerrainChange);
+    this.container?.remove();
+    this.container = null;
+    this.button = null;
+    this.map = null;
+  }
+
+  private readonly handleClick = () => {
+    // A second click within the double-click window opens the exaggeration
+    // dialog; a lone click toggles terrain once the window elapses. Debouncing
+    // (rather than toggling on every click) keeps a double-click from flickering
+    // terrain on and back off before the dialog appears.
+    if (this.clickTimer !== null) {
+      clearTimeout(this.clickTimer);
+      this.clickTimer = null;
+      this.openSettings();
+      return;
+    }
+    this.clickTimer = setTimeout(() => {
+      this.clickTimer = null;
+      this.setEnabled(!this.isEnabled());
+    }, DOUBLE_CLICK_MS);
+  };
+
+  private openSettings(): void {
+    // Enable terrain first so exaggeration edits are visible live in the dialog.
+    this.setEnabled(true);
+    this.onOpenSettings?.();
+  }
+
+  /** Whether 3D terrain backed by this control's DEM source is active. */
+  isEnabled(): boolean {
+    return this.map?.getTerrain()?.source === this.source;
+  }
+
+  setEnabled(enabled: boolean): void {
+    if (!this.map) return;
+    if (enabled) {
+      if (!this.isEnabled()) {
+        this.map.setTerrain({
+          source: this.source,
+          exaggeration: this.exaggeration,
+        });
+      }
+    } else if (this.isEnabled()) {
+      this.map.setTerrain(null);
+    }
+  }
+
+  getExaggeration(): number {
+    return this.exaggeration;
+  }
+
+  /** Update the vertical exaggeration, applying it live when terrain is on. */
+  setExaggeration(exaggeration: number): void {
+    this.exaggeration = exaggeration;
+    if (this.map && this.isEnabled()) {
+      this.map.setTerrain({ source: this.source, exaggeration });
+    }
+  }
+
+  /** Update the tooltip/aria label, e.g. after a UI language change. */
+  setLabel(label: string): void {
+    this.label = label;
+    this.applyLabel();
+  }
+
+  private applyLabel(): void {
+    if (!this.button) return;
+    this.button.title = this.label;
+    this.button.setAttribute("aria-label", this.label);
+  }
+
+  private updateActiveState(): void {
+    this.button?.classList.toggle(
+      "maplibregl-ctrl-terrain-enabled",
+      this.isEnabled(),
+    );
+  }
+}
