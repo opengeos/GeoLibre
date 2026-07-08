@@ -93,3 +93,97 @@ describe("decodeWkb", () => {
     assert.throws(() => decodeWkb(bytes), /Unsupported WKB geometry type 8/);
   });
 });
+
+/**
+ * ESRI MultiPatch shapefiles (3D buildings) come through DuckDB's bundled GDAL
+ * as TIN / Triangle / PolyhedralSurface WKB, which DuckDB Spatial's own reader
+ * rejects. `encodeWkb` cannot produce these, so the buffers are hand-built to
+ * prove {@link decodeWkb} maps each surface to a MultiPolygon/Polygon (issue
+ * #1121).
+ */
+describe("decodeWkb surface geometries", () => {
+  const littleEndianU32 = (value: number): number[] => [
+    value & 0xff,
+    (value >> 8) & 0xff,
+    (value >> 16) & 0xff,
+    (value >> 24) & 0xff,
+  ];
+  const littleEndianF64 = (value: number): number[] => {
+    const bytes = new Uint8Array(8);
+    new DataView(bytes.buffer).setFloat64(0, value, true);
+    return Array.from(bytes);
+  };
+  // A closed ring of [x, y, z] positions, serialized as a WKB linear ring.
+  const ring = (positions: [number, number, number][]): number[] => [
+    ...littleEndianU32(positions.length),
+    ...positions.flatMap(([x, y, z]) => [
+      ...littleEndianF64(x),
+      ...littleEndianF64(y),
+      ...littleEndianF64(z),
+    ]),
+  ];
+  // A WKB Triangle Z (type 1017): one exterior ring.
+  const triangle = (positions: [number, number, number][]): number[] => [
+    0x01,
+    ...littleEndianU32(1017),
+    ...littleEndianU32(1),
+    ...ring(positions),
+  ];
+  // A WKB Polygon Z (type 1003): one exterior ring.
+  const polygonZ = (positions: [number, number, number][]): number[] => [
+    0x01,
+    ...littleEndianU32(1003),
+    ...littleEndianU32(1),
+    ...ring(positions),
+  ];
+
+  const triA: [number, number, number][] = [
+    [0, 0, 10],
+    [1, 0, 10],
+    [1, 1, 10],
+    [0, 0, 10],
+  ];
+  const triB: [number, number, number][] = [
+    [1, 1, 20],
+    [2, 1, 20],
+    [2, 2, 20],
+    [1, 1, 20],
+  ];
+
+  it("decodes a Triangle Z to a Polygon, keeping Z", () => {
+    assert.deepEqual(decodeWkb(new Uint8Array(triangle(triA))), {
+      type: "Polygon",
+      coordinates: [triA],
+    });
+  });
+
+  it("decodes a TIN Z to a MultiPolygon (one polygon per triangle)", () => {
+    // TIN Z (type 1016) wrapping two Triangle patches.
+    const bytes = new Uint8Array([
+      0x01,
+      ...littleEndianU32(1016),
+      ...littleEndianU32(2),
+      ...triangle(triA),
+      ...triangle(triB),
+    ]);
+    assert.deepEqual(decodeWkb(bytes), {
+      type: "MultiPolygon",
+      coordinates: [[triA], [triB]],
+    });
+  });
+
+  it("decodes a PolyhedralSurface Z to a MultiPolygon", () => {
+    // PolyhedralSurface Z (type 1015) wrapping two Polygon patches.
+    const bytes = new Uint8Array([
+      0x01,
+      ...littleEndianU32(1015),
+      ...littleEndianU32(2),
+      ...polygonZ(triA),
+      ...polygonZ(triB),
+    ]);
+    assert.deepEqual(decodeWkb(bytes), {
+      type: "MultiPolygon",
+      coordinates: [[triA], [triB]],
+    });
+  });
+});

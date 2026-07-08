@@ -13,6 +13,7 @@ import {
   confirmLargeDataset,
   type DuckDbVectorLoadOptions,
 } from "./duckdb-vector-guard";
+import { decodeWkb } from "./geometry-wkb";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
 import { selectDuckDbBundle } from "./duckdb-wasm-bundles";
@@ -379,11 +380,22 @@ function crsSql(fileName: string): string {
       -- drives reprojection instead. A future multi-layer format that DOES embed
       -- per-layer CRS would need this query to look the chosen layer up by name.
       layers[1].geometry_fields[1].crs.auth_name AS auth_name,
-      layers[1].geometry_fields[1].crs.auth_code AS auth_code
+      layers[1].geometry_fields[1].crs.auth_code AS auth_code,
+      -- WKT is the reprojection fallback for a CRS that GDAL could not resolve to
+      -- an EPSG code (e.g. an ESRI .prj carrying a custom State Plane definition):
+      -- ST_Transform accepts a WKT string source just as it does AUTHORITY:CODE,
+      -- so the layer still reprojects to WGS84 instead of rendering in raw
+      -- projected coordinates. See issue #1121.
+      layers[1].geometry_fields[1].crs.wkt AS wkt
     FROM ST_Read_Meta(${quoteSqlString(fileName)})
   `;
 }
 
+/**
+ * Resolve the source CRS of a vector file as a string ST_Transform accepts —
+ * `AUTHORITY:CODE` when GDAL identified one, otherwise the raw WKT definition, or
+ * null when the file carries no usable CRS (so reprojection is skipped).
+ */
 async function readSourceCrs(
   connection: duckdb.AsyncDuckDBConnection,
   file: DuckDbVectorFile,
@@ -401,8 +413,11 @@ async function readSourceCrs(
     const authName =
       typeof row.auth_name === "string" ? row.auth_name.trim() : "";
     const authCode = row.auth_code != null ? String(row.auth_code).trim() : "";
-    if (!authName || !authCode) return null;
-    return `${authName.toUpperCase()}:${authCode}`;
+    if (authName && authCode) return `${authName.toUpperCase()}:${authCode}`;
+    // No EPSG identity: fall back to the raw WKT so a projected file without a
+    // recognised authority code still reprojects (issue #1121).
+    const wkt = typeof row.wkt === "string" ? row.wkt.trim() : "";
+    return wkt || null;
   } catch (err) {
     console.warn(
       "[GeoLibre] Could not read CRS metadata; reprojection skipped.",
@@ -629,11 +644,21 @@ export async function loadDuckDbVectorFile(
       geometryExpr(detected),
       sourceCrs,
     );
-    const result = await connection.query(
-      `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
-        GEOMETRY_JSON_COLUMN,
-      )} FROM (${sql}) AS data`,
-    );
+    let result: Awaited<ReturnType<typeof connection.query>>;
+    try {
+      result = await connection.query(
+        `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
+          GEOMETRY_JSON_COLUMN,
+        )} FROM (${sql}) AS data`,
+      );
+    } catch (error) {
+      // DuckDB Spatial's WKB reader rejects surface geometries (TIN /
+      // PolyhedralSurface), which its bundled GDAL emits for ESRI MultiPatch
+      // shapefiles (3D buildings). Re-read the raw WKB and decode it in JS,
+      // where TIN triangles become a MultiPolygon (issue #1121).
+      if (!isUnsupportedWkbGeometryError(error)) throw error;
+      return loadViaKeepWkbFallback(db, file, options, sourceCrs);
+    }
     // Features may carry a null geometry; the app's layer model treats them as
     // a regular FeatureCollection and the map ignores null geometries.
     return toFeatureCollection(
@@ -643,6 +668,111 @@ export async function loadDuckDbVectorFile(
   } finally {
     await connection.close();
   }
+}
+
+/**
+ * True when a query failed because DuckDB Spatial's WKB reader cannot represent
+ * the geometry — the "Could not parse WKB input: WKB type 'TIN Z' is not
+ * supported" error its bundled GDAL raises for ESRI MultiPatch (TIN /
+ * PolyhedralSurface) shapefiles. Kept narrow so only this case triggers the
+ * (more expensive) raw-WKB fallback; every other query error still propagates.
+ */
+function isUnsupportedWkbGeometryError(error: unknown): boolean {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  return (
+    message.includes("could not parse wkb") ||
+    (message.includes("wkb type") && message.includes("not supported"))
+  );
+}
+
+/**
+ * Load a vector file by re-reading its geometry as raw WKB (`keep_wkb=true`) and
+ * decoding it in JS, the fallback for surface geometries DuckDB Spatial cannot
+ * materialize as a GEOMETRY value (TIN / PolyhedralSurface from an ESRI
+ * MultiPatch shapefile). `keep_wkb` hands back GDAL's WKB export untouched, so
+ * the read succeeds where the normal path threw; {@link decodeWkb} then turns a
+ * TIN into a MultiPolygon. Reprojection to WGS84 runs afterwards on the decoded
+ * (now DuckDB-representable) MultiPolygon via the shared ST_Transform path.
+ *
+ * @param sourceCrs The source CRS resolved for the normal path (reused so the
+ *   fallback reprojects identically), as `AUTHORITY:CODE`, a WKT string, or null.
+ */
+async function loadViaKeepWkbFallback(
+  db: duckdb.AsyncDuckDB,
+  file: DuckDbVectorFile,
+  options: DuckDbVectorLoadOptions,
+  sourceCrs: string | null,
+): Promise<FeatureCollection> {
+  const layerArg = options.layer?.trim()
+    ? `, layer=${quoteSqlString(options.layer.trim())}`
+    : "";
+  // Read on a fresh connection: re-running ST_Read on the connection that
+  // already scanned the file trips a "Missing DB manager" GDAL assertion in the
+  // single-threaded WASM build. The file itself is already registered on the db.
+  const connection = await db.connect();
+  try {
+    await ensureSpatialExtension(db, connection);
+    const wkbSql =
+      `SELECT * FROM ST_Read(${quoteSqlString(file.name)}, keep_wkb=true${layerArg})`;
+    // With keep_wkb the geometry arrives as a WKB BLOB column (named
+    // `wkb_geometry`); detectGeometryColumn identifies it by name and type.
+    const detected = detectGeometryColumn(
+      rowsFromResult(await connection.query(`DESCRIBE ${wkbSql}`)),
+    );
+    if (!detected) {
+      throw new Error("DuckDB did not find a geometry column in this file.");
+    }
+    const rows = rowsFromResult(await connection.query(wkbSql));
+    // Null geometries are legal in a FeatureCollection; the map ignores them.
+    const collection = wkbRowsToFeatureCollection(
+      rows,
+      detected.column,
+    ) as FeatureCollection;
+    // The decoded geometry is in the file's own CRS; reproject to WGS84 with the
+    // same source CRS the normal path resolved. Reuses the shared ST_Transform
+    // path, which handles the MultiPolygon the TIN decoded to.
+    return reprojectFeatureCollectionToWgs84(collection, sourceCrs);
+  } finally {
+    await connection.close();
+  }
+}
+
+/**
+ * Build a FeatureCollection from `keep_wkb=true` rows, decoding each row's raw
+ * WKB blob with {@link decodeWkb} (which maps TIN / PolyhedralSurface surfaces
+ * to a MultiPolygon). A blob that cannot be decoded yields a null geometry
+ * rather than aborting the whole file, and the WKB column is dropped from the
+ * feature's properties.
+ */
+function wkbRowsToFeatureCollection(
+  rows: Record<string, unknown>[],
+  wkbColumn: string,
+): FeatureCollection<Geometry | null> {
+  const features = rows.map((row) => {
+    const rawWkb = row[wkbColumn];
+    let geometry: Geometry | null = null;
+    if (rawWkb instanceof Uint8Array && rawWkb.length > 0) {
+      try {
+        geometry = decodeWkb(rawWkb);
+      } catch (error) {
+        // One malformed/unrepresentable geometry must not fail the whole layer.
+        console.warn("[GeoLibre] Skipped an undecodable WKB geometry.", error);
+      }
+    }
+    const properties: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(row)) {
+      if (key === wkbColumn || value instanceof Uint8Array) continue;
+      properties[key] = normalizePropertyValue(value);
+    }
+    return {
+      type: "Feature",
+      geometry,
+      properties,
+    } satisfies Feature<Geometry | null>;
+  });
+  return { type: "FeatureCollection", features };
 }
 
 /** One OGR layer in a multi-layer source, as reported by `ST_Read_Meta`. */
@@ -743,12 +873,21 @@ function sourceCrsFromGeoJson(fc: FeatureCollection): string | null {
  * deprecated ``crs`` member stripped either way.
  *
  * @param fc The FeatureCollection to reproject.
+ * @param explicitSourceCrs When provided (the TIN/MultiPatch fallback, whose
+ *   decoded geometry carries no ``crs`` member), the source CRS as
+ *   `AUTHORITY:CODE` or a WKT string — both accepted by ST_Transform. `null`
+ *   skips reprojection; omit it to parse the CRS from the collection's own
+ *   member instead.
  * @returns A WGS84 FeatureCollection without a ``crs`` member.
  */
 export async function reprojectFeatureCollectionToWgs84(
   fc: FeatureCollection,
+  explicitSourceCrs?: string | null,
 ): Promise<FeatureCollection> {
-  const sourceCrs = sourceCrsFromGeoJson(fc);
+  const sourceCrs =
+    explicitSourceCrs !== undefined
+      ? explicitSourceCrs
+      : sourceCrsFromGeoJson(fc);
   const { crs: _deprecatedCrs, ...stripped } = fc as FeatureCollection & {
     crs?: unknown;
   };
@@ -758,7 +897,14 @@ export async function reprojectFeatureCollectionToWgs84(
   const connection = await db.connect();
   const sourceFile = `geolibre-reproject-${(reprojectionSeq += 1)}.geojson`;
   try {
-    await db.registerFileText(sourceFile, JSON.stringify(fc));
+    // Strip GDAL's synthetic OGC_FID before ST_Read re-reads the file: a
+    // collection decoded from a prior ST_Read carries OGC_FID as a property, and
+    // GDAL's GeoJSON driver would add a second one, aborting with
+    // `duplicate column name "OGC_FID"` (issue #499).
+    await db.registerFileText(
+      sourceFile,
+      JSON.stringify(stripAutoFidColumn(fc)),
+    );
     await ensureSpatialExtension(db, connection);
 
     const sql = `SELECT * FROM ST_Read(${quoteSqlString(sourceFile)})`;

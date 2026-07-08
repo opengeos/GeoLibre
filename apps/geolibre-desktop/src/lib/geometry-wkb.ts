@@ -135,7 +135,12 @@ export function encodeWkb(geometry: Geometry): Uint8Array {
  * Decode a standalone WKB (Well-Known Binary) buffer into a GeoJSON geometry.
  *
  * The inverse of {@link encodeWkb}, used to read GeoPackage geometry blobs
- * without GDAL (see `gpkg-reader.ts`). Handles mixed byte order, ISO WKB
+ * without GDAL (see `gpkg-reader.ts`) and to decode the raw WKB the DuckDB
+ * vector loader falls back to for surface geometries (TIN / PolyhedralSurface /
+ * Triangle, codes 15-17) that DuckDB Spatial's own WKB reader rejects — the
+ * encoding GDAL produces for ESRI MultiPatch shapefiles (issue #1121). Those
+ * surfaces have no GeoJSON equivalent, so each is exposed as a MultiPolygon (or
+ * Polygon, for a lone Triangle). Handles mixed byte order, ISO WKB
  * dimensionality (Z/M, where the type code is offset by 1000/2000/3000) and the
  * PostGIS EWKB Z/M/SRID high-bit flags. The M ordinate is dropped; Z is kept so
  * a `[x, y, z]` position survives. Throws on the curved geometry types
@@ -242,6 +247,36 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
       }
       case 7:
         return { type: "GeometryCollection", geometries: readChildren() };
+      case 15: {
+        // PolyhedralSurface: a set of polygon patches. GeoJSON has no surface
+        // type, so expose the patches as a MultiPolygon (each patch keeps its
+        // own header, so readChildren decodes them like the members of a
+        // MultiPolygon).
+        const patches = readChildren();
+        return {
+          type: "MultiPolygon",
+          coordinates: patches.map(
+            (patch) => (patch as { coordinates: Position[][] }).coordinates,
+          ),
+        };
+      }
+      case 16: {
+        // TIN (Triangulated Irregular Network): a set of Triangle patches, the
+        // encoding GDAL emits for an ESRI MultiPatch shapefile (3D buildings).
+        // Each triangle decodes to a Polygon (case 17), so the surface becomes a
+        // MultiPolygon that MapLibre/deck.gl can render (issue #1121).
+        const triangles = readChildren();
+        return {
+          type: "MultiPolygon",
+          coordinates: triangles.map(
+            (triangle) =>
+              (triangle as { coordinates: Position[][] }).coordinates,
+          ),
+        };
+      }
+      case 17:
+        // Triangle: a Polygon constrained to a single 4-vertex ring.
+        return { type: "Polygon", coordinates: readRings() };
       default:
         // Codes 8-12 are the curved geometries (CircularString, CompoundCurve,
         // CurvePolygon, MultiCurve, MultiSurface) that GeoJSON cannot represent.
