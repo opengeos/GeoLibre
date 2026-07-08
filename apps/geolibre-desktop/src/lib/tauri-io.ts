@@ -234,6 +234,11 @@ export interface LoadedModel {
   roll: number;
   /** `<Scale>` factors along the model's x/y/z axes. */
   scale: { x: number; y: number; z: number };
+  /**
+   * The model's extent in meters (max distance from its anchored origin to any
+   * bounding-box corner), used to frame it on load. `0` when unknown.
+   */
+  radiusMeters: number;
 }
 
 /**
@@ -760,7 +765,7 @@ function kmlModelName(
 
 function kmlModelLayer(
   model: KmlModel,
-  url: string,
+  converted: { url: string; radiusMeters: number },
   path: string,
   index: number,
   total: number,
@@ -769,7 +774,7 @@ function kmlModelLayer(
     kind: "model",
     name: kmlModelName(model, path, index, total),
     path,
-    url,
+    url: converted.url,
     longitude: model.longitude,
     latitude: model.latitude,
     altitude: model.altitude,
@@ -777,6 +782,7 @@ function kmlModelLayer(
     tilt: model.tilt,
     roll: model.roll,
     scale: model.scale,
+    radiusMeters: converted.radiusMeters,
   };
 }
 
@@ -790,7 +796,7 @@ async function daeToGlbDataUrl(
   href: string,
   resolveTexture?: (path: string) => Uint8Array | undefined,
   basePath = "",
-): Promise<string | null> {
+): Promise<{ url: string; radiusMeters: number } | null> {
   const blobUrls: string[] = [];
   const modifier = resolveTexture
     ? (url: string): string | undefined => {
@@ -805,14 +811,19 @@ async function daeToGlbDataUrl(
     : undefined;
   try {
     const { convertDaeToGlb } = await import("./collada-to-glb");
-    const glb = await convertDaeToGlb(daeText, modifier, basePath);
+    const { glb, radiusMeters } = await convertDaeToGlb(
+      daeText,
+      modifier,
+      basePath,
+    );
     if (glb.length > MAX_MODEL_GLB_BYTES) {
       console.warn(
         `Skipping a KML model: "${href}" converts to ${Math.round(glb.length / (1024 * 1024))} MB, over the ${Math.round(MAX_MODEL_GLB_BYTES / (1024 * 1024))} MB inline limit.`,
       );
       return null;
     }
-    return await bytesToDataUrl(glb, "model/gltf-binary");
+    const url = await bytesToDataUrl(glb, "model/gltf-binary");
+    return { url, radiusMeters };
   } catch (error) {
     console.warn(`Could not convert the KML model "${href}" to glTF.`, error);
     return null;
@@ -843,8 +854,9 @@ async function modelsFromKmz(
   const total = parsed.length;
   for (const [index, { model, baseDir }] of parsed.entries()) {
     if (isHttpUrl(model.href)) {
-      const url = await fetchDaeAsGlbDataUrl(model.href);
-      if (url) models.push(kmlModelLayer(model, url, path, index, total));
+      const converted = await fetchDaeAsGlbDataUrl(model.href);
+      if (converted)
+        models.push(kmlModelLayer(model, converted, path, index, total));
       continue;
     }
     const daeEntry = baseDir + model.href;
@@ -866,12 +878,13 @@ async function modelsFromKmz(
     const resolveTexture = (texturePath: string): Uint8Array | undefined =>
       findArchiveEntry(entries, daeDir + texturePath) ??
       findArchiveEntry(entries, texturePath);
-    const url = await daeToGlbDataUrl(
+    const converted = await daeToGlbDataUrl(
       new TextDecoder("utf-8").decode(data),
       model.href,
       resolveTexture,
     );
-    if (url) models.push(kmlModelLayer(model, url, path, index, total));
+    if (converted)
+      models.push(kmlModelLayer(model, converted, path, index, total));
   }
   return models;
 }
@@ -879,7 +892,9 @@ async function modelsFromKmz(
 // Fetch an absolute-URL `.dae`, convert it to a GLB data URL. Textures resolve
 // against the mesh's URL directory (best effort; a CORS-blocked fetch is
 // skipped). Returns null on any failure.
-async function fetchDaeAsGlbDataUrl(href: string): Promise<string | null> {
+async function fetchDaeAsGlbDataUrl(
+  href: string,
+): Promise<{ url: string; radiusMeters: number } | null> {
   try {
     const response = await fetch(href);
     if (!response.ok) {
@@ -919,8 +934,9 @@ async function modelsFromKml(
       );
       continue;
     }
-    const url = await fetchDaeAsGlbDataUrl(model.href);
-    if (url) models.push(kmlModelLayer(model, url, path, index, parsed.length));
+    const converted = await fetchDaeAsGlbDataUrl(model.href);
+    if (converted)
+      models.push(kmlModelLayer(model, converted, path, index, parsed.length));
   }
   return models;
 }

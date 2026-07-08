@@ -22,6 +22,7 @@ function model(patch: Partial<LoadedModel> = {}): LoadedModel {
     tilt: 0,
     roll: 0,
     scale: { x: 1, y: 1, z: 1 },
+    radiusMeters: 0,
     ...patch,
   };
 }
@@ -58,6 +59,22 @@ describe("kmlModelBounds", () => {
     const [w, s, e, n] = kmlModelBounds(model());
     assert.ok(w < -100 && e > -100, "extent brackets the longitude");
     assert.ok(s < 40 && n > 40, "extent brackets the latitude");
+  });
+
+  it("grows the extent to frame a large model", () => {
+    // A ~33 km-radius model (e.g. a geological cross-section) should get an
+    // extent far wider than the point-pad fallback so it frames on load.
+    const [w, s, e, n] = kmlModelBounds(model({ radiusMeters: 33_000 }));
+    const [w0, s0] = kmlModelBounds(model({ radiusMeters: 0 }));
+    assert.ok(e - w > 0.5, "longitude extent spans the model's width");
+    assert.ok(n - s > 0.5, "latitude extent spans the model's height");
+    assert.ok(w < w0 && s < s0, "large extent is wider than the point pad");
+  });
+
+  it("falls back to the point pad for a model with no known extent", () => {
+    const [w, s, e, n] = kmlModelBounds(model({ radiusMeters: 0 }));
+    assert.ok(Math.abs(e - w - 0.004) < 1e-9, "longitude pad is 2 * minPad");
+    assert.ok(Math.abs(n - s - 0.004) < 1e-9, "latitude pad is 2 * minPad");
   });
 });
 

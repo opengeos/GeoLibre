@@ -1,6 +1,38 @@
-import { LoadingManager, Mesh } from "three";
+import { Box3, LoadingManager, Mesh, Vector3 } from "three";
 import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+
+/** The result of converting a COLLADA `.dae` to a GLB. */
+export interface ConvertedModel {
+  /** The model encoded as binary glTF (GLB) bytes. */
+  glb: Uint8Array;
+  /**
+   * The model's extent as the maximum distance (in meters, after the DAE's
+   * `<unit>` scale) from its origin — the point a KML `<Location>` anchors to —
+   * to any corner of its bounding box. A KML/SketchUp model's origin is often a
+   * corner rather than the center and the mesh can span kilometers, so callers
+   * use this to frame the whole model instead of zooming to a tiny box at the
+   * anchor. `0` when the scene is empty.
+   */
+  radiusMeters: number;
+}
+
+// The largest distance from the origin (0,0,0) to any of the 8 corners of a
+// bounding box. Rotation-invariant, so it bounds the model's horizontal footprint
+// under any `<Orientation>`/deck.gl transform, which is what framing needs.
+function radiusFromOrigin(box: Box3): number {
+  if (box.isEmpty()) return 0;
+  const corner = new Vector3();
+  let max = 0;
+  for (const x of [box.min.x, box.max.x]) {
+    for (const y of [box.min.y, box.max.y]) {
+      for (const z of [box.min.z, box.max.z]) {
+        max = Math.max(max, corner.set(x, y, z).length());
+      }
+    }
+  }
+  return max;
+}
 
 /**
  * Convert COLLADA (`.dae`) text into a binary glTF (GLB) so a KML `<Model>` can
@@ -20,14 +52,14 @@ import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
  * @param basePath - Base URL/path COLLADA texture references resolve against
  *   (the `.dae`'s directory); leave empty when `resolveTexture` maps raw paths.
  * @param textureTimeoutMs - Maximum time to wait for textures to load.
- * @returns The model encoded as GLB bytes.
+ * @returns The model's GLB bytes and its extent (see {@link ConvertedModel}).
  */
 export async function convertDaeToGlb(
   daeText: string,
   resolveTexture?: (url: string) => string | undefined,
   basePath = "",
   textureTimeoutMs = 8000,
-): Promise<Uint8Array> {
+): Promise<ConvertedModel> {
   const manager = new LoadingManager();
   if (resolveTexture) {
     manager.setURLModifier((url) => resolveTexture(url) ?? url);
@@ -62,6 +94,11 @@ export async function convertDaeToGlb(
     }
   });
 
+  // Measure the model (world-space, so the DAE's <unit> scale and Z-up→Y-up
+  // conversion are already baked in) before exporting, so the caller can frame
+  // the whole thing.
+  const radiusMeters = radiusFromOrigin(new Box3().setFromObject(collada.scene));
+
   // Wait for textures only when a load actually started during parse; otherwise
   // there are none and there is nothing to wait for. A missing/hanging texture
   // never blocks the model past `textureTimeoutMs` (yielding an untextured one).
@@ -84,5 +121,5 @@ export async function convertDaeToGlb(
       { binary: true },
     );
   });
-  return new Uint8Array(glb);
+  return { glb: new Uint8Array(glb), radiusMeters };
 }

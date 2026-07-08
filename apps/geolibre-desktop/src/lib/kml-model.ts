@@ -51,23 +51,42 @@ export function kmlModelRow(model: LoadedModel): {
   };
 }
 
+// Meters per degree of latitude (WGS84 mean). Longitude degrees shrink by
+// cos(latitude), so a fixed meter extent spans more longitude near the poles.
+const METERS_PER_DEGREE_LAT = 111320;
+
 /**
- * A small padded extent around the model's point so "Zoom to layer" frames it
- * instead of snapping to a single point at maximum zoom.
+ * A geographic extent around the model that frames the whole thing on load.
+ *
+ * A KML `<Location>` anchors the model's *origin*, which for SketchUp/Google
+ * Earth exports is often a corner of a mesh that spans kilometers (a building,
+ * a terrain slice, a geological cross-section). A fixed tiny box around that
+ * corner would leave the model mostly off-screen — the user has to zoom way out
+ * to find it — so the extent grows with the model's `radiusMeters`. Models with
+ * no known extent fall back to a small point pad.
  *
  * @param model - A resolved KML model descriptor.
- * @param pad - Half-width of the extent in degrees.
+ * @param minPad - Minimum half-width of the extent in degrees (used when the
+ *   model is tiny or its extent is unknown).
  * @returns `[west, south, east, north]` in WGS84 degrees.
  */
 export function kmlModelBounds(
   model: LoadedModel,
-  pad = 0.002,
+  minPad = 0.002,
 ): [number, number, number, number] {
+  const radius =
+    Number.isFinite(model.radiusMeters) && model.radiusMeters > 0
+      ? model.radiusMeters * 1.1 // a little breathing room around the model
+      : 0;
+  const latPad = Math.max(minPad, radius / METERS_PER_DEGREE_LAT);
+  // Guard the cosine against a divide-by-zero at the poles.
+  const cosLat = Math.max(Math.cos((model.latitude * Math.PI) / 180), 1e-6);
+  const lngPad = Math.max(minPad, radius / (METERS_PER_DEGREE_LAT * cosLat));
   return [
-    model.longitude - pad,
-    model.latitude - pad,
-    model.longitude + pad,
-    model.latitude + pad,
+    model.longitude - lngPad,
+    model.latitude - latPad,
+    model.longitude + lngPad,
+    model.latitude + latPad,
   ];
 }
 

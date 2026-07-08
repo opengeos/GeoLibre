@@ -1023,7 +1023,23 @@ export function DesktopShell({
       const importedLayer = useAppStore
         .getState()
         .layers.find((layer) => layer.id === lastLayerId);
-      if (importedLayer) mapControllerRef.current?.fitLayer(importedLayer);
+      if (importedLayer) {
+        // A deck.gl-backed layer (e.g. a KML <Model> scenegraph) mounts its
+        // overlay on the next render; fitting synchronously here races that
+        // mount and the camera move is lost. Defer the fit past the mount so
+        // it frames the model. MapLibre-native layers fit synchronously.
+        if (importedLayer.type === "deckgl-viz") {
+          const layerId = importedLayer.id;
+          requestAnimationFrame(() => {
+            const current = useAppStore
+              .getState()
+              .layers.find((layer) => layer.id === layerId);
+            if (current) mapControllerRef.current?.fitLayer(current);
+          });
+        } else {
+          mapControllerRef.current?.fitLayer(importedLayer);
+        }
+      }
     },
     [addGeoJsonLayer, addImageOverlayLayer, addLayer],
   );
