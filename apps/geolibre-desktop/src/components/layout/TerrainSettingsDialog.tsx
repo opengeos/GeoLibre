@@ -1,4 +1,8 @@
-import { TERRAIN_SETTINGS_EVENT, type MapController } from "@geolibre/map";
+import {
+  DEFAULT_TERRAIN_EXAGGERATION,
+  TERRAIN_SETTINGS_EVENT,
+  type MapController,
+} from "@geolibre/map";
 import {
   Button,
   Dialog,
@@ -16,7 +20,8 @@ import { useTranslation } from "react-i18next";
 const MIN_EXAGGERATION = 0;
 const MAX_EXAGGERATION = 5;
 const EXAGGERATION_STEP = 0.1;
-const DEFAULT_EXAGGERATION = 1;
+// Default sourced from the map package so it can't drift from the control's.
+const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
 
 function clampExaggeration(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_EXAGGERATION;
@@ -83,9 +88,12 @@ export function TerrainSettingsDialog({
                 max={MAX_EXAGGERATION}
                 step={EXAGGERATION_STEP}
                 value={exaggeration}
-                onChange={(event) =>
-                  applyExaggeration(Number(event.target.value))
-                }
+                onChange={(event) => {
+                  // Ignore an emptied field (mid-edit) so it doesn't parse to 0
+                  // and momentarily flatten the terrain before the user retypes.
+                  if (event.target.value === "") return;
+                  applyExaggeration(Number(event.target.value));
+                }}
               />
             </div>
             <Slider
