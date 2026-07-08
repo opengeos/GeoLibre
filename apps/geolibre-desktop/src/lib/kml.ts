@@ -144,6 +144,18 @@ function groundOverlayFromElement(element: Element): KmlGroundOverlay | null {
   }
   // A zero-area box has nothing to render.
   if (north === south || east === west) return null;
+  // Reject a box outside WGS84 range (a malformed overlay); MapLibre's image
+  // source would otherwise silently drop such corners, leaving an invisible
+  // layer with no feedback.
+  if (
+    north > 90 ||
+    south < -90 ||
+    north < south ||
+    Math.abs(east) > 180 ||
+    Math.abs(west) > 180
+  ) {
+    return null;
+  }
 
   const rotation = Number(childText(box, "rotation"));
   const coordinates = latLonBoxCorners(

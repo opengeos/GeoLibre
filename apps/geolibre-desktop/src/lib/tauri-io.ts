@@ -582,7 +582,12 @@ async function groundOverlaysFromKmz(
       continue;
     }
     const data = findArchiveEntry(entries, overlay.href);
-    if (!data) continue;
+    if (!data) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`,
+      );
+      continue;
+    }
     const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
     overlays.push(imageOverlayLayer(overlay, url, path));
   }
@@ -669,12 +674,23 @@ async function loadKmzLayers(
     new TextDecoder("utf-8").decode(file.data),
   );
 
-  const features = await kmzVectorFeatures(kmlFiles, options);
-  if (features.features.length > 0) layers.push({ data: features, path });
+  // Declining the oversized-vector prompt must not throw away the archive's
+  // ground overlays, so catch the cancellation and load overlays anyway; it is
+  // only re-thrown at the end when nothing else loaded (so the caller still
+  // skips a purely-declined file rather than surfacing a generic error).
+  let cancellation: unknown;
+  try {
+    const features = await kmzVectorFeatures(kmlFiles, options);
+    if (features.features.length > 0) layers.push({ data: features, path });
+  } catch (error) {
+    if (!isVectorLoadCancelled(error)) throw error;
+    cancellation = error;
+  }
 
   layers.push(...(await groundOverlaysFromKmz(entries, kmlTexts, path)));
 
   if (layers.length === 0) {
+    if (cancellation) throw cancellation;
     throw new Error(
       "The KMZ archive did not contain readable placemarks or ground overlays.",
     );
@@ -1809,15 +1825,17 @@ export async function loadDroppedVectorFiles(
       try {
         layers.push(await loadBrowserVectorFile(file, [], options));
       } catch (error) {
-        if (isVectorLoadCancelled(error)) continue;
-        // No placemarks is the expected reason for an overlay-only KML; a
-        // genuine parse/load failure is still worth surfacing before it is
-        // swallowed in favor of the overlays.
-        if (!overlays.length) throw error;
-        console.warn(
-          `Loaded ground overlays from "${file.name}" but could not read its vector placemarks.`,
-          error,
-        );
+        // Declining the oversized-vector prompt, or a genuine parse failure,
+        // still leaves the ground overlays to add below (a real non-cancellation
+        // failure with no overlays to salvage is rethrown). Cancellation is not
+        // surfaced; other failures are logged so they are not fully invisible.
+        if (!isVectorLoadCancelled(error)) {
+          if (!overlays.length) throw error;
+          console.warn(
+            `Loaded ground overlays from "${file.name}" but could not read its vector placemarks.`,
+            error,
+          );
+        }
       }
       layers.push(...overlays);
       continue;
@@ -2027,15 +2045,17 @@ export async function loadDroppedVectorPaths(
       try {
         layers.push(await loadTauriVectorFile(path, options));
       } catch (error) {
-        if (isVectorLoadCancelled(error)) continue;
-        // No placemarks is the expected reason for an overlay-only KML; a
-        // genuine parse/load failure is still worth surfacing before it is
-        // swallowed in favor of the overlays.
-        if (!overlays.length) throw error;
-        console.warn(
-          `Loaded ground overlays from "${path}" but could not read its vector placemarks.`,
-          error,
-        );
+        // Declining the oversized-vector prompt, or a genuine parse failure,
+        // still leaves the ground overlays to add below (a real non-cancellation
+        // failure with no overlays to salvage is rethrown). Cancellation is not
+        // surfaced; other failures are logged so they are not fully invisible.
+        if (!isVectorLoadCancelled(error)) {
+          if (!overlays.length) throw error;
+          console.warn(
+            `Loaded ground overlays from "${path}" but could not read its vector placemarks.`,
+            error,
+          );
+        }
       }
       layers.push(...overlays);
       continue;
