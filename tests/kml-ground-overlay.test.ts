@@ -106,6 +106,14 @@ describe("findArchiveEntry", () => {
   it("returns undefined when nothing matches", () => {
     assert.equal(findArchiveEntry(entries, "missing.png"), undefined);
   });
+
+  it("does not resolve inherited prototype members", () => {
+    // A crafted href must not pull `Object.prototype.__proto__`/`constructor`
+    // out of the bracket lookup instead of a real archive entry.
+    assert.equal(findArchiveEntry(entries, "__proto__"), undefined);
+    assert.equal(findArchiveEntry(entries, "constructor"), undefined);
+    assert.equal(findArchiveEntry(entries, "hasOwnProperty"), undefined);
+  });
 });
 
 describe("imageMimeFromName", () => {

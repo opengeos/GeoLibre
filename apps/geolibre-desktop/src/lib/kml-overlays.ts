@@ -60,7 +60,10 @@ export function findArchiveEntry(
   entries: Record<string, Uint8Array>,
   href: string,
 ): Uint8Array | undefined {
-  if (entries[href]) return entries[href];
+  // `Object.hasOwn`, not a truthy `entries[href]`, so an href like "__proto__"
+  // or "constructor" cannot resolve an inherited prototype member instead of a
+  // real archive entry.
+  if (Object.hasOwn(entries, href)) return entries[href];
 
   const target = normalizeArchivePath(href);
   for (const [name, data] of Object.entries(entries)) {

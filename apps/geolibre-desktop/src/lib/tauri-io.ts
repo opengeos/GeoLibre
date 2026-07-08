@@ -575,8 +575,11 @@ async function groundOverlaysFromKmz(
   kmlTexts: string[],
   path: string,
 ): Promise<LoadedImageOverlay[]> {
+  // Skip a second DOM parse of KMLs with no overlay (the vector loader already
+  // parsed their placemarks); "GroundOverlay" only appears when present.
+  const overlayTexts = kmlTexts.filter((text) => text.includes("GroundOverlay"));
   const overlays: LoadedImageOverlay[] = [];
-  for (const overlay of sortByDrawOrder(kmlTexts.flatMap(parseKmlGroundOverlays))) {
+  for (const overlay of sortByDrawOrder(overlayTexts.flatMap(parseKmlGroundOverlays))) {
     if (isHttpUrl(overlay.href)) {
       overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
       continue;
@@ -608,9 +611,18 @@ function groundOverlaysFromKml(
   text: string,
   path: string,
 ): LoadedImageOverlay[] {
+  // Cheap prefilter so a KML with no overlays is not DOM-parsed a second time
+  // (its placemarks are already parsed by the vector loader). "GroundOverlay"
+  // only appears when the element is present, so a miss is a safe skip.
+  if (!text.includes("GroundOverlay")) return [];
   const overlays: LoadedImageOverlay[] = [];
   for (const overlay of sortByDrawOrder(parseKmlGroundOverlays(text))) {
-    if (!isHttpUrl(overlay.href)) continue;
+    if (!isHttpUrl(overlay.href)) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" is a relative path, which a standalone KML (unlike a KMZ) cannot resolve. Only absolute URLs are supported.`,
+      );
+      continue;
+    }
     overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
   }
   return overlays;
