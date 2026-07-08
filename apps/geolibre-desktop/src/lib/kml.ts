@@ -281,7 +281,18 @@ function modelFromElement(element: Element): KmlModel | null {
   if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
     return null;
   }
-  const altitude = numberOr(location && childText(location, "altitude"), 0);
+  // KML's default altitudeMode is clampToGround, which ignores <altitude> and
+  // drapes the model on the terrain; only `absolute` and `relativeToGround`
+  // define a vertical offset. There's no client-side DEM to clamp against, so
+  // treat clamped modes as ground level (0) — otherwise a stale/leftover
+  // <altitude> (common in SketchUp/Google Earth exports) leaves the model
+  // floating in the air.
+  const altitudeMode = childText(element, "altitudeMode")?.toLowerCase();
+  const honorsAltitude =
+    altitudeMode === "absolute" || altitudeMode === "relativetoground";
+  const altitude = honorsAltitude
+    ? numberOr(location && childText(location, "altitude"), 0)
+    : 0;
 
   const orientation = directChild(element, "Orientation");
   const heading = numberOr(orientation && childText(orientation, "heading"), 0);

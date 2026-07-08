@@ -751,7 +751,9 @@ const MAX_DAE_SOURCE_BYTES = 64 * 1024 * 1024;
 
 // The display name for a model layer. An unnamed `<Model>` falls back to a
 // path-derived name; when a file has several such models the 1-based `index`
-// disambiguates them so they are not all named identically.
+// disambiguates them so they are not all named identically. This resolves the
+// name once here at load time; `kmlModelDisplayName` (kml-model.ts) is the
+// downstream reader whose own fallback is only a defensive/test-time path.
 function kmlModelName(
   model: KmlModel,
   path: string,
