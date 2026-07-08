@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   kmlModelBounds,
-  kmlModelName,
+  kmlModelDisplayName,
   kmlModelRow,
   kmlModelUniformScale,
   modelNameFromPath,
@@ -85,10 +85,10 @@ describe("model naming", () => {
   });
 
   it("keeps the model name when present", () => {
-    assert.equal(kmlModelName(model()), "House");
+    assert.equal(kmlModelDisplayName(model()), "House");
   });
 
   it("falls back to a path-derived name when unnamed", () => {
-    assert.equal(kmlModelName(model({ name: "" })), "town model");
+    assert.equal(kmlModelDisplayName(model({ name: "" })), "town model");
   });
 });

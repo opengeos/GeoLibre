@@ -874,9 +874,15 @@ async function modelsFromKmz(
       );
       continue;
     }
+    // `daeEntry` is the guessed path (`baseDir + href`); the mesh may actually
+    // have been found via the bare-href fallback above, so also try the href's
+    // own directory before the bare-basename fallback, so textures resolve when
+    // the href already carries the full archive-relative path.
     const daeDir = archiveDirname(normalizeArchivePath(daeEntry));
+    const hrefDir = archiveDirname(normalizeArchivePath(model.href));
     const resolveTexture = (texturePath: string): Uint8Array | undefined =>
       findArchiveEntry(entries, daeDir + texturePath) ??
+      findArchiveEntry(entries, hrefDir + texturePath) ??
       findArchiveEntry(entries, texturePath);
     const converted = await daeToGlbDataUrl(
       new TextDecoder("utf-8").decode(data),
@@ -896,7 +902,9 @@ async function fetchDaeAsGlbDataUrl(
   href: string,
 ): Promise<{ url: string; radiusMeters: number } | null> {
   try {
-    const response = await fetch(href);
+    // Bound the fetch so an unresponsive host can't hang the whole KML/KMZ load
+    // (models are resolved sequentially), mirroring the texture-load timeout.
+    const response = await fetch(href, { signal: AbortSignal.timeout(15000) });
     if (!response.ok) {
       console.warn(
         `Skipping a KML model: fetching "${href}" returned ${response.status}.`,
@@ -904,9 +912,12 @@ async function fetchDaeAsGlbDataUrl(
       return null;
     }
     const daeText = await response.text();
-    if (daeText.length > MAX_DAE_SOURCE_BYTES) {
+    // Measure real byte size (not UTF-16 code units) so the cap matches the
+    // archive path's `Uint8Array.length` check.
+    const daeBytes = new Blob([daeText]).size;
+    if (daeBytes > MAX_DAE_SOURCE_BYTES) {
       console.warn(
-        `Skipping a KML model: "${href}" is ${Math.round(daeText.length / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+        `Skipping a KML model: "${href}" is ${Math.round(daeBytes / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
       );
       return null;
     }

@@ -90,8 +90,16 @@ export function kmlModelBounds(
   ];
 }
 
-/** The display name for a model layer, falling back to a path-derived name. */
-export function kmlModelName(model: LoadedModel): string {
+/**
+ * The display name for a model layer, falling back to a path-derived name.
+ *
+ * By the time a {@link LoadedModel} reaches here its `name` was already
+ * resolved to a non-empty string upstream (`kmlModelName` in `tauri-io.ts`,
+ * which also does index-based disambiguation for unnamed models), so the
+ * fallback below is defensive — it only fires for a directly-constructed
+ * `LoadedModel` with an empty name (as in the unit tests).
+ */
+export function kmlModelDisplayName(model: LoadedModel): string {
   // `||` (not `??`) so an empty name falls back to a path-derived one.
   return model.name || `${modelNameFromPath(model.path)} model`;
 }

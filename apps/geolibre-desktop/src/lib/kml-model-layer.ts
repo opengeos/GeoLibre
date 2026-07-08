@@ -4,7 +4,7 @@ import {
   createDeckVizStoreLayer,
   type DeckVizConfig,
 } from "@geolibre/plugins";
-import { kmlModelBounds, kmlModelName, kmlModelRow } from "./kml-model";
+import { kmlModelBounds, kmlModelDisplayName, kmlModelRow } from "./kml-model";
 import type { LoadedModel } from "./tauri-io";
 
 /**
@@ -41,7 +41,7 @@ export function buildKmlModelLayer(model: LoadedModel): GeoLibreLayer {
     },
   };
   return createDeckVizStoreLayer({
-    name: kmlModelName(model),
+    name: kmlModelDisplayName(model),
     config,
     rows: [kmlModelRow(model)],
     sourcePath: model.path,
