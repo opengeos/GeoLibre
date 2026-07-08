@@ -65,6 +65,11 @@ const METERS_PER_DEGREE_LAT = 111320;
  * to find it — so the extent grows with the model's `radiusMeters`. Models with
  * no known extent fall back to a small point pad.
  *
+ * `radiusMeters` is measured on the unscaled GLB, but the scenegraph renders
+ * the model scaled by `kmlModelUniformScale(model.scale)` (see
+ * {@link kmlModelRow}), so apply that same factor here or a non-default
+ * `<Scale>` would under- or over-frame the model.
+ *
  * @param model - A resolved KML model descriptor.
  * @param minPad - Minimum half-width of the extent in degrees (used when the
  *   model is tiny or its extent is unknown).
@@ -76,7 +81,7 @@ export function kmlModelBounds(
 ): [number, number, number, number] {
   const radius =
     Number.isFinite(model.radiusMeters) && model.radiusMeters > 0
-      ? model.radiusMeters * 1.1 // a little breathing room around the model
+      ? model.radiusMeters * kmlModelUniformScale(model.scale) * 1.1 // scaled, with breathing room
       : 0;
   const latPad = Math.max(minPad, radius / METERS_PER_DEGREE_LAT);
   // Guard the cosine against a divide-by-zero at the poles.

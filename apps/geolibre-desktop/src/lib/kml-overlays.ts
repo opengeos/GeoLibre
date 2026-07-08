@@ -48,34 +48,53 @@ export function normalizeArchivePath(value: string): string {
 }
 
 /**
- * Find the archive entry a GroundOverlay's href points at. Hrefs are written
- * relative to the archive root, but authors nest images inconsistently, so this
+ * Find the *key* of the archive entry an href points at. Hrefs are written
+ * relative to the archive root, but authors nest files inconsistently, so this
  * tries an exact match, then a normalized-path match, then a unique basename.
  *
+ * Callers that need to resolve sibling files (e.g. a `.dae`'s textures relative
+ * to where it was actually found) use the returned key rather than the guessed
+ * href, since the basename tier can match a differently-nested entry.
+ *
  * @param entries - The unzipped archive entries, keyed by entry name.
- * @param href - The overlay's `<Icon><href>` value.
+ * @param href - The href value to resolve.
+ * @returns The matching entry's key, or undefined when none is found.
+ */
+export function findArchiveEntryKey(
+  entries: Record<string, Uint8Array>,
+  href: string,
+): string | undefined {
+  // `Object.hasOwn`, not a truthy `entries[href]`, so an href like "__proto__"
+  // or "constructor" cannot resolve an inherited prototype member instead of a
+  // real archive entry.
+  if (Object.hasOwn(entries, href)) return href;
+
+  const target = normalizeArchivePath(href);
+  for (const name of Object.keys(entries)) {
+    if (normalizeArchivePath(name) === target) return name;
+  }
+
+  const base = target.split("/").pop();
+  if (base) {
+    const matches = Object.keys(entries).filter(
+      (name) => normalizeArchivePath(name).split("/").pop() === base,
+    );
+    if (matches.length === 1) return matches[0];
+  }
+  return undefined;
+}
+
+/**
+ * Find the archive entry an href points at (see {@link findArchiveEntryKey}).
+ *
+ * @param entries - The unzipped archive entries, keyed by entry name.
+ * @param href - The href value to resolve.
  * @returns The matching entry's bytes, or undefined when none is found.
  */
 export function findArchiveEntry(
   entries: Record<string, Uint8Array>,
   href: string,
 ): Uint8Array | undefined {
-  // `Object.hasOwn`, not a truthy `entries[href]`, so an href like "__proto__"
-  // or "constructor" cannot resolve an inherited prototype member instead of a
-  // real archive entry.
-  if (Object.hasOwn(entries, href)) return entries[href];
-
-  const target = normalizeArchivePath(href);
-  for (const [name, data] of Object.entries(entries)) {
-    if (normalizeArchivePath(name) === target) return data;
-  }
-
-  const base = target.split("/").pop();
-  if (base) {
-    const matches = Object.entries(entries).filter(
-      ([name]) => normalizeArchivePath(name).split("/").pop() === base,
-    );
-    if (matches.length === 1) return matches[0][1];
-  }
-  return undefined;
+  const key = findArchiveEntryKey(entries, href);
+  return key === undefined ? undefined : entries[key];
 }

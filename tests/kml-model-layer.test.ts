@@ -71,6 +71,17 @@ describe("kmlModelBounds", () => {
     assert.ok(w < w0 && s < s0, "large extent is wider than the point pad");
   });
 
+  it("scales the extent by the KML <Scale> factor", () => {
+    // The mesh renders scaled by the uniform <Scale>, so the framing extent
+    // must scale too — a 10x-scaled model needs a ~10x-wider box.
+    const base = model({ radiusMeters: 1_000, scale: { x: 1, y: 1, z: 1 } });
+    const scaled = model({ radiusMeters: 1_000, scale: { x: 10, y: 10, z: 10 } });
+    const [bw, , be] = kmlModelBounds(base);
+    const [sw, , se] = kmlModelBounds(scaled);
+    const ratio = (se - sw) / (be - bw);
+    assert.ok(ratio > 9 && ratio < 11, `expected ~10x wider extent, got ${ratio}`);
+  });
+
   it("falls back to the point pad for a model with no known extent", () => {
     const [w, s, e, n] = kmlModelBounds(model({ radiusMeters: 0 }));
     assert.ok(Math.abs(e - w - 0.004) < 1e-9, "longitude pad is 2 * minPad");

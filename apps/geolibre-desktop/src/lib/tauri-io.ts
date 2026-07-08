@@ -47,6 +47,7 @@ import {
 } from "./kml";
 import {
   findArchiveEntry,
+  findArchiveEntryKey,
   imageMimeFromName,
   normalizeArchivePath,
 } from "./kml-overlays";
@@ -859,30 +860,29 @@ async function modelsFromKmz(
         models.push(kmlModelLayer(model, converted, path, index, total));
       continue;
     }
-    const daeEntry = baseDir + model.href;
-    const data =
-      findArchiveEntry(entries, daeEntry) ?? findArchiveEntry(entries, model.href);
-    if (!data) {
+    const daeKey =
+      findArchiveEntryKey(entries, baseDir + model.href) ??
+      findArchiveEntryKey(entries, model.href);
+    if (daeKey === undefined) {
       console.warn(
         `Skipping a KML model: its mesh "${model.href}" was not found in the KMZ archive.`,
       );
       continue;
     }
+    const data = entries[daeKey];
     if (data.length > MAX_DAE_SOURCE_BYTES) {
       console.warn(
         `Skipping a KML model: its mesh "${model.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
       );
       continue;
     }
-    // `daeEntry` is the guessed path (`baseDir + href`); the mesh may actually
-    // have been found via the bare-href fallback above, so also try the href's
-    // own directory before the bare-basename fallback, so textures resolve when
-    // the href already carries the full archive-relative path.
-    const daeDir = archiveDirname(normalizeArchivePath(daeEntry));
-    const hrefDir = archiveDirname(normalizeArchivePath(model.href));
+    // Resolve textures relative to where the `.dae` was actually found (its
+    // matched key), not the guessed `baseDir + href` — the basename fallback in
+    // findArchiveEntryKey can match a differently-nested entry. Fall back to a
+    // bare basename for textures stored elsewhere in the archive.
+    const daeDir = archiveDirname(normalizeArchivePath(daeKey));
     const resolveTexture = (texturePath: string): Uint8Array | undefined =>
       findArchiveEntry(entries, daeDir + texturePath) ??
-      findArchiveEntry(entries, hrefDir + texturePath) ??
       findArchiveEntry(entries, texturePath);
     const converted = await daeToGlbDataUrl(
       new TextDecoder("utf-8").decode(data),
