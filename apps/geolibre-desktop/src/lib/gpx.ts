@@ -80,15 +80,15 @@ const GPX_NUMERIC_PROPERTY_NAMES = new Set([
 
 export interface GpxParseOptions {
   /**
-   * Build the per-`<rtept>` route-point features. Defaults to `true`; pass
-   * `false` to skip the (potentially large) collection when the caller does not
-   * intend to use it.
+   * Build the per-`<rtept>` route-point features. Defaults to `false` so the
+   * (potentially large) collection is only built when the caller opts in; the
+   * line/waypoint/route outputs are always produced regardless.
    */
   includeRoutePoints?: boolean;
   /**
-   * Build the per-`<trkpt>` track-point features. Defaults to `true`; pass
-   * `false` to skip the (potentially large) collection when the caller does not
-   * intend to use it.
+   * Build the per-`<trkpt>` track-point features. Defaults to `false` so the
+   * (potentially large) collection is only built when the caller opts in; the
+   * line/waypoint/route outputs are always produced regardless.
    */
   includeTrackPoints?: boolean;
 }
@@ -97,7 +97,7 @@ export function parseGpxLayer(
   text: string,
   options: GpxParseOptions = {},
 ): GpxLayerResult {
-  const { includeRoutePoints = true, includeTrackPoints = true } = options;
+  const { includeRoutePoints = false, includeTrackPoints = false } = options;
   const document = new DOMParser().parseFromString(text, "application/xml");
   const parserError = document.querySelector("parsererror");
   if (parserError) {
@@ -114,6 +114,12 @@ export function parseGpxLayer(
   const routePointFeatures: Feature<Point, GeoJsonProperties>[] = [];
   const trackFeatures: Feature<LineString, GeoJsonProperties>[] = [];
   const trackPointFeatures: Feature<Point, GeoJsonProperties>[] = [];
+  // Valid points seen while building the line coordinates, tracked even when the
+  // point-feature collections are not built, so the "no valid content" guard
+  // below does not reject a file whose only geometry is a single-point track or
+  // route (which never forms a >= 2 point LineString).
+  let validRoutePointCount = 0;
+  let validTrackPointCount = 0;
   const waypoints = directChildren(gpx, "wpt");
   const routes = directChildren(gpx, "rte");
   const tracks = directChildren(gpx, "trk");
@@ -160,6 +166,7 @@ export function parseGpxLayer(
         },
       } satisfies Feature<Point, GeoJsonProperties>);
     }
+    validRoutePointCount += coordinates.length;
     if (coordinates.length < 2) continue;
     routeFeatures.push({
       type: "Feature",
@@ -204,6 +211,7 @@ export function parseGpxLayer(
           },
         } satisfies Feature<Point, GeoJsonProperties>);
       }
+      validTrackPointCount += coordinates.length;
       if (coordinates.length < 2) continue;
       trackFeatures.push({
         type: "Feature",
@@ -226,9 +234,9 @@ export function parseGpxLayer(
   if (
     waypointFeatures.length === 0 &&
     routeFeatures.length === 0 &&
-    routePointFeatures.length === 0 &&
     trackFeatures.length === 0 &&
-    trackPointFeatures.length === 0
+    validRoutePointCount === 0 &&
+    validTrackPointCount === 0
   ) {
     throw new Error(
       "No valid GPX waypoints, routes, tracks, or track/route points were found.",
