@@ -198,9 +198,10 @@ export class TerrainControl implements maplibregl.IControl {
   }
 
   private updateActiveState(): void {
-    this.button?.classList.toggle(
-      "maplibregl-ctrl-terrain-enabled",
-      this.isEnabled(),
-    );
+    if (!this.button) return;
+    const enabled = this.isEnabled();
+    this.button.classList.toggle("maplibregl-ctrl-terrain-enabled", enabled);
+    // Expose the on/off state to assistive tech, not just via the CSS class.
+    this.button.setAttribute("aria-pressed", String(enabled));
   }
 }

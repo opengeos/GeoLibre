@@ -11,6 +11,7 @@ interface FakeElement {
   title: string;
   children: FakeElement[];
   classList: { has: (n: string) => boolean; toggle: (n: string, f?: boolean) => boolean };
+  attributes: Record<string, string>;
   setAttribute: (name: string, value: string) => void;
   appendChild: (child: FakeElement) => FakeElement;
   addEventListener: (type: string, handler: () => void) => void;
@@ -35,7 +36,10 @@ function makeFakeElement(): FakeElement {
         return next;
       },
     },
-    setAttribute: () => {},
+    attributes: {},
+    setAttribute: (name, value) => {
+      el.attributes[name] = value;
+    },
     appendChild: (child) => {
       el.children.push(child);
       return child;
@@ -230,12 +234,15 @@ describe("TerrainControl", () => {
     assert.equal(mount({ exaggeration: Number.NaN }).control.getExaggeration(), 1);
   });
 
-  it("reflects the enabled state on the button class", () => {
+  it("reflects the enabled state on the button class and aria-pressed", () => {
     const { control, button } = mount();
     assert.equal(button.classList.has("maplibregl-ctrl-terrain-enabled"), false);
+    assert.equal(button.attributes["aria-pressed"], "false");
     control.setEnabled(true);
     assert.equal(button.classList.has("maplibregl-ctrl-terrain-enabled"), true);
+    assert.equal(button.attributes["aria-pressed"], "true");
     control.setEnabled(false);
     assert.equal(button.classList.has("maplibregl-ctrl-terrain-enabled"), false);
+    assert.equal(button.attributes["aria-pressed"], "false");
   });
 });

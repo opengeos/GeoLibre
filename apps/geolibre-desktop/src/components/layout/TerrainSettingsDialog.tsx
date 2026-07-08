@@ -45,6 +45,12 @@ export function TerrainSettingsDialog({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [exaggeration, setExaggeration] = useState(DEFAULT_EXAGGERATION);
+  // Free-text draft for the number input so a fractional value like "2.5" can be
+  // typed without the controlled numeric value snapping the field mid-keystroke.
+  // Committed (parsed/clamped) on blur or Enter; kept in sync when the value
+  // changes elsewhere (slider, dialog open, reset).
+  const [draft, setDraft] = useState(String(DEFAULT_EXAGGERATION));
+  useEffect(() => setDraft(String(exaggeration)), [exaggeration]);
 
   useEffect(() => {
     const handleOpen = () => {
@@ -73,6 +79,20 @@ export function TerrainSettingsDialog({
     mapControllerRef.current?.setTerrainExaggeration(clamped);
   };
 
+  const commitDraft = () => {
+    const parsed = Number(draft);
+    if (draft.trim() === "" || !Number.isFinite(parsed)) {
+      // Revert an empty/invalid draft to the last committed value.
+      setDraft(String(exaggeration));
+      return;
+    }
+    const clamped = clampExaggeration(parsed);
+    applyExaggeration(clamped);
+    // Reflect clamping in the field even when the state value is unchanged
+    // (e.g. "7" committed while already at the max of 5).
+    setDraft(String(clamped));
+  };
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-md">
@@ -91,19 +111,16 @@ export function TerrainSettingsDialog({
               <Input
                 id="terrain-exaggeration-input"
                 type="number"
+                inputMode="decimal"
                 className="w-24"
                 min={MIN_EXAGGERATION}
                 max={MAX_EXAGGERATION}
                 step={EXAGGERATION_STEP}
-                value={exaggeration}
-                onChange={(event) => {
-                  // Ignore incomplete mid-edit states (empty field → 0, or a
-                  // lone "-" → NaN) so the terrain doesn't flicker through 0/1
-                  // before the user finishes typing a value.
-                  if (event.target.value === "") return;
-                  const parsed = Number(event.target.value);
-                  if (!Number.isFinite(parsed)) return;
-                  applyExaggeration(parsed);
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={commitDraft}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
             </div>
