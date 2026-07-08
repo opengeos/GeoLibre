@@ -6,8 +6,13 @@ import type maplibregl from "maplibre-gl";
  */
 const DOUBLE_CLICK_MS = 250;
 
-/** Fallback exaggeration when none (or an invalid value) is supplied. */
-const DEFAULT_EXAGGERATION = 1;
+/**
+ * Fallback exaggeration when none (or an invalid value) is supplied. Exported as
+ * the single source of truth: MapController seeds its cache from it and re-exports
+ * it for the settings dialog, so the control's fallback and the UI default can't
+ * drift apart.
+ */
+export const DEFAULT_TERRAIN_EXAGGERATION = 1;
 
 export interface TerrainControlOptions {
   /** The raster-DEM source id used to drive terrain. */
@@ -51,10 +56,10 @@ export class TerrainControl implements maplibregl.IControl {
     this.source = options.source;
     // Clamp like setExaggeration so every write path validates identically: a
     // caller (e.g. a corrupted cached value) can't seed an invalid exaggeration.
-    const requested = options.exaggeration ?? DEFAULT_EXAGGERATION;
+    const requested = options.exaggeration ?? DEFAULT_TERRAIN_EXAGGERATION;
     this.exaggeration = Number.isFinite(requested)
       ? Math.max(0, requested)
-      : DEFAULT_EXAGGERATION;
+      : DEFAULT_TERRAIN_EXAGGERATION;
     // English fallback for when no translated label is supplied. The map package
     // is i18n-agnostic, so this necessarily duplicates the `terrainSettings.
     // controlLabel` string in the app's en.json — keep the two in sync.

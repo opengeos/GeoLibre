@@ -12,11 +12,14 @@ export {
   createMapController,
   type BuiltInMapControl,
   DEFAULT_BUILT_IN_CONTROL_VISIBILITY,
-  DEFAULT_TERRAIN_EXAGGERATION,
   TERRAIN_SETTINGS_EVENT,
   TERRAIN_SETTINGS_CLOSE_EVENT,
 } from "./map-controller";
-export { TerrainControl, type TerrainControlOptions } from "./terrain-control";
+export {
+  TerrainControl,
+  DEFAULT_TERRAIN_EXAGGERATION,
+  type TerrainControlOptions,
+} from "./terrain-control";
 export {
   detectGeometryProfile,
   getLayerBounds,

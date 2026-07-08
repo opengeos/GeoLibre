@@ -41,7 +41,10 @@ import {
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { ResetBearingControl } from "./reset-bearing-control";
-import { TerrainControl } from "./terrain-control";
+import {
+  TerrainControl,
+  DEFAULT_TERRAIN_EXAGGERATION,
+} from "./terrain-control";
 
 const DEFAULT_PROJECTION: maplibregl.ProjectionSpecification = {
   type: "globe",
@@ -86,12 +89,17 @@ const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   attribution:
     'Elevation tiles by <a href="https://registry.opendata.aws/terrain-tiles/">AWS Open Data Terrain Tiles</a>',
 };
-/** Default terrain vertical exaggeration; the single source shared with the UI. */
-export const DEFAULT_TERRAIN_EXAGGERATION = 1;
 /**
  * Window event dispatched when the terrain control is double-clicked, so the
  * React layer can open the vertical-exaggeration dialog. The controller lives
  * outside React, so it signals through a window event rather than a callback.
+ *
+ * These terrain events are dispatched on `window` (not scoped to a controller
+ * instance), so they assume a single terrain-enabled map: only the primary pane
+ * enables the terrain control today (secondary panes never override the default
+ * `terrain: false`), and one dialog — bound to the primary controller — listens.
+ * A future secondary-pane terrain control would need the event scoped to its
+ * originating controller.
  */
 export const TERRAIN_SETTINGS_EVENT = "geolibre:terrain-settings-open";
 /**
