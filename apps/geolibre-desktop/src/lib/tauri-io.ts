@@ -610,6 +610,12 @@ async function groundOverlaysFromKmz(
 
   const overlays: LoadedImageOverlay[] = [];
   for (const { overlay, baseDir } of parsed) {
+    // Applies to every href type (archive-embedded or absolute URL): browsers
+    // cannot decode TIFF for a MapLibre image source.
+    if (isUnrenderableOverlayImage(overlay.href)) {
+      warnUnrenderableOverlay(overlay.href);
+      continue;
+    }
     if (isHttpUrl(overlay.href)) {
       overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
       continue;
@@ -632,17 +638,23 @@ async function groundOverlaysFromKmz(
       );
       continue;
     }
-    const mime = imageMimeFromName(overlay.href);
-    if (mime === "image/tiff") {
-      console.warn(
-        `Skipping a KML ground overlay: browsers cannot render the TIFF image "${overlay.href}".`,
-      );
-      continue;
-    }
-    const url = await bytesToDataUrl(data, mime);
+    const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
     overlays.push(imageOverlayLayer(overlay, url, path));
   }
   return overlays;
+}
+
+// Browsers cannot decode TIFF into an <img>/canvas/createImageBitmap, which is
+// what a MapLibre image source paints from, so a TIFF overlay would fail to
+// render with no feedback. Detected from the href extension.
+function isUnrenderableOverlayImage(href: string): boolean {
+  return imageMimeFromName(href) === "image/tiff";
+}
+
+function warnUnrenderableOverlay(href: string): void {
+  console.warn(
+    `Skipping a KML ground overlay: browsers cannot render the TIFF image "${href}".`,
+  );
 }
 
 // Order overlays by KML `<drawOrder>` ascending. Layers added later render on
@@ -672,10 +684,8 @@ function groundOverlaysFromKml(
       );
       continue;
     }
-    if (imageMimeFromName(overlay.href) === "image/tiff") {
-      console.warn(
-        `Skipping a KML ground overlay: browsers cannot render the TIFF image "${overlay.href}".`,
-      );
+    if (isUnrenderableOverlayImage(overlay.href)) {
+      warnUnrenderableOverlay(overlay.href);
       continue;
     }
     overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
@@ -1897,7 +1907,11 @@ export async function loadDroppedVectorFiles(
       const text = await file.text();
       const overlays = groundOverlaysFromKml(text, file.name);
       try {
-        layers.push(await loadBrowserVectorFile(file, [], options));
+        // Only add a vector layer when it actually has features: the DuckDB
+        // fallback for an overlay-only KML can return an empty collection, and
+        // an empty vector layer alongside the overlay is just clutter.
+        const vector = await loadBrowserVectorFile(file, [], options);
+        if (vector.data.features.length > 0) layers.push(vector);
       } catch (error) {
         // Declining the oversized-vector prompt, or a genuine parse failure,
         // still leaves the ground overlays to add below (a real non-cancellation
@@ -2117,7 +2131,10 @@ export async function loadDroppedVectorPaths(
       // KML still contributes its overlays when the vector load throws.
       const overlays = groundOverlaysFromKml(await readLocalFileText(path), path);
       try {
-        layers.push(await loadTauriVectorFile(path, options));
+        // Only add a vector layer when it actually has features (an overlay-only
+        // KML's DuckDB fallback can return an empty collection).
+        const vector = await loadTauriVectorFile(path, options);
+        if (vector.data.features.length > 0) layers.push(vector);
       } catch (error) {
         // Declining the oversized-vector prompt, or a genuine parse failure,
         // still leaves the ground overlays to add below (a real non-cancellation
