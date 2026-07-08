@@ -2391,7 +2391,7 @@
       "verticalScaleTooltip": "Multiplies each coordinate's Z value. 1 renders true elevations; larger values emphasize relief.",
       "offset": "Altitude offset (m)",
       "offsetTooltip": "Constant height in meters added to every feature, e.g. to lift a track above 3D buildings or terrain.",
-      "footer": "Rendered in 3D at coordinate Z values via deck.gl. Changes apply live."
+      "footer": "Rendered in 3D at coordinate Z values via deck.gl. Changes apply live. Identify and feature highlighting are not available in this mode."
     },
     "symbology": {
       "colormap": "Colormap",

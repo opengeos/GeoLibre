@@ -3360,7 +3360,7 @@ export function StylePanel({
                   3D extrusion
                 </label>
                 {supportsElevation3d && (
-                  <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                  <label className="col-span-2 flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
                     <input
                       type="radio"
                       name={`style-mode-${layer.id}`}
