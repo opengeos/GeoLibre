@@ -38,7 +38,8 @@ import {
 } from "./geotagged-photos";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
-import { parseKmlText } from "./kml";
+import { parseKmlGroundOverlays, parseKmlText, type KmlGroundOverlay } from "./kml";
+import { findArchiveEntry, imageMimeFromName } from "./kml-overlays";
 
 // Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
 // working; the implementation lives in the lightweight ./is-tauri module.
@@ -180,6 +181,47 @@ export interface LoadedVectorLayer {
   data: FeatureCollection;
   name?: string;
   path: string;
+}
+
+/**
+ * A georeferenced image overlay produced by a KML/KMZ `<GroundOverlay>`. Unlike
+ * {@link LoadedVectorLayer} it carries no `FeatureCollection`; the caller turns
+ * it into an `image`-type store layer via `addImageOverlayLayer`. The `kind`
+ * tag distinguishes it from a vector layer in a mixed load result.
+ */
+export interface LoadedImageOverlay {
+  kind: "image-overlay";
+  name: string;
+  path: string;
+  /** Image data URL (from a KMZ archive) or an absolute URL (from a KML). */
+  url: string;
+  /** Four `[lng, lat]` corners: top-left, top-right, bottom-right, bottom-left. */
+  coordinates: [number, number][];
+  /** Overlay extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds: [number, number, number, number];
+  /** Overlay opacity in [0, 1]. */
+  opacity: number;
+}
+
+/**
+ * A single result from a vector-file load: either a vector layer or an image
+ * overlay. A KMZ/KML file can yield a mix of both (placemarks plus ground
+ * overlays), mirroring how a GPX file yields several vector layers.
+ */
+export type LoadedLayer = LoadedVectorLayer | LoadedImageOverlay;
+
+/** Narrow a {@link LoadedLayer} to its image-overlay variant. */
+export function isLoadedImageOverlay(
+  layer: LoadedLayer,
+): layer is LoadedImageOverlay {
+  return "kind" in layer && layer.kind === "image-overlay";
+}
+
+/** Narrow a {@link LoadedLayer} to its vector variant. */
+export function isLoadedVectorLayer(
+  layer: LoadedLayer,
+): layer is LoadedVectorLayer {
+  return !isLoadedImageOverlay(layer);
 }
 
 // Auxiliary files that accompany Shapefiles (spatial indexes, metadata, etc.)
@@ -460,10 +502,9 @@ function toDuckDbVectorData(data: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(data);
 }
 
-async function readKmzKmlFiles(
-  data: ArrayBuffer | Uint8Array,
-): Promise<DuckDbVectorFile[]> {
-  const entries = await unzipArchive(data);
+function readKmlEntries(
+  entries: Record<string, Uint8Array>,
+): DuckDbVectorFile[] {
   const kmlEntries = Object.entries(entries)
     .filter(([entryName]) => entryName.toLowerCase().endsWith(".kml"))
     .sort(([leftName], [rightName]) => {
@@ -488,6 +529,259 @@ async function readKmzKmlFiles(
       data: toDuckDbVectorData(data),
     };
   });
+}
+
+async function readKmzKmlFiles(
+  data: ArrayBuffer | Uint8Array,
+): Promise<DuckDbVectorFile[]> {
+  return readKmlEntries(await unzipArchive(data));
+}
+
+/**
+ * Encode raw image bytes as a `data:` URL. Uses a `Blob` + `FileReader` (rather
+ * than `btoa`) so a large overlay image cannot overflow the argument stack.
+ */
+function bytesToDataUrl(bytes: Uint8Array, mime: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Could not read overlay image."));
+    reader.readAsDataURL(new Blob([bytes as BlobPart], { type: mime }));
+  });
+}
+
+function imageOverlayLayer(
+  overlay: KmlGroundOverlay,
+  url: string,
+  path: string,
+): LoadedImageOverlay {
+  return {
+    kind: "image-overlay",
+    // Strip the file extension for the fallback name (e.g. "tour.kmz" ->
+    // "tour overlay"), matching how the vector layers are named.
+    name: overlay.name?.trim() || `${pathWithoutExtension(fileBaseName(path))} overlay`,
+    path,
+    url,
+    coordinates: overlay.coordinates,
+    bounds: overlay.bounds,
+    opacity: overlay.opacity,
+  };
+}
+
+// A ground-overlay image is inlined as a base64 `data:` URL on the layer and
+// persisted in the project file (and every collaboration snapshot) at ~4/3 its
+// byte size, so cap it like the Raster Georeferencer does to avoid bloating
+// projects and memory.
+const MAX_OVERLAY_IMAGE_BYTES = 8 * 1024 * 1024;
+
+// A `<GroundOverlay>` together with the archive directory of the KML that
+// declared it, so a relative `href` can be resolved against that directory
+// first.
+interface KmzOverlay {
+  overlay: KmlGroundOverlay;
+  baseDir: string;
+}
+
+// The directory prefix (with trailing slash) of an archive entry name, or "".
+function archiveDirname(entryName: string): string {
+  const slash = entryName.lastIndexOf("/");
+  return slash >= 0 ? entryName.slice(0, slash + 1) : "";
+}
+
+// Resolve every GroundOverlay in the archive's KML documents to an image layer,
+// pulling each overlay's image bytes out of the archive (or using an absolute
+// URL directly). Overlays whose image is missing, oversized, or in a format
+// browsers cannot render are skipped with a warning.
+async function groundOverlaysFromKmz(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: { name: string; text: string }[],
+  path: string,
+): Promise<LoadedImageOverlay[]> {
+  // Prefilter (case-insensitively, matching kml.ts's tolerant element matching)
+  // so a KML with no overlay is not DOM-parsed a second time.
+  const parsed: KmzOverlay[] = kmlDocs
+    .filter((doc) => /groundoverlay/i.test(doc.text))
+    .flatMap((doc) =>
+      parseKmlGroundOverlays(doc.text).map((overlay) => ({
+        overlay,
+        baseDir: archiveDirname(doc.name),
+      })),
+    )
+    .sort((a, b) => a.overlay.drawOrder - b.overlay.drawOrder);
+
+  const overlays: LoadedImageOverlay[] = [];
+  for (const { overlay, baseDir } of parsed) {
+    // Applies to every href type (archive-embedded or absolute URL): browsers
+    // cannot decode TIFF for a MapLibre image source.
+    if (isUnrenderableOverlayImage(overlay.href)) {
+      warnUnrenderableOverlay(overlay.href);
+      continue;
+    }
+    if (isHttpUrl(overlay.href)) {
+      overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
+      continue;
+    }
+    // Try the href relative to its KML's directory first (a KMZ nesting
+    // `folder/doc.kml` referencing `images/x.png` means `folder/images/x.png`),
+    // then fall back to the global archive lookup.
+    const data =
+      findArchiveEntry(entries, baseDir + overlay.href) ??
+      findArchiveEntry(entries, overlay.href);
+    if (!data) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`,
+      );
+      continue;
+    }
+    if (data.length > MAX_OVERLAY_IMAGE_BYTES) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
+      );
+      continue;
+    }
+    const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
+    overlays.push(imageOverlayLayer(overlay, url, path));
+  }
+  return overlays;
+}
+
+// Browsers cannot decode TIFF into an <img>/canvas/createImageBitmap, which is
+// what a MapLibre image source paints from, so a TIFF overlay would fail to
+// render with no feedback. Detected from the href extension.
+function isUnrenderableOverlayImage(href: string): boolean {
+  return imageMimeFromName(href) === "image/tiff";
+}
+
+function warnUnrenderableOverlay(href: string): void {
+  console.warn(
+    `Skipping a KML ground overlay: browsers cannot render the TIFF image "${href}".`,
+  );
+}
+
+// Order overlays by KML `<drawOrder>` ascending. Layers added later render on
+// top (higher store index sits above), so emitting the lowest drawOrder first
+// makes the highest drawOrder end up on top, matching Google Earth's stacking.
+function sortByDrawOrder(overlays: KmlGroundOverlay[]): KmlGroundOverlay[] {
+  return [...overlays].sort((a, b) => a.drawOrder - b.drawOrder);
+}
+
+// GroundOverlays in a standalone (non-archived) KML can only be resolved when
+// their href is an absolute URL; a relative path needs the sibling image files
+// a browser load does not have.
+function groundOverlaysFromKml(
+  text: string,
+  path: string,
+): LoadedImageOverlay[] {
+  // Cheap prefilter so a KML with no overlays is not DOM-parsed a second time
+  // (its placemarks are already parsed by the vector loader). Matched
+  // case-insensitively, like kml.ts's element matching, so non-conformant
+  // casing is not dropped.
+  if (!/groundoverlay/i.test(text)) return [];
+  const overlays: LoadedImageOverlay[] = [];
+  for (const overlay of sortByDrawOrder(parseKmlGroundOverlays(text))) {
+    if (!isHttpUrl(overlay.href)) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" is a relative path, which a standalone KML (unlike a KMZ) cannot resolve. Only absolute URLs are supported.`,
+      );
+      continue;
+    }
+    if (isUnrenderableOverlayImage(overlay.href)) {
+      warnUnrenderableOverlay(overlay.href);
+      continue;
+    }
+    overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
+  }
+  return overlays;
+}
+
+// Merge the vector placemarks from every KML in an archive, tolerating entries
+// with no readable vector content (returning an empty collection) so an
+// overlay-only archive still loads its overlays. Declining an oversized entry
+// drops just that entry, matching `parseKmz`; the cancellation only propagates
+// (skipping the whole archive) when every entry was declined and nothing else
+// loaded.
+async function kmzVectorFeatures(
+  kmlFiles: DuckDbVectorFile[],
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
+  let cancellation: unknown;
+  const settled = await Promise.all(
+    kmlFiles.map((file) =>
+      loadKmlFile(file, options).then(
+        (collection): FeatureCollection | null => collection,
+        (error): null => {
+          if (isVectorLoadCancelled(error)) {
+            cancellation = error;
+            return null;
+          }
+          console.warn(
+            "Could not read vector features from a KML entry in the KMZ archive.",
+            error,
+          );
+          return null;
+        },
+      ),
+    ),
+  );
+  const collections = settled.filter(
+    (collection): collection is FeatureCollection => collection !== null,
+  );
+  if (collections.length === 0 && cancellation) throw cancellation;
+  return mergeFeatureCollections(collections);
+}
+
+/**
+ * Load a KMZ archive into its layers: the merged vector placemarks (when any)
+ * plus every resolvable `<GroundOverlay>` as an image overlay. Throws only when
+ * the archive yields neither, so a placemark-only, overlay-only, or mixed KMZ
+ * all load correctly.
+ */
+async function loadKmzLayers(
+  data: ArrayBuffer | Uint8Array,
+  path: string,
+  options?: DuckDbVectorLoadOptions,
+): Promise<LoadedLayer[]> {
+  const entries = await unzipArchive(data);
+  const kmlFiles = readKmlEntries(entries);
+
+  // Decode the KML text up front, keeping each entry's full archive name so an
+  // overlay href can resolve relative to its KML's directory. Reading from
+  // `entries` (not the copies in `kmlFiles`) also avoids the DuckDB-WASM
+  // fallback transferring/detaching a KML buffer before overlays are parsed.
+  const kmlDocs = Object.entries(entries)
+    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
+    .map(([name, bytes]) => ({
+      name,
+      text: new TextDecoder("utf-8").decode(bytes),
+    }));
+
+  // Ground overlays are drawn under vector placemarks (as in Google Earth), so
+  // they are added first: a later store index renders on top.
+  const layers: LoadedLayer[] = [
+    ...(await groundOverlaysFromKmz(entries, kmlDocs, path)),
+  ];
+
+  // Declining the oversized-vector prompt must not throw away the archive's
+  // ground overlays, so catch the cancellation and keep them; it is only
+  // re-thrown at the end when nothing else loaded (so the caller still skips a
+  // purely-declined file rather than surfacing a generic error).
+  let cancellation: unknown;
+  try {
+    const features = await kmzVectorFeatures(kmlFiles, options);
+    if (features.features.length > 0) layers.push({ data: features, path });
+  } catch (error) {
+    if (!isVectorLoadCancelled(error)) throw error;
+    cancellation = error;
+  }
+
+  if (layers.length === 0) {
+    if (cancellation) throw cancellation;
+    throw new Error(
+      "The KMZ archive did not contain readable placemarks or ground overlays.",
+    );
+  }
+  return layers;
 }
 
 async function parseKmz(
@@ -1572,7 +1866,7 @@ export async function openVectorFileWithFallback(
 export async function loadDroppedVectorFiles(
   droppedFiles: FileList | File[],
   options?: DuckDbVectorLoadOptions,
-): Promise<LoadedVectorLayer[]> {
+): Promise<LoadedLayer[]> {
   const droppedFileArray = Array.from(droppedFiles);
   const files = droppedFileArray.filter((file) => isVectorFileName(file.name));
   if (!files.length) return [];
@@ -1586,13 +1880,56 @@ export async function loadDroppedVectorFiles(
     ]);
   }
 
-  const layers: LoadedVectorLayer[] = [];
+  const layers: LoadedLayer[] = [];
   for (const file of files) {
     const extension = fileExtension(file.name);
     if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
 
     if (extension === "gpx") {
       layers.push(...parseGpxTextLayers(await file.text(), file.name));
+      continue;
+    }
+
+    if (extension === "kmz") {
+      try {
+        layers.push(
+          ...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)),
+        );
+      } catch (error) {
+        if (isVectorLoadCancelled(error)) continue;
+        throw error;
+      }
+      continue;
+    }
+
+    if (extension === "kml") {
+      // Load the vector placemarks and the ground overlays independently so an
+      // overlay-only KML still adds its overlays even when it has no readable
+      // placemarks (which makes the vector load throw).
+      const text = await file.text();
+      const overlays = groundOverlaysFromKml(text, file.name);
+      // Overlays go under the placemarks (added first), matching the KMZ path.
+      layers.push(...overlays);
+      try {
+        // Only add a vector layer when it actually has features: the DuckDB
+        // fallback for an overlay-only KML can return an empty collection, and
+        // an empty vector layer alongside the overlay is just clutter.
+        const vector = await loadBrowserVectorFile(file, [], options);
+        if (vector.data.features.length > 0) layers.push(vector);
+      } catch (error) {
+        // Declining the oversized-vector prompt, or a genuine parse failure,
+        // still leaves the ground overlays already added above (a real
+        // non-cancellation failure with no overlays to salvage is rethrown).
+        // Cancellation is not surfaced; other failures are logged so they are
+        // not fully invisible.
+        if (!isVectorLoadCancelled(error)) {
+          if (!overlays.length) throw error;
+          console.warn(
+            `Loaded ground overlays from "${file.name}" but could not read its vector placemarks.`,
+            error,
+          );
+        }
+      }
       continue;
     }
 
@@ -1761,11 +2098,11 @@ export async function loadDroppedPhotoPaths(
 export async function loadDroppedVectorPaths(
   paths: string[],
   options?: DuckDbVectorLoadOptions,
-): Promise<LoadedVectorLayer[]> {
+): Promise<LoadedLayer[]> {
   const vectorPaths = paths.filter(isVectorFileName);
   if (!vectorPaths.length) return [];
 
-  const layers: LoadedVectorLayer[] = [];
+  const layers: LoadedLayer[] = [];
   for (const path of vectorPaths) {
     const extension = fileExtension(path);
     if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
@@ -1778,6 +2115,45 @@ export async function loadDroppedVectorPaths(
         // "Unknown error" when the fs-plugin fallback fails.
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(`Could not read this GPX file. ${detail}`);
+      }
+      continue;
+    }
+    if (extension === "kmz") {
+      try {
+        layers.push(
+          ...(await loadKmzLayers(await readLocalFileBytes(path), path, options)),
+        );
+      } catch (error) {
+        if (isVectorLoadCancelled(error)) continue;
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Could not read this KMZ file. ${detail}`);
+      }
+      continue;
+    }
+    if (extension === "kml") {
+      // Load placemarks and ground overlays independently so an overlay-only
+      // KML still contributes its overlays when the vector load throws.
+      const overlays = groundOverlaysFromKml(await readLocalFileText(path), path);
+      // Overlays go under the placemarks (added first), matching the KMZ path.
+      layers.push(...overlays);
+      try {
+        // Only add a vector layer when it actually has features (an overlay-only
+        // KML's DuckDB fallback can return an empty collection).
+        const vector = await loadTauriVectorFile(path, options);
+        if (vector.data.features.length > 0) layers.push(vector);
+      } catch (error) {
+        // Declining the oversized-vector prompt, or a genuine parse failure,
+        // still leaves the ground overlays already added above (a real
+        // non-cancellation failure with no overlays to salvage is rethrown).
+        // Cancellation is not surfaced; other failures are logged so they are
+        // not fully invisible.
+        if (!isVectorLoadCancelled(error)) {
+          if (!overlays.length) throw error;
+          console.warn(
+            `Loaded ground overlays from "${path}" but could not read its vector placemarks.`,
+            error,
+          );
+        }
       }
       continue;
     }
