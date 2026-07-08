@@ -2985,6 +2985,16 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   border-top-color: hsl(var(--popover));
 }
 
+:is(.geo-editor-properties-popup, .geo-editor-rotate-popup).maplibregl-popup-anchor-left
+  .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+
+:is(.geo-editor-properties-popup, .geo-editor-rotate-popup).maplibregl-popup-anchor-right
+  .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
+}
+
 .geo-editor-popup-table td {
   border-bottom-color: hsl(var(--border));
 }
