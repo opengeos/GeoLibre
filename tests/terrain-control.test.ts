@@ -182,6 +182,27 @@ describe("TerrainControl", () => {
     });
   });
 
+  it("clamps invalid exaggeration values defensively", () => {
+    const { control, fake } = mount();
+    control.setEnabled(true);
+    const enabledCall = fake.setTerrainCalls.length;
+
+    // Negatives clamp to 0 (flat); non-finite values are ignored entirely.
+    control.setExaggeration(-3);
+    assert.equal(control.getExaggeration(), 0);
+    assert.deepEqual(fake.setTerrainCalls.at(-1), {
+      source: TERRAIN_SOURCE,
+      exaggeration: 0,
+    });
+
+    control.setExaggeration(Number.NaN);
+    assert.equal(control.getExaggeration(), 0);
+    control.setExaggeration(Number.POSITIVE_INFINITY);
+    assert.equal(control.getExaggeration(), 0);
+    // NaN/Infinity did not re-apply terrain (only the -3 clamp call did).
+    assert.equal(fake.setTerrainCalls.length, enabledCall + 1);
+  });
+
   it("reflects the enabled state on the button class", () => {
     const { control, button } = mount();
     assert.equal(button.classList.has("maplibregl-ctrl-terrain-enabled"), false);

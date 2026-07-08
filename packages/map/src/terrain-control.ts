@@ -138,11 +138,19 @@ export class TerrainControl implements maplibregl.IControl {
     return this.exaggeration;
   }
 
-  /** Update the vertical exaggeration, applying it live when terrain is on. */
+  /**
+   * Update the vertical exaggeration, applying it live when terrain is on.
+   * Defensively guards invalid input so validation isn't solely the caller's
+   * job: non-finite values are ignored and negatives clamp to 0 (flat). No
+   * upper bound — large exaggerations are valid; the dialog enforces its own
+   * display range.
+   */
   setExaggeration(exaggeration: number): void {
-    this.exaggeration = exaggeration;
+    if (!Number.isFinite(exaggeration)) return;
+    const safe = Math.max(0, exaggeration);
+    this.exaggeration = safe;
     if (this.map && this.isEnabled()) {
-      this.map.setTerrain({ source: this.source, exaggeration });
+      this.map.setTerrain({ source: this.source, exaggeration: safe });
     }
   }
 

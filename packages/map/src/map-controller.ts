@@ -260,7 +260,9 @@ export class MapController {
   private globeControl: maplibregl.GlobeControl | null = null;
   private terrainControl: TerrainControl | null = null;
   private terrainExaggeration = DEFAULT_TERRAIN_EXAGGERATION;
-  private terrainLabel = "Toggle terrain (double-click for exaggeration)";
+  // Undefined until the React layer supplies a translated label; the control
+  // falls back to its own default in the meantime (single source for the string).
+  private terrainLabel: string | undefined;
   private scaleControl: maplibregl.ScaleControl | null = null;
   private attributionControl: maplibregl.AttributionControl | null = null;
   private logoControl: maplibregl.LogoControl | null = null;
@@ -2157,16 +2159,6 @@ export class MapController {
     if (!this.terrainControl) return;
     this.removeControl(this.terrainControl);
     this.terrainControl = null;
-  }
-
-  /** Whether 3D terrain is currently active. */
-  isTerrainEnabled(): boolean {
-    return this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID;
-  }
-
-  /** Enable or disable 3D terrain (matches a single click on the control). */
-  setTerrainEnabled(enabled: boolean): void {
-    this.terrainControl?.setEnabled(enabled);
   }
 
   /** The current terrain vertical exaggeration. */
