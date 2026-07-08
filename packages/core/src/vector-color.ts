@@ -104,8 +104,11 @@ export const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512
  * the project's active body: its circumference over the 512px zoom-0 world. On
  * Earth this equals the constant; on the Moon/Mars it uses that body's radius so
  * a stroke width given in ground meters renders at the correct on-screen size.
+ * Exported so the Mapbox-style importer can reverse {@link metersWidthExpression}
+ * with the same ellipsoid-aware factor the exporter used (keeping the round trip
+ * correct on non-Earth projects), rather than the Earth-only constant.
  */
-function mercatorMetersPerPixelAtZoom0(): number {
+export function mercatorMetersPerPixelAtZoom0(): number {
   return (2 * Math.PI * getActiveSemiMajorAxisMeters()) / 512;
 }
 
