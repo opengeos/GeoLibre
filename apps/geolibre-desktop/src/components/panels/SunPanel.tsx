@@ -2,6 +2,7 @@ import {
   closeSunPanel,
   getSunSettingsSnapshot,
   isSunPanelVisible,
+  localDayStart,
   setSunSettings,
   SUN_SHADE_MAX,
   SUN_SHADE_MIN,
@@ -40,12 +41,10 @@ const QUICK_TIMES = [
   { label: "18:00", minutes: 18 * 60 },
 ];
 
-/** Local midnight (device time zone) of the day containing `dateMs`. */
-function localDayStart(dateMs: number): number {
-  const d = new Date(dateMs);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-}
-
+// DST: known limitation. The slider position and the displayed clock both use
+// device-local time and assume a 24h day, so on the two DST-transition days a
+// year (23h/25h days) the thumb and the digital clock can disagree by up to an
+// hour. Acceptable given how narrow the window is.
 function minutesOfLocalDay(dateMs: number): number {
   return clamp(
     Math.round((dateMs - localDayStart(dateMs)) / MS_PER_MINUTE),
@@ -129,14 +128,18 @@ function SunPanelCard() {
     const startY = event.clientY;
     const origin = position;
     const handleMove = (move: PointerEvent) => {
-      const bounds = handle.parentElement?.parentElement?.getBoundingClientRect();
+      const card = handle.parentElement;
+      const bounds = card?.parentElement?.getBoundingClientRect();
+      // Measure the card's real height instead of guessing, so it can't be
+      // dragged until only its header stays on-screen.
+      const cardHeight = card?.getBoundingClientRect().height ?? 80;
       const maxX = Math.max(
         EDGE_MARGIN,
         (bounds?.width ?? window.innerWidth) - PANEL_WIDTH - EDGE_MARGIN,
       );
       const maxY = Math.max(
         EDGE_MARGIN,
-        (bounds?.height ?? window.innerHeight) - 80,
+        (bounds?.height ?? window.innerHeight) - cardHeight - EDGE_MARGIN,
       );
       setPosition({
         x: clamp(origin.x + (move.clientX - startX), EDGE_MARGIN, maxX),
@@ -147,9 +150,13 @@ function SunPanelCard() {
       handle.releasePointerCapture(event.pointerId);
       handle.removeEventListener("pointermove", handleMove);
       handle.removeEventListener("pointerup", handleUp);
+      // Also clean up if the gesture is interrupted (e.g. pointercancel), so
+      // the move listener and pointer capture don't leak.
+      handle.removeEventListener("pointercancel", handleUp);
     };
     handle.addEventListener("pointermove", handleMove);
     handle.addEventListener("pointerup", handleUp);
+    handle.addEventListener("pointercancel", handleUp);
   };
 
   const stepHour = (deltaHours: number) => {
@@ -172,7 +179,7 @@ function SunPanelCard() {
   const scrubToMinute = (nextMinute: number, pause = true) => {
     setSunSettings({
       dateMs: withMinutesOfLocalDay(dateMs, nextMinute),
-      ...(pause ? { playing: false } : null),
+      ...(pause ? { playing: false } : {}),
     });
   };
 
@@ -342,7 +349,10 @@ interface SunTimelineProps {
 }
 
 function SunTimeline({ value, label, onChange }: SunTimelineProps) {
-  const handleInput = (event: React.FormEvent<HTMLInputElement>) => {
+  // React's onChange already fires continuously while dragging a range input and
+  // on keyboard steps, so a single handler covers both without the redundant
+  // double-fire of also binding onInput.
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     onChange(Number(event.currentTarget.value));
   };
 
@@ -355,8 +365,7 @@ function SunTimeline({ value, label, onChange }: SunTimelineProps) {
         max={MINUTES_PER_DAY - 1}
         step={1}
         value={value}
-        onInput={handleInput}
-        onChange={handleInput}
+        onChange={handleChange}
         className="h-5 w-full cursor-ew-resize appearance-none bg-transparent accent-amber-500 [&::-moz-range-progress]:h-2 [&::-moz-range-progress]:rounded-full [&::-moz-range-progress]:bg-amber-500 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-amber-600 [&::-moz-range-thumb]:bg-background [&::-moz-range-thumb]:shadow [&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-[linear-gradient(90deg,#111827_0%,#334155_20%,#f59e0b_28%,#f8fafc_50%,#f59e0b_72%,#334155_80%,#111827_100%)] [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-[linear-gradient(90deg,#111827_0%,#334155_20%,#f59e0b_28%,#f8fafc_50%,#f59e0b_72%,#334155_80%,#111827_100%)] [&::-webkit-slider-thumb]:mt-[-4px] [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-amber-600 [&::-webkit-slider-thumb]:bg-background [&::-webkit-slider-thumb]:shadow"
       />
       <div className="grid grid-cols-5 text-[10px] tabular-nums text-muted-foreground">

@@ -1,4 +1,3 @@
-import type { Feature, Polygon } from "geojson";
 import type {
   CanvasSource,
   LightSpecification,
@@ -41,8 +40,12 @@ const R2D = 180 / Math.PI;
 const NIGHT_TWILIGHT_SIN_DEPTH = Math.sin(NIGHT_TWILIGHT_DEPTH * D2R);
 const MS_PER_DAY = 86_400_000;
 const MS_PER_MINUTE = 60_000;
+// Minimum subsolar-longitude movement (degrees, ~1 min of time) that warrants a
+// night-mask redraw; smaller playback steps reuse the last painted mask.
+const MASK_LNG_EPSILON = 0.25;
 
-function localDayStart(dateMs: number): number {
+/** Local midnight (device time zone) of the day containing `dateMs`. */
+export function localDayStart(dateMs: number): number {
   const d = new Date(dateMs);
   return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 }
@@ -200,11 +203,13 @@ export function sunPositionAt(
   const haR = ha * D2R;
   const latR = lat * D2R;
   const decR = delta * D2R;
-  const altitude =
-    Math.asin(
-      Math.sin(latR) * Math.sin(decR) +
-        Math.cos(latR) * Math.cos(decR) * Math.cos(haR),
-    ) * R2D;
+  // Clamp before asin: the bracketed term is mathematically within [-1, 1] but
+  // floating-point rounding can push it fractionally past 1 (e.g. sun at zenith
+  // for the current center at local noon), which would make asin return NaN.
+  const sinAltitude =
+    Math.sin(latR) * Math.sin(decR) +
+    Math.cos(latR) * Math.cos(decR) * Math.cos(haR);
+  const altitude = Math.asin(Math.min(1, Math.max(-1, sinAltitude))) * R2D;
   // Azimuth measured clockwise from north.
   const azimuth =
     (Math.atan2(
@@ -215,65 +220,6 @@ export function sunPositionAt(
       180) %
     360;
   return { altitude, azimuth };
-}
-
-/**
- * Latitude of the boundary where the sun sits exactly `altitudeDeg` above the
- * horizon, for a given hour angle `ha` (degrees) and declination `delta`
- * (degrees). Solving sin(alt) = sinφ·sinδ + cosφ·cosδ·cos(ha) for φ.
- */
-function terminatorLatitude(
-  altitudeDeg: number,
-  ha: number,
-  delta: number,
-): number {
-  const decR = delta * D2R;
-  const p = Math.sin(decR);
-  const q = Math.cos(decR) * Math.cos(ha * D2R);
-  const hyp = Math.hypot(p, q);
-  if (hyp < 1e-9) return 0;
-  const ratio = Math.min(1, Math.max(-1, Math.sin(altitudeDeg * D2R) / hyp));
-  const lat = (Math.asin(ratio) - Math.atan2(q, p)) * R2D;
-  return Math.min(90, Math.max(-90, lat));
-}
-
-/**
- * Night-side polygon for the region where the sun is below `altitudeDeg`. Walks
- * the terminator latitude across all longitudes, then closes the ring along the
- * pole that lies in darkness (the winter pole). Returns null when the whole
- * globe is lit above the threshold (degenerate ring).
- */
-export function nightPolygon(
-  dateMs: number,
-  altitudeDeg: number,
-): Feature<Polygon> | null {
-  const jd = julianDay(dateMs);
-  const gst = greenwichMeanSiderealTime(jd);
-  const { alpha, delta } = sunEquatorialPosition(dateMs);
-  // Pole in night: the one in the hemisphere opposite the subsolar latitude.
-  const nightPole = delta < 0 ? 90 : -90;
-
-  const ring: Array<[number, number]> = [];
-  const STEP = 1;
-  for (let lng = -180; lng <= 180; lng += STEP) {
-    let ha = gst * 15 + lng - alpha;
-    ha = ((((ha + 180) % 360) + 360) % 360) - 180;
-    ring.push([lng, terminatorLatitude(altitudeDeg, ha, delta)]);
-  }
-  // Close the band up to the dark pole and back.
-  ring.push([180, nightPole]);
-  ring.push([-180, nightPole]);
-  ring.push([ring[0][0], ring[0][1]]);
-
-  // Reject a ring with no vertical extent (nothing below the threshold).
-  const lats = ring.map(([, y]) => y);
-  if (Math.max(...lats) - Math.min(...lats) < 1e-6) return null;
-
-  return {
-    type: "Feature",
-    properties: { altitude: altitudeDeg },
-    geometry: { type: "Polygon", coordinates: [ring] },
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +240,12 @@ class SunEngine {
   private readonly nightCanvas: HTMLCanvasElement;
   private readonly nightContext: CanvasRenderingContext2D | null;
   private nightImageData: ImageData | null = null;
+  // Subsolar point / shading depth of the last painted mask, so playback can
+  // skip the full per-pixel recompute until the sun has actually moved.
+  private maskDrawn = false;
+  private lastMaskLng = 0;
+  private lastMaskLat = 0;
+  private lastMaskShade = -1;
   private rafId: number | null = null;
   // Wall-clock timestamp of the previous animation frame; null while paused.
   private lastFrame: number | null = null;
@@ -415,6 +367,27 @@ class SunEngine {
 
   private drawNightMask(): void {
     if (!this.nightContext) return;
+    const subsolar = subsolarPoint(this.settings.dateMs);
+    const subLng = subsolar.lng;
+    const shadeAlpha = Math.round(
+      Math.min(1, Math.max(0, this.settings.shadeOpacity)) * 255,
+    );
+    // Throttle: playing the clock re-renders every animation frame, but the
+    // subsolar point creeps only a fraction of a degree per frame. Skip the
+    // 460k-pixel recompute until it (or the shading depth) moves enough to be
+    // visible; a scrub or date change jumps well past the epsilon and redraws.
+    const lngDelta = Math.abs(
+      ((subLng - this.lastMaskLng + 540) % 360) - 180,
+    );
+    if (
+      this.maskDrawn &&
+      lngDelta < MASK_LNG_EPSILON &&
+      subsolar.lat === this.lastMaskLat &&
+      shadeAlpha === this.lastMaskShade
+    ) {
+      return;
+    }
+
     const width = this.nightCanvas.width;
     const height = this.nightCanvas.height;
     if (
@@ -426,14 +399,9 @@ class SunEngine {
     }
 
     const data = this.nightImageData.data;
-    const subsolar = subsolarPoint(this.settings.dateMs);
     const decR = subsolar.lat * D2R;
     const sinDec = Math.sin(decR);
     const cosDec = Math.cos(decR);
-    const subLng = subsolar.lng;
-    const shadeAlpha = Math.round(
-      Math.min(1, Math.max(0, this.settings.shadeOpacity)) * 255,
-    );
     const cosHourAngles = new Float64Array(width);
     for (let x = 0; x < width; x += 1) {
       const lng = -180 + ((x + 0.5) / width) * 360;
@@ -462,6 +430,10 @@ class SunEngine {
     }
 
     this.nightContext.putImageData(this.nightImageData, 0, 0);
+    this.maskDrawn = true;
+    this.lastMaskLng = subLng;
+    this.lastMaskLat = subsolar.lat;
+    this.lastMaskShade = shadeAlpha;
   }
 
   /** Point the 3D scene light at the sun as seen from the current map center. */
@@ -649,21 +621,40 @@ export function advanceSunClock(deltaMs: number): void {
 }
 
 /**
- * Re-attach the engine to the (possibly new) map after a project load or map
- * re-init, mirroring restoreEffects. Applies persisted settings first so the
- * shading reflects the loaded project. Idempotent.
+ * Apply a saved project's sun state: adopt its settings and open or close the
+ * panel to match the persisted `open` flag. This is the genuine project-load
+ * path (invoked via the plugin's applyProjectState), so it is the one place
+ * allowed to change open/closed state from stored data. Returns whether
+ * anything changed. See {@link reattachSun} for the map-reinit path.
  */
-export function restoreSun(app: GeoLibreAppAPI, state?: unknown): void {
+export function restoreSun(app: GeoLibreAppAPI, state?: unknown): boolean {
   const next = normalizeSunSettings(state, DEFAULT_SUN_SETTINGS);
   const shouldOpen = Boolean(
     state && typeof state === "object" && (state as { open?: unknown }).open,
   );
+  let changed = false;
   if (!sunSettingsEqual(next, settings)) {
     settings = next;
     notifyState();
+    changed = true;
   }
+  const wasVisible = panelVisible;
   if (shouldOpen) openSunPanel(app);
   else closeSunPanel(app);
+  return changed || panelVisible !== wasVisible;
+}
+
+/**
+ * Re-bind the engine to the current map without touching open/closed state.
+ * Called after a map re-init or basemap change (which bump the map generation
+ * independently of project loads), so it must never reset the panel: a
+ * collaborator's unrelated remote edit or a basemap swap should not close a
+ * locally-opened Sun panel. The project-load case is handled by
+ * {@link restoreSun} via applyProjectState.
+ */
+export function reattachSun(app: GeoLibreAppAPI): void {
+  if (panelVisible) attachEngine(app);
+  else detachEngine();
 }
 
 export const maplibreSunPlugin: GeoLibrePlugin = {
@@ -682,8 +673,6 @@ export const maplibreSunPlugin: GeoLibrePlugin = {
     }
     return { open: panelVisible, ...settings };
   },
-  applyProjectState: (app: GeoLibreAppAPI, state: unknown) => {
-    restoreSun(app, state);
-    return true;
-  },
+  applyProjectState: (app: GeoLibreAppAPI, state: unknown) =>
+    restoreSun(app, state),
 };

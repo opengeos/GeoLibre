@@ -20,11 +20,10 @@ import {
   restoreEffects,
   restoreLidarLayers,
   restorePlanetaryComputerLayers,
+  reattachSun,
   restoreRasterLayers,
-  restoreSun,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
-  SUN_PLUGIN_ID,
   setBookmarkLabels,
   setNonTiledRasterHandler,
   setViewStateLabels,
@@ -896,12 +895,12 @@ export function DesktopShell({
       useAppStore.getState().projectPlugins?.settings?.[EFFECTS_PLUGIN_ID],
     );
     // The sun simulation reads/writes native map layers, so it must re-bind to
-    // the (possibly new) map instance after a project load or map re-init. Its
-    // panel-open flag and settings ride in the plugin's saved project state.
-    restoreSun(
-      appAPI,
-      useAppStore.getState().projectPlugins?.settings?.[SUN_PLUGIN_ID],
-    );
+    // the (possibly new) map instance after a map re-init or basemap change.
+    // Reattach only — it must NOT derive open/closed state here, which would
+    // reset a locally-opened panel on an unrelated basemap swap or remote edit.
+    // Project loads open/close it via the plugin's applyProjectState (invoked by
+    // restoreProjectState above).
+    reattachSun(appAPI);
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));

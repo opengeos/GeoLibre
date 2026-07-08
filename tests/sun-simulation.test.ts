@@ -4,7 +4,6 @@ import {
   DEFAULT_SUN_SETTINGS,
   advanceSunClock,
   getSunSettings,
-  nightPolygon,
   normalizeSunSettings,
   setSunSettings,
   SUN_SHADE_MAX,
@@ -94,26 +93,6 @@ describe("subsolarPoint / sunPositionAt round trip", () => {
     const { lat } = subsolarPoint(dateMs);
     const { delta } = sunEquatorialPosition(dateMs);
     assert.ok(Math.abs(lat - delta) < 1e-9);
-  });
-});
-
-describe("nightPolygon", () => {
-  it("returns a closed ring tagged with its altitude threshold", () => {
-    const feature = nightPolygon(DEFAULT_SUN_SETTINGS.dateMs, -0.83);
-    assert.ok(feature, "expected a night polygon");
-    assert.equal(feature?.properties?.altitude, -0.83);
-    const ring = feature!.geometry.coordinates[0];
-    assert.ok(ring.length > 100, "ring should be densely sampled");
-    assert.deepEqual(ring[0], ring[ring.length - 1], "ring must be closed");
-    // Closes along the winter (dark) pole: June solstice → the South Pole.
-    const lats = ring.map(([, y]) => y);
-    assert.ok(Math.min(...lats) <= -89, "night band should reach the dark pole");
-  });
-
-  it("puts the dark cap over the North Pole near the December solstice", () => {
-    const feature = nightPolygon(Date.UTC(2024, 11, 21, 12), -0.83);
-    const lats = feature!.geometry.coordinates[0].map(([, y]) => y);
-    assert.ok(Math.max(...lats) >= 89, "polar night should cover the North Pole");
   });
 });
 

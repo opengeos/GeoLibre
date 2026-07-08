@@ -1308,7 +1308,6 @@
     },
     "sun": {
       "title": "Sun",
-      "dateTime": "Date and time",
       "date": "Date",
       "time": "Time",
       "timeOfDay": "Time of day",
