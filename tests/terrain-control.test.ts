@@ -52,6 +52,9 @@ function makeFakeElement(): FakeElement {
 }
 
 const TERRAIN_SOURCE = "geolibre-terrain-dem";
+// Mirrors the control's private DOUBLE_CLICK_MS: advancing timers by exactly the
+// debounce window fires the pending single-click toggle.
+const DOUBLE_CLICK_MS = 250;
 
 interface FakeMap {
   map: maplibregl.Map;
@@ -125,7 +128,7 @@ describe("TerrainControl", () => {
     button.emit("click");
     // Still pending until the double-click window elapses.
     assert.equal(fake.setTerrainCalls.length, 0);
-    t.mock.timers.tick(300);
+    t.mock.timers.tick(DOUBLE_CLICK_MS);
     assert.equal(control.isEnabled(), true);
     assert.deepEqual(fake.setTerrainCalls.at(-1), {
       source: TERRAIN_SOURCE,
@@ -134,7 +137,7 @@ describe("TerrainControl", () => {
 
     // A second lone click toggles it back off.
     button.emit("click");
-    t.mock.timers.tick(300);
+    t.mock.timers.tick(DOUBLE_CLICK_MS);
     assert.equal(control.isEnabled(), false);
     assert.equal(fake.setTerrainCalls.at(-1), null);
   });
@@ -153,7 +156,7 @@ describe("TerrainControl", () => {
     assert.equal(fake.setTerrainCalls.length, 1);
 
     // The cancelled single-click toggle must not fire late.
-    t.mock.timers.tick(300);
+    t.mock.timers.tick(DOUBLE_CLICK_MS);
     assert.equal(fake.setTerrainCalls.length, 1);
   });
 

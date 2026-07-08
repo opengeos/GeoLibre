@@ -87,10 +87,6 @@ const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
     'Elevation tiles by <a href="https://registry.opendata.aws/terrain-tiles/">AWS Open Data Terrain Tiles</a>',
 };
 const DEFAULT_TERRAIN_EXAGGERATION = 1;
-const TERRAIN_OPTIONS: maplibregl.TerrainSpecification = {
-  source: TERRAIN_SOURCE_ID,
-  exaggeration: DEFAULT_TERRAIN_EXAGGERATION,
-};
 /**
  * Window event dispatched when the terrain control is double-clicked, so the
  * React layer can open the vertical-exaggeration dialog. The controller lives
