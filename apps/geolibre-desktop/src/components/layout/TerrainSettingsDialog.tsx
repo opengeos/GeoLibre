@@ -55,10 +55,14 @@ export function TerrainSettingsDialog({
   useEffect(() => {
     const handleOpen = () => {
       // Seed the slider from the controller's current value so the dialog
-      // reflects any previously chosen exaggeration.
+      // reflects any previously chosen exaggeration. Clamp it to the dialog's
+      // display range: the controller only floors its cache at 0, so a value
+      // written directly (e.g. via a future scripting API) could exceed the max.
       setExaggeration(
-        mapControllerRef.current?.getTerrainExaggeration() ??
-          DEFAULT_EXAGGERATION,
+        clampExaggeration(
+          mapControllerRef.current?.getTerrainExaggeration() ??
+            DEFAULT_EXAGGERATION,
+        ),
       );
       setOpen(true);
     };

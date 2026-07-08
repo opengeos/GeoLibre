@@ -699,8 +699,13 @@ export class MapController {
     else if (control === "compass") this.removeCompassControl();
     else if (control === "geolocate") this.removeGeolocateControl();
     else if (control === "globe") this.removeGlobeControl();
-    else if (control === "terrain") this.removeTerrainControl();
-    else if (control === "scale") this.removeScaleControl();
+    else if (control === "terrain") {
+      this.removeTerrainControl();
+      // Terrain is genuinely being hidden here (not repositioned, which goes
+      // through removeBuiltInControl), so close the exaggeration dialog — it has
+      // no control to act on now.
+      window.dispatchEvent(new CustomEvent(TERRAIN_SETTINGS_CLOSE_EVENT));
+    } else if (control === "scale") this.removeScaleControl();
     else if (control === "attribution") this.removeAttributionControl();
     else if (control === "logo") this.removeLogoControl();
     else this.removeLayerControl();
@@ -2213,9 +2218,6 @@ export class MapController {
     if (!this.terrainControl) return;
     this.removeControl(this.terrainControl);
     this.terrainControl = null;
-    // The exaggeration dialog is driven by this control; tell the React layer to
-    // close it so it isn't left open with no effect once terrain is gone.
-    window.dispatchEvent(new CustomEvent(TERRAIN_SETTINGS_CLOSE_EVENT));
   }
 
   /** The current terrain vertical exaggeration. */
