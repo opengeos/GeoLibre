@@ -483,6 +483,72 @@ async function parseShapefileZip(
   return normalizeShapefileResult(await shp(data));
 }
 
+/** ESRI shape type for MultiPatch (3D surfaces), read from a `.shp` header. */
+const SHAPEFILE_MULTIPATCH_TYPE = 31;
+
+/**
+ * True for the metadata entries macOS Finder adds to a zip: the `__MACOSX/`
+ * resource-fork tree and AppleDouble `._<name>` files that shadow every real
+ * entry (an AppleDouble `._x.shp` otherwise looks like the shapefile).
+ */
+function isMacOsMetadataEntry(entryName: string): boolean {
+  const baseName = entryName.slice(entryName.lastIndexOf("/") + 1);
+  return entryName.startsWith("__MACOSX/") || baseName.startsWith("._");
+}
+
+/** The ESRI shape type from a `.shp` header (byte 32, little-endian), or -1. */
+export function shapefileShapeType(shp: Uint8Array): number {
+  if (shp.byteLength < 36) return -1;
+  return new DataView(shp.buffer, shp.byteOffset, shp.byteLength).getInt32(
+    32,
+    true,
+  );
+}
+
+/**
+ * Unzip a shapefile archive into a {@link DuckDbVectorFile} (the `.shp` plus its
+ * sidecars, registered under one flat base name), skipping macOS `__MACOSX` /
+ * AppleDouble entries. Returns null when the archive has no `.shp`.
+ *
+ * The `isMultiPatch` flag marks 3D MultiPatch (shape type 31) shapefiles: shpjs
+ * mis-reads those as points, so they must be loaded through DuckDB, which
+ * decodes the TIN surfaces (issue #1121).
+ */
+export async function readShapefileZipForDuckDb(
+  data: ArrayBuffer | Uint8Array,
+): Promise<{ file: DuckDbVectorFile; isMultiPatch: boolean } | null> {
+  const entries = await unzipArchive(data);
+  const shpEntry = Object.keys(entries).find(
+    (name) => /\.shp$/i.test(name) && !isMacOsMetadataEntry(name),
+  );
+  if (!shpEntry) return null;
+  const baseName = browserSafeFileName(shpEntry) || "layer.shp";
+  const stem = baseName.replace(/\.shp$/i, "");
+  const entryBase = shpEntry.replace(/\.[^./]+$/, "");
+  const shpBytes = entries[shpEntry];
+  const siblingFiles: DuckDbVectorFile[] = [];
+  for (const [entry, bytes] of Object.entries(entries)) {
+    if (entry === shpEntry || isMacOsMetadataEntry(entry)) continue;
+    // Same base path (any extension): the shapefile's sidecars (.dbf, .shx, ...).
+    if (entry.replace(/\.[^./]+$/, "") !== entryBase) continue;
+    const extension = entry.slice(entry.lastIndexOf(".") + 1).toLowerCase();
+    siblingFiles.push({
+      name: `${stem}.${extension}`,
+      extension,
+      data: toDuckDbVectorData(bytes),
+    });
+  }
+  return {
+    file: {
+      name: baseName,
+      extension: "shp",
+      data: toDuckDbVectorData(shpBytes),
+      siblingFiles,
+    },
+    isMultiPatch: shapefileShapeType(shpBytes) === SHAPEFILE_MULTIPATCH_TYPE,
+  };
+}
+
 function unzipArchive(
   data: ArrayBuffer | Uint8Array,
 ): Promise<Record<string, Uint8Array>> {
@@ -953,13 +1019,22 @@ async function loadBrowserVectorFile(
   }
 
   if (extension === "zip") {
+    const buffer = await file.arrayBuffer();
+    const shapefile = await readShapefileZipForDuckDb(buffer).catch(() => null);
+    // 3D MultiPatch shapefiles: shpjs mis-parses their surfaces as points, so
+    // read them through DuckDB, which decodes the TIN geometry (issue #1121).
+    if (shapefile?.isMultiPatch) {
+      return { data: await loadDuckDbVector(shapefile.file, options), path: file.name };
+    }
     try {
-      return {
-        data: await parseShapefileZip(await file.arrayBuffer()),
-        path: file.name,
-      };
+      return { data: await parseShapefileZip(buffer), path: file.name };
     } catch {
-      // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
+      // shpjs could not read it; retry through DuckDB with the unzipped
+      // components (a raw `.zip` is not a GDAL dataset, so the `.shp` and its
+      // sidecars must be registered individually).
+      if (shapefile) {
+        return { data: await loadDuckDbVector(shapefile.file, options), path: file.name };
+      }
     }
   }
 
@@ -1233,13 +1308,21 @@ async function loadTauriVectorFile(
   }
 
   if (extension === "zip") {
+    const buffer = await readLocalFileBytes(path);
+    const shapefile = await readShapefileZipForDuckDb(buffer).catch(() => null);
+    // 3D MultiPatch shapefiles: shpjs mis-parses their surfaces as points, so
+    // read them through DuckDB, which decodes the TIN geometry (issue #1121).
+    if (shapefile?.isMultiPatch) {
+      return { data: await loadDuckDbVector(shapefile.file, options), path };
+    }
     try {
-      return {
-        data: await parseShapefileZip(await readLocalFileBytes(path)),
-        path,
-      };
+      return { data: await parseShapefileZip(buffer), path };
     } catch {
-      // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
+      // shpjs could not read it; retry through DuckDB with the unzipped
+      // components (a raw `.zip` is not a GDAL dataset).
+      if (shapefile) {
+        return { data: await loadDuckDbVector(shapefile.file, options), path };
+      }
     }
   }
 
