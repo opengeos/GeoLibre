@@ -585,7 +585,13 @@ function imageOverlayLayer(
  * time, fill an open `<TimeStamp>`/`<TimeSpan>` end with the next frame's start
  * (a step function), give them a shared group id, and leave only the first
  * frame visible so the others do not all stack at once before the Time Slider
- * is opened. Overlays without a time (or a lone time-tagged one) are untouched.
+ * is opened.
+ *
+ * Only overlays with a numeric start (`timeSpan.begin`) are treated as frames,
+ * matching what the Time Slider can animate; an overlay with an open-start span
+ * (or a lone time-tagged overlay that is not part of a sequence) has its
+ * transient `timeSpan` dropped so it stays a normal static overlay the slider
+ * never hides.
  *
  * @param overlays - The resolved overlays for one file, mutated in place.
  * @returns The same array, for chaining.
@@ -594,22 +600,40 @@ function sequenceTimeOverlays(
   overlays: LoadedImageOverlay[],
 ): LoadedImageOverlay[] {
   const frames = overlays
-    .filter((overlay) => overlay.timeSpan)
-    .sort((a, b) => (a.timeSpan?.begin ?? 0) - (b.timeSpan?.begin ?? 0));
-  if (frames.length < 2) return overlays;
+    .filter(
+      (overlay): overlay is LoadedImageOverlay & {
+        timeSpan: { begin: number; end: number | null };
+      } => typeof overlay.timeSpan?.begin === "number",
+    )
+    .sort((a, b) => a.timeSpan.begin - b.timeSpan.begin);
 
+  // An animation needs at least two frames with distinct start times. A lone
+  // time-tagged overlay, or several sharing one time (e.g. a single inherited
+  // Folder `<TimeSpan>`), is not a sequence; strip every transient timeSpan so
+  // the Time Slider treats these overlays as ordinary static layers.
+  const distinctBegins = new Set(frames.map((frame) => frame.timeSpan.begin));
+  if (distinctBegins.size < 2) {
+    for (const overlay of overlays) delete overlay.timeSpan;
+    return overlays;
+  }
+
+  const inSequence = new Set<LoadedImageOverlay>(frames);
   const groupId = crypto.randomUUID();
   frames.forEach((frame, index) => {
     frame.groupId = groupId;
     frame.visible = index === 0;
     // A frame with an open end runs until the next frame begins (or stays open
     // for the last frame), so an instant-tagged sequence steps cleanly.
-    const span = frame.timeSpan;
-    if (span && span.end === null) {
-      const next = frames[index + 1]?.timeSpan?.begin;
-      if (typeof next === "number") span.end = next;
+    if (frame.timeSpan.end === null) {
+      const next = frames[index + 1]?.timeSpan.begin;
+      if (typeof next === "number") frame.timeSpan.end = next;
     }
   });
+  // Any time-tagged overlay left out of the sequence (e.g. an open-start span)
+  // should not be animated, so drop its timeSpan too.
+  for (const overlay of overlays) {
+    if (!inSequence.has(overlay)) delete overlay.timeSpan;
+  }
   return overlays;
 }
 

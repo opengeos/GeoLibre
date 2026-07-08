@@ -204,18 +204,27 @@ function groundOverlayFromElement(element: Element): KmlGroundOverlay | null {
  * `YYYY-MM`, `YYYY-MM-DD`, and full `dateTime` via `Date.parse`.
  */
 function parseKmlTime(element: Element): KmlTimeBounds | null {
-  const span = directChild(element, "TimeSpan");
-  if (span) {
-    const begin = parseKmlDate(childText(span, "begin"));
-    const end = parseKmlDate(childText(span, "end"));
-    if (begin === null && end === null) return null;
-    return { begin, end };
-  }
-  const stamp = directChild(element, "TimeStamp");
-  if (stamp) {
-    const when = parseKmlDate(childText(stamp, "when"));
-    if (when === null) return null;
-    return { begin: when, end: null };
+  // KML time can be inherited: a `<TimeSpan>`/`<TimeStamp>` on an enclosing
+  // `<Folder>`/`<Document>` applies to descendant features that lack their own,
+  // so walk up until one is found (the overlay's own primitive wins).
+  for (
+    let node: Element | null = element;
+    node;
+    node = node.parentElement
+  ) {
+    const span = directChild(node, "TimeSpan");
+    if (span) {
+      const begin = parseKmlDate(childText(span, "begin"));
+      const end = parseKmlDate(childText(span, "end"));
+      if (begin === null && end === null) return null;
+      return { begin, end };
+    }
+    const stamp = directChild(node, "TimeStamp");
+    if (stamp) {
+      const when = parseKmlDate(childText(stamp, "when"));
+      if (when === null) return null;
+      return { begin: when, end: null };
+    }
   }
   return null;
 }

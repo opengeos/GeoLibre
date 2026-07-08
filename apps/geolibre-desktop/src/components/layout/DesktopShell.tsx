@@ -1027,13 +1027,17 @@ export function DesktopShell({
 
       // Gather each time-animated overlay's frames into one collapsible group so
       // the sequence reads as a single timeline entry, not N stacked layers.
-      let hasTimeAnimation = false;
-      for (const ids of frameGroups.values()) {
-        if (ids.length > 1) {
-          addLayerGroup(t("kml.timeOverlayGroup"), ids);
-          hasTimeAnimation = true;
-        }
-      }
+      const sequences = [...frameGroups.values()].filter((ids) => ids.length > 1);
+      sequences.forEach((ids, index) => {
+        // Suffix when a single drop yields more than one sequence so the groups
+        // are distinguishable in the panel (e.g. two independent radar loops).
+        const name =
+          sequences.length > 1
+            ? `${t("kml.timeOverlayGroup")} ${index + 1}`
+            : t("kml.timeOverlayGroup");
+        addLayerGroup(name, ids);
+      });
+      const hasTimeAnimation = sequences.length > 0;
       // Auto-open the Time Slider so a time-animated overlay sequence can be
       // stepped through immediately, without the user hunting for the plugin.
       if (hasTimeAnimation && !isPluginActive(TIME_SLIDER_PLUGIN_ID)) {

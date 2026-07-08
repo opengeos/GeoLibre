@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import {
   buildTimeFilter,
+  pickGranularity,
   type TimeBinding,
   type TimeGranularity,
 } from "./time-slider-binding";
@@ -389,9 +390,6 @@ const appliedFilterKeys = new Map<string, string>();
 // Guards the store writes made by overlay-frame visibility toggling (mirrors
 // `applyingBoundFilters`) so they do not re-trigger the store subscription.
 let applyingOverlayVisibility = false;
-// Last visibility pushed to each time-overlay frame, so a tick that lands in the
-// same window does not re-write the store.
-const appliedFrameVisibility = new Map<string, boolean>();
 
 interface BoundLayer {
   id: string;
@@ -441,9 +439,10 @@ function applyTimeOverlayVisibility(
     for (const frame of frames) {
       const visible =
         now >= frame.begin && (frame.end === null || now < frame.end);
-      if (appliedFrameVisibility.get(frame.id) === visible) continue;
-      appliedFrameVisibility.set(frame.id, visible);
       const layer = store.layers.find((item) => item.id === frame.id);
+      // Compare against the layer's live visibility (not a cache) so the slider
+      // both avoids redundant writes and re-asserts the date-driven frame after
+      // a manual toggle from the Layers panel.
       if (layer && layer.visible !== visible) {
         store.setLayerVisibility(frame.id, visible);
       }
@@ -551,9 +550,10 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       if (frameMax > max) max = frameMax;
     }
     // With no vector binding to set the stepping unit, derive one from the total
-    // overlay span so scrubbing steps through the frames at a sensible rate.
+    // overlay span (reusing the vector path's bucketing so the two stay
+    // consistent) so scrubbing steps through the frames at a sensible rate.
     if (bound.length === 0 && Number.isFinite(min) && Number.isFinite(max)) {
-      granularity = granularityForSpan(max - min);
+      granularity = pickGranularity(max - min);
     }
     const rangeKey = `${min}|${max}|${granularity}`;
     if (rangeKey !== lastBoundRangeKey) {
@@ -588,14 +588,6 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
   applyTimeOverlayVisibility(control, frames);
 }
 
-/** Choose a stepping granularity from a total span in milliseconds. */
-function granularityForSpan(spanMs: number): TimeGranularity {
-  const day = 24 * 60 * 60 * 1000;
-  if (spanMs > 1095 * day) return "year"; // > ~3 years
-  if (spanMs > 90 * day) return "month"; // > ~3 months
-  return "day";
-}
-
 /**
  * Wire the control's date changes and the GeoLibre store together so bound
  * layers track the timeline. Returns a detacher that also clears every applied
@@ -608,7 +600,6 @@ function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
   preBindingRange = null;
   appliedFilterKeys.clear();
-  appliedFrameVisibility.clear();
   // `statechange` fires on every date change (scrub and each playback tick) plus
   // range/granularity changes, which is exactly when bound filters and overlay
   // frames must update.
@@ -644,7 +635,6 @@ function attachBindingSync(control: TimeSliderControl): () => void {
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
     appliedFilterKeys.clear();
-    appliedFrameVisibility.clear();
     lastBoundRangeKey = null;
     preBindingRange = null;
   };
