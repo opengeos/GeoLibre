@@ -973,7 +973,9 @@ export function DesktopShell({
         // A KML/KMZ ground overlay becomes an image layer, not a vector one.
         if (isLoadedImageOverlay(layer)) {
           lastLayerId = addImageOverlayLayer(
-            layer.name,
+            // `||` (not `??`) so an empty name falls back to the path, matching
+            // the vector branch and the drop toast.
+            layer.name || layerNameFromPath(layer.path),
             { url: layer.url, coordinates: layer.coordinates },
             {
               opacity: layer.opacity,

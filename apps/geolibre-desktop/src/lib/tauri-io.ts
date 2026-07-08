@@ -567,31 +567,79 @@ function imageOverlayLayer(
   };
 }
 
+// A ground-overlay image is inlined as a base64 `data:` URL on the layer and
+// persisted in the project file (and every collaboration snapshot) at ~4/3 its
+// byte size, so cap it like the Raster Georeferencer does to avoid bloating
+// projects and memory.
+const MAX_OVERLAY_IMAGE_BYTES = 8 * 1024 * 1024;
+
+// A `<GroundOverlay>` together with the archive directory of the KML that
+// declared it, so a relative `href` can be resolved against that directory
+// first.
+interface KmzOverlay {
+  overlay: KmlGroundOverlay;
+  baseDir: string;
+}
+
+// The directory prefix (with trailing slash) of an archive entry name, or "".
+function archiveDirname(entryName: string): string {
+  const slash = entryName.lastIndexOf("/");
+  return slash >= 0 ? entryName.slice(0, slash + 1) : "";
+}
+
 // Resolve every GroundOverlay in the archive's KML documents to an image layer,
 // pulling each overlay's image bytes out of the archive (or using an absolute
-// URL directly). Overlays whose image cannot be found are skipped.
+// URL directly). Overlays whose image is missing, oversized, or in a format
+// browsers cannot render are skipped with a warning.
 async function groundOverlaysFromKmz(
   entries: Record<string, Uint8Array>,
-  kmlTexts: string[],
+  kmlDocs: { name: string; text: string }[],
   path: string,
 ): Promise<LoadedImageOverlay[]> {
-  // Skip a second DOM parse of KMLs with no overlay (the vector loader already
-  // parsed their placemarks); "GroundOverlay" only appears when present.
-  const overlayTexts = kmlTexts.filter((text) => text.includes("GroundOverlay"));
+  // Prefilter (case-insensitively, matching kml.ts's tolerant element matching)
+  // so a KML with no overlay is not DOM-parsed a second time.
+  const parsed: KmzOverlay[] = kmlDocs
+    .filter((doc) => /groundoverlay/i.test(doc.text))
+    .flatMap((doc) =>
+      parseKmlGroundOverlays(doc.text).map((overlay) => ({
+        overlay,
+        baseDir: archiveDirname(doc.name),
+      })),
+    )
+    .sort((a, b) => a.overlay.drawOrder - b.overlay.drawOrder);
+
   const overlays: LoadedImageOverlay[] = [];
-  for (const overlay of sortByDrawOrder(overlayTexts.flatMap(parseKmlGroundOverlays))) {
+  for (const { overlay, baseDir } of parsed) {
     if (isHttpUrl(overlay.href)) {
       overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
       continue;
     }
-    const data = findArchiveEntry(entries, overlay.href);
+    // Try the href relative to its KML's directory first (a KMZ nesting
+    // `folder/doc.kml` referencing `images/x.png` means `folder/images/x.png`),
+    // then fall back to the global archive lookup.
+    const data =
+      findArchiveEntry(entries, baseDir + overlay.href) ??
+      findArchiveEntry(entries, overlay.href);
     if (!data) {
       console.warn(
         `Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`,
       );
       continue;
     }
-    const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
+    if (data.length > MAX_OVERLAY_IMAGE_BYTES) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
+      );
+      continue;
+    }
+    const mime = imageMimeFromName(overlay.href);
+    if (mime === "image/tiff") {
+      console.warn(
+        `Skipping a KML ground overlay: browsers cannot render the TIFF image "${overlay.href}".`,
+      );
+      continue;
+    }
+    const url = await bytesToDataUrl(data, mime);
     overlays.push(imageOverlayLayer(overlay, url, path));
   }
   return overlays;
@@ -612,14 +660,21 @@ function groundOverlaysFromKml(
   path: string,
 ): LoadedImageOverlay[] {
   // Cheap prefilter so a KML with no overlays is not DOM-parsed a second time
-  // (its placemarks are already parsed by the vector loader). "GroundOverlay"
-  // only appears when the element is present, so a miss is a safe skip.
-  if (!text.includes("GroundOverlay")) return [];
+  // (its placemarks are already parsed by the vector loader). Matched
+  // case-insensitively, like kml.ts's element matching, so non-conformant
+  // casing is not dropped.
+  if (!/groundoverlay/i.test(text)) return [];
   const overlays: LoadedImageOverlay[] = [];
   for (const overlay of sortByDrawOrder(parseKmlGroundOverlays(text))) {
     if (!isHttpUrl(overlay.href)) {
       console.warn(
         `Skipping a KML ground overlay: its image "${overlay.href}" is a relative path, which a standalone KML (unlike a KMZ) cannot resolve. Only absolute URLs are supported.`,
+      );
+      continue;
+    }
+    if (imageMimeFromName(overlay.href) === "image/tiff") {
+      console.warn(
+        `Skipping a KML ground overlay: browsers cannot render the TIFF image "${overlay.href}".`,
       );
       continue;
     }
@@ -677,19 +732,28 @@ async function loadKmzLayers(
 ): Promise<LoadedLayer[]> {
   const entries = await unzipArchive(data);
   const kmlFiles = readKmlEntries(entries);
-  const layers: LoadedLayer[] = [];
 
-  // Decode the KML text up front: the DuckDB-WASM fallback in
-  // `kmzVectorFeatures` may transfer (and detach) a KML entry's buffer to its
-  // worker, which would leave nothing to read for overlay parsing afterward.
-  const kmlTexts = kmlFiles.map((file) =>
-    new TextDecoder("utf-8").decode(file.data),
-  );
+  // Decode the KML text up front, keeping each entry's full archive name so an
+  // overlay href can resolve relative to its KML's directory. Reading from
+  // `entries` (not the copies in `kmlFiles`) also avoids the DuckDB-WASM
+  // fallback transferring/detaching a KML buffer before overlays are parsed.
+  const kmlDocs = Object.entries(entries)
+    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
+    .map(([name, bytes]) => ({
+      name,
+      text: new TextDecoder("utf-8").decode(bytes),
+    }));
+
+  // Ground overlays are drawn under vector placemarks (as in Google Earth), so
+  // they are added first: a later store index renders on top.
+  const layers: LoadedLayer[] = [
+    ...(await groundOverlaysFromKmz(entries, kmlDocs, path)),
+  ];
 
   // Declining the oversized-vector prompt must not throw away the archive's
-  // ground overlays, so catch the cancellation and load overlays anyway; it is
-  // only re-thrown at the end when nothing else loaded (so the caller still
-  // skips a purely-declined file rather than surfacing a generic error).
+  // ground overlays, so catch the cancellation and keep them; it is only
+  // re-thrown at the end when nothing else loaded (so the caller still skips a
+  // purely-declined file rather than surfacing a generic error).
   let cancellation: unknown;
   try {
     const features = await kmzVectorFeatures(kmlFiles, options);
@@ -698,8 +762,6 @@ async function loadKmzLayers(
     if (!isVectorLoadCancelled(error)) throw error;
     cancellation = error;
   }
-
-  layers.push(...(await groundOverlaysFromKmz(entries, kmlTexts, path)));
 
   if (layers.length === 0) {
     if (cancellation) throw cancellation;
