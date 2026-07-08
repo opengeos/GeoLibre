@@ -1012,6 +1012,9 @@
       "hideEntry": "Hide entry"
     }
   },
+  "kml": {
+    "timeOverlayGroup": "Time overlay animation"
+  },
   "map": {
     "boundsRestricted": "Bounds locked",
     "boundsRestrictedTooltip": "Map bounds are restricted. You can change this in Settings.",

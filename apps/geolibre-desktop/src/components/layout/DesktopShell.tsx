@@ -475,6 +475,7 @@ export function DesktopShell({
   const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
+  const addLayerGroup = useAppStore((s) => s.addLayerGroup);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
@@ -985,6 +986,9 @@ export function DesktopShell({
   const addImportedVectorLayers = useCallback(
     (importedLayers: ImportedVectorLayer[]) => {
       let lastLayerId: string | null = null;
+      // Frame ids for each time-animated overlay sequence (keyed by the loader's
+      // group marker), so they can be gathered into one layer group afterward.
+      const frameGroups = new Map<string, string[]>();
       for (const layer of importedLayers) {
         // A KML/KMZ ground overlay becomes an image layer, not a vector one.
         if (isLoadedImageOverlay(layer)) {
@@ -997,8 +1001,15 @@ export function DesktopShell({
               opacity: layer.opacity,
               bounds: layer.bounds,
               sourcePath: layer.path,
+              ...(layer.timeSpan ? { timeSpan: layer.timeSpan } : {}),
+              ...(layer.visible === false ? { visible: false } : {}),
             },
           );
+          if (layer.groupId) {
+            const ids = frameGroups.get(layer.groupId) ?? [];
+            ids.push(lastLayerId);
+            frameGroups.set(layer.groupId, ids);
+          }
           continue;
         }
         // `||` (not `??`) so an empty-string name falls back to the path, and
@@ -1010,12 +1021,18 @@ export function DesktopShell({
         );
       }
 
+      // Gather each time-animated overlay's frames into one collapsible group so
+      // the sequence reads as a single timeline entry, not N stacked layers.
+      for (const ids of frameGroups.values()) {
+        if (ids.length > 1) addLayerGroup(t("kml.timeOverlayGroup"), ids);
+      }
+
       const importedLayer = useAppStore
         .getState()
         .layers.find((layer) => layer.id === lastLayerId);
       if (importedLayer) mapControllerRef.current?.fitLayer(importedLayer);
     },
-    [addGeoJsonLayer, addImageOverlayLayer],
+    [addGeoJsonLayer, addImageOverlayLayer, addLayerGroup, t],
   );
 
   const addDroppedPhotos = useCallback(

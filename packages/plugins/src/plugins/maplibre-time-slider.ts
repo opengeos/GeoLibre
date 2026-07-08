@@ -14,7 +14,11 @@ import type {
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
-import { buildTimeFilter, type TimeBinding } from "./time-slider-binding";
+import {
+  buildTimeFilter,
+  type TimeBinding,
+  type TimeGranularity,
+} from "./time-slider-binding";
 
 /**
  * Marker placed on every GeoLibre store layer that mirrors a time-slider
@@ -382,9 +386,71 @@ let applyingBoundFilters = false;
 // re-write the store. Cleared when a layer is unbound or the dock detaches.
 const appliedFilterKeys = new Map<string, string>();
 
+// Guards the store writes made by overlay-frame visibility toggling (mirrors
+// `applyingBoundFilters`) so they do not re-trigger the store subscription.
+let applyingOverlayVisibility = false;
+// Last visibility pushed to each time-overlay frame, so a tick that lands in the
+// same window does not re-write the store.
+const appliedFrameVisibility = new Map<string, boolean>();
+
 interface BoundLayer {
   id: string;
   binding: TimeBinding;
+}
+
+/** A KML `<TimeSpan>`/`<TimeStamp>` overlay frame's epoch-ms window. */
+interface TimeOverlayFrame {
+  id: string;
+  begin: number;
+  end: number | null;
+}
+
+/** Collect the image-overlay frames tagged with a `<TimeSpan>`/`<TimeStamp>`. */
+function getTimeOverlayFrames(): TimeOverlayFrame[] {
+  const frames: TimeOverlayFrame[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    const span = layer.metadata?.timeSpan as
+      | { begin: number | null; end: number | null }
+      | undefined;
+    if (span && typeof span.begin === "number") {
+      frames.push({
+        id: layer.id,
+        begin: span.begin,
+        end: typeof span.end === "number" ? span.end : null,
+      });
+    }
+  }
+  return frames;
+}
+
+/**
+ * Show only the overlay frame whose `[begin, end)` window contains the control's
+ * current date; hide the rest. Writes are guarded and diffed so scrubbing does
+ * not churn the store. A frame with an open end (the last in a sequence) stays
+ * visible for any date at or after its start.
+ */
+function applyTimeOverlayVisibility(
+  control: TimeSliderControl,
+  frames: TimeOverlayFrame[],
+): void {
+  if (frames.length === 0) return;
+  const now = new Date(control.getConfig().currentDate).getTime();
+  const store = useAppStore.getState();
+  applyingOverlayVisibility = true;
+  try {
+    for (const frame of frames) {
+      const visible =
+        now >= frame.begin && (frame.end === null || now < frame.end);
+      if (appliedFrameVisibility.get(frame.id) === visible) continue;
+      appliedFrameVisibility.set(frame.id, visible);
+      const layer = store.layers.find((item) => item.id === frame.id);
+      if (layer && layer.visible !== visible) {
+        store.setLayerVisibility(frame.id, visible);
+      }
+    }
+  } finally {
+    applyingOverlayVisibility = false;
+  }
 }
 
 /**
@@ -461,10 +527,12 @@ function clearBoundFilters(ids: string[]): void {
  */
 function reconcileBoundLayers(control: TimeSliderControl): void {
   const bound = getBoundLayers();
-  if (bound.length > 0) {
+  const frames = getTimeOverlayFrames();
+  if (bound.length > 0 || frames.length > 0) {
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
-    let granularity = bound[0].binding.granularity;
+    let granularity: TimeGranularity =
+      bound[0]?.binding.granularity ?? "day";
     let widestSpan = -1;
     for (const { binding } of bound) {
       if (binding.min < min) min = binding.min;
@@ -475,6 +543,17 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
         widestSpan = span;
         granularity = binding.granularity;
       }
+    }
+    // Fold in the time-overlay frames' extents so the track covers them too.
+    for (const frame of frames) {
+      if (frame.begin < min) min = frame.begin;
+      const frameMax = frame.end ?? frame.begin;
+      if (frameMax > max) max = frameMax;
+    }
+    // With no vector binding to set the stepping unit, derive one from the total
+    // overlay span so scrubbing steps through the frames at a sensible rate.
+    if (bound.length === 0 && Number.isFinite(min) && Number.isFinite(max)) {
+      granularity = granularityForSpan(max - min);
     }
     const rangeKey = `${min}|${max}|${granularity}`;
     if (rangeKey !== lastBoundRangeKey) {
@@ -492,8 +571,8 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
       control.setRange(new Date(min), new Date(max), undefined, granularity);
     }
   } else {
-    // The last binding was removed: restore the pre-binding range so any other
-    // temporal sources are not stranded at the bound layer's range.
+    // The last binding/frame was removed: restore the pre-binding range so any
+    // other temporal sources are not stranded at the bound layer's range.
     if (lastBoundRangeKey !== null && preBindingRange) {
       control.setRange(
         preBindingRange.start,
@@ -506,6 +585,15 @@ function reconcileBoundLayers(control: TimeSliderControl): void {
     lastBoundRangeKey = null;
   }
   applyBoundFilters(control, bound);
+  applyTimeOverlayVisibility(control, frames);
+}
+
+/** Choose a stepping granularity from a total span in milliseconds. */
+function granularityForSpan(spanMs: number): TimeGranularity {
+  const day = 24 * 60 * 60 * 1000;
+  if (spanMs > 1095 * day) return "year"; // > ~3 years
+  if (spanMs > 90 * day) return "month"; // > ~3 months
+  return "day";
 }
 
 /**
@@ -520,18 +608,24 @@ function attachBindingSync(control: TimeSliderControl): () => void {
   lastBoundRangeKey = null;
   preBindingRange = null;
   appliedFilterKeys.clear();
+  appliedFrameVisibility.clear();
   // `statechange` fires on every date change (scrub and each playback tick) plus
-  // range/granularity changes, which is exactly when bound filters must update.
-  const onStateChange = () => applyBoundFilters(control, getBoundLayers());
+  // range/granularity changes, which is exactly when bound filters and overlay
+  // frames must update.
+  const onStateChange = () => {
+    applyBoundFilters(control, getBoundLayers());
+    applyTimeOverlayVisibility(control, getTimeOverlayFrames());
+  };
   control.on("statechange", onStateChange);
 
-  // Track the set of bound layers so a store change only re-snaps the range when
-  // a binding was actually added, removed, or edited (not on every opacity drag).
-  let boundSignature = bindingSignature();
+  // Track the bound layers AND time-overlay frames so a store change only
+  // re-snaps the range when one of them was added, removed, or edited (not on
+  // every opacity drag). Ignore the store writes this sync makes itself.
+  let boundSignature = temporalSignature();
   let boundIds = getBoundLayers().map((entry) => entry.id);
   const unsubscribe = useAppStore.subscribe(() => {
-    if (applyingBoundFilters) return;
-    const nextSignature = bindingSignature();
+    if (applyingBoundFilters || applyingOverlayVisibility) return;
+    const nextSignature = temporalSignature();
     if (nextSignature === boundSignature) return;
     const nextIds = getBoundLayers().map((entry) => entry.id);
     const removed = boundIds.filter((id) => !nextIds.includes(id));
@@ -541,7 +635,8 @@ function attachBindingSync(control: TimeSliderControl): () => void {
     reconcileBoundLayers(control);
   });
 
-  // Apply once now so a binding made before activation takes effect immediately.
+  // Apply once now so a binding/frame set made before activation takes effect
+  // immediately.
   reconcileBoundLayers(control);
 
   return () => {
@@ -549,19 +644,26 @@ function attachBindingSync(control: TimeSliderControl): () => void {
     unsubscribe();
     clearBoundFilters(getBoundLayers().map((entry) => entry.id));
     appliedFilterKeys.clear();
+    appliedFrameVisibility.clear();
     lastBoundRangeKey = null;
     preBindingRange = null;
   };
 }
 
 /**
- * A compact signature of the current bindings (ids + configs) used to detect
- * binding changes without reacting to unrelated store updates.
+ * A compact signature of the current bindings and time-overlay frames (ids +
+ * configs/spans) used to detect temporal changes without reacting to unrelated
+ * store updates.
  */
-function bindingSignature(): string {
-  return JSON.stringify(
-    getBoundLayers().map(({ id, binding }) => [id, binding]),
-  );
+function temporalSignature(): string {
+  return JSON.stringify({
+    bound: getBoundLayers().map(({ id, binding }) => [id, binding]),
+    frames: getTimeOverlayFrames().map((frame) => [
+      frame.id,
+      frame.begin,
+      frame.end,
+    ]),
+  });
 }
 
 /**

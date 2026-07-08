@@ -365,6 +365,12 @@ export interface AppState {
       opacity?: number;
       bounds?: [number, number, number, number];
       sourcePath?: string;
+      /** Initial visibility (default true); a time-slider frame past the first
+       * starts hidden. */
+      visible?: boolean;
+      /** Epoch-ms time bounds of a KML `<TimeSpan>`/`<TimeStamp>` frame; the
+       * Time Slider toggles this frame's visibility by the current date. */
+      timeSpan?: { begin: number | null; end: number | null };
     },
     beforeLayerId?: string | null
   ) => string;
@@ -1115,12 +1121,13 @@ export const useAppStore = create<AppState>()(
           name,
           type: "image",
           source: { type: "image", url: source.url, coordinates: source.coordinates },
-          visible: true,
+          visible: options?.visible ?? true,
           opacity: options?.opacity ?? 1,
           style: { ...DEFAULT_LAYER_STYLE },
           metadata: {
             sourceKind: "kml-ground-overlay",
             ...(options?.bounds ? { bounds: options.bounds } : {}),
+            ...(options?.timeSpan ? { timeSpan: options.timeSpan } : {}),
           },
           ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };

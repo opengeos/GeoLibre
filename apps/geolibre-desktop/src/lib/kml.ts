@@ -100,6 +100,20 @@ export interface KmlGroundOverlay {
   opacity: number;
   /** The `<drawOrder>` (default 0); higher values draw on top. */
   drawOrder: number;
+  /**
+   * The overlay's KML time primitive as epoch-millisecond bounds, when it
+   * carries a `<TimeSpan>` or `<TimeStamp>`. `begin`/`end` are `null` when
+   * open-ended (or, for a `<TimeStamp>`, `end` is `null` and `begin` is the
+   * instant). Absent when the overlay has no time. Callers sequence a set of
+   * time-tagged overlays into an animation.
+   */
+  time?: KmlTimeBounds;
+}
+
+/** Epoch-millisecond bounds of a KML `<TimeSpan>`/`<TimeStamp>`. */
+export interface KmlTimeBounds {
+  begin: number | null;
+  end: number | null;
 }
 
 /**
@@ -169,6 +183,7 @@ function groundOverlayFromElement(element: Element): KmlGroundOverlay | null {
   const color = parseKmlColor(childText(element, "color"));
   const drawOrder = Number(childText(element, "drawOrder"));
   const name = childText(element, "name");
+  const time = parseKmlTime(element);
 
   return {
     ...(name !== undefined ? { name } : {}),
@@ -177,7 +192,45 @@ function groundOverlayFromElement(element: Element): KmlGroundOverlay | null {
     bounds: [west, south, east, north],
     opacity: color ? color.opacity : 1,
     drawOrder: Number.isFinite(drawOrder) ? drawOrder : 0,
+    ...(time ? { time } : {}),
   };
+}
+
+/**
+ * Read a KML `<TimeSpan>` or `<TimeStamp>` from an element into epoch-ms bounds.
+ * A `<TimeSpan>` yields `{begin, end}` (either side `null` when open); a
+ * `<TimeStamp>` yields `{begin: when, end: null}`. Returns null when the element
+ * has no (parseable) time primitive. Handles the KML date forms `YYYY`,
+ * `YYYY-MM`, `YYYY-MM-DD`, and full `dateTime` via `Date.parse`.
+ */
+function parseKmlTime(element: Element): KmlTimeBounds | null {
+  const span = directChild(element, "TimeSpan");
+  if (span) {
+    const begin = parseKmlDate(childText(span, "begin"));
+    const end = parseKmlDate(childText(span, "end"));
+    if (begin === null && end === null) return null;
+    return { begin, end };
+  }
+  const stamp = directChild(element, "TimeStamp");
+  if (stamp) {
+    const when = parseKmlDate(childText(stamp, "when"));
+    if (when === null) return null;
+    return { begin: when, end: null };
+  }
+  return null;
+}
+
+/**
+ * Parse a KML date/dateTime string to epoch milliseconds, or null when missing
+ * or unparseable. A bare year (`YYYY`) is normalized to `YYYY-01-01` so engines
+ * that would otherwise read it as a millisecond count do not misinterpret it.
+ */
+export function parseKmlDate(value: string | undefined): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  const normalized = /^\d{4}$/.test(trimmed) ? `${trimmed}-01-01` : trimmed;
+  const ms = Date.parse(normalized);
+  return Number.isNaN(ms) ? null : ms;
 }
 
 /**
