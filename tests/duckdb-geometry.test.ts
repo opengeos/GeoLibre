@@ -300,6 +300,17 @@ describe("isUnsupportedSurfaceWkbError", () => {
     );
   });
 
+  // Some DuckDB Spatial builds emit a generic message with no type name/id;
+  // it is matched so the fallback runs (which re-throws if it decodes nothing).
+  it("matches the generic 'Unsupported geometry type in WKB' message", () => {
+    assert.equal(
+      isUnsupportedSurfaceWkbError(
+        new Error("Invalid Input Error: Unsupported geometry type in WKB"),
+      ),
+      true,
+    );
+  });
+
   it("ignores unrelated errors", () => {
     assert.equal(
       isUnsupportedSurfaceWkbError(new Error("stoi: no conversion")),

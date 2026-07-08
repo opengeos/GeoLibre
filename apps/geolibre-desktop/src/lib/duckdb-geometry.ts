@@ -49,12 +49,21 @@ const SURFACE_WKB_TYPE_CODES = new Set([15, 16, 17]);
 export function isUnsupportedSurfaceWkbError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
+  // Generic form emitted by some DuckDB Spatial builds (e.g. the WASM 1.33
+  // extension on a full MultiPatch shapefile): "Unsupported geometry type in
+  // WKB". It carries no type name or id, so it cannot be distinguished from a
+  // curved geometry here — the raw-WKB fallback re-reads and re-throws if it
+  // decodes nothing, so a genuinely undecodable geometry still fails loudly.
+  if (lower.includes("unsupported geometry type in wkb")) return true;
+  // Detailed form: "Could not parse WKB input: WKB type 'TIN Z' is not
+  // supported! (type id: 1016, SRID: 0)".
   const isUnsupportedWkb =
     lower.includes("could not parse wkb") ||
     (lower.includes("wkb type") && lower.includes("not supported"));
   if (!isUnsupportedWkb) return false;
   // Prefer the numeric type id when present (unambiguous); otherwise fall back
-  // to the type name DuckDB quotes in the message.
+  // to the type name DuckDB quotes in the message. Curved geometries
+  // (CircularString etc.) are excluded so they still fail loudly.
   const idMatch = message.match(/type id:\s*(\d+)/i);
   if (idMatch) {
     return SURFACE_WKB_TYPE_CODES.has(Number(idMatch[1]) % 1000);

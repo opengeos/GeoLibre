@@ -632,52 +632,59 @@ export async function loadDuckDbVectorFile(
       throw new Error("DuckDB did not find a geometry column in this file.");
     }
 
-    // Guard against very large files before the expensive GeoJSON
-    // materialization. Only counted when a callback is attached, so the
-    // common (non-interactive) path stays single-pass.
-    if (options.onLargeDataset) {
-      const featureCount = await countFeatures(connection, sql);
-      await confirmLargeDataset({ name: file.name, featureCount }, options.onLargeDataset);
-    }
-
     // A caller-supplied CRS (CAD DXF/DWG, which carry none of their own) wins
     // over the file's metadata; a blank override falls back to the file's CRS.
+    // Resolved up front (ST_Read_Meta does not materialize geometry) so the
+    // surface-WKB fallback below can reuse it.
     const sourceCrs =
       options.overrideSourceCrs?.trim() ||
       (await readSourceCrs(connection, file));
-    const geometryJsonSql = geometryGeoJsonSql(
-      geometryExpr(detected),
-      sourceCrs,
-    );
-    let result: Awaited<ReturnType<typeof connection.query>>;
+
     try {
-      result = await connection.query(
+      // Guard against very large files before the expensive GeoJSON
+      // materialization. Only counted when a callback is attached, so the
+      // common (non-interactive) path stays single-pass.
+      if (options.onLargeDataset) {
+        const featureCount = await countFeatures(connection, sql);
+        await confirmLargeDataset(
+          { name: file.name, featureCount },
+          options.onLargeDataset,
+        );
+      }
+
+      const geometryJsonSql = geometryGeoJsonSql(
+        geometryExpr(detected),
+        sourceCrs,
+      );
+      const result = await connection.query(
         `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
           GEOMETRY_JSON_COLUMN,
         )} FROM (${sql}) AS data`,
       );
+      // Features may carry a null geometry; the app's layer model treats them
+      // as a regular FeatureCollection and the map ignores null geometries.
+      return toFeatureCollection(
+        rowsFromResult(result),
+        detected.column,
+      ) as FeatureCollection;
     } catch (error) {
       // DuckDB Spatial's WKB reader rejects surface geometries (TIN /
       // PolyhedralSurface), which its bundled GDAL emits for ESRI MultiPatch
-      // shapefiles (3D buildings). Re-read the raw WKB and decode it in JS,
-      // where TIN triangles become a MultiPolygon (issue #1121). The fallback
-      // re-reads via `ST_Read`, so it only applies to the ST_Read formats; a
-      // Parquet file (read here via `read_parquet`, not GDAL) that hit the same
-      // error propagates it instead of being mis-read through GDAL's driver.
+      // shapefiles (3D buildings) — either as a detailed "WKB type 'TIN Z'..."
+      // or a generic "Unsupported geometry type in WKB". Depending on the build
+      // that fires on the count(*) guard or the GeoJSON read, so the whole read
+      // is wrapped. Re-read the raw WKB and decode it in JS, where TIN triangles
+      // become a MultiPolygon (issue #1121). The fallback re-reads via
+      // `ST_Read`, so a Parquet file (read via `read_parquet`, not GDAL)
+      // propagates the error instead of being mis-read through GDAL's driver.
       if (
         isParquetExtension(file.extension) ||
         !isUnsupportedSurfaceWkbError(error)
       ) {
         throw error;
       }
-      return loadViaKeepWkbFallback(db, file, options, sourceCrs);
+      return loadViaKeepWkbFallback(db, file, options, sourceCrs, error);
     }
-    // Features may carry a null geometry; the app's layer model treats them as
-    // a regular FeatureCollection and the map ignores null geometries.
-    return toFeatureCollection(
-      rowsFromResult(result),
-      detected.column,
-    ) as FeatureCollection;
   } finally {
     await connection.close();
   }
@@ -700,6 +707,7 @@ async function loadViaKeepWkbFallback(
   file: DuckDbVectorFile,
   options: DuckDbVectorLoadOptions,
   sourceCrs: string | null,
+  originalError: unknown,
 ): Promise<FeatureCollection> {
   // Read on a fresh connection: re-running ST_Read on the connection that
   // already scanned the file trips a "Missing DB manager" GDAL assertion in the
@@ -709,20 +717,40 @@ async function loadViaKeepWkbFallback(
     await ensureSpatialExtension(db, connection);
     const wkbSql =
       `SELECT * FROM ST_Read(${quoteSqlString(file.name)}, keep_wkb=true${layerArgSql(options.layer)})`;
-    // With keep_wkb the geometry arrives as a WKB BLOB column (named
-    // `wkb_geometry`); detectGeometryColumn identifies it by name and type.
-    const detected = detectGeometryColumn(
-      rowsFromResult(await connection.query(`DESCRIBE ${wkbSql}`)),
-    );
-    if (!detected) {
+    // `keep_wkb` materializes the geometry as a WKB blob column named
+    // `wkb_geometry` (its DuckDB type varies by build: `BLOB` or `WKB_BLOB`), so
+    // find it by that name, falling back to any WKB/BLOB-typed column.
+    const columns = rowsFromResult(await connection.query(`DESCRIBE ${wkbSql}`));
+    const wkbColumn =
+      columns.find(
+        (column) =>
+          typeof column.column_name === "string" &&
+          column.column_name.toLowerCase() === "wkb_geometry",
+      )?.column_name ??
+      columns.find(
+        (column) =>
+          typeof column.column_type === "string" &&
+          /WKB|BLOB|BINARY/i.test(column.column_type),
+      )?.column_name;
+    if (typeof wkbColumn !== "string") {
       throw new Error("DuckDB did not find a geometry column in this file.");
     }
     const rows = rowsFromResult(await connection.query(wkbSql));
     // Null geometries are legal in a FeatureCollection; the map ignores them.
     const collection = wkbRowsToFeatureCollection(
       rows,
-      detected.column,
+      wkbColumn,
     ) as FeatureCollection;
+    // If nothing decoded, the geometry was not a surface this fallback handles
+    // (e.g. the original error was the generic "Unsupported geometry type in
+    // WKB", which also fires for curved geometries). Surface the original error
+    // rather than adding an invisible, all-null-geometry layer.
+    if (
+      collection.features.length > 0 &&
+      collection.features.every((feature) => feature.geometry === null)
+    ) {
+      throw originalError;
+    }
     // The decoded geometry is in the file's own CRS; reproject to WGS84 with the
     // same source CRS the normal path resolved. Reuses the shared ST_Transform
     // path, which handles the MultiPolygon the TIN decoded to.
