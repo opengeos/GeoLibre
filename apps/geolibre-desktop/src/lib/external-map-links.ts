@@ -11,11 +11,13 @@ const GOOGLE_MAPS_MIN_ZOOM = 2;
 const GOOGLE_MAPS_MAX_ZOOM = 21;
 
 /**
- * Google Earth camera distance (metres) that shows roughly the same ground
- * extent as a web-mercator zoom-0 view: with Earth's ~35° vertical field of
- * view, the visible ground width is about 0.63 × distance, and a ~1000 px
- * viewport at zoom 0 spans ~156543 m/px × 1000 px. Halves per zoom level like
- * mercator resolution does.
+ * Scaling anchor for the zoom → Google Earth camera distance conversion, in
+ * metres: the (theoretical) distance whose ~35° field of view spans the same
+ * ground width as a web-mercator zoom-0 view (visible ground width is about
+ * 0.63 × distance, and a ~1000 px viewport at zoom 0 spans ~156543 m/px ×
+ * 1000 px). The distance halves per zoom level like mercator resolution does.
+ * Note this anchor exceeds GOOGLE_EARTH_MAX_DISTANCE, so zooms below ~2 all
+ * clamp to the same whole-globe view rather than tracking the formula.
  */
 const GOOGLE_EARTH_DISTANCE_AT_ZOOM_0 = 248_500_000;
 /** Keep the camera distance inside the range Google Earth web navigates to. */

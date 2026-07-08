@@ -9,9 +9,7 @@ import {
 } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { ParseKeys } from "i18next";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { createAppAPI } from "../../../hooks/usePlugins";
-import { isTauri } from "../../../lib/tauri-io";
 import type { AddDataKind } from "../AddDataDialog";
 
 /** The live app API surface plugins and panels are driven through. */
@@ -195,14 +193,9 @@ export const RASTER_TOOL_COMMANDS: Array<{
   { kind: "focal", titleKey: "toolbar.rasterTool.focal" },
 ];
 
-/** Open an external link in the OS browser (Tauri) or a new tab (web). */
-export async function openExternalLink(url: string): Promise<void> {
-  if (isTauri()) {
-    await openUrl(url);
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
+// Re-exported so existing toolbar imports keep working; the shared helper
+// guards the URL scheme and logs opener failures instead of rejecting.
+export { openExternalLink } from "../../../lib/open-external";
 
 /** Format a recent-project timestamp for display, or "" if unparseable. */
 export function formatRecentProjectTime(openedAt: string): string {
