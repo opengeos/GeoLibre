@@ -664,8 +664,12 @@ export async function loadDuckDbVectorFile(
       // re-reads via `ST_Read`, so it only applies to the ST_Read formats; a
       // Parquet file (read here via `read_parquet`, not GDAL) that hit the same
       // error propagates it instead of being mis-read through GDAL's driver.
-      if (isParquetExtension(file.extension) || !isUnsupportedSurfaceWkbError(error))
+      if (
+        isParquetExtension(file.extension) ||
+        !isUnsupportedSurfaceWkbError(error)
+      ) {
         throw error;
+      }
       return loadViaKeepWkbFallback(db, file, options, sourceCrs);
     }
     // Features may carry a null geometry; the app's layer model treats them as
