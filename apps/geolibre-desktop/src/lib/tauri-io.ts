@@ -558,7 +558,9 @@ function imageOverlayLayer(
 ): LoadedImageOverlay {
   return {
     kind: "image-overlay",
-    name: overlay.name?.trim() || `${fileBaseName(path)} overlay`,
+    // Strip the file extension for the fallback name (e.g. "tour.kmz" ->
+    // "tour overlay"), matching how the vector layers are named.
+    name: overlay.name?.trim() || `${pathWithoutExtension(fileBaseName(path))} overlay`,
     path,
     url,
     coordinates: overlay.coordinates,
@@ -1906,6 +1908,8 @@ export async function loadDroppedVectorFiles(
       // placemarks (which makes the vector load throw).
       const text = await file.text();
       const overlays = groundOverlaysFromKml(text, file.name);
+      // Overlays go under the placemarks (added first), matching the KMZ path.
+      layers.push(...overlays);
       try {
         // Only add a vector layer when it actually has features: the DuckDB
         // fallback for an overlay-only KML can return an empty collection, and
@@ -1914,9 +1918,10 @@ export async function loadDroppedVectorFiles(
         if (vector.data.features.length > 0) layers.push(vector);
       } catch (error) {
         // Declining the oversized-vector prompt, or a genuine parse failure,
-        // still leaves the ground overlays to add below (a real non-cancellation
-        // failure with no overlays to salvage is rethrown). Cancellation is not
-        // surfaced; other failures are logged so they are not fully invisible.
+        // still leaves the ground overlays already added above (a real
+        // non-cancellation failure with no overlays to salvage is rethrown).
+        // Cancellation is not surfaced; other failures are logged so they are
+        // not fully invisible.
         if (!isVectorLoadCancelled(error)) {
           if (!overlays.length) throw error;
           console.warn(
@@ -1925,7 +1930,6 @@ export async function loadDroppedVectorFiles(
           );
         }
       }
-      layers.push(...overlays);
       continue;
     }
 
@@ -2130,6 +2134,8 @@ export async function loadDroppedVectorPaths(
       // Load placemarks and ground overlays independently so an overlay-only
       // KML still contributes its overlays when the vector load throws.
       const overlays = groundOverlaysFromKml(await readLocalFileText(path), path);
+      // Overlays go under the placemarks (added first), matching the KMZ path.
+      layers.push(...overlays);
       try {
         // Only add a vector layer when it actually has features (an overlay-only
         // KML's DuckDB fallback can return an empty collection).
@@ -2137,9 +2143,10 @@ export async function loadDroppedVectorPaths(
         if (vector.data.features.length > 0) layers.push(vector);
       } catch (error) {
         // Declining the oversized-vector prompt, or a genuine parse failure,
-        // still leaves the ground overlays to add below (a real non-cancellation
-        // failure with no overlays to salvage is rethrown). Cancellation is not
-        // surfaced; other failures are logged so they are not fully invisible.
+        // still leaves the ground overlays already added above (a real
+        // non-cancellation failure with no overlays to salvage is rethrown).
+        // Cancellation is not surfaced; other failures are logged so they are
+        // not fully invisible.
         if (!isVectorLoadCancelled(error)) {
           if (!overlays.length) throw error;
           console.warn(
@@ -2148,7 +2155,6 @@ export async function loadDroppedVectorPaths(
           );
         }
       }
-      layers.push(...overlays);
       continue;
     }
     try {
