@@ -304,6 +304,14 @@ export function syncLayer(
   if (isPlaceholderLayer(layer)) return;
 
   if (layer.type === "geojson" && layer.geojson) {
+    // 3D Z-value rendering hands the layer to the shared deck.gl overlay
+    // (deckgl-viz plugin), which honors coordinate Z values that MapLibre's
+    // flat 2D layers ignore. Drop any MapLibre rendering so the layer is not
+    // drawn twice; toggling back off re-adds it through the paths below.
+    if (styleValue(layer.style, "elevation3dEnabled")) {
+      removeLayerFromMap(map, layer.id, layer);
+      return;
+    }
     if (shouldUseTiledRendering(layer.geojson)) {
       syncGeoJsonVtLayer(map, layer, beforeId);
     } else {

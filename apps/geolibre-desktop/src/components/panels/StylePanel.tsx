@@ -12,6 +12,7 @@ import {
   type VectorStyleStop,
   createEqualIntervalBreaks,
   createQuantileBreaks,
+  geojsonHasZCoordinates,
   interpolateRampColors,
   parseJsonExpression,
   styleValue,
@@ -1232,6 +1233,17 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
+  // Whether the layer's coordinates carry real Z values (e.g. GPX track
+  // elevations), which unlocks the "3D (Z values)" visualization mode.
+  // Memoized because the scan touches every coordinate when no Z is present.
+  // Kept before the early returns below so the hook order stays stable.
+  const supportsElevation3d = useMemo(
+    () =>
+      layer?.type === "geojson" && layer.geojson
+        ? geojsonHasZCoordinates(layer.geojson)
+        : false,
+    [layer],
+  );
 
   const resizeHandle = (
     <div
@@ -1347,6 +1359,7 @@ export function StylePanel({
     strokeWidthUnit === "meters" && !supportsPointRenderer;
   const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
+  const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
   const labels: LabelStyle = {
@@ -2985,6 +2998,92 @@ export function StylePanel({
     </>
   );
 
+  // Controls for the "3D (Z values)" mode: only the knobs the deck.gl render
+  // honors (flat colors, widths, and the elevation transform). Data-driven
+  // symbology, point renderers, patterns, markers, and labels are 2D-only.
+  const elevation3dControls = (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="fillColor">Fill color</Label>
+        <ColorField
+          id="fillColor"
+          value={style.fillColor}
+          onChange={(fillColor) => setLayerStyle(layer.id, { fillColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.fillColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="strokeColor">Outline color</Label>
+        <ColorField
+          id="strokeColor"
+          value={style.strokeColor}
+          onChange={(strokeColor) => setLayerStyle(layer.id, { strokeColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.strokeColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
+        />
+      </div>
+      <NumericStyleInput
+        id="strokeWidth"
+        label="Stroke width"
+        min={0}
+        max={20}
+        step={0.5}
+        value={style.strokeWidth}
+        onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
+      />
+      <NumericStyleInput
+        id="fillOpacity"
+        label="Fill opacity"
+        min={0}
+        max={1}
+        step={0.05}
+        value={style.fillOpacity}
+        onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
+      />
+      {geometryFlags.hasPoint ? (
+        <NumericStyleInput
+          id="circleRadius"
+          label="Circle radius"
+          min={1}
+          max={50}
+          step={1}
+          value={style.circleRadius}
+          onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
+        />
+      ) : null}
+      <Separator />
+      <NumericStyleInput
+        id="elevation3dVerticalScale"
+        label={t("style.elevation3d.verticalScale")}
+        min={0}
+        max={100}
+        step={0.1}
+        value={styleValue(style, "elevation3dVerticalScale")}
+        onChange={(elevation3dVerticalScale) =>
+          setLayerStyle(layer.id, { elevation3dVerticalScale })
+        }
+        tooltip={t("style.elevation3d.verticalScaleTooltip")}
+      />
+      <NumericStyleInput
+        id="elevation3dOffset"
+        label={t("style.elevation3d.offset")}
+        min={-10000}
+        max={10000}
+        step={10}
+        value={styleValue(style, "elevation3dOffset")}
+        onChange={(elevation3dOffset) =>
+          setLayerStyle(layer.id, { elevation3dOffset })
+        }
+        tooltip={t("style.elevation3d.offsetTooltip")}
+      />
+    </>
+  );
+
   if (hasRasterPaintControls) {
     return (
       <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
@@ -3201,10 +3300,13 @@ export function StylePanel({
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={!extrusionEnabled}
+                    checked={!extrusionEnabled && !elevation3dEnabled}
                     onChange={() => {
                       setExtrusionError(null);
-                      setLayerStyle(layer.id, { extrusionEnabled: false });
+                      setLayerStyle(layer.id, {
+                        extrusionEnabled: false,
+                        elevation3dEnabled: false,
+                      });
                     }}
                   />
                   2D
@@ -3216,22 +3318,48 @@ export function StylePanel({
                     checked={extrusionEnabled}
                     onChange={() => {
                       setVectorStyleError(null);
-                      setLayerStyle(layer.id, { extrusionEnabled: true });
+                      setLayerStyle(layer.id, {
+                        extrusionEnabled: true,
+                        elevation3dEnabled: false,
+                      });
                     }}
                   />
                   3D extrusion
                 </label>
+                {supportsElevation3d && (
+                  <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                    <input
+                      type="radio"
+                      name={`style-mode-${layer.id}`}
+                      checked={elevation3dEnabled}
+                      onChange={() => {
+                        setExtrusionError(null);
+                        setLayerStyle(layer.id, {
+                          extrusionEnabled: false,
+                          elevation3dEnabled: true,
+                        });
+                      }}
+                    />
+                    {t("style.elevation3d.mode")}
+                  </label>
+                )}
               </div>
             </div>
           )}
-          {/* Data-driven coloring doesn't apply to the heatmap renderer. */}
-          {pointRenderer === "heatmap" ? null : vectorSymbologyControls}
-          {!hasExtrusionControls || !extrusionEnabled ? (
+          {/* Data-driven coloring doesn't apply to the heatmap renderer or the
+              flat-styled 3D Z-value render. */}
+          {pointRenderer === "heatmap" || elevation3dEnabled
+            ? null
+            : vectorSymbologyControls}
+          {elevation3dEnabled ? (
+            elevation3dControls
+          ) : !hasExtrusionControls || !extrusionEnabled ? (
             twoDimensionalControls
           ) : (
             extrusionControls
           )}
-          {(!hasExtrusionControls || !extrusionEnabled) && (
+          {!elevation3dEnabled &&
+            (!hasExtrusionControls || !extrusionEnabled) && (
             <>
               {showProportionalControls && (
                 <>
@@ -3254,8 +3382,8 @@ export function StylePanel({
             </>
           )}
           {/* Attribute labels apply to vector features, not the heatmap density
-              surface or the 3D extrusion render. */}
-          {!extrusionEnabled && pointRenderer !== "heatmap" ? (
+              surface or the 3D extrusion / 3D Z-value renders. */}
+          {!extrusionEnabled && !elevation3dEnabled && pointRenderer !== "heatmap" ? (
             <>
               <Separator />
               <p className="text-sm font-semibold">
@@ -3270,9 +3398,11 @@ export function StylePanel({
       <p className="p-2 text-[10px] text-muted-foreground">
         {extrusionEnabled
           ? "3D extrusion settings apply when saved."
-          : isDeckVectorLayer
-            ? "Changes apply live to DuckDB deck.gl layer styling."
-            : "Changes apply live to MapLibre paint properties."}
+          : elevation3dEnabled
+            ? t("style.elevation3d.footer")
+            : isDeckVectorLayer
+              ? "Changes apply live to DuckDB deck.gl layer styling."
+              : "Changes apply live to MapLibre paint properties."}
       </p>
     </aside>
   );

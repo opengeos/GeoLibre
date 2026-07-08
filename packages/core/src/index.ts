@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./geojson-z";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";

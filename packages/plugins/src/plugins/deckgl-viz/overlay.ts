@@ -3,6 +3,7 @@ import type { Layer } from "@deck.gl/core";
 import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../../types";
 import { ensureMercatorProjection } from "../map-projection-utils";
+import { buildElevation3dLayer, isElevation3dLayer } from "./elevation";
 import {
   type DeckVizBuildContext,
   getDeckVizLayerDef,
@@ -11,10 +12,11 @@ import { deckVizRows, isDeckVizLayer, readDeckVizConfig } from "./store-layer";
 
 /**
  * Owns the single deck.gl overlay that renders every Deck.gl Layer in the
- * store. Mirrors the store-subscription pattern of the raster overlay: the
- * store is the source of truth, this module rebuilds the overlay's layer list
- * whenever the layer set, visibility, or opacity changes, and drives an
- * animation clock for animated layer types (Trips).
+ * store, plus ordinary vector layers whose style enables 3D Z-value rendering
+ * (see ./elevation.ts). Mirrors the store-subscription pattern of the raster
+ * overlay: the store is the source of truth, this module rebuilds the
+ * overlay's layer list whenever the layer set, visibility, or opacity
+ * changes, and drives an animation clock for animated layer types (Trips).
  */
 
 // Data-time units advanced per real second for animated layers.
@@ -142,12 +144,15 @@ export function deactivateDeckViz(app: GeoLibreAppAPI): void {
 function renderDeckVizLayers(): void {
   if (!overlay || !deckGL || !appRef) return;
 
-  const vizLayers = useAppStore.getState().layers.filter(isDeckVizLayer);
+  const storeLayers = useAppStore.getState().layers;
+  const vizLayers = storeLayers.filter(isDeckVizLayer);
+  const hasRenderableLayers =
+    vizLayers.length > 0 || storeLayers.some(isElevation3dLayer);
 
   // The deck.gl overlay renders in a Mercator viewport and does not align with
   // MapLibre's globe projection, so force Mercator while deck layers are shown
   // (same contract as the DuckDB deck overlay).
-  if (vizLayers.length > 0) {
+  if (hasRenderableLayers) {
     ensureMercatorProjection(appRef.getMap?.());
   }
 
@@ -155,7 +160,7 @@ function renderDeckVizLayers(): void {
   // the next animation frame so a project restore that races map init does not
   // depend on a later store change to mount.
   if (!overlayMounted) {
-    if (vizLayers.length === 0) return;
+    if (!hasRenderableLayers) return;
     // Add at top-left: MapboxOverlay's overlaid canvas is positioned `left:0`
     // to fill the map, which only aligns when its control container is the
     // left corner. The host's addControl otherwise defaults to top-right,
@@ -177,16 +182,25 @@ function renderDeckVizLayers(): void {
     .filter((entry): entry is RenderEntry => entry !== null);
 
   const currentTime = updateAnimationClock(contexts);
+  const contextById = new Map(contexts.map((entry) => [entry.id, entry]));
 
+  // Walk the store order (first-is-top) so deck-viz layers and 3D Z-value
+  // vector layers interleave exactly as the Layers panel shows them.
   const deckLayers: Layer[] = [];
-  for (const entry of contexts) {
+  for (const layer of storeLayers) {
+    if (!layer.visible) continue;
+    const entry = contextById.get(layer.id);
     try {
-      deckLayers.push(
-        entry.def.build(deckGL, entry.id, {
-          ...entry.ctx,
-          currentTime,
-        }),
-      );
+      if (entry) {
+        deckLayers.push(
+          entry.def.build(deckGL, entry.id, {
+            ...entry.ctx,
+            currentTime,
+          }),
+        );
+      } else if (isElevation3dLayer(layer)) {
+        deckLayers.push(buildElevation3dLayer(deckGL, layer));
+      }
     } catch (error) {
       console.warn("[GeoLibre] deckgl-viz: failed to build layer", error);
     }
