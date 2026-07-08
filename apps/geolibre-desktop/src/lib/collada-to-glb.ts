@@ -33,9 +33,24 @@ export async function convertDaeToGlb(
     manager.setURLModifier((url) => resolveTexture(url) ?? url);
   }
 
+  // Wire the manager's start/done handlers BEFORE parsing: `ColladaLoader.parse`
+  // starts texture loads synchronously, so `onStart` must already be attached to
+  // observe them, and `onLoad` must be attached to catch completion.
+  let started = false;
+  let loaded = false;
+  manager.onStart = () => {
+    started = true;
+  };
+  const texturesLoaded = new Promise<void>((resolve) => {
+    manager.onLoad = () => {
+      loaded = true;
+      resolve();
+    };
+  });
+
   const loader = new ColladaLoader(manager);
-  // ColladaLoader.parse is synchronous for geometry but kicks off async texture
-  // loads through the manager; the scene is returned immediately.
+  // Geometry is returned synchronously; textures load asynchronously through the
+  // manager wired above.
   const collada = loader.parse(daeText, basePath);
 
   // Some COLLADA meshes ship without vertex normals, which makes lit PBR
@@ -47,7 +62,15 @@ export async function convertDaeToGlb(
     }
   });
 
-  await waitForManager(manager, textureTimeoutMs);
+  // Wait for textures only when a load actually started during parse; otherwise
+  // there are none and there is nothing to wait for. A missing/hanging texture
+  // never blocks the model past `textureTimeoutMs` (yielding an untextured one).
+  if (started && !loaded) {
+    await Promise.race([
+      texturesLoaded,
+      new Promise<void>((resolve) => setTimeout(resolve, textureTimeoutMs)),
+    ]);
+  }
 
   const exporter = new GLTFExporter();
   const glb = await new Promise<ArrayBuffer>((resolve, reject) => {
@@ -62,37 +85,4 @@ export async function convertDaeToGlb(
     );
   });
   return new Uint8Array(glb);
-}
-
-/**
- * Resolve once the loading manager reports all in-flight loads finished, or when
- * `timeoutMs` elapses (so a missing/hanging texture never blocks the model).
- * `ColladaLoader.parse` starts any texture loads synchronously, so if nothing
- * has started shortly after parse there are no textures and this resolves right
- * away instead of waiting out the timeout.
- */
-function waitForManager(
-  manager: LoadingManager,
-  timeoutMs: number,
-): Promise<void> {
-  return new Promise((resolve) => {
-    let started = false;
-    let settled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve();
-    };
-    manager.onStart = () => {
-      started = true;
-    };
-    manager.onLoad = finish;
-    timer = setTimeout(finish, timeoutMs);
-    // No texture load kicked off during parse -> untextured model, resolve now.
-    setTimeout(() => {
-      if (!started) finish();
-    }, 50);
-  });
 }

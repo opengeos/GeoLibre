@@ -738,14 +738,36 @@ function groundOverlaysFromKml(
 // to avoid bloating projects and memory.
 const MAX_MODEL_GLB_BYTES = 24 * 1024 * 1024;
 
+// Cap the raw `.dae` source too, so an enormous mesh is rejected up front rather
+// than after the expensive parse/normal-compute/export. COLLADA is verbose XML,
+// so the source limit is more generous than the GLB output limit.
+const MAX_DAE_SOURCE_BYTES = 64 * 1024 * 1024;
+
+// The display name for a model layer. An unnamed `<Model>` falls back to a
+// path-derived name; when a file has several such models the 1-based `index`
+// disambiguates them so they are not all named identically.
+function kmlModelName(
+  model: KmlModel,
+  path: string,
+  index: number,
+  total: number,
+): string {
+  const named = model.name?.trim();
+  if (named) return named;
+  const base = `${pathWithoutExtension(fileBaseName(path))} model`;
+  return total > 1 ? `${base} ${index + 1}` : base;
+}
+
 function kmlModelLayer(
   model: KmlModel,
   url: string,
   path: string,
+  index: number,
+  total: number,
 ): LoadedModel {
   return {
     kind: "model",
-    name: model.name?.trim() || `${pathWithoutExtension(fileBaseName(path))} model`,
+    name: kmlModelName(model, path, index, total),
     path,
     url,
     longitude: model.longitude,
@@ -818,10 +840,11 @@ async function modelsFromKmz(
     );
 
   const models: LoadedModel[] = [];
-  for (const { model, baseDir } of parsed) {
+  const total = parsed.length;
+  for (const [index, { model, baseDir }] of parsed.entries()) {
     if (isHttpUrl(model.href)) {
       const url = await fetchDaeAsGlbDataUrl(model.href);
-      if (url) models.push(kmlModelLayer(model, url, path));
+      if (url) models.push(kmlModelLayer(model, url, path, index, total));
       continue;
     }
     const daeEntry = baseDir + model.href;
@@ -830,6 +853,12 @@ async function modelsFromKmz(
     if (!data) {
       console.warn(
         `Skipping a KML model: its mesh "${model.href}" was not found in the KMZ archive.`,
+      );
+      continue;
+    }
+    if (data.length > MAX_DAE_SOURCE_BYTES) {
+      console.warn(
+        `Skipping a KML model: its mesh "${model.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
       );
       continue;
     }
@@ -842,7 +871,7 @@ async function modelsFromKmz(
       model.href,
       resolveTexture,
     );
-    if (url) models.push(kmlModelLayer(model, url, path));
+    if (url) models.push(kmlModelLayer(model, url, path, index, total));
   }
   return models;
 }
@@ -860,6 +889,12 @@ async function fetchDaeAsGlbDataUrl(href: string): Promise<string | null> {
       return null;
     }
     const daeText = await response.text();
+    if (daeText.length > MAX_DAE_SOURCE_BYTES) {
+      console.warn(
+        `Skipping a KML model: "${href}" is ${Math.round(daeText.length / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+      );
+      return null;
+    }
     const basePath = href.slice(0, href.lastIndexOf("/") + 1);
     return await daeToGlbDataUrl(daeText, href, undefined, basePath);
   } catch (error) {
@@ -875,8 +910,9 @@ async function modelsFromKml(
   path: string,
 ): Promise<LoadedModel[]> {
   if (!/<model[\s/>]/i.test(text)) return [];
+  const parsed = parseKmlModels(text);
   const models: LoadedModel[] = [];
-  for (const model of parseKmlModels(text)) {
+  for (const [index, model] of parsed.entries()) {
     if (!isHttpUrl(model.href)) {
       console.warn(
         `Skipping a KML model: its mesh "${model.href}" is a relative path, which a standalone KML (unlike a KMZ) cannot resolve. Only absolute URLs are supported.`,
@@ -884,7 +920,7 @@ async function modelsFromKml(
       continue;
     }
     const url = await fetchDaeAsGlbDataUrl(model.href);
-    if (url) models.push(kmlModelLayer(model, url, path));
+    if (url) models.push(kmlModelLayer(model, url, path, index, parsed.length));
   }
   return models;
 }
