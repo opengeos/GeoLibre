@@ -14,10 +14,16 @@ import type {
  * handing the data to a deck.gl overlay.
  */
 
+// Proving the *negative* (no Z anywhere) walks every coordinate, so cache the
+// verdict per GeoJSON object — the map sync, the deck overlay, and the Style
+// panel all ask the same question about the same (immutable) data.
+const hasZCache = new WeakMap<object, boolean>();
+
 /**
  * Returns true when any coordinate in the GeoJSON carries a finite, non-zero
  * Z value. All-zero Z arrays are treated as flat data because rendering them
- * "in 3D" would be indistinguishable from the 2D result.
+ * "in 3D" would be indistinguishable from the 2D result. The result is
+ * cached per GeoJSON object, so repeated calls on the same data are free.
  *
  * @param geojson - Any GeoJSON object (geometry, feature, or collection).
  */
@@ -25,20 +31,25 @@ export function geojsonHasZCoordinates(
   geojson: GeoJSON | null | undefined,
 ): boolean {
   if (!geojson) return false;
-  return someGeometry(geojson, (geometry) =>
+  const cached = hasZCache.get(geojson);
+  if (cached !== undefined) return cached;
+  const result = someGeometry(geojson, (geometry) =>
     somePosition(geometry, (position) => {
       const z = position[2];
       return typeof z === "number" && Number.isFinite(z) && z !== 0;
     }),
   );
+  hasZCache.set(geojson, result);
+  return result;
 }
 
 /**
  * Returns a copy of the GeoJSON with every coordinate's Z value mapped to
- * `z * verticalScale + offset` (missing Z treated as 0). Used to apply
- * vertical exaggeration and a constant altitude offset before 3D rendering.
- * When the transform is the identity (`verticalScale === 1 && offset === 0`)
- * the input is returned unchanged.
+ * `z * verticalScale + offset` (missing or non-finite Z treated as 0). Used
+ * to apply vertical exaggeration and a constant altitude offset before 3D
+ * rendering. The identity transform (`verticalScale === 1 && offset === 0`)
+ * still produces a copy so the non-finite-Z sanitization applies on every
+ * path — WebGL does not handle NaN positions gracefully.
  *
  * @param geojson - The feature collection to transform.
  * @param verticalScale - Multiplier applied to each Z value.
@@ -49,7 +60,6 @@ export function transformGeojsonElevation(
   verticalScale: number,
   offset: number,
 ): FeatureCollection {
-  if (verticalScale === 1 && offset === 0) return geojson;
   // Positions are normalized to [x, y, z]; a 4th measure value (M), which
   // some producers emit, is intentionally dropped — nothing downstream of
   // this render path consumes it.

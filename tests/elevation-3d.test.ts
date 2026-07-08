@@ -118,9 +118,17 @@ describe("geojsonHasZCoordinates", () => {
 });
 
 describe("transformGeojsonElevation", () => {
-  it("returns the input unchanged for the identity transform", () => {
-    const data = track([[6.86, 45.83, 1000]]);
-    assert.equal(transformGeojsonElevation(data, 1, 0), data);
+  it("sanitizes non-finite Z even for the identity transform", () => {
+    const data = track([
+      [6.86, 45.83, 1000],
+      [6.87, 45.84, Number.NaN],
+    ]);
+    const result = transformGeojsonElevation(data, 1, 0);
+    const coordinates = (
+      result.features[0].geometry as { coordinates: number[][] }
+    ).coordinates;
+    assert.deepEqual(coordinates[0], [6.86, 45.83, 1000]);
+    assert.deepEqual(coordinates[1], [6.87, 45.84, 0]);
   });
 
   it("applies vertical scale and offset without mutating the input", () => {
@@ -171,6 +179,21 @@ describe("isElevation3dLayer", () => {
       false,
     );
   });
+
+  it("treats the flag as inert when the data carries no Z values", () => {
+    assert.equal(
+      isElevation3dLayer(
+        geojsonLayer({
+          style: { ...DEFAULT_LAYER_STYLE, elevation3dEnabled: true },
+          geojson: track([
+            [6.86, 45.83],
+            [6.87, 45.84],
+          ]),
+        }),
+      ),
+      false,
+    );
+  });
 });
 
 describe("buildElevation3dLayer", () => {
@@ -212,8 +235,19 @@ describe("buildElevation3dLayer", () => {
     assert.deepEqual(built.props.getFillColor, [255, 0, 0, 128]);
     assert.equal(built.props.getLineWidth, 4);
     assert.equal(built.props.getPointRadius, 9);
-    // Identity elevation transform passes the source data straight through.
-    assert.equal(built.props.data, layer.geojson);
+    // The identity transform still sanitizes into a copy; the copy is cached
+    // so subsequent rebuilds reuse it.
+    const coordinates = (
+      (built.props.data as FeatureCollection).features[0].geometry as {
+        coordinates: number[][];
+      }
+    ).coordinates;
+    assert.deepEqual(coordinates[0], [6.86, 45.83, 1035]);
+    const rebuilt = buildElevation3dLayer(
+      fakeDeckGL,
+      layer,
+    ) as unknown as FakeGeoJsonLayer;
+    assert.equal(rebuilt.props.data, built.props.data);
   });
 
   it("renders the transparent color sentinel invisible", () => {

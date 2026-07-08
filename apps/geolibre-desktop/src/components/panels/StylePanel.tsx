@@ -1362,6 +1362,11 @@ export function StylePanel({
   const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
   const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
+  // Effective 3D Z-value mode: the saved flag can outlive the data's Z values
+  // (e.g. a processing tool rewrote the geometry), in which case the renderer
+  // falls back to 2D — the panel must match so a Visualization radio is
+  // always selected and 2D controls stay usable.
+  const elevation3dActive = elevation3dEnabled && supportsElevation3d;
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
   const labels: LabelStyle = {
@@ -1635,10 +1640,16 @@ export function StylePanel({
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   const otherLayers = layers.filter((l) => l.id !== layer.id);
+  // While 3D (Z values) is active the basemap group below is hidden, so a
+  // saved basemap target surfaces under "Saved (unavailable)" instead of
+  // leaving the select pointing at a missing option.
+  const beforeIdHiddenByElevation3d =
+    elevation3dActive && basemapStyleLayerIds.includes(draftBeforeId);
   const orphanedBeforeId =
     draftBeforeId &&
-    !basemapStyleLayerIds.includes(draftBeforeId) &&
-    !otherLayers.some((l) => l.id === draftBeforeId)
+    (beforeIdHiddenByElevation3d ||
+      (!basemapStyleLayerIds.includes(draftBeforeId) &&
+        !otherLayers.some((l) => l.id === draftBeforeId)))
       ? draftBeforeId
       : null;
   // The basemap style exposes dozens of internal layer ids that overwhelm the
@@ -1677,7 +1688,7 @@ export function StylePanel({
             ignored setting. */}
         {basemapStyleLayerIds.length > 0 &&
           basemapStyleLayersVisible &&
-          !elevation3dEnabled && (
+          !elevation3dActive && (
           <optgroup label="Basemap layers">
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
@@ -1689,7 +1700,7 @@ export function StylePanel({
       </Select>
       {basemapStyleLayerIds.length > 0 &&
         !valueIsBasemapStyleLayer &&
-        !elevation3dEnabled && (
+        !elevation3dActive && (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -3306,7 +3317,7 @@ export function StylePanel({
           {/* The 3D Z-value render (deck.gl) does not honor the MapLibre
               min/max zoom range, so hide the controls rather than show a
               silently-ignored setting. */}
-          {!elevation3dEnabled && zoomRangeControls}
+          {!elevation3dActive && zoomRangeControls}
           {hasExtrusionControls && (
             <div className="space-y-2">
               <Label>Visualization</Label>
@@ -3315,7 +3326,7 @@ export function StylePanel({
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={!extrusionEnabled && !elevation3dEnabled}
+                    checked={!extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setExtrusionError(null);
                       setLayerStyle(layer.id, {
@@ -3346,7 +3357,7 @@ export function StylePanel({
                     <input
                       type="radio"
                       name={`style-mode-${layer.id}`}
-                      checked={elevation3dEnabled}
+                      checked={elevation3dActive}
                       onChange={() => {
                         setExtrusionError(null);
                         setLayerStyle(layer.id, {
@@ -3363,17 +3374,17 @@ export function StylePanel({
           )}
           {/* Data-driven coloring doesn't apply to the heatmap renderer or the
               flat-styled 3D Z-value render. */}
-          {pointRenderer === "heatmap" || elevation3dEnabled
+          {pointRenderer === "heatmap" || elevation3dActive
             ? null
             : vectorSymbologyControls}
-          {elevation3dEnabled ? (
+          {elevation3dActive ? (
             elevation3dControls
           ) : !hasExtrusionControls || !extrusionEnabled ? (
             twoDimensionalControls
           ) : (
             extrusionControls
           )}
-          {!elevation3dEnabled &&
+          {!elevation3dActive &&
             (!hasExtrusionControls || !extrusionEnabled) && (
             <>
               {showProportionalControls && (
@@ -3398,7 +3409,7 @@ export function StylePanel({
           )}
           {/* Attribute labels apply to vector features, not the heatmap density
               surface or the 3D extrusion / 3D Z-value renders. */}
-          {!extrusionEnabled && !elevation3dEnabled && pointRenderer !== "heatmap" ? (
+          {!extrusionEnabled && !elevation3dActive && pointRenderer !== "heatmap" ? (
             <>
               <Separator />
               <p className="text-sm font-semibold">
@@ -3413,7 +3424,7 @@ export function StylePanel({
       <p className="p-2 text-[10px] text-muted-foreground">
         {extrusionEnabled
           ? "3D extrusion settings apply when saved."
-          : elevation3dEnabled
+          : elevation3dActive
             ? t("style.elevation3d.footer")
             : isDeckVectorLayer
               ? "Changes apply live to DuckDB deck.gl layer styling."

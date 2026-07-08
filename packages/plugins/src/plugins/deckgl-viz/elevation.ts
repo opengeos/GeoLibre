@@ -1,5 +1,6 @@
 import {
   type GeoLibreLayer,
+  geojsonHasZCoordinates,
   styleValue,
   transformGeojsonElevation,
 } from "@geolibre/core";
@@ -17,7 +18,10 @@ import { colorToRgba } from "../deck-style-utils";
 
 /**
  * Whether a store layer should render through the deck.gl overlay's 3D
- * elevation path instead of MapLibre's 2D layers.
+ * elevation path instead of MapLibre's 2D layers. Data without any real Z
+ * coordinates (e.g. after a processing tool dropped them) renders 2D even if
+ * the style flag is set, matching the Style panel and the map-side sync;
+ * the Z scan is cached per GeoJSON object.
  *
  * @param layer - The store layer to test.
  */
@@ -25,13 +29,16 @@ export function isElevation3dLayer(layer: GeoLibreLayer): boolean {
   return (
     layer.type === "geojson" &&
     !!layer.geojson &&
-    styleValue(layer.style, "elevation3dEnabled") === true
+    styleValue(layer.style, "elevation3dEnabled") === true &&
+    geojsonHasZCoordinates(layer.geojson)
   );
 }
 
 // One entry per source FeatureCollection so the coordinate rescan only runs
 // when the exaggeration/offset changes, not on every overlay rebuild (opacity
-// toggles, other layers changing, animation frames).
+// toggles, other layers changing, animation frames). The transform always
+// runs (even for the identity) so non-finite Z values are sanitized before
+// they reach WebGL.
 const elevationDataCache = new WeakMap<
   FeatureCollection,
   { verticalScale: number; offset: number; data: FeatureCollection }
@@ -42,7 +49,6 @@ function elevationData(
   verticalScale: number,
   offset: number,
 ): FeatureCollection {
-  if (verticalScale === 1 && offset === 0) return geojson;
   const cached = elevationDataCache.get(geojson);
   if (
     cached &&
