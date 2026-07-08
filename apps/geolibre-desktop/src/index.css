@@ -2327,7 +2327,7 @@ body,
 }
 
 .dark .basemap-control-status.is-error {
-  color: #f87171;
+  color: hsl(var(--destructive));
 }
 
 .dark .basemap-control-input,

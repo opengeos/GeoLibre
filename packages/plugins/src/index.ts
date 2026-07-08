@@ -47,6 +47,7 @@ export { cartoLightPlugin } from "./plugins/carto-light";
 export {
   maplibreBasemapControlPlugin,
   BASEMAP_CONTROL_PLUGIN_ID,
+  getActiveBasemapControl,
   setBasemapControlLabels,
   type BasemapControlLabels,
 } from "./plugins/maplibre-basemap-control";
