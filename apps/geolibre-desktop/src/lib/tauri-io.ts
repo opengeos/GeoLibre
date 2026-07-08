@@ -576,19 +576,24 @@ async function groundOverlaysFromKmz(
   path: string,
 ): Promise<LoadedImageOverlay[]> {
   const overlays: LoadedImageOverlay[] = [];
-  for (const text of kmlTexts) {
-    for (const overlay of parseKmlGroundOverlays(text)) {
-      if (isHttpUrl(overlay.href)) {
-        overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
-        continue;
-      }
-      const data = findArchiveEntry(entries, overlay.href);
-      if (!data) continue;
-      const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
-      overlays.push(imageOverlayLayer(overlay, url, path));
+  for (const overlay of sortByDrawOrder(kmlTexts.flatMap(parseKmlGroundOverlays))) {
+    if (isHttpUrl(overlay.href)) {
+      overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
+      continue;
     }
+    const data = findArchiveEntry(entries, overlay.href);
+    if (!data) continue;
+    const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
+    overlays.push(imageOverlayLayer(overlay, url, path));
   }
   return overlays;
+}
+
+// Order overlays by KML `<drawOrder>` ascending. Layers added later render on
+// top (higher store index sits above), so emitting the lowest drawOrder first
+// makes the highest drawOrder end up on top, matching Google Earth's stacking.
+function sortByDrawOrder(overlays: KmlGroundOverlay[]): KmlGroundOverlay[] {
+  return [...overlays].sort((a, b) => a.drawOrder - b.drawOrder);
 }
 
 // GroundOverlays in a standalone (non-archived) KML can only be resolved when
@@ -599,7 +604,7 @@ function groundOverlaysFromKml(
   path: string,
 ): LoadedImageOverlay[] {
   const overlays: LoadedImageOverlay[] = [];
-  for (const overlay of parseKmlGroundOverlays(text)) {
+  for (const overlay of sortByDrawOrder(parseKmlGroundOverlays(text))) {
     if (!isHttpUrl(overlay.href)) continue;
     overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
   }
@@ -608,8 +613,10 @@ function groundOverlaysFromKml(
 
 // Merge the vector placemarks from every KML in an archive, tolerating entries
 // with no readable vector content (returning an empty collection) so an
-// overlay-only archive still loads its overlays. Cancellation of an oversized
-// load still propagates so the whole archive is skipped.
+// overlay-only archive still loads its overlays. Declining an oversized entry
+// drops just that entry, matching `parseKmz`; the cancellation only propagates
+// (skipping the whole archive) when every entry was declined and nothing else
+// loaded.
 async function kmzVectorFeatures(
   kmlFiles: DuckDbVectorFile[],
   options?: DuckDbVectorLoadOptions,
@@ -1803,7 +1810,14 @@ export async function loadDroppedVectorFiles(
         layers.push(await loadBrowserVectorFile(file, [], options));
       } catch (error) {
         if (isVectorLoadCancelled(error)) continue;
+        // No placemarks is the expected reason for an overlay-only KML; a
+        // genuine parse/load failure is still worth surfacing before it is
+        // swallowed in favor of the overlays.
         if (!overlays.length) throw error;
+        console.warn(
+          `Loaded ground overlays from "${file.name}" but could not read its vector placemarks.`,
+          error,
+        );
       }
       layers.push(...overlays);
       continue;
@@ -2014,7 +2028,14 @@ export async function loadDroppedVectorPaths(
         layers.push(await loadTauriVectorFile(path, options));
       } catch (error) {
         if (isVectorLoadCancelled(error)) continue;
+        // No placemarks is the expected reason for an overlay-only KML; a
+        // genuine parse/load failure is still worth surfacing before it is
+        // swallowed in favor of the overlays.
         if (!overlays.length) throw error;
+        console.warn(
+          `Loaded ground overlays from "${path}" but could not read its vector placemarks.`,
+          error,
+        );
       }
       layers.push(...overlays);
       continue;
