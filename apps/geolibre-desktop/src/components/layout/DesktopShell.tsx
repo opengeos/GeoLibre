@@ -50,10 +50,12 @@ import {
   loadDroppedRasterFiles,
   loadDroppedRasterPaths,
   isLoadedImageOverlay,
+  isLoadedModel,
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
   type DroppedRaster,
 } from "../../lib/tauri-io";
+import { buildKmlModelLayer } from "../../lib/kml-model-layer";
 import {
   isPhotoDropFileName,
   type GeotaggedPhotoResult,
@@ -475,6 +477,7 @@ export function DesktopShell({
   const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
   const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
+  const addLayer = useAppStore((s) => s.addLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
@@ -1001,6 +1004,13 @@ export function DesktopShell({
           );
           continue;
         }
+        // A KML/KMZ <Model> becomes a deck.gl scenegraph layer.
+        if (isLoadedModel(layer)) {
+          const modelLayer = buildKmlModelLayer(layer);
+          addLayer(modelLayer);
+          lastLayerId = modelLayer.id;
+          continue;
+        }
         // `||` (not `??`) so an empty-string name falls back to the path, and
         // matches the name shown in the drop confirmation toast.
         lastLayerId = addGeoJsonLayer(
@@ -1015,7 +1025,7 @@ export function DesktopShell({
         .layers.find((layer) => layer.id === lastLayerId);
       if (importedLayer) mapControllerRef.current?.fitLayer(importedLayer);
     },
-    [addGeoJsonLayer, addImageOverlayLayer],
+    [addGeoJsonLayer, addImageOverlayLayer, addLayer],
   );
 
   const addDroppedPhotos = useCallback(

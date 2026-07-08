@@ -219,6 +219,114 @@ export function latLonBoxCorners(
   });
 }
 
+/**
+ * A `<Model>` 3D model extracted from a KML document: a mesh (typically a
+ * COLLADA `.dae`) placed at a geographic location. The mesh is referenced by
+ * {@link href} (an archive-relative path in a KMZ, or an absolute URL); the
+ * caller resolves and renders it.
+ */
+export interface KmlModel {
+  /** The enclosing Placemark's `<name>`, when present. */
+  name?: string;
+  /** The `<Link><href>` (or `<Icon><href>`): an archive-relative path or URL. */
+  href: string;
+  /** `<Location>` longitude in WGS84 degrees. */
+  longitude: number;
+  /** `<Location>` latitude in WGS84 degrees. */
+  latitude: number;
+  /** `<Location>` altitude in meters (default 0). */
+  altitude: number;
+  /** `<Orientation>` heading (rotation about the up axis), degrees (default 0). */
+  heading: number;
+  /** `<Orientation>` tilt (rotation about the east axis), degrees (default 0). */
+  tilt: number;
+  /** `<Orientation>` roll (rotation about the north axis), degrees (default 0). */
+  roll: number;
+  /** `<Scale>` factors along the model's x/y/z axes (default 1 each). */
+  scale: { x: number; y: number; z: number };
+}
+
+/**
+ * Parse the `<Model>` 3D models out of a KML document. Like
+ * {@link parseKmlGroundOverlays} this never throws: a document with no models
+ * (or invalid KML) yields an empty array.
+ *
+ * @param text - The raw KML XML text.
+ * @returns The document's models, in document order.
+ */
+export function parseKmlModels(text: string): KmlModel[] {
+  const document = new DOMParser().parseFromString(text, "application/xml");
+  if (document.querySelector("parsererror")) return [];
+  const root = document.documentElement;
+  if (!root || root.localName.toLowerCase() !== "kml") return [];
+
+  const models: KmlModel[] = [];
+  for (const element of descendants(root, "Model")) {
+    const model = modelFromElement(element);
+    if (model) models.push(model);
+  }
+  return models;
+}
+
+function modelFromElement(element: Element): KmlModel | null {
+  // KML 2.2 uses <Link><href>; some exports use <Icon><href>.
+  const link = directChild(element, "Link") ?? directChild(element, "Icon");
+  const href = link ? childText(link, "href") : undefined;
+  if (!href) return null;
+
+  const location = directChild(element, "Location");
+  const longitude = Number(location && childText(location, "longitude"));
+  const latitude = Number(location && childText(location, "latitude"));
+  if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
+  if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) {
+    return null;
+  }
+  const altitude = numberOr(location && childText(location, "altitude"), 0);
+
+  const orientation = directChild(element, "Orientation");
+  const heading = numberOr(orientation && childText(orientation, "heading"), 0);
+  const tilt = numberOr(orientation && childText(orientation, "tilt"), 0);
+  const roll = numberOr(orientation && childText(orientation, "roll"), 0);
+
+  const scaleEl = directChild(element, "Scale");
+  const scale = {
+    x: numberOr(scaleEl && childText(scaleEl, "x"), 1),
+    y: numberOr(scaleEl && childText(scaleEl, "y"), 1),
+    z: numberOr(scaleEl && childText(scaleEl, "z"), 1),
+  };
+
+  const name = enclosingPlacemarkName(element);
+
+  return {
+    ...(name !== undefined ? { name } : {}),
+    href,
+    longitude,
+    latitude,
+    altitude,
+    heading,
+    tilt,
+    roll,
+    scale,
+  };
+}
+
+// A <Model> is normally wrapped in a <Placemark> whose <name> labels it.
+function enclosingPlacemarkName(element: Element): string | undefined {
+  let node: Element | null = element.parentElement;
+  while (node) {
+    if (node.localName.toLowerCase() === "placemark") {
+      return childText(node, "name");
+    }
+    node = node.parentElement;
+  }
+  return undefined;
+}
+
+function numberOr(value: string | undefined | null, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function placemarkProperties(
   placemark: Element,
   styles: Map<string, KmlStyle>,
