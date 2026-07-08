@@ -19,9 +19,11 @@ import {
   ArrowRight,
   Compass,
   Crosshair,
+  Earth,
   Eye,
   LayoutGrid,
   Link2,
+  MapIcon,
   Mountain,
   RotateCcw,
   ZoomIn,
@@ -75,6 +77,10 @@ interface ViewMenuProps {
   onResetPitchBearing: () => void;
   /** Open the dialog for typing an exact camera (center/zoom/pitch/bearing). */
   onSetView: () => void;
+  /** Open the current map view in Google Earth in the system browser. */
+  onViewInGoogleEarth: () => void;
+  /** Open the current map view in Google Maps in the system browser. */
+  onViewInGoogleMaps: () => void;
   /** Animate the map in by one zoom level. */
   onZoomIn: () => void;
   /** Animate the map out by one zoom level. */
@@ -95,6 +101,8 @@ export function ViewMenu({
   onResetPitch,
   onResetPitchBearing,
   onSetView,
+  onViewInGoogleEarth,
+  onViewInGoogleMaps,
   onZoomIn,
   onZoomOut,
 }: ViewMenuProps) {
@@ -131,6 +139,9 @@ export function ViewMenu({
     (!showResetPitchBearing || (bearingIsNorth && pitchIsFlat));
   const showSetView = show("view.setView");
   const showSplitView = show("view.splitView");
+  const showGoogleMaps = show("view.googleMaps");
+  const showGoogleEarth = show("view.googleEarth");
+  const showExternal = showGoogleMaps || showGoogleEarth;
   const paneCount = mapLayout.rows * mapLayout.cols;
   const gridKey = `${mapLayout.rows}x${mapLayout.cols}`;
   // A custom profile could hide every item; render nothing rather than a menu
@@ -141,7 +152,8 @@ export function ViewMenu({
     !showNavigation &&
     !showReset &&
     !showSetView &&
-    !showSplitView
+    !showSplitView &&
+    !showExternal
   )
     return null;
 
@@ -325,6 +337,28 @@ export function ViewMenu({
               </DropdownMenuCheckboxItem>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+        )}
+        {(showZoom ||
+          showNavigation ||
+          showReset ||
+          showSetView ||
+          showSplitView) &&
+          showExternal && <DropdownMenuSeparator />}
+        {showGoogleMaps && (
+          <DropdownMenuItem onSelect={onViewInGoogleMaps}>
+            <MapIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">
+              {t("toolbar.item.viewInGoogleMaps")}
+            </span>
+          </DropdownMenuItem>
+        )}
+        {showGoogleEarth && (
+          <DropdownMenuItem onSelect={onViewInGoogleEarth}>
+            <Earth className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">
+              {t("toolbar.item.viewInGoogleEarth")}
+            </span>
+          </DropdownMenuItem>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

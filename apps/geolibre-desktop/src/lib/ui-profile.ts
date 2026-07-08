@@ -225,6 +225,8 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "view.resetPitchBearing", menuId: "view", labelKey: "toolbar.item.resetPitchBearing", tier: "basic" },
   { id: "view.setView", menuId: "view", labelKey: "toolbar.item.setView", tier: "intermediate" },
   { id: "view.splitView", menuId: "view", labelKey: "toolbar.item.splitView", tier: "intermediate" },
+  { id: "view.googleMaps", menuId: "view", labelKey: "toolbar.item.viewInGoogleMaps", tier: "basic" },
+  { id: "view.googleEarth", menuId: "view", labelKey: "toolbar.item.viewInGoogleEarth", tier: "basic" },
   // Processing — ordered to mirror the Processing menu. The Whitebox toggle
   // also governs the per-category Whitebox submenus, so those categories have no
   // separate entries here. The conversion/vector/network/statistics/raster,

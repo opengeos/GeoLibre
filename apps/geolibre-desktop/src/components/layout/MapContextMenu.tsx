@@ -8,9 +8,11 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import type maplibregl from "maplibre-gl";
-import { Braces, Crosshair, MapPin, ZoomIn } from "lucide-react";
+import { Braces, Crosshair, Earth, MapIcon, MapPin, ZoomIn } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
+import { openExternalLink } from "../../lib/open-external";
 
 interface ContextMenuState {
   /** Monotonic id so each right-click remounts the menu at the new anchor. */
@@ -58,7 +60,7 @@ async function copyText(value: string): Promise<void> {
  * handler) yields the clicked geographic coordinate directly. The top item
  * shows that coordinate and copies it to the clipboard on click, Google-Maps
  * style; below it sits a curated set of quick actions that operate on the
- * clicked point (copy GeoJSON, recenter, zoom in).
+ * clicked point (copy GeoJSON, recenter, zoom in, open in Google Maps/Earth).
  *
  * The menu is positioned with an invisible zero-size trigger pinned at the
  * cursor: Radix anchors its content to that trigger. The whole menu is keyed by
@@ -137,6 +139,23 @@ export function MapContextMenu({
     });
   }, [menu, mapControllerRef]);
 
+  // Read the live zoom so the external site opens at the on-screen scale; if
+  // the map was torn down between right-click and selection, fall back to a
+  // city-level view rather than dropping the action.
+  const viewInGoogleMaps = useCallback(() => {
+    if (!menu) return;
+    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    void openExternalLink(
+      googleMapsUrl(menu.lat, menu.lng, zoom, { marker: true }),
+    );
+  }, [menu, mapControllerRef]);
+
+  const viewInGoogleEarth = useCallback(() => {
+    if (!menu) return;
+    const zoom = mapControllerRef.current?.getMap()?.getZoom() ?? 12;
+    void openExternalLink(googleEarthUrl(menu.lat, menu.lng, zoom));
+  }, [menu, mapControllerRef]);
+
   return (
     // Keyed by the right-click id so each new right-click remounts the menu with
     // a fresh anchor at the cursor. The key is tied to `menu` (not `open`), so a
@@ -185,6 +204,15 @@ export function MapContextMenu({
         <DropdownMenuItem onSelect={zoomInHere} className="gap-2">
           <ZoomIn className="h-4 w-4 shrink-0 text-muted-foreground" />
           {t("mapContextMenu.zoomInHere")}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={viewInGoogleMaps} className="gap-2">
+          <MapIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {t("mapContextMenu.viewInGoogleMaps")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={viewInGoogleEarth} className="gap-2">
+          <Earth className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {t("mapContextMenu.viewInGoogleEarth")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

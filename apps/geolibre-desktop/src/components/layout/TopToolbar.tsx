@@ -120,6 +120,7 @@ import { PluginToolbarMenus } from "./toolbar/PluginToolbarMenus";
 import { ProcessingMenu } from "./toolbar/ProcessingMenu";
 import { ProjectFileDialogs } from "./toolbar/ProjectFileDialogs";
 import { ProjectMenu } from "./toolbar/ProjectMenu";
+import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
 import {
   ADD_DATA_KIND_COMMANDS,
   ALL_BUILT_IN_CONTROL_IDS,
@@ -959,6 +960,22 @@ export function TopToolbar({
             mapControllerRef.current?.resetNorthPitch()
           }
           onSetView={() => setSetViewOpen(true)}
+          onViewInGoogleEarth={() => {
+            const map = mapControllerRef.current?.getMap();
+            if (!map) return;
+            const center = map.getCenter();
+            void openExternalLink(
+              googleEarthUrl(center.lat, center.lng, map.getZoom()),
+            );
+          }}
+          onViewInGoogleMaps={() => {
+            const map = mapControllerRef.current?.getMap();
+            if (!map) return;
+            const center = map.getCenter();
+            void openExternalLink(
+              googleMapsUrl(center.lat, center.lng, map.getZoom()),
+            );
+          }}
           onZoomIn={() => mapControllerRef.current?.zoomIn()}
           onZoomOut={() => mapControllerRef.current?.zoomOut()}
         />
