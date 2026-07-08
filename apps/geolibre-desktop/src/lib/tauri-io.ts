@@ -885,9 +885,21 @@ async function modelsFromKmz(
     // findArchiveEntryKey can match a differently-nested entry. Fall back to a
     // bare basename for textures stored elsewhere in the archive.
     const daeDir = archiveDirname(normalizeArchivePath(daeKey));
-    const resolveTexture = (texturePath: string): Uint8Array | undefined =>
-      findArchiveEntry(entries, daeDir + texturePath) ??
-      findArchiveEntry(entries, texturePath);
+    const resolveTexture = (texturePath: string): Uint8Array | undefined => {
+      const bytes =
+        findArchiveEntry(entries, daeDir + texturePath) ??
+        findArchiveEntry(entries, texturePath);
+      // Cap a single packaged texture (same limit as ground-overlay images) so
+      // an oversized bundled image can't blow up the decode/GPU upload before
+      // the GLB-size cap ever measures the result; skip it (untextured) instead.
+      if (bytes && bytes.length > MAX_OVERLAY_IMAGE_BYTES) {
+        console.warn(
+          `Skipping a KML model texture "${texturePath}": ${Math.round(bytes.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB limit.`,
+        );
+        return undefined;
+      }
+      return bytes;
+    };
     const converted = await daeToGlbDataUrl(
       new TextDecoder("utf-8").decode(data),
       model.href,
