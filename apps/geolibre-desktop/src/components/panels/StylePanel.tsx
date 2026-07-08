@@ -3050,12 +3050,19 @@ export function StylePanel({
           transparentSwatchLabel={t("style.symbology.transparentSwatch")}
         />
       </div>
+      {/* The 3D render honors meter-based widths (lineWidthUnits), so mirror
+          the 2D control's range/label switch or the tighter pixel clamp would
+          silently destroy a meters width on the next edit. */}
       <NumericStyleInput
         id="strokeWidth"
-        label={t("style.elevation3d.strokeWidth")}
+        label={
+          strokeWidthInMeters
+            ? `${t("style.elevation3d.strokeWidth")} (meters)`
+            : t("style.elevation3d.strokeWidth")
+        }
         min={0}
-        max={20}
-        step={0.5}
+        max={strokeWidthInMeters ? 100000 : 20}
+        step={strokeWidthInMeters ? 1 : 0.5}
         value={style.strokeWidth}
         onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
       />
