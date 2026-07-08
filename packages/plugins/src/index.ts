@@ -239,6 +239,31 @@ export {
   setEffectsSettings,
 } from "./plugins/maplibre-effects";
 export {
+  advanceSunClock,
+  closeSunPanel,
+  DEFAULT_SUN_SETTINGS,
+  getSunSettings,
+  getSunSettingsSnapshot,
+  isSunPanelVisible,
+  maplibreSunPlugin,
+  nightPolygon,
+  normalizeSunSettings,
+  openSunPanel,
+  restoreSun,
+  setSunSettings,
+  SUN_PLUGIN_ID,
+  SUN_SHADE_MAX,
+  SUN_SHADE_MIN,
+  SUN_SPEED_MAX,
+  SUN_SPEED_MIN,
+  type SunSettings,
+  subsolarPoint,
+  subscribeSunPanel,
+  subscribeSunSettings,
+  sunEquatorialPosition,
+  sunPositionAt,
+} from "./plugins/maplibre-sun";
+export {
   DECK_VIZ_PLUGIN_ID,
   maplibreDeckGlVizPlugin,
 } from "./plugins/maplibre-deckgl-viz";

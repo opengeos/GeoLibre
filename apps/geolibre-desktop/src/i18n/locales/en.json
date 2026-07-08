@@ -1306,6 +1306,23 @@
       "reset": "Reset to defaults",
       "globeOnly": "Atmospheric effects are only available when Globe view is enabled."
     },
+    "sun": {
+      "title": "Sun",
+      "dateTime": "Date and time",
+      "date": "Date",
+      "time": "Time",
+      "timeOfDay": "Time of day",
+      "play": "Play",
+      "pause": "Pause",
+      "stepBack": "Step back one hour",
+      "stepForward": "Step forward one hour",
+      "speed": "Animation speed",
+      "loop": "Loop animation",
+      "now": "Now",
+      "shade": "Night shading",
+      "close": "Close",
+      "localTimeNote": "Times shown in your computer's time zone."
+    },
     "setView": {
       "title": "Set View",
       "description": "Move the map to an exact camera.",
@@ -1644,6 +1661,8 @@
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
       "graticule": "Gridlines",
+      "sun": "Sun",
+      "sunTooltip": "Simulate the sun's position and the day/night terminator for any date and time.",
       "spinGlobeBoundsTitle": "Bounds are locked",
       "spinGlobeBoundsDesc": "The globe can't spin while the map bounds are locked.",
       "spinGlobeBoundsHint": "Unlocking the bounds lets the globe spin freely. You can re-lock them anytime in Settings.",
