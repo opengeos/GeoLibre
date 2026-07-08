@@ -423,6 +423,12 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
     this._clearHover();
     this._setStatus('');
     this._renderProfile();
+    // Clearing mid-fetch (the draw button is disabled by _setBusy(true) while a
+    // profile is loading) bumps _requestToken above, so the in-flight
+    // _profileLine's finally block no longer owns the token and won't re-enable
+    // the draw button. Re-enable it unconditionally here so Clear never leaves
+    // it stuck disabled.
+    this._setBusy(false);
     this._syncButtons();
   }
 

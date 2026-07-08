@@ -27,6 +27,13 @@ export function getElevationLineValue(params: URLSearchParams): string | null {
 /**
  * Encode a polyline as a compact `lng,lat;lng,lat;...` string for a share URL.
  *
+ * This is the producer counterpart to {@link parseLine} and the canonical
+ * definition of the `?elevation-line=` format. The built-in control only
+ * *consumes* the parameter today (there is no in-app "copy share link" button
+ * yet), so this encoder is currently exercised only by tests and external
+ * callers (e.g. the Python API) that construct share links; it is kept as the
+ * documented inverse and the basis for a future copy-link affordance.
+ *
  * @param coords - Ordered polyline vertices as `[lng, lat]`
  * @returns The encoded string (coordinates rounded to 6 decimal places)
  */
