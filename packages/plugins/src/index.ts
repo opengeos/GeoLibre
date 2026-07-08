@@ -333,6 +333,10 @@ export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
+export {
+  maplibreElevationProfilePlugin,
+  ELEVATION_PROFILE_PLUGIN_ID,
+} from "./plugins/elevation-profile";
 export { maplibreSwipePlugin, SWIPE_PLUGIN_ID } from "./plugins/maplibre-swipe";
 export {
   maplibreGraticulePlugin,
