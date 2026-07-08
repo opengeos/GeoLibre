@@ -102,6 +102,28 @@ const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
  * originating controller.
  */
 export const TERRAIN_SETTINGS_EVENT = "geolibre:terrain-settings-open";
+/** DOM class the LayerControl gives its container element. */
+const LAYER_CONTROL_SELECTOR = ".maplibregl-ctrl-layer-control";
+
+/**
+ * Restore `refreshed` to just before `anchor` under `parent` after a
+ * remove/re-add appended it to the end of its control corner. No-ops safely
+ * when the reinsert can't be trusted: no parent, the anchor drifted to a
+ * different parent, or `refreshed` is missing / already the anchor.
+ *
+ * Exported for unit testing; the reorder itself is only observable against a
+ * real MapLibre control DOM (see refreshLayerControl).
+ */
+export function restoreControlOrder(
+  parent: Element | null,
+  anchor: Element | null,
+  refreshed: Element | null,
+): void {
+  if (!parent) return;
+  if (anchor !== null && anchor.parentElement !== parent) return;
+  if (!refreshed || refreshed === anchor) return;
+  parent.insertBefore(refreshed, anchor);
+}
 /**
  * Window event dispatched when the terrain control is removed (e.g. hidden from
  * the Controls menu), so the React layer closes the exaggeration dialog rather
@@ -1490,19 +1512,18 @@ export class MapController {
     // (e.g. a terrain control the user enabled post-load), visibly reordering
     // the stack on every basemap/style change. Re-anchor it to its old sibling.
     const container = this.map.getContainer();
-    const previous = container.querySelector(".maplibregl-ctrl-layer-control");
+    const previous = container.querySelector(LAYER_CONTROL_SELECTOR);
     const anchor = previous?.nextElementSibling ?? null;
     const parent = previous?.parentElement ?? null;
 
     this.removeLayerControl();
     this.addLayerControl();
 
-    if (parent && (anchor === null || anchor.parentElement === parent)) {
-      const refreshed = container.querySelector(".maplibregl-ctrl-layer-control");
-      if (refreshed && refreshed !== anchor) {
-        parent.insertBefore(refreshed, anchor);
-      }
-    }
+    restoreControlOrder(
+      parent,
+      anchor,
+      container.querySelector(LAYER_CONTROL_SELECTOR),
+    );
   }
 
   private syncLayerControlState(): void {
