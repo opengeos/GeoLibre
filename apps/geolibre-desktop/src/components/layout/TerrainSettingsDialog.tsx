@@ -1,5 +1,6 @@
 import {
   DEFAULT_TERRAIN_EXAGGERATION,
+  TERRAIN_SETTINGS_CLOSE_EVENT,
   TERRAIN_SETTINGS_EVENT,
   type MapController,
 } from "@geolibre/map";
@@ -55,8 +56,15 @@ export function TerrainSettingsDialog({
       );
       setOpen(true);
     };
+    // Close if the terrain control is removed (e.g. hidden from the Controls
+    // menu) while the dialog is open, so it isn't left responding with no effect.
+    const handleClose = () => setOpen(false);
     window.addEventListener(TERRAIN_SETTINGS_EVENT, handleOpen);
-    return () => window.removeEventListener(TERRAIN_SETTINGS_EVENT, handleOpen);
+    window.addEventListener(TERRAIN_SETTINGS_CLOSE_EVENT, handleClose);
+    return () => {
+      window.removeEventListener(TERRAIN_SETTINGS_EVENT, handleOpen);
+      window.removeEventListener(TERRAIN_SETTINGS_CLOSE_EVENT, handleClose);
+    };
   }, [mapControllerRef]);
 
   const applyExaggeration = (value: number) => {
@@ -89,10 +97,13 @@ export function TerrainSettingsDialog({
                 step={EXAGGERATION_STEP}
                 value={exaggeration}
                 onChange={(event) => {
-                  // Ignore an emptied field (mid-edit) so it doesn't parse to 0
-                  // and momentarily flatten the terrain before the user retypes.
+                  // Ignore incomplete mid-edit states (empty field → 0, or a
+                  // lone "-" → NaN) so the terrain doesn't flicker through 0/1
+                  // before the user finishes typing a value.
                   if (event.target.value === "") return;
-                  applyExaggeration(Number(event.target.value));
+                  const parsed = Number(event.target.value);
+                  if (!Number.isFinite(parsed)) return;
+                  applyExaggeration(parsed);
                 }}
               />
             </div>

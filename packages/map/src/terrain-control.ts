@@ -6,6 +6,9 @@ import type maplibregl from "maplibre-gl";
  */
 const DOUBLE_CLICK_MS = 250;
 
+/** Fallback exaggeration when none (or an invalid value) is supplied. */
+const DEFAULT_EXAGGERATION = 1;
+
 export interface TerrainControlOptions {
   /** The raster-DEM source id used to drive terrain. */
   source: string;
@@ -39,10 +42,19 @@ export class TerrainControl implements maplibregl.IControl {
   private label: string;
   private readonly onOpenSettings?: () => void;
   private clickTimer: ReturnType<typeof setTimeout> | null = null;
+  // Set briefly after a double-click opens the dialog so a 3rd+ rapid click
+  // can't re-arm a single-click toggle and flatten terrain under the open dialog.
+  private clicksSuppressed = false;
+  private suppressTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: TerrainControlOptions) {
     this.source = options.source;
-    this.exaggeration = options.exaggeration ?? 1;
+    // Clamp like setExaggeration so every write path validates identically: a
+    // caller (e.g. a corrupted cached value) can't seed an invalid exaggeration.
+    const requested = options.exaggeration ?? DEFAULT_EXAGGERATION;
+    this.exaggeration = Number.isFinite(requested)
+      ? Math.max(0, requested)
+      : DEFAULT_EXAGGERATION;
     // English fallback for when no translated label is supplied. The map package
     // is i18n-agnostic, so this necessarily duplicates the `terrainSettings.
     // controlLabel` string in the app's en.json — keep the two in sync.
@@ -88,6 +100,11 @@ export class TerrainControl implements maplibregl.IControl {
       clearTimeout(this.clickTimer);
       this.clickTimer = null;
     }
+    if (this.suppressTimer !== null) {
+      clearTimeout(this.suppressTimer);
+      this.suppressTimer = null;
+    }
+    this.clicksSuppressed = false;
     this.map?.off("terrain", this.handleTerrainChange);
     this.container?.remove();
     this.container = null;
@@ -96,6 +113,10 @@ export class TerrainControl implements maplibregl.IControl {
   }
 
   private readonly handleClick = () => {
+    // Ignore trailing clicks right after a double-click opened the dialog, so a
+    // 3rd+ rapid click can't schedule a fresh single-click toggle that fires
+    // (and flattens terrain) while the dialog is still open.
+    if (this.clicksSuppressed) return;
     // A second click within the double-click window opens the exaggeration
     // dialog; a lone click toggles terrain once the window elapses. Debouncing
     // (rather than toggling on every click) keeps a double-click from flickering
@@ -116,6 +137,13 @@ export class TerrainControl implements maplibregl.IControl {
     // Enable terrain first so exaggeration edits are visible live in the dialog.
     this.setEnabled(true);
     this.onOpenSettings?.();
+    // Swallow further clicks for one more window (see handleClick).
+    this.clicksSuppressed = true;
+    if (this.suppressTimer !== null) clearTimeout(this.suppressTimer);
+    this.suppressTimer = setTimeout(() => {
+      this.clicksSuppressed = false;
+      this.suppressTimer = null;
+    }, DOUBLE_CLICK_MS);
   }
 
   /** Whether 3D terrain backed by this control's DEM source is active. */

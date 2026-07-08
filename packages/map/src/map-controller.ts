@@ -94,6 +94,12 @@ export const DEFAULT_TERRAIN_EXAGGERATION = 1;
  * outside React, so it signals through a window event rather than a callback.
  */
 export const TERRAIN_SETTINGS_EVENT = "geolibre:terrain-settings-open";
+/**
+ * Window event dispatched when the terrain control is removed (e.g. hidden from
+ * the Controls menu), so the React layer closes the exaggeration dialog rather
+ * than leaving it open with no terrain to affect.
+ */
+export const TERRAIN_SETTINGS_CLOSE_EVENT = "geolibre:terrain-settings-close";
 const EMPTY_HIGHLIGHT: FeatureCollection = {
   type: "FeatureCollection",
   features: [],
@@ -2178,6 +2184,9 @@ export class MapController {
     if (!this.terrainControl) return;
     this.removeControl(this.terrainControl);
     this.terrainControl = null;
+    // The exaggeration dialog is driven by this control; tell the React layer to
+    // close it so it isn't left open with no effect once terrain is gone.
+    window.dispatchEvent(new CustomEvent(TERRAIN_SETTINGS_CLOSE_EVENT));
   }
 
   /** The current terrain vertical exaggeration. */
@@ -2191,8 +2200,15 @@ export class MapController {
    * terrain is already enabled.
    */
   setTerrainExaggeration(exaggeration: number): void {
-    this.terrainExaggeration = exaggeration;
-    this.terrainControl?.setExaggeration(exaggeration);
+    // Clamp before caching so the cached value (which seeds the next control
+    // built on a Controls-menu toggle / style reload) can't drift from what the
+    // live control actually applies, and so the public API is safe regardless of
+    // whether the caller pre-validated. Mirrors TerrainControl.setExaggeration.
+    const safe = Number.isFinite(exaggeration)
+      ? Math.max(0, exaggeration)
+      : this.terrainExaggeration;
+    this.terrainExaggeration = safe;
+    this.terrainControl?.setExaggeration(safe);
   }
 
   /**

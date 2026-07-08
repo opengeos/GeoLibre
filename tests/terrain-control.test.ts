@@ -160,6 +160,28 @@ describe("TerrainControl", () => {
     assert.equal(fake.setTerrainCalls.length, 1);
   });
 
+  it("ignores a 3rd rapid click so terrain stays on under the open dialog", (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const onOpenSettings = mock.fn();
+    const { control, fake, button } = mount({ onOpenSettings });
+
+    button.emit("click"); // arms the single-click toggle
+    button.emit("click"); // double-click → opens settings, enables terrain
+    button.emit("click"); // 3rd rapid click must be swallowed, not re-armed
+    assert.equal(control.isEnabled(), true);
+    const callsAfterOpen = fake.setTerrainCalls.length;
+
+    // The suppression window elapses without any late toggle firing.
+    t.mock.timers.tick(DOUBLE_CLICK_MS);
+    assert.equal(control.isEnabled(), true);
+    assert.equal(fake.setTerrainCalls.length, callsAfterOpen);
+
+    // Once suppression lifts, a fresh click toggles normally again.
+    button.emit("click");
+    t.mock.timers.tick(DOUBLE_CLICK_MS);
+    assert.equal(control.isEnabled(), false);
+  });
+
   it("applies a new exaggeration live only while terrain is enabled", () => {
     const { control, fake } = mount();
 
@@ -201,6 +223,11 @@ describe("TerrainControl", () => {
     assert.equal(control.getExaggeration(), 0);
     // NaN/Infinity did not re-apply terrain (only the -3 clamp call did).
     assert.equal(fake.setTerrainCalls.length, enabledCall + 1);
+  });
+
+  it("clamps an invalid exaggeration passed to the constructor", () => {
+    assert.equal(mount({ exaggeration: -2 }).control.getExaggeration(), 0);
+    assert.equal(mount({ exaggeration: Number.NaN }).control.getExaggeration(), 1);
   });
 
   it("reflects the enabled state on the button class", () => {
