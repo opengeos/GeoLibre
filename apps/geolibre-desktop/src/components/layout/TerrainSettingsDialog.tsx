@@ -15,19 +15,17 @@ import {
   Label,
   Slider,
 } from "@geolibre/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  clampExaggeration,
+  EXAGGERATION_STEP,
+  MAX_EXAGGERATION,
+  MIN_EXAGGERATION,
+} from "../../lib/terrain-exaggeration";
 
-const MIN_EXAGGERATION = 0;
-const MAX_EXAGGERATION = 5;
-const EXAGGERATION_STEP = 0.1;
 // Default sourced from the map package so it can't drift from the control's.
 const DEFAULT_EXAGGERATION = DEFAULT_TERRAIN_EXAGGERATION;
-
-function clampExaggeration(value: number): number {
-  if (!Number.isFinite(value)) return DEFAULT_EXAGGERATION;
-  return Math.min(MAX_EXAGGERATION, Math.max(MIN_EXAGGERATION, value));
-}
 
 export interface TerrainSettingsDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -54,16 +52,18 @@ export function TerrainSettingsDialog({
 
   useEffect(() => {
     const handleOpen = () => {
-      // Seed the slider from the controller's current value so the dialog
-      // reflects any previously chosen exaggeration. Clamp it to the dialog's
-      // display range: the controller only floors its cache at 0, so a value
-      // written directly (e.g. via a future scripting API) could exceed the max.
-      setExaggeration(
-        clampExaggeration(
-          mapControllerRef.current?.getTerrainExaggeration() ??
-            DEFAULT_EXAGGERATION,
-        ),
+      // Seed from the controller's current value so the dialog reflects any
+      // previously chosen exaggeration. Clamp to the dialog's display range: the
+      // controller only floors its cache at 0, so a value written directly (e.g.
+      // via a future scripting API) could exceed the max. Set the draft directly
+      // too (not just via the exaggeration effect) so reopening after an
+      // uncommitted/invalid draft was abandoned via Escape shows the real value.
+      const value = clampExaggeration(
+        mapControllerRef.current?.getTerrainExaggeration() ??
+          DEFAULT_EXAGGERATION,
       );
+      setExaggeration(value);
+      setDraft(String(value));
       setOpen(true);
     };
     // Close if the terrain control is removed (e.g. hidden from the Controls
@@ -77,10 +77,30 @@ export function TerrainSettingsDialog({
     };
   }, [mapControllerRef]);
 
+  // Coalesce the live map update to one per animation frame so a fast slider
+  // drag (Radix fires onValueChange on every 0.1 step) doesn't spray dozens of
+  // setTerrain calls — each of which reprocesses the terrain mesh — per second.
+  const frameRef = useRef<number | null>(null);
+  const pendingRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
+    },
+    [],
+  );
+
   const applyExaggeration = (value: number) => {
     const clamped = clampExaggeration(value);
     setExaggeration(clamped);
-    mapControllerRef.current?.setTerrainExaggeration(clamped);
+    pendingRef.current = clamped;
+    if (frameRef.current === null) {
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null;
+        const next = pendingRef.current;
+        pendingRef.current = null;
+        if (next !== null) mapControllerRef.current?.setTerrainExaggeration(next);
+      });
+    }
   };
 
   const commitDraft = () => {
