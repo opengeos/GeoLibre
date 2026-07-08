@@ -2263,6 +2263,143 @@ body,
   background: hsl(var(--border));
 }
 
+/* Basemaps plugin (maplibre-gl-basemap-control) — the package ships a
+   hard-coded light theme with `color-scheme: light`, so map its own classes
+   onto the app design tokens when the app is in dark mode. Scoped to the
+   package's own root/child classes, mirroring the STAC `.pc-control-*` block
+   above. Never edit the package's stylesheet in node_modules. */
+.dark .basemap-control {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  color-scheme: dark;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.4);
+}
+
+.dark .basemap-control-toggle {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-toggle:hover {
+  background-color: hsl(var(--muted));
+}
+
+.dark .basemap-control-icon svg {
+  stroke: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-panel {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.55), 0 0 0 1px hsl(var(--border));
+}
+
+.dark .basemap-control-header {
+  border-bottom-color: hsl(var(--border));
+}
+
+.dark .basemap-control-title,
+.dark .basemap-control-result-name,
+.dark .basemap-control-settings-heading,
+.dark .basemap-control-multiple-toggle {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-settings-toggle,
+.dark .basemap-control-close,
+.dark .basemap-control-status,
+.dark .basemap-control-empty,
+.dark .basemap-control-result-meta,
+.dark .basemap-control-result-attribution,
+.dark .basemap-control-settings-intro,
+.dark .basemap-control-provider-group-label {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .basemap-control-settings-toggle:hover,
+.dark .basemap-control-close:hover {
+  color: hsl(var(--popover-foreground));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-settings-toggle.is-active {
+  color: hsl(var(--accent-foreground));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-status.is-error {
+  color: #f87171;
+}
+
+.dark .basemap-control-input,
+.dark .basemap-control-select,
+.dark .basemap-control-settings-back {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .basemap-control-input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .basemap-control-select option {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-input:focus,
+.dark .basemap-control-select:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+}
+
+.dark .basemap-control-multiple-checkbox {
+  accent-color: hsl(var(--ring));
+}
+
+.dark .basemap-control-result {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-result:hover {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-result.is-active {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-result-type {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.dark .basemap-control-settings-back:hover {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-status-link {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-results::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+}
+
+.dark .basemap-control-resize-handle::after {
+  border-color: hsl(var(--border));
+}
+
+.dark .basemap-control-resize-handle:hover::after {
+  border-color: hsl(var(--muted-foreground));
+}
+
 .geolibre-earth-engine-control .plugin-control-toggle {
   align-items: center;
   display: flex;

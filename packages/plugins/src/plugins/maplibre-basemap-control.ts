@@ -112,8 +112,10 @@ const registeredRasterLayers = new Map<string, string>();
 let styleChangeFallback: { attemptedUrl: string; previousUrl: string } | null =
   null;
 
+export const BASEMAP_CONTROL_PLUGIN_ID = "maplibre-gl-basemap-control";
+
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-basemap-control",
+  id: BASEMAP_CONTROL_PLUGIN_ID,
   name: "Basemaps",
   version: "0.3.0",
   activate: (app: GeoLibreAppAPI) => {
@@ -154,7 +156,12 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) return;
     cleanupRuntimeEnvListener();
-    unregisterAllRasterBasemaps(app);
+    // Closing the control must not throw away the stacked raster basemaps the
+    // user assembled — they are real layers in the Layers panel. Keep them in
+    // the store and only drop the module-level link tracking; a later
+    // reactivation relinks them from the store via relinkRestoredRasterBasemaps
+    // (the same path a reopened project takes). See #1113 follow-up.
+    registeredRasterLayers.clear();
     app.removeMapControl(basemapControl);
     basemapControl = null;
     // Drop any pending style-failure fallback so a later reactivation cannot

@@ -2477,6 +2477,7 @@
     "basemapOpacity": "Basemap opacity",
     "backgroundNameFixed": "The name of the background basemap is fixed and cannot be changed.",
     "newGroup": "New group",
+    "basemaps": "Basemaps",
     "collapseGroup": "Collapse group",
     "expandGroup": "Expand group",
     "hideGroup": "Hide group",

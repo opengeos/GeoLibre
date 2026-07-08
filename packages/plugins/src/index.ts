@@ -46,6 +46,7 @@ export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export {
   maplibreBasemapControlPlugin,
+  BASEMAP_CONTROL_PLUGIN_ID,
   setBasemapControlLabels,
   type BasemapControlLabels,
 } from "./plugins/maplibre-basemap-control";

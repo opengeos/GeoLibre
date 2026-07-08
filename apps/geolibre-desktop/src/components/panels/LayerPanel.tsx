@@ -20,6 +20,7 @@ import {
   canEditLayerGeometry,
   detectTimeProperties,
   getLayerTimeBinding,
+  BASEMAP_CONTROL_PLUGIN_ID,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
   SKETCHES_SOURCE_KIND,
@@ -66,6 +67,7 @@ import {
   Separator,
   Select,
   Slider,
+  cn,
 } from "@geolibre/ui";
 import {
   CalendarClock,
@@ -82,6 +84,7 @@ import {
   GripVertical,
   Info,
   Layers,
+  Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
   Palette,
@@ -1896,6 +1899,27 @@ export function LayerPanel({
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">Layers</span>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("layers.basemaps")}
+            aria-label={t("layers.basemaps")}
+            aria-pressed={isPluginActive(BASEMAP_CONTROL_PLUGIN_ID)}
+            onClick={() =>
+              togglePlugin(
+                BASEMAP_CONTROL_PLUGIN_ID,
+                createAppAPI(mapControllerRef),
+              )
+            }
+          >
+            <MapIcon
+              className={cn(
+                "h-4 w-4",
+                isPluginActive(BASEMAP_CONTROL_PLUGIN_ID) && "text-primary",
+              )}
+            />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
