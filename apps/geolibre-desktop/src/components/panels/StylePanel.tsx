@@ -3075,7 +3075,9 @@ export function StylePanel({
         value={style.fillOpacity}
         onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
       />
-      {geometryFlags.hasPoint ? (
+      {/* Sketches mix geometry types under one style, so "Circle radius" is
+          suppressed there for the same reason as in the 2D controls (#483). */}
+      {geometryFlags.hasPoint && !isSketchLayer ? (
         <NumericStyleInput
           id="circleRadius"
           label={t("style.elevation3d.circleRadius")}
@@ -3348,7 +3350,7 @@ export function StylePanel({
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={extrusionEnabled}
+                    checked={extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setVectorStyleError(null);
                       setLayerStyle(layer.id, {

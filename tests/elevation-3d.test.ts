@@ -7,6 +7,7 @@ import {
   geojsonHasZCoordinates,
   transformGeojsonElevation,
 } from "../packages/core/src/index";
+import { syncLayer } from "../packages/map/src/layer-sync";
 import {
   buildElevation3dLayer,
   isElevation3dLayer,
@@ -43,6 +44,88 @@ function geojsonLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
     ...overrides,
   } as GeoLibreLayer;
 }
+
+// Stateful fake MapLibre map (mirrors point-renderer-sync.test.ts): tracks
+// sources and layers across sync passes so the tests can assert what the
+// elevation3d branch removes and what a toggle back to 2D re-adds.
+function makeMap() {
+  const sources = new Map<string, Record<string, unknown>>();
+  const layers = new Map<string, Record<string, unknown>>();
+  const map = {
+    getSource: (id: string) =>
+      sources.has(id) ? { type: "geojson", setData: () => {} } : undefined,
+    addSource: (id: string, spec: Record<string, unknown>) => {
+      sources.set(id, spec);
+    },
+    removeSource: (id: string) => {
+      sources.delete(id);
+    },
+    getLayer: (id: string) =>
+      layers.has(id) ? { id, ...layers.get(id) } : undefined,
+    addLayer: (spec: Record<string, unknown>) => {
+      layers.set(spec.id as string, spec);
+    },
+    removeLayer: (id: string) => {
+      layers.delete(id);
+    },
+    getFilter: (id: string) => layers.get(id)?.filter,
+    setFilter: () => {},
+    setPaintProperty: () => {},
+    setLayoutProperty: () => {},
+    setLayerZoomRange: () => {},
+    moveLayer: () => {},
+    getStyle: () => ({
+      layers: [...layers.values()],
+      sources: Object.fromEntries(sources),
+    }),
+    once: () => {},
+  };
+  return { map, sources, layers };
+}
+
+describe("syncLayer with elevation3dEnabled", () => {
+  it("drops the MapLibre rendering for Z-bearing data and restores it when toggled off", () => {
+    const { map, sources, layers } = makeMap();
+    const layer = geojsonLayer({});
+
+    // Baseline 2D render creates a source and at least one style layer.
+    syncLayer(map as never, layer);
+    assert.equal(sources.size, 1);
+    assert.ok(layers.size > 0);
+
+    // Enabling the 3D Z-value mode hands the layer to the deck.gl overlay,
+    // so every MapLibre source/layer for it must be removed.
+    syncLayer(
+      map as never,
+      geojsonLayer({
+        style: { ...DEFAULT_LAYER_STYLE, elevation3dEnabled: true },
+      }),
+    );
+    assert.equal(sources.size, 0);
+    assert.equal(layers.size, 0);
+
+    // Toggling back to 2D re-adds the MapLibre rendering.
+    syncLayer(map as never, layer);
+    assert.equal(sources.size, 1);
+    assert.ok(layers.size > 0);
+  });
+
+  it("keeps the 2D render when the flag is set but the data has no Z values", () => {
+    const { map, sources, layers } = makeMap();
+    syncLayer(
+      map as never,
+      geojsonLayer({
+        style: { ...DEFAULT_LAYER_STYLE, elevation3dEnabled: true },
+        geojson: track([
+          [6.86, 45.83],
+          [6.87, 45.84],
+        ]),
+      }),
+    );
+    assert.equal(sources.size, 1);
+    assert.ok(layers.size > 0);
+  });
+});
 
 describe("geojsonHasZCoordinates", () => {
   it("detects Z on LineString coordinates", () => {
