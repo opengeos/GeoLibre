@@ -5,6 +5,7 @@ import {
 } from "@geolibre/core";
 import {
   isAbsoluteLocalPath,
+  isLoadedVectorLayer,
   isRestorableVectorPath,
   isTauri,
   loadDroppedVectorPaths,
@@ -60,7 +61,11 @@ export async function restoreLocalFileLayers(): Promise<void> {
   await Promise.all(
     Array.from(byPath, async ([path, layers]) => {
       try {
-        const loaded = await loadDroppedVectorPaths([path]);
+        // A KMZ/KML file can yield image overlays alongside its vector layers;
+        // only the vector entries carry the `geojson` these layers reload.
+        const loaded = (await loadDroppedVectorPaths([path])).filter(
+          isLoadedVectorLayer,
+        );
         if (loaded.length === 0) {
           dropLayers(layers, path);
           return;

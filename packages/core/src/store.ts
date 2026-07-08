@@ -352,6 +352,23 @@ export interface AppState {
     beforeLayerId?: string | null
   ) => string;
   /**
+   * Add a georeferenced image overlay (a MapLibre `image` source rendered as a
+   * raster layer) from an image URL and its four corner coordinates, and return
+   * its id. Used for KML/KMZ `<GroundOverlay>` imports; the layer persists and
+   * renders exactly like a Raster Georeferencer overlay. Corners are `[lng,
+   * lat]` in top-left, top-right, bottom-right, bottom-left order.
+   */
+  addImageOverlayLayer: (
+    name: string,
+    source: { url: string; coordinates: [number, number][] },
+    options?: {
+      opacity?: number;
+      bounds?: [number, number, number, number];
+      sourcePath?: string;
+    },
+    beforeLayerId?: string | null
+  ) => string;
+  /**
    * Add a native raster tile layer (XYZ, WMS, or WMTS) from one or more tile
    * URL templates and return its id. The layer appears in the Layers panel and
    * persists with the project exactly like a layer added through the Add Data
@@ -1086,6 +1103,26 @@ export const useAppStore = create<AppState>()(
           metadata: {},
           geojson,
           sourcePath,
+        };
+        get().addLayer(layer, beforeLayerId);
+        return id;
+      },
+
+      addImageOverlayLayer: (name, source, options, beforeLayerId = null) => {
+        const id = uuidv4();
+        const layer: GeoLibreLayer = {
+          id,
+          name,
+          type: "image",
+          source: { type: "image", url: source.url, coordinates: source.coordinates },
+          visible: true,
+          opacity: options?.opacity ?? 1,
+          style: { ...DEFAULT_LAYER_STYLE },
+          metadata: {
+            sourceKind: "kml-ground-overlay",
+            ...(options?.bounds ? { bounds: options.bounds } : {}),
+          },
+          ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };
         get().addLayer(layer, beforeLayerId);
         return id;

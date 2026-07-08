@@ -48,6 +48,7 @@ import {
   loadDroppedPhotoPaths,
   loadDroppedRasterFiles,
   loadDroppedRasterPaths,
+  isLoadedImageOverlay,
   loadDroppedVectorFiles,
   loadDroppedVectorPaths,
   type DroppedRaster,
@@ -470,6 +471,7 @@ export function DesktopShell({
   const materializingRef = useRef(false);
   const togglingGeometryEditRef = useRef(false);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const addImageOverlayLayer = useAppStore((s) => s.addImageOverlayLayer);
   const projectGeneration = useAppStore((s) => s.projectGeneration);
   const pythonConsoleOpen = useAppStore((s) => s.ui.pythonConsoleOpen);
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
@@ -968,6 +970,19 @@ export function DesktopShell({
     (importedLayers: ImportedVectorLayer[]) => {
       let lastLayerId: string | null = null;
       for (const layer of importedLayers) {
+        // A KML/KMZ ground overlay becomes an image layer, not a vector one.
+        if (isLoadedImageOverlay(layer)) {
+          lastLayerId = addImageOverlayLayer(
+            layer.name,
+            { url: layer.url, coordinates: layer.coordinates },
+            {
+              opacity: layer.opacity,
+              bounds: layer.bounds,
+              sourcePath: layer.path,
+            },
+          );
+          continue;
+        }
         // `||` (not `??`) so an empty-string name falls back to the path, and
         // matches the name shown in the drop confirmation toast.
         lastLayerId = addGeoJsonLayer(
@@ -982,7 +997,7 @@ export function DesktopShell({
         .layers.find((layer) => layer.id === lastLayerId);
       if (importedLayer) mapControllerRef.current?.fitLayer(importedLayer);
     },
-    [addGeoJsonLayer],
+    [addGeoJsonLayer, addImageOverlayLayer],
   );
 
   const addDroppedPhotos = useCallback(
