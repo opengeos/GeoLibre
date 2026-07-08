@@ -16,6 +16,13 @@ export interface ExportFileOptions {
   extensions?: string[];
   /** MIME type used for the browser download blob. */
   mimeType?: string;
+  /**
+   * Ask the user for a file name first on browsers without a native save
+   * picker (Firefox/Safari), where the export would otherwise download under a
+   * fixed name and silently overwrite/duplicate. No effect under Tauri or where
+   * the File System Access picker already prompts for the name.
+   */
+  promptName?: boolean;
 }
 
 /**

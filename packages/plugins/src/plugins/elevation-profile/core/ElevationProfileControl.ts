@@ -109,6 +109,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   private _svgEl?: SVGSVGElement;
   private _chartResizeObserver?: ResizeObserver;
   private _chartRenderQueued = false;
+  private _styleReadyQueued = false;
 
   // Drawing / profiling runtime state (not serialized).
   private _drawing = false;
@@ -162,7 +163,16 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
 
     // Restore a previously saved or deep-linked line, if any.
     if (this._state.line && this._state.line.length >= 2) {
-      void this._profileLine(this._state.line, { fit: false });
+      if (this._profilePoints.length >= 2) {
+        // The control was re-mounted (e.g. repositioned via
+        // setMapControlPosition) with its profile still in memory — only the
+        // map's GeoJSON line/vertex layers were torn down in onRemove. Redraw
+        // them without re-hitting Open-Meteo; _createPanel already re-rendered
+        // the cached stats/chart.
+        this._renderLineGeometry(this._state.line);
+      } else {
+        void this._profileLine(this._state.line, { fit: false });
+      }
     }
 
     return this._container;
@@ -172,6 +182,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
   onRemove(): void {
     this._exitDrawing();
     this._removeMapLayers();
+    // Any pending style-ready retry becomes a no-op (its callback guards on
+    // this._map), but clear the flag so a later re-add can queue a fresh one.
+    this._styleReadyQueued = false;
     this._chartResizeObserver?.disconnect();
     this._chartResizeObserver = undefined;
 
@@ -417,7 +430,23 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
 
   private _ensureMapLayers(): boolean {
     const map = this._map;
-    if (!map || !map.isStyleLoaded()) return false;
+    if (!map) return false;
+    if (!map.isStyleLoaded()) {
+      // The style is still loading (e.g. onAdd profiling a restored/deep-linked
+      // line before the basemap is ready). Drop this draw but retry once the
+      // style settles so the line/vertices are not lost — mirrors
+      // maplibre-graticule's whenStyleReady idle retry.
+      if (!this._styleReadyQueued) {
+        this._styleReadyQueued = true;
+        map.once('idle', () => {
+          this._styleReadyQueued = false;
+          if (!this._map) return; // control was removed while waiting
+          if (this._drawing) this._renderDrawGeometry();
+          else if (this._state.line) this._renderLineGeometry(this._state.line);
+        });
+      }
+      return false;
+    }
     if (!map.getSource(SOURCE_LINE)) {
       map.addSource(SOURCE_LINE, { type: 'geojson', data: emptyFeatureCollection() });
       map.addLayer({
@@ -501,14 +530,23 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
 
   private _fitToLine(coords: LngLat[]): void {
     if (!this._map || coords.length === 0) return;
+    // Unwrap longitudes so a line crossing the antimeridian (e.g. Bering Strait)
+    // yields a tight box around the line rather than one spanning the globe.
+    // Each point is brought into the same 360° window as the previous, matching
+    // maplibre-graticule's unwrappedLongitudeRange handling.
+    let prevLng = coords[0][0];
     let minLng = coords[0][0];
-    let minLat = coords[0][1];
     let maxLng = coords[0][0];
+    let minLat = coords[0][1];
     let maxLat = coords[0][1];
     for (const [lng, lat] of coords) {
-      minLng = Math.min(minLng, lng);
+      let unwrapped = lng;
+      while (unwrapped - prevLng > 180) unwrapped -= 360;
+      while (unwrapped - prevLng < -180) unwrapped += 360;
+      prevLng = unwrapped;
+      minLng = Math.min(minLng, unwrapped);
+      maxLng = Math.max(maxLng, unwrapped);
       minLat = Math.min(minLat, lat);
-      maxLng = Math.max(maxLng, lng);
       maxLat = Math.max(maxLat, lat);
     }
     this._map.fitBounds(
@@ -838,6 +876,9 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       description: 'CSV',
       extensions: ['csv'],
       mimeType: 'text/csv',
+      // Prompt for a name on browsers without a native save picker so repeated
+      // exports don't silently overwrite the fixed filename.
+      promptName: true,
     });
   }
 
@@ -848,6 +889,7 @@ export class ElevationProfileControl implements IControl, DeepLinkConsumer {
       description: 'SVG image',
       extensions: ['svg'],
       mimeType: 'image/svg+xml',
+      promptName: true,
     });
   }
 

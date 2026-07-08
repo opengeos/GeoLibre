@@ -23,7 +23,10 @@ export class ElevationFetchError extends Error {
 }
 
 /** A `fetch`-compatible function, so tests can inject a stub. */
-export type FetchLike = (url: string) => Promise<Response>;
+export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+
+/** Abort an elevation request that has not responded within this window. */
+export const ELEVATION_REQUEST_TIMEOUT_MS = 15000;
 
 interface ElevationResponse {
   elevation?: number[];
@@ -49,17 +52,30 @@ export async function fetchElevations(
     );
   }
 
-  const doFetch: FetchLike = fetchImpl ?? ((url) => fetch(url));
+  const doFetch: FetchLike = fetchImpl ?? ((url, init) => fetch(url, init));
   const latitudes = points.map((p) => p[1].toFixed(6)).join(',');
   const longitudes = points.map((p) => p[0].toFixed(6)).join(',');
   const url = `${ENDPOINT}?latitude=${latitudes}&longitude=${longitudes}`;
 
+  // A default fetch never times out, so a hung request would leave the control's
+  // busy state stuck with no recovery. Abort after ELEVATION_REQUEST_TIMEOUT_MS
+  // and surface it as a normal fetch error the caller already handles.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    ELEVATION_REQUEST_TIMEOUT_MS,
+  );
   let response: Response;
   try {
-    response = await doFetch(url);
+    response = await doFetch(url, { signal: controller.signal });
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new ElevationFetchError('Elevation request timed out.');
+    }
     const detail = error instanceof Error ? error.message : 'unknown error';
     throw new ElevationFetchError(`Could not reach the elevation service: ${detail}`);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!response.ok) {

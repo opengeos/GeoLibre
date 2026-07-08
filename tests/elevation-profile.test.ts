@@ -230,13 +230,9 @@ describe("elevation-profile deep link", () => {
 
 describe("elevation-profile Open-Meteo client", () => {
   const stubFetch =
-    (body: unknown, ok = true, status = 200): FetchLike =>
+    (body: unknown, status = 200): FetchLike =>
     () =>
-      Promise.resolve(
-        new Response(JSON.stringify(body), {
-          status: ok ? status : status,
-        }),
-      );
+      Promise.resolve(new Response(JSON.stringify(body), { status }));
 
   it("returns [] for no points and never calls fetch", async () => {
     let called = false;
@@ -272,8 +268,18 @@ describe("elevation-profile Open-Meteo client", () => {
 
   it("rejects on a non-2xx response", async () => {
     await assert.rejects(
-      () => fetchElevations([[0, 0]], stubFetch({}, false, 503)),
+      () => fetchElevations([[0, 0]], stubFetch({}, 503)),
       ElevationFetchError,
+    );
+  });
+
+  it("surfaces an aborted (timed-out) request as an ElevationFetchError", async () => {
+    const abortFetch: FetchLike = () =>
+      Promise.reject(new DOMException("aborted", "AbortError"));
+    await assert.rejects(
+      () => fetchElevations([[0, 0]], abortFetch),
+      (err: unknown) =>
+        err instanceof ElevationFetchError && /timed out/i.test(err.message),
     );
   });
 

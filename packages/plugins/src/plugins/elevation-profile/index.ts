@@ -138,7 +138,22 @@ export const maplibreElevationProfilePlugin: GeoLibrePlugin = {
   },
 
   applyProjectState(_app, state) {
-    if (!isPluginState(state)) return false;
+    if (!isPluginState(state)) {
+      // A missing/invalid state (e.g. the "New Project" reset, which calls
+      // applyProjectState(app, undefined) via restoreProjectState's
+      // resetMissingSettings) must still clear any cached line/unit/collapse,
+      // otherwise re-enabling the plugin on the new blank project would restore
+      // the previous project's profile. Mirrors maplibre-swipe /
+      // maplibre-graticule, whose normalizers reset to defaults on undefined.
+      const cleared: ElevationProfileState = {
+        collapsed: true,
+        unitSystem: "metric",
+        line: null,
+      };
+      pendingState = cleared;
+      control?.setState(cleared);
+      return;
+    }
     pendingState = state as Partial<ElevationProfileState> & {
       unitSystem?: UnitSystem;
     };
