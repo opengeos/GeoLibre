@@ -55,13 +55,22 @@ describe("getComponentsConstructors", () => {
 
   it("memoizes a successful load so concurrent controls share one import", async () => {
     let calls = 0;
-    __setComponentsModuleLoaderForTests((): Promise<ComponentsModules> => {
-      calls += 1;
-      return Promise.resolve([fakeComponentsModule, null]);
-    });
+    const resolvers: Array<(modules: ComponentsModules) => void> = [];
+    __setComponentsModuleLoaderForTests(
+      (): Promise<ComponentsModules> => {
+        calls += 1;
+        return new Promise((resolve) => resolvers.push(resolve));
+      }
+    );
 
-    const first = await getComponentsConstructors();
-    const second = await getComponentsConstructors();
+    // Issue both calls before the loader resolves so this exercises the actual
+    // in-flight dedup (the synchronous `??=` assignment), not just reuse of an
+    // already-settled promise. A naive impl that re-triggers the loader for
+    // calls made before the first resolves would fail this.
+    const firstPromise = getComponentsConstructors();
+    const secondPromise = getComponentsConstructors();
+    for (const resolve of resolvers) resolve([fakeComponentsModule, null]);
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
 
     assert.equal(calls, 1);
     assert.equal(first, second);
