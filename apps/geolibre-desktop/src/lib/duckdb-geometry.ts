@@ -49,12 +49,6 @@ const SURFACE_WKB_TYPE_CODES = new Set([15, 16, 17]);
 export function isUnsupportedSurfaceWkbError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const lower = message.toLowerCase();
-  // Generic form emitted by some DuckDB Spatial builds (e.g. the WASM 1.33
-  // extension on a full MultiPatch shapefile): "Unsupported geometry type in
-  // WKB". It carries no type name or id, so it cannot be distinguished from a
-  // curved geometry here — the raw-WKB fallback re-reads and re-throws if it
-  // decodes nothing, so a genuinely undecodable geometry still fails loudly.
-  if (lower.includes("unsupported geometry type in wkb")) return true;
   // Detailed form: "Could not parse WKB input: WKB type 'TIN Z' is not
   // supported! (type id: 1016, SRID: 0)".
   const isUnsupportedWkb =
@@ -73,6 +67,24 @@ export function isUnsupportedSurfaceWkbError(error: unknown): boolean {
   // like "casting"; `polyhedral`/`triangle` are distinctive enough as-is (and
   // "PolyhedralSurface" has no boundary before "Surface").
   return /\btin\b|polyhedral|triangle/i.test(message);
+}
+
+/**
+ * True for the generic "Unsupported geometry type in WKB" error some DuckDB
+ * Spatial builds (e.g. the WASM 1.33 extension on a full MultiPatch shapefile)
+ * emit instead of the detailed {@link isUnsupportedSurfaceWkbError} form.
+ *
+ * It carries no type name or id, so it cannot be told apart from a curved
+ * geometry (CircularString etc.). Callers must therefore only route it into the
+ * raw-WKB fallback for a source where a surface is the sole possible cause — an
+ * ESRI shapefile, whose only surface geometry is MultiPatch and which cannot
+ * hold curves. For every other format this message must still fail loudly.
+ */
+export function isGenericUnsupportedWkbError(error: unknown): boolean {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  return message.includes("unsupported geometry type in wkb");
 }
 
 /**

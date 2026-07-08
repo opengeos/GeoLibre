@@ -275,7 +275,9 @@ export function decodeWkb(bytes: Uint8Array): Geometry {
         };
       }
       case 17:
-        // Triangle: a Polygon constrained to a single 4-vertex ring.
+        // Triangle: WKB-encoded exactly like a Polygon (rings of positions).
+        // Spec-wise it is a single 4-vertex ring, but the bytes are read as a
+        // Polygon without enforcing that, matching the ring loop for any polygon.
         return { type: "Polygon", coordinates: readRings() };
       default:
         // Codes 8-12 are the curved geometries (CircularString, CompoundCurve,

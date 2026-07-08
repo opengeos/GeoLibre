@@ -5,6 +5,7 @@ import {
   detectGeometryColumn,
   geometryExpr,
   geometryGeoJsonSql,
+  isGenericUnsupportedWkbError,
   isGeometryColumnType,
   isUnsupportedSurfaceWkbError,
   normalizePropertyValue,
@@ -300,14 +301,14 @@ describe("isUnsupportedSurfaceWkbError", () => {
     );
   });
 
-  // Some DuckDB Spatial builds emit a generic message with no type name/id;
-  // it is matched so the fallback runs (which re-throws if it decodes nothing).
-  it("matches the generic 'Unsupported geometry type in WKB' message", () => {
+  // The generic, type-less message is matched by isGenericUnsupportedWkbError,
+  // NOT the surface matcher (which needs a type name/id to exclude curves).
+  it("does not match the generic 'Unsupported geometry type in WKB' message", () => {
     assert.equal(
       isUnsupportedSurfaceWkbError(
         new Error("Invalid Input Error: Unsupported geometry type in WKB"),
       ),
-      true,
+      false,
     );
   });
 
@@ -317,6 +318,30 @@ describe("isUnsupportedSurfaceWkbError", () => {
       false,
     );
     assert.equal(isUnsupportedSurfaceWkbError("TIN"), false);
+  });
+});
+
+describe("isGenericUnsupportedWkbError", () => {
+  it("matches the generic type-less message", () => {
+    assert.equal(
+      isGenericUnsupportedWkbError(
+        new Error("Invalid Input Error: Unsupported geometry type in WKB"),
+      ),
+      true,
+    );
+  });
+
+  it("does not match the detailed surface or unrelated messages", () => {
+    assert.equal(
+      isGenericUnsupportedWkbError(
+        new Error("WKB type 'TIN Z' is not supported! (type id: 1016)"),
+      ),
+      false,
+    );
+    assert.equal(
+      isGenericUnsupportedWkbError(new Error("stoi: no conversion")),
+      false,
+    );
   });
 });
 

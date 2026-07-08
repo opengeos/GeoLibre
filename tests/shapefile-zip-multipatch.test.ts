@@ -11,6 +11,7 @@ type ReadShapefileZipForDuckDb = (
   data: ArrayBuffer | Uint8Array,
 ) => Promise<{
   file: { name: string; extension: string; siblingFiles?: { name: string }[] };
+  sidecar: Record<string, Uint8Array>;
   isMultiPatch: boolean;
 } | null>;
 

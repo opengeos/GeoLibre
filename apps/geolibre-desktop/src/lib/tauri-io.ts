@@ -15,7 +15,7 @@ import {
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
-import shp from "shpjs";
+import { combine, parseDbf, parseShp } from "shpjs";
 import {
   DELIMITER_CANDIDATES,
   NO_VALID_COORDINATES_MESSAGE,
@@ -477,12 +477,6 @@ function parseDelimitedTextFile(
   }
 }
 
-async function parseShapefileZip(
-  data: ArrayBuffer | Uint8Array,
-): Promise<FeatureCollection> {
-  return normalizeShapefileResult(await shp(data));
-}
-
 /** ESRI shape type for MultiPatch (3D surfaces), read from a `.shp` header. */
 const SHAPEFILE_MULTIPATCH_TYPE = 31;
 
@@ -505,10 +499,21 @@ export function shapefileShapeType(shp: Uint8Array): number {
   );
 }
 
+/** A zipped shapefile unzipped once: the DuckDB file, its raw sidecar bytes
+ *  (keyed by lowercase extension), and whether it is a 3D MultiPatch. */
+export interface UnzippedShapefile {
+  file: DuckDbVectorFile;
+  /** Sidecar bytes keyed by lowercase extension (`dbf`, `prj`, `cpg`, ...). */
+  sidecar: Record<string, Uint8Array>;
+  isMultiPatch: boolean;
+}
+
 /**
- * Unzip a shapefile archive into a {@link DuckDbVectorFile} (the `.shp` plus its
- * sidecars, registered under one flat base name), skipping macOS `__MACOSX` /
- * AppleDouble entries. Returns null when the archive has no `.shp`.
+ * Unzip a shapefile archive **once** into a {@link DuckDbVectorFile} (the `.shp`
+ * plus its sidecars, registered under one flat base name) and the raw sidecar
+ * bytes, skipping macOS `__MACOSX` / AppleDouble entries. Returns null when the
+ * archive has no `.shp` (a corrupt archive rejects, so the caller does not
+ * silently fall through to a mis-parse).
  *
  * The `isMultiPatch` flag marks 3D MultiPatch (shape type 31) shapefiles: shpjs
  * mis-reads those as points, so they must be loaded through DuckDB, which
@@ -516,7 +521,7 @@ export function shapefileShapeType(shp: Uint8Array): number {
  */
 export async function readShapefileZipForDuckDb(
   data: ArrayBuffer | Uint8Array,
-): Promise<{ file: DuckDbVectorFile; isMultiPatch: boolean } | null> {
+): Promise<UnzippedShapefile | null> {
   const entries = await unzipArchive(data);
   const shpEntry = Object.keys(entries).find(
     (name) => /\.shp$/i.test(name) && !isMacOsMetadataEntry(name),
@@ -527,6 +532,7 @@ export async function readShapefileZipForDuckDb(
   const entryBase = shpEntry.replace(/\.[^./]+$/, "");
   const shpBytes = entries[shpEntry];
   const siblingFiles: DuckDbVectorFile[] = [];
+  const sidecar: Record<string, Uint8Array> = {};
   for (const [entry, bytes] of Object.entries(entries)) {
     if (entry === shpEntry || isMacOsMetadataEntry(entry)) continue;
     // Same base path (any extension): the shapefile's sidecars (.dbf, .shx, ...).
@@ -537,6 +543,7 @@ export async function readShapefileZipForDuckDb(
       extension,
       data: toDuckDbVectorData(bytes),
     });
+    sidecar[extension] = bytes;
   }
   return {
     file: {
@@ -545,8 +552,60 @@ export async function readShapefileZipForDuckDb(
       data: toDuckDbVectorData(shpBytes),
       siblingFiles,
     },
+    sidecar,
     isMultiPatch: shapefileShapeType(shpBytes) === SHAPEFILE_MULTIPATCH_TYPE,
   };
+}
+
+/**
+ * Parse an already-unzipped shapefile with shpjs's low-level parsers, so the
+ * archive is not unzipped a second time (shpjs's `shp(zip)` re-inflates every
+ * entry). The `.prj` drives reprojection to WGS84 and the `.cpg` the DBF
+ * encoding, mirroring `shp(zip)`. Requires the `.dbf`; without it the caller
+ * falls back to DuckDB.
+ */
+function parseShapefileComponents({
+  file,
+  sidecar,
+}: UnzippedShapefile): FeatureCollection {
+  if (!sidecar.dbf) {
+    throw new Error("Shapefile archive is missing its .dbf sidecar.");
+  }
+  const decoder = new TextDecoder();
+  const prj = sidecar.prj ? decoder.decode(sidecar.prj) : undefined;
+  const cpg = sidecar.cpg ? decoder.decode(sidecar.cpg).trim() : undefined;
+  const geometries = parseShp(toArrayBuffer(file.data), prj);
+  const attributes = parseDbf(toArrayBuffer(sidecar.dbf), cpg);
+  return normalizeShapefileResult(combine([geometries, attributes]));
+}
+
+/**
+ * Load a zipped shapefile. Unzips once, then reads a 3D MultiPatch shapefile
+ * through DuckDB (shpjs mis-parses its surfaces as points; DuckDB decodes the
+ * TIN as a MultiPolygon, issue #1121) or parses an ordinary shapefile from the
+ * already-extracted buffers, retrying through DuckDB if shpjs cannot read it. A
+ * corrupt archive or one without a `.shp` throws, since GeoLibre reads only
+ * shapefile `.zip`s.
+ */
+async function loadShapefileZip(
+  data: ArrayBuffer | Uint8Array,
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
+  const unzipped = await readShapefileZipForDuckDb(data);
+  if (!unzipped) {
+    throw new Error("The zip archive does not contain a .shp file.");
+  }
+  if (unzipped.isMultiPatch) {
+    return loadDuckDbVector(unzipped.file, options);
+  }
+  try {
+    return parseShapefileComponents(unzipped);
+  } catch {
+    // shpjs could not read it; retry through DuckDB with the registered
+    // components (a raw `.zip` is not a GDAL dataset, so the `.shp` and its
+    // sidecars must be registered individually).
+    return loadDuckDbVector(unzipped.file, options);
+  }
 }
 
 function unzipArchive(
@@ -1019,23 +1078,10 @@ async function loadBrowserVectorFile(
   }
 
   if (extension === "zip") {
-    const buffer = await file.arrayBuffer();
-    const shapefile = await readShapefileZipForDuckDb(buffer).catch(() => null);
-    // 3D MultiPatch shapefiles: shpjs mis-parses their surfaces as points, so
-    // read them through DuckDB, which decodes the TIN geometry (issue #1121).
-    if (shapefile?.isMultiPatch) {
-      return { data: await loadDuckDbVector(shapefile.file, options), path: file.name };
-    }
-    try {
-      return { data: await parseShapefileZip(buffer), path: file.name };
-    } catch {
-      // shpjs could not read it; retry through DuckDB with the unzipped
-      // components (a raw `.zip` is not a GDAL dataset, so the `.shp` and its
-      // sidecars must be registered individually).
-      if (shapefile) {
-        return { data: await loadDuckDbVector(shapefile.file, options), path: file.name };
-      }
-    }
+    return {
+      data: await loadShapefileZip(await file.arrayBuffer(), options),
+      path: file.name,
+    };
   }
 
   if (extension === "kmz") {
@@ -1308,22 +1354,10 @@ async function loadTauriVectorFile(
   }
 
   if (extension === "zip") {
-    const buffer = await readLocalFileBytes(path);
-    const shapefile = await readShapefileZipForDuckDb(buffer).catch(() => null);
-    // 3D MultiPatch shapefiles: shpjs mis-parses their surfaces as points, so
-    // read them through DuckDB, which decodes the TIN geometry (issue #1121).
-    if (shapefile?.isMultiPatch) {
-      return { data: await loadDuckDbVector(shapefile.file, options), path };
-    }
-    try {
-      return { data: await parseShapefileZip(buffer), path };
-    } catch {
-      // shpjs could not read it; retry through DuckDB with the unzipped
-      // components (a raw `.zip` is not a GDAL dataset).
-      if (shapefile) {
-        return { data: await loadDuckDbVector(shapefile.file, options), path };
-      }
-    }
+    return {
+      data: await loadShapefileZip(await readLocalFileBytes(path), options),
+      path,
+    };
   }
 
   if (extension === "kmz") {

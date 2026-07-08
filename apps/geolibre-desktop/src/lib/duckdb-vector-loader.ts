@@ -4,6 +4,7 @@ import {
   detectGeometryColumn,
   geometryExpr,
   geometryGeoJsonSql,
+  isGenericUnsupportedWkbError,
   isGeometryColumnType,
   isUnsupportedSurfaceWkbError,
   normalizePropertyValue,
@@ -640,6 +641,10 @@ export async function loadDuckDbVectorFile(
       options.overrideSourceCrs?.trim() ||
       (await readSourceCrs(connection, file));
 
+    // Tracks whether the large-dataset guard already confirmed, so the
+    // surface-WKB fallback does not prompt a second time (or skip it entirely
+    // when the error fired on the count guard before it ran).
+    let guardConfirmed = false;
     try {
       // Guard against very large files before the expensive GeoJSON
       // materialization. Only counted when a callback is attached, so the
@@ -650,6 +655,7 @@ export async function loadDuckDbVectorFile(
           { name: file.name, featureCount },
           options.onLargeDataset,
         );
+        guardConfirmed = true;
       }
 
       const geometryJsonSql = geometryGeoJsonSql(
@@ -677,13 +683,25 @@ export async function loadDuckDbVectorFile(
       // become a MultiPolygon (issue #1121). The fallback re-reads via
       // `ST_Read`, so a Parquet file (read via `read_parquet`, not GDAL)
       // propagates the error instead of being mis-read through GDAL's driver.
-      if (
-        isParquetExtension(file.extension) ||
-        !isUnsupportedSurfaceWkbError(error)
-      ) {
+      //
+      // The detailed message names the surface type, so it is trusted for any
+      // format. The generic message names nothing, so it is only trusted for a
+      // shapefile, whose sole surface geometry is MultiPatch (and which cannot
+      // hold the curved geometries that share that message).
+      const isSurfaceError =
+        isUnsupportedSurfaceWkbError(error) ||
+        (file.extension === "shp" && isGenericUnsupportedWkbError(error));
+      if (isParquetExtension(file.extension) || !isSurfaceError) {
         throw error;
       }
-      return loadViaKeepWkbFallback(db, file, options, sourceCrs, error);
+      return loadViaKeepWkbFallback(
+        db,
+        file,
+        options,
+        sourceCrs,
+        error,
+        guardConfirmed,
+      );
     }
   } finally {
     await connection.close();
@@ -701,6 +719,11 @@ export async function loadDuckDbVectorFile(
  *
  * @param sourceCrs The source CRS resolved for the normal path (reused so the
  *   fallback reprojects identically), as `AUTHORITY:CODE`, a WKT string, or null.
+ * @param originalError The error that triggered the fallback, re-thrown when
+ *   nothing decodes so an unsupported geometry still fails loudly.
+ * @param guardConfirmed Whether the normal path already confirmed the
+ *   large-dataset guard; when false (the error fired on the count guard) it is
+ *   re-run here so a huge file is not loaded without confirmation.
  */
 async function loadViaKeepWkbFallback(
   db: duckdb.AsyncDuckDB,
@@ -708,6 +731,7 @@ async function loadViaKeepWkbFallback(
   options: DuckDbVectorLoadOptions,
   sourceCrs: string | null,
   originalError: unknown,
+  guardConfirmed: boolean,
 ): Promise<FeatureCollection> {
   // Read on a fresh connection: re-running ST_Read on the connection that
   // already scanned the file trips a "Missing DB manager" GDAL assertion in the
@@ -734,6 +758,15 @@ async function loadViaKeepWkbFallback(
       )?.column_name;
     if (typeof wkbColumn !== "string") {
       throw new Error("DuckDB did not find a geometry column in this file.");
+    }
+    // Re-run the large-dataset guard when the count(*) failure above pre-empted
+    // it, so a huge MultiPatch file still prompts before every row is decoded.
+    if (options.onLargeDataset && !guardConfirmed) {
+      const featureCount = await countFeatures(connection, wkbSql);
+      await confirmLargeDataset(
+        { name: file.name, featureCount },
+        options.onLargeDataset,
+      );
     }
     const rows = rowsFromResult(await connection.query(wkbSql));
     // Null geometries are legal in a FeatureCollection; the map ignores them.
