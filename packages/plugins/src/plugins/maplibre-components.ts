@@ -1188,8 +1188,17 @@ interface StacCogTextureHelper {
 
 type ComponentsModule = typeof import("maplibre-gl-components");
 type SplatModule = typeof import("maplibre-gl-splat");
+// Both elements can be `undefined` at runtime, not just rejected: a
+// `vite:preloadError` handler that calls preventDefault() makes a failed dynamic
+// import RESOLVE to `undefined` (see getComponentsConstructors). An `undefined`
+// splat is handled the same as a rejected one (null) - both fall back to the
+// bundled GaussianSplatControl via optional chaining - so only `components`
+// being absent is fatal.
 /** @internal The dynamic-import pair {@link getComponentsConstructors} builds from. */
-export type ComponentsModules = [ComponentsModule | undefined, SplatModule | null];
+export type ComponentsModules = [
+  ComponentsModule | undefined,
+  SplatModule | null | undefined,
+];
 
 // The pair of dynamic imports getComponentsConstructors builds from. Split out
 // as an injectable seam so a test can simulate the vite:preloadError +
