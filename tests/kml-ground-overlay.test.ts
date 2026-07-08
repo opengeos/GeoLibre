@@ -4,7 +4,6 @@ import { latLonBoxCorners } from "../apps/geolibre-desktop/src/lib/kml";
 import {
   findArchiveEntry,
   imageMimeFromName,
-  isHttpUrl,
   normalizeArchivePath,
 } from "../apps/geolibre-desktop/src/lib/kml-overlays";
 
@@ -119,17 +118,5 @@ describe("imageMimeFromName", () => {
 
   it("falls back to a generic type for unknown extensions", () => {
     assert.equal(imageMimeFromName("data.bin"), "application/octet-stream");
-  });
-});
-
-describe("isHttpUrl", () => {
-  it("recognizes absolute http(s) urls", () => {
-    assert.equal(isHttpUrl("https://example.com/a.png"), true);
-    assert.equal(isHttpUrl("  http://x/y.png "), true);
-  });
-
-  it("rejects relative archive paths", () => {
-    assert.equal(isHttpUrl("files/overlay.png"), false);
-    assert.equal(isHttpUrl("./a.png"), false);
   });
 });

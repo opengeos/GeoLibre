@@ -30,17 +30,6 @@ export function imageMimeFromName(name: string): string {
 }
 
 /**
- * Whether a GroundOverlay href is an absolute `http(s)` URL (usable directly)
- * rather than a path that must be resolved against a KMZ archive.
- *
- * @param value - The `<Icon><href>` value.
- * @returns True for `http://`/`https://` URLs.
- */
-export function isHttpUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value.trim());
-}
-
-/**
  * Normalize a KMZ archive path (or a GroundOverlay href) for matching: drop any
  * query/fragment, decode `%XX` escapes, collapse backslashes, strip a leading
  * `./` or `/`, and lower-case it.
