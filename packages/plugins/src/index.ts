@@ -303,6 +303,7 @@ export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
 export {
   maplibreGeoEditorPlugin,
+  GEO_EDITOR_PLUGIN_ID,
   canEditLayerGeometry,
   SKETCHES_SOURCE_KIND,
   startLayerGeometryEdit,

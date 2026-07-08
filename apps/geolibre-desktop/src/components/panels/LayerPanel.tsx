@@ -21,6 +21,7 @@ import {
   detectTimeProperties,
   getLayerTimeBinding,
   BASEMAP_CONTROL_PLUGIN_ID,
+  GEO_EDITOR_PLUGIN_ID,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
   SKETCHES_SOURCE_KIND,
@@ -92,6 +93,7 @@ import {
   PanelLeftOpen,
   Pencil,
   PencilRuler,
+  PenTool,
   RefreshCw,
   Save,
   SquarePen,
@@ -1917,6 +1919,24 @@ export function LayerPanel({
               className={cn(
                 "h-4 w-4",
                 isPluginActive(BASEMAP_CONTROL_PLUGIN_ID) && "text-primary",
+              )}
+            />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("layers.geoEditor")}
+            aria-label={t("layers.geoEditor")}
+            aria-pressed={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
+            onClick={() =>
+              togglePlugin(GEO_EDITOR_PLUGIN_ID, createAppAPI(mapControllerRef))
+            }
+          >
+            <PenTool
+              className={cn(
+                "h-4 w-4",
+                isPluginActive(GEO_EDITOR_PLUGIN_ID) && "text-primary",
               )}
             />
           </Button>

@@ -135,8 +135,10 @@ const GEOMAN_EDIT_SYNC_EVENTS = [
   "gm:rotateend",
 ] as const;
 
+export const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
+
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-geo-editor",
+  id: GEO_EDITOR_PLUGIN_ID,
   name: "GeoEditor",
   version: "0.9.0",
   activate: (app: GeoLibreAppAPI) => {
