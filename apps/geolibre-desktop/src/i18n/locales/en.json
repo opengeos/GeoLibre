@@ -2384,6 +2384,7 @@
       "fillColor": "Fill color",
       "outlineColor": "Outline color",
       "strokeWidth": "Stroke width",
+      "strokeWidthMeters": "Stroke width (meters)",
       "fillOpacity": "Fill opacity",
       "circleRadius": "Circle radius",
       "verticalScale": "Vertical exaggeration",

@@ -3057,7 +3057,7 @@ export function StylePanel({
         id="strokeWidth"
         label={
           strokeWidthInMeters
-            ? `${t("style.elevation3d.strokeWidth")} (meters)`
+            ? t("style.elevation3d.strokeWidthMeters")
             : t("style.elevation3d.strokeWidth")
         }
         min={0}
