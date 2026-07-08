@@ -78,7 +78,26 @@ const GPX_NUMERIC_PROPERTY_NAMES = new Set([
   "number",
 ]);
 
-export function parseGpxLayer(text: string): GpxLayerResult {
+export interface GpxParseOptions {
+  /**
+   * Build the per-`<rtept>` route-point features. Defaults to `true`; pass
+   * `false` to skip the (potentially large) collection when the caller does not
+   * intend to use it.
+   */
+  includeRoutePoints?: boolean;
+  /**
+   * Build the per-`<trkpt>` track-point features. Defaults to `true`; pass
+   * `false` to skip the (potentially large) collection when the caller does not
+   * intend to use it.
+   */
+  includeTrackPoints?: boolean;
+}
+
+export function parseGpxLayer(
+  text: string,
+  options: GpxParseOptions = {},
+): GpxLayerResult {
+  const { includeRoutePoints = true, includeTrackPoints = true } = options;
   const document = new DOMParser().parseFromString(text, "application/xml");
   const parserError = document.querySelector("parsererror");
   if (parserError) {
@@ -118,24 +137,24 @@ export function parseGpxLayer(text: string): GpxLayerResult {
 
   for (const [index, route] of routes.entries()) {
     const routePoints = directChildren(route, "rtept");
-    let pointIndex = 0;
-    for (const point of routePoints) {
-      const coordinate = coordinateFromPoint(point);
-      if (!coordinate) continue;
-      pointIndex += 1;
-      routePointFeatures.push({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: coordinate,
-        },
-        properties: {
-          ...pointProperties(point),
-          gpx_index: pointIndex,
-          gpx_kind: "route_point",
-          route_index: index + 1,
-        },
-      } satisfies Feature<Point, GeoJsonProperties>);
+    if (includeRoutePoints) {
+      for (const [pointIndex, point] of routePoints.entries()) {
+        const coordinate = coordinateFromPoint(point);
+        if (!coordinate) continue;
+        routePointFeatures.push({
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: coordinate,
+          },
+          properties: {
+            ...pointProperties(point),
+            gpx_index: pointIndex + 1,
+            gpx_kind: "route_point",
+            route_index: index + 1,
+          },
+        } satisfies Feature<Point, GeoJsonProperties>);
+      }
     }
     const coordinates = coordinatesFromPoints(routePoints);
     if (coordinates.length < 2) continue;
@@ -158,25 +177,25 @@ export function parseGpxLayer(text: string): GpxLayerResult {
     const segments = directChildren(track, "trkseg");
     for (const [segmentIndex, segment] of segments.entries()) {
       const trackPoints = directChildren(segment, "trkpt");
-      let pointIndex = 0;
-      for (const point of trackPoints) {
-        const coordinate = coordinateFromPoint(point);
-        if (!coordinate) continue;
-        pointIndex += 1;
-        trackPointFeatures.push({
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: coordinate,
-          },
-          properties: {
-            ...pointProperties(point),
-            gpx_index: pointIndex,
-            gpx_kind: "track_point",
-            track_index: trackIndex + 1,
-            segment_index: segmentIndex + 1,
-          },
-        } satisfies Feature<Point, GeoJsonProperties>);
+      if (includeTrackPoints) {
+        for (const [pointIndex, point] of trackPoints.entries()) {
+          const coordinate = coordinateFromPoint(point);
+          if (!coordinate) continue;
+          trackPointFeatures.push({
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: coordinate,
+            },
+            properties: {
+              ...pointProperties(point),
+              gpx_index: pointIndex + 1,
+              gpx_kind: "track_point",
+              track_index: trackIndex + 1,
+              segment_index: segmentIndex + 1,
+            },
+          } satisfies Feature<Point, GeoJsonProperties>);
+        }
       }
       const coordinates = coordinatesFromPoints(trackPoints);
       if (coordinates.length < 2) continue;

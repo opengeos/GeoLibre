@@ -121,7 +121,12 @@ export function GpxSource() {
     }
 
     const { sourcePath, text } = await readGpxSource();
-    const result = parseGpxLayer(text);
+    // Building the per-point collections is skipped for unchecked kinds so a
+    // large track/route does not pay the cost when its points are not wanted.
+    const result = parseGpxLayer(text, {
+      includeRoutePoints: selectedGpxLayerKinds.routePoints,
+      includeTrackPoints: selectedGpxLayerKinds.trackPoints,
+    });
     const gpxLayerGroups: Array<{
       featureCollection: FeatureCollection;
       kind: GpxLayerKind;
