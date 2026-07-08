@@ -1671,7 +1671,13 @@ export function StylePanel({
             ))}
           </optgroup>
         )}
-        {basemapStyleLayerIds.length > 0 && basemapStyleLayersVisible && (
+        {/* The 3D Z-value render (deck.gl overlay) honors store order for
+            user layers but has no MapLibre layer to insert below a basemap
+            style layer, so hide that group rather than offer a silently
+            ignored setting. */}
+        {basemapStyleLayerIds.length > 0 &&
+          basemapStyleLayersVisible &&
+          !elevation3dEnabled && (
           <optgroup label="Basemap layers">
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
@@ -1681,7 +1687,9 @@ export function StylePanel({
           </optgroup>
         )}
       </Select>
-      {basemapStyleLayerIds.length > 0 && !valueIsBasemapStyleLayer && (
+      {basemapStyleLayerIds.length > 0 &&
+        !valueIsBasemapStyleLayer &&
+        !elevation3dEnabled && (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"

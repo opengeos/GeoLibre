@@ -50,6 +50,9 @@ export function transformGeojsonElevation(
   offset: number,
 ): FeatureCollection {
   if (verticalScale === 1 && offset === 0) return geojson;
+  // Positions are normalized to [x, y, z]; a 4th measure value (M), which
+  // some producers emit, is intentionally dropped — nothing downstream of
+  // this render path consumes it.
   const mapPosition = (position: Position): Position => [
     position[0],
     position[1],

@@ -216,6 +216,23 @@ describe("buildElevation3dLayer", () => {
     assert.equal(built.props.data, layer.geojson);
   });
 
+  it("renders the transparent color sentinel invisible", () => {
+    const layer = geojsonLayer({
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        elevation3dEnabled: true,
+        fillColor: "transparent",
+        strokeColor: "transparent",
+      },
+    });
+    const built = buildElevation3dLayer(
+      fakeDeckGL,
+      layer,
+    ) as unknown as FakeGeoJsonLayer;
+    assert.deepEqual(built.props.getFillColor, [0, 0, 0, 0]);
+    assert.deepEqual(built.props.getLineColor, [0, 0, 0, 0]);
+  });
+
   it("honors a meter-based stroke width unit", () => {
     const layer = geojsonLayer({
       style: {
