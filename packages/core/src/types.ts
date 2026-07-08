@@ -263,6 +263,18 @@ export interface LayerStyle {
   extrusionAdvancedStyleEnabled: boolean;
   extrusionColorExpression: string;
   extrusionHeightExpression: string;
+  /**
+   * When true, a vector layer whose coordinates carry Z values (e.g. a GPX
+   * track with elevations) renders in true 3D through the shared deck.gl
+   * overlay instead of MapLibre's flat 2D layers, so features sit at their
+   * own altitude. Orthogonal to {@link extrusionEnabled}, which extrudes flat
+   * polygons by an attribute; only one of the two should be on at a time.
+   */
+  elevation3dEnabled: boolean;
+  /** Multiplier applied to each coordinate's Z value (vertical exaggeration). */
+  elevation3dVerticalScale: number;
+  /** Constant altitude offset in meters added after the vertical scale. */
+  elevation3dOffset: number;
   vectorStyleMode: VectorStyleMode;
   vectorStyleProperty: string;
   vectorStyleClassCount: number;
@@ -372,6 +384,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   extrusionAdvancedStyleEnabled: false,
   extrusionColorExpression: "",
   extrusionHeightExpression: "",
+  elevation3dEnabled: false,
+  elevation3dVerticalScale: 1,
+  elevation3dOffset: 0,
   vectorStyleMode: "single",
   vectorStyleProperty: "",
   vectorStyleClassCount: 5,

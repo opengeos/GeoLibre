@@ -321,7 +321,9 @@
       "errorNotFound": "The selected GPX layer types were not found.",
       "waypoints": "Waypoints",
       "tracks": "Tracks",
+      "trackPoints": "Track Points",
       "routes": "Routes",
+      "routePoints": "Route Points",
       "url": "GPX URL",
       "file": "GPX file",
       "urlPlaceholder": "https://example.com/route.gpx",
@@ -2378,6 +2380,20 @@
       "expression": "Expression (optional)",
       "expressionHint": "A MapLibre expression (JSON). Overrides the field when set.",
       "expressionInvalid": "Not a valid MapLibre expression (must be a JSON array). This value is ignored."
+    },
+    "elevation3d": {
+      "mode": "3D (Z values)",
+      "fillColor": "Fill color",
+      "outlineColor": "Outline color",
+      "strokeWidth": "Stroke width",
+      "strokeWidthMeters": "Stroke width (meters)",
+      "fillOpacity": "Fill opacity",
+      "circleRadius": "Circle radius",
+      "verticalScale": "Vertical exaggeration",
+      "verticalScaleTooltip": "Multiplies each coordinate's Z value. 1 renders true elevations; larger values emphasize relief.",
+      "offset": "Altitude offset (m)",
+      "offsetTooltip": "Constant height in meters added to every feature, e.g. to lift a track above 3D buildings or terrain.",
+      "footer": "Rendered in 3D at coordinate Z values via deck.gl. Changes apply live. Identify and feature highlighting are not available in this mode."
     },
     "symbology": {
       "colormap": "Colormap",

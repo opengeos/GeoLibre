@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  geojsonHasZCoordinates,
   type LayerStyle,
   shouldUseTiledRendering,
   styleValue,
@@ -304,6 +305,21 @@ export function syncLayer(
   if (isPlaceholderLayer(layer)) return;
 
   if (layer.type === "geojson" && layer.geojson) {
+    // 3D Z-value rendering hands the layer to the shared deck.gl overlay
+    // (deckgl-viz plugin), which honors coordinate Z values that MapLibre's
+    // flat 2D layers ignore. Drop any MapLibre rendering so the layer is not
+    // drawn twice; toggling back off re-adds it through the paths below.
+    // Data without real Z coordinates keeps the normal 2D render even if the
+    // flag is set (e.g. a saved flag after a tool dropped the Z values), so
+    // the flag never leaves a layer invisible; the Z scan is cached per
+    // GeoJSON object.
+    if (
+      styleValue(layer.style, "elevation3dEnabled") === true &&
+      geojsonHasZCoordinates(layer.geojson)
+    ) {
+      removeLayerFromMap(map, layer.id, layer);
+      return;
+    }
     if (shouldUseTiledRendering(layer.geojson)) {
       syncGeoJsonVtLayer(map, layer, beforeId);
     } else {

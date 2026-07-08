@@ -12,6 +12,7 @@ import {
   type VectorStyleStop,
   createEqualIntervalBreaks,
   createQuantileBreaks,
+  geojsonHasZCoordinates,
   interpolateRampColors,
   parseJsonExpression,
   styleValue,
@@ -1232,6 +1233,19 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
+  // Whether the layer's coordinates carry real Z values (e.g. GPX track
+  // elevations), which unlocks the "3D (Z values)" visualization mode.
+  // Memoized on the geojson reference (not the layer object, which is
+  // recreated on every style edit) because the scan touches every coordinate
+  // when no Z is present. Kept before the early returns below so the hook
+  // order stays stable.
+  const supportsElevation3d = useMemo(
+    () =>
+      layer?.type === "geojson" && layer.geojson
+        ? geojsonHasZCoordinates(layer.geojson)
+        : false,
+    [layer?.type, layer?.geojson],
+  );
 
   const resizeHandle = (
     <div
@@ -1347,6 +1361,12 @@ export function StylePanel({
     strokeWidthUnit === "meters" && !supportsPointRenderer;
   const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
+  const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
+  // Effective 3D Z-value mode: the saved flag can outlive the data's Z values
+  // (e.g. a processing tool rewrote the geometry), in which case the renderer
+  // falls back to 2D — the panel must match so a Visualization radio is
+  // always selected and 2D controls stay usable.
+  const elevation3dActive = elevation3dEnabled && supportsElevation3d;
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
   const labels: LabelStyle = {
@@ -1620,10 +1640,16 @@ export function StylePanel({
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   const otherLayers = layers.filter((l) => l.id !== layer.id);
+  // While 3D (Z values) is active the basemap group below is hidden, so a
+  // saved basemap target surfaces under "Saved (unavailable)" instead of
+  // leaving the select pointing at a missing option.
+  const beforeIdHiddenByElevation3d =
+    elevation3dActive && basemapStyleLayerIds.includes(draftBeforeId);
   const orphanedBeforeId =
     draftBeforeId &&
-    !basemapStyleLayerIds.includes(draftBeforeId) &&
-    !otherLayers.some((l) => l.id === draftBeforeId)
+    (beforeIdHiddenByElevation3d ||
+      (!basemapStyleLayerIds.includes(draftBeforeId) &&
+        !otherLayers.some((l) => l.id === draftBeforeId)))
       ? draftBeforeId
       : null;
   // The basemap style exposes dozens of internal layer ids that overwhelm the
@@ -1656,7 +1682,13 @@ export function StylePanel({
             ))}
           </optgroup>
         )}
-        {basemapStyleLayerIds.length > 0 && basemapStyleLayersVisible && (
+        {/* The 3D Z-value render (deck.gl overlay) honors store order for
+            user layers but has no MapLibre layer to insert below a basemap
+            style layer, so hide that group rather than offer a silently
+            ignored setting. */}
+        {basemapStyleLayerIds.length > 0 &&
+          basemapStyleLayersVisible &&
+          !elevation3dActive && (
           <optgroup label="Basemap layers">
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
@@ -1666,7 +1698,9 @@ export function StylePanel({
           </optgroup>
         )}
       </Select>
-      {basemapStyleLayerIds.length > 0 && !valueIsBasemapStyleLayer && (
+      {basemapStyleLayerIds.length > 0 &&
+        !valueIsBasemapStyleLayer &&
+        !elevation3dActive && (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -2985,6 +3019,103 @@ export function StylePanel({
     </>
   );
 
+  // Controls for the "3D (Z values)" mode: only the knobs the deck.gl render
+  // honors (flat colors, widths, and the elevation transform). Data-driven
+  // symbology, point renderers, patterns, markers, and labels are 2D-only.
+  const elevation3dControls = (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="fillColor">{t("style.elevation3d.fillColor")}</Label>
+        <ColorField
+          id="fillColor"
+          value={style.fillColor}
+          onChange={(fillColor) => setLayerStyle(layer.id, { fillColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.fillColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="strokeColor">
+          {t("style.elevation3d.outlineColor")}
+        </Label>
+        <ColorField
+          id="strokeColor"
+          value={style.strokeColor}
+          onChange={(strokeColor) => setLayerStyle(layer.id, { strokeColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.strokeColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
+        />
+      </div>
+      {/* The 3D render honors meter-based widths (lineWidthUnits), so mirror
+          the 2D control's range/label switch or the tighter pixel clamp would
+          silently destroy a meters width on the next edit. */}
+      <NumericStyleInput
+        id="strokeWidth"
+        label={
+          strokeWidthInMeters
+            ? t("style.elevation3d.strokeWidthMeters")
+            : t("style.elevation3d.strokeWidth")
+        }
+        min={0}
+        max={strokeWidthInMeters ? 100000 : 20}
+        step={strokeWidthInMeters ? 1 : 0.5}
+        value={style.strokeWidth}
+        onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
+      />
+      <NumericStyleInput
+        id="fillOpacity"
+        label={t("style.elevation3d.fillOpacity")}
+        min={0}
+        max={1}
+        step={0.05}
+        value={style.fillOpacity}
+        onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
+      />
+      {/* Sketches mix geometry types under one style, so "Circle radius" is
+          suppressed there for the same reason as in the 2D controls (#483). */}
+      {geometryFlags.hasPoint && !isSketchLayer ? (
+        <NumericStyleInput
+          id="circleRadius"
+          label={t("style.elevation3d.circleRadius")}
+          min={1}
+          max={50}
+          step={1}
+          value={style.circleRadius}
+          onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
+        />
+      ) : null}
+      <Separator />
+      <NumericStyleInput
+        id="elevation3dVerticalScale"
+        label={t("style.elevation3d.verticalScale")}
+        min={0}
+        max={100}
+        step={0.1}
+        value={styleValue(style, "elevation3dVerticalScale")}
+        onChange={(elevation3dVerticalScale) =>
+          setLayerStyle(layer.id, { elevation3dVerticalScale })
+        }
+        tooltip={t("style.elevation3d.verticalScaleTooltip")}
+      />
+      <NumericStyleInput
+        id="elevation3dOffset"
+        label={t("style.elevation3d.offset")}
+        min={-10000}
+        max={10000}
+        step={10}
+        value={styleValue(style, "elevation3dOffset")}
+        onChange={(elevation3dOffset) =>
+          setLayerStyle(layer.id, { elevation3dOffset })
+        }
+        tooltip={t("style.elevation3d.offsetTooltip")}
+      />
+    </>
+  );
+
   if (hasRasterPaintControls) {
     return (
       <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
@@ -3192,7 +3323,10 @@ export function StylePanel({
             right edge of a control (e.g. the "Transparent" label). */}
         <div className="space-y-4 p-3 pr-5">
           {beforeIdControl}
-          {zoomRangeControls}
+          {/* The 3D Z-value render (deck.gl) does not honor the MapLibre
+              min/max zoom range, so hide the controls rather than show a
+              silently-ignored setting. */}
+          {!elevation3dActive && zoomRangeControls}
           {hasExtrusionControls && (
             <div className="space-y-2">
               <Label>Visualization</Label>
@@ -3201,10 +3335,13 @@ export function StylePanel({
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={!extrusionEnabled}
+                    checked={!extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setExtrusionError(null);
-                      setLayerStyle(layer.id, { extrusionEnabled: false });
+                      setLayerStyle(layer.id, {
+                        extrusionEnabled: false,
+                        elevation3dEnabled: false,
+                      });
                     }}
                   />
                   2D
@@ -3213,25 +3350,51 @@ export function StylePanel({
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={extrusionEnabled}
+                    checked={extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setVectorStyleError(null);
-                      setLayerStyle(layer.id, { extrusionEnabled: true });
+                      setLayerStyle(layer.id, {
+                        extrusionEnabled: true,
+                        elevation3dEnabled: false,
+                      });
                     }}
                   />
                   3D extrusion
                 </label>
+                {supportsElevation3d && (
+                  <label className="col-span-2 flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                    <input
+                      type="radio"
+                      name={`style-mode-${layer.id}`}
+                      checked={elevation3dActive}
+                      onChange={() => {
+                        setExtrusionError(null);
+                        setLayerStyle(layer.id, {
+                          extrusionEnabled: false,
+                          elevation3dEnabled: true,
+                        });
+                      }}
+                    />
+                    {t("style.elevation3d.mode")}
+                  </label>
+                )}
               </div>
             </div>
           )}
-          {/* Data-driven coloring doesn't apply to the heatmap renderer. */}
-          {pointRenderer === "heatmap" ? null : vectorSymbologyControls}
-          {!hasExtrusionControls || !extrusionEnabled ? (
+          {/* Data-driven coloring doesn't apply to the heatmap renderer or the
+              flat-styled 3D Z-value render. */}
+          {pointRenderer === "heatmap" || elevation3dActive
+            ? null
+            : vectorSymbologyControls}
+          {elevation3dActive ? (
+            elevation3dControls
+          ) : !hasExtrusionControls || !extrusionEnabled ? (
             twoDimensionalControls
           ) : (
             extrusionControls
           )}
-          {(!hasExtrusionControls || !extrusionEnabled) && (
+          {!elevation3dActive &&
+            (!hasExtrusionControls || !extrusionEnabled) && (
             <>
               {showProportionalControls && (
                 <>
@@ -3254,8 +3417,8 @@ export function StylePanel({
             </>
           )}
           {/* Attribute labels apply to vector features, not the heatmap density
-              surface or the 3D extrusion render. */}
-          {!extrusionEnabled && pointRenderer !== "heatmap" ? (
+              surface or the 3D extrusion / 3D Z-value renders. */}
+          {!extrusionEnabled && !elevation3dActive && pointRenderer !== "heatmap" ? (
             <>
               <Separator />
               <p className="text-sm font-semibold">
@@ -3270,9 +3433,11 @@ export function StylePanel({
       <p className="p-2 text-[10px] text-muted-foreground">
         {extrusionEnabled
           ? "3D extrusion settings apply when saved."
-          : isDeckVectorLayer
-            ? "Changes apply live to DuckDB deck.gl layer styling."
-            : "Changes apply live to MapLibre paint properties."}
+          : elevation3dActive
+            ? t("style.elevation3d.footer")
+            : isDeckVectorLayer
+              ? "Changes apply live to DuckDB deck.gl layer styling."
+              : "Changes apply live to MapLibre paint properties."}
       </p>
     </aside>
   );
