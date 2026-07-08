@@ -90,25 +90,45 @@ export function normalizePropertyValue(value: unknown): unknown {
 }
 
 /**
+ * Coerce a DuckDB geometry cell to WKB bytes: a BLOB arrives as a `Uint8Array`,
+ * but a base64-encoded WKB string column arrives as a `string`. Returns null for
+ * an empty/absent value or an undecodable base64 string, so the caller can treat
+ * it as a null geometry rather than mis-reading a string as an empty blob.
+ */
+function wkbCellToBytes(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value.length > 0 ? value : null;
+  if (typeof value === "string" && value.length > 0) {
+    try {
+      return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Build a FeatureCollection from `keep_wkb=true` rows, decoding each row's raw
- * WKB blob with {@link decodeWkb} (which maps TIN / PolyhedralSurface surfaces
- * to a MultiPolygon). A blob that cannot be decoded yields a null geometry
+ * WKB with {@link decodeWkb} (which maps TIN / PolyhedralSurface surfaces to a
+ * MultiPolygon). The geometry cell is accepted as either a BLOB (`Uint8Array`)
+ * or a base64 WKB string, so a string-typed WKB column does not silently degrade
+ * to null geometries. A value that cannot be decoded yields a null geometry
  * rather than aborting the whole file, and the WKB column is dropped from the
  * feature's properties.
  *
  * @param rows Rows from a `SELECT * FROM ST_Read(..., keep_wkb=true)` query.
- * @param wkbColumn The name of the WKB BLOB geometry column.
+ * @param wkbColumn The name of the WKB geometry column.
  */
 export function wkbRowsToFeatureCollection(
   rows: Record<string, unknown>[],
   wkbColumn: string,
 ): FeatureCollection<Geometry | null> {
   const features = rows.map((row) => {
-    const rawWkb = row[wkbColumn];
+    const bytes = wkbCellToBytes(row[wkbColumn]);
     let geometry: Geometry | null = null;
-    if (rawWkb instanceof Uint8Array && rawWkb.length > 0) {
+    if (bytes) {
       try {
-        geometry = decodeWkb(rawWkb);
+        geometry = decodeWkb(bytes);
       } catch (error) {
         // One malformed/unrepresentable geometry must not fail the whole layer.
         console.warn("[GeoLibre] Skipped an undecodable WKB geometry.", error);

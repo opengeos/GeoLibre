@@ -343,6 +343,19 @@ describe("wkbRowsToFeatureCollection", () => {
     assert.deepEqual(out.features[0].properties, { name: "a" });
   });
 
+  it("decodes a base64-encoded WKB string column", () => {
+    const wkb = encodeWkb({ type: "Point", coordinates: [3, 4] });
+    const base64 = Buffer.from(wkb).toString("base64");
+    const out = wkbRowsToFeatureCollection(
+      [{ wkb_geometry: base64 }],
+      "wkb_geometry",
+    );
+    assert.deepEqual(out.features[0].geometry, {
+      type: "Point",
+      coordinates: [3, 4],
+    });
+  });
+
   it("yields a null geometry when a blob cannot be decoded", () => {
     // Type code 8 = CircularString, which decodeWkb throws on.
     const undecodable = new Uint8Array([0x01, 0x08, 0x00, 0x00, 0x00]);

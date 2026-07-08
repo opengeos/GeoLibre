@@ -660,8 +660,12 @@ export async function loadDuckDbVectorFile(
       // DuckDB Spatial's WKB reader rejects surface geometries (TIN /
       // PolyhedralSurface), which its bundled GDAL emits for ESRI MultiPatch
       // shapefiles (3D buildings). Re-read the raw WKB and decode it in JS,
-      // where TIN triangles become a MultiPolygon (issue #1121).
-      if (!isUnsupportedSurfaceWkbError(error)) throw error;
+      // where TIN triangles become a MultiPolygon (issue #1121). The fallback
+      // re-reads via `ST_Read`, so it only applies to the ST_Read formats; a
+      // Parquet file (read here via `read_parquet`, not GDAL) that hit the same
+      // error propagates it instead of being mis-read through GDAL's driver.
+      if (isParquetExtension(file.extension) || !isUnsupportedSurfaceWkbError(error))
+        throw error;
       return loadViaKeepWkbFallback(db, file, options, sourceCrs);
     }
     // Features may carry a null geometry; the app's layer model treats them as
