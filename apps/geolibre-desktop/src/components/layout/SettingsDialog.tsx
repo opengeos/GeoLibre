@@ -1,5 +1,6 @@
 import {
   DEFAULT_PROJECT_PREFERENCES,
+  ELLIPSOIDS,
   GEOCODING_PROVIDERS,
   getGeocodingProvider,
   normalizeGeocodingProviderId,
@@ -1509,6 +1510,29 @@ export function SettingsDialog({
                     />
                     {t("settings.map.renderWorldCopies")}
                   </label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-ellipsoid">
+                      {t("settings.map.ellipsoid")}
+                    </Label>
+                    <Select
+                      id="settings-ellipsoid"
+                      value={draftPreferences.map.ellipsoidId}
+                      onChange={(event) =>
+                        updateMapPreferences({
+                          ellipsoidId: event.target.value,
+                        })
+                      }
+                    >
+                      {ELLIPSOIDS.map((ellipsoid) => (
+                        <option key={ellipsoid.id} value={ellipsoid.id}>
+                          {ellipsoid.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.map.ellipsoidHint")}
+                    </p>
+                  </div>
                 </div>
               ) : null}
               {effectiveSection === "layout" ? (

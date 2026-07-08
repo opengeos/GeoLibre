@@ -53,6 +53,7 @@ import {
   type StoryMap,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
+import { setActiveEllipsoidId } from "./ellipsoids";
 
 export type ConversionToolKind =
   | "vector-to-vector"
@@ -1413,6 +1414,15 @@ export const useAppStore = create<AppState>()(
     }
   )
 );
+
+// Mirror the project's ellipsoid into the module-level singleton the
+// measurement helpers read. One subscription covers every path that changes
+// preferences (setPreferences, load/new project, undo/redo) without threading
+// the value through each call site. Fires immediately to seed the initial value.
+useAppStore.subscribe((state) => {
+  setActiveEllipsoidId(state.preferences.map.ellipsoidId);
+});
+setActiveEllipsoidId(useAppStore.getState().preferences.map.ellipsoidId);
 
 /**
  * After an undo/redo restores the tracked slice, mark the project dirty and

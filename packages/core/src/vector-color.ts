@@ -1,4 +1,5 @@
 import { styleValue, type LayerStyle } from "./types";
+import { getActiveSemiMajorAxisMeters } from "./ellipsoids";
 
 /**
  * A data-driven color value for a vector paint property: either a plain CSS
@@ -98,6 +99,16 @@ export function simpleStyleNumberValue(
  */
 export const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
 
+/**
+ * Same ground resolution as {@link MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0} but for
+ * the project's active body: its circumference over the 512px zoom-0 world. On
+ * Earth this equals the constant; on the Moon/Mars it uses that body's radius so
+ * a stroke width given in ground meters renders at the correct on-screen size.
+ */
+function mercatorMetersPerPixelAtZoom0(): number {
+  return (2 * Math.PI * getActiveSemiMajorAxisMeters()) / 512;
+}
+
 // Largest zoom MapLibre renders; used as the upper interpolation stop.
 const MAX_MERCATOR_ZOOM = 24;
 
@@ -120,7 +131,7 @@ const MAX_MERCATOR_ZOOM = 24;
  * @returns A MapLibre `interpolate` expression array.
  */
 export function metersWidthExpression(meters: number): unknown[] {
-  const widthAtZoom0 = meters / MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0;
+  const widthAtZoom0 = meters / mercatorMetersPerPixelAtZoom0();
   return [
     "interpolate",
     ["exponential", 2],

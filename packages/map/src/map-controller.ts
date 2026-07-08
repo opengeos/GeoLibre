@@ -2,6 +2,7 @@ import {
   BLANK_BASEMAP,
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
+  getPlanetaryBasemapByStyleUrl,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -10,6 +11,7 @@ import type {
   MapPreferences,
   MapProjection,
   MapViewState,
+  PlanetaryBasemap,
   StoryChapterAnimation,
   StoryChapterLocation,
 } from "@geolibre/core";
@@ -216,7 +218,44 @@ function resolveMapStyle(
   styleUrl: string | undefined,
 ): string | maplibregl.StyleSpecification {
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
+  const planetary = getPlanetaryBasemapByStyleUrl(styleUrl);
+  if (planetary) return createPlanetaryMapStyle(planetary);
   return styleUrl ?? DEFAULT_BASEMAP;
+}
+
+/**
+ * A single-source raster style for a non-Earth body. The tiles are XYZ PNGs in
+ * that body's Web-Mercator scheme, so MapLibre renders them like any raster
+ * basemap. A dark background shows through at zoom levels the source doesn't
+ * cover, matching how the planetary tiles fade to black at the poles.
+ */
+function createPlanetaryMapStyle(
+  basemap: PlanetaryBasemap,
+): maplibregl.StyleSpecification {
+  return {
+    version: 8,
+    sources: {
+      "planetary-basemap": {
+        type: "raster",
+        tiles: [basemap.tileUrl],
+        tileSize: 256,
+        maxzoom: basemap.maxZoom,
+        attribution: basemap.attribution,
+      },
+    },
+    layers: [
+      {
+        id: BLANK_BACKGROUND_LAYER_ID,
+        type: "background",
+        paint: { "background-color": "#000000" },
+      },
+      {
+        id: "planetary-basemap",
+        type: "raster",
+        source: "planetary-basemap",
+      },
+    ],
+  };
 }
 
 interface LayerControlConfig {
@@ -1459,7 +1498,14 @@ export class MapController {
     this.layerControlSignature =
       this.createLayerControlSignature(layerControlConfig);
     this.layerControl = new LayerControl({
-      basemapStyleUrl: this.basemapStyleUrl,
+      // The layer control fetches this URL to introspect the basemap's layers.
+      // Planetary basemaps use a non-fetchable `geolibre://` sentinel (expanded
+      // to an inline raster style by resolveMapStyle), so hand the control the
+      // blank sentinel instead — like blank/raster basemaps it then skips the
+      // fetch and shows a single background entry.
+      basemapStyleUrl: getPlanetaryBasemapByStyleUrl(this.basemapStyleUrl)
+        ? BLANK_BASEMAP
+        : this.basemapStyleUrl,
       collapsed: true,
       panelWidth: 340,
       panelMinWidth: 240,

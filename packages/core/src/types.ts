@@ -710,6 +710,12 @@ export interface MapPreferences {
   maxPitch: number;
   renderWorldCopies: boolean;
   projection: MapProjection;
+  /**
+   * Celestial body / ellipsoid the project's coordinates describe (keys into the
+   * ellipsoid registry in `@geolibre/core`). Drives measurement radii and pairs
+   * with planetary basemaps. Defaults to `"earth"` (WGS 84).
+   */
+  ellipsoidId: string;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -772,6 +778,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     maxPitch: 85,
     renderWorldCopies: true,
     projection: "globe",
+    ellipsoidId: "earth",
   },
   environmentVariables: [],
   geocoding: {

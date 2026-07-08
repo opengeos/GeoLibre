@@ -473,12 +473,6 @@ export function LayerPanel({
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
-  // Transient note shown when the user double-clicks the Background name (the
-  // rename gesture on every other layer). The background name is fixed, so
-  // instead of staying silent we surface a short-lived message explaining why
-  // (#838). The timer ref clears it after the standard status duration.
-  const [backgroundNameNotice, setBackgroundNameNotice] = useState(false);
-  const backgroundNoticeTimerRef = useRef<number | null>(null);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
     null,
   );
@@ -706,26 +700,6 @@ export function LayerPanel({
     setEditingLayerId(null);
     setEditingName("");
   };
-
-  const showBackgroundNameNotice = useCallback(() => {
-    if (backgroundNoticeTimerRef.current !== null) {
-      window.clearTimeout(backgroundNoticeTimerRef.current);
-    }
-    setBackgroundNameNotice(true);
-    backgroundNoticeTimerRef.current = window.setTimeout(() => {
-      backgroundNoticeTimerRef.current = null;
-      setBackgroundNameNotice(false);
-    }, REFRESH_STATUS_DURATION_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (backgroundNoticeTimerRef.current !== null) {
-        window.clearTimeout(backgroundNoticeTimerRef.current);
-      }
-    },
-    [],
-  );
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
     const timer = refreshStatusTimersRef.current.get(layerId);
@@ -2698,28 +2672,13 @@ export function LayerPanel({
                 )}
               </button>
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-              <span
-                className="flex-1 truncate text-sm font-medium"
-                title={t("layers.backgroundNameFixed")}
-                onDoubleClick={(e: ReactMouseEvent) => {
-                  // The card's own onDoubleClick opens the basemap picker; on
-                  // the name we instead explain that the name is fixed, since
-                  // that is where users attempt the rename gesture (#838).
-                  e.stopPropagation();
-                  showBackgroundNameNotice();
-                }}
-              >
+              <span className="flex-1 truncate text-sm font-medium">
                 {t("layers.background")}
               </span>
               <span className="text-[10px] uppercase text-muted-foreground">
                 {t("layers.typeBasemap")}
               </span>
             </div>
-            {backgroundNameNotice && (
-              <p className="mt-1 text-[10px] text-amber-600">
-                {t("layers.backgroundNameFixed")}
-              </p>
-            )}
             <LayerOpacitySlider
               label={t("layers.opacity")}
               ariaLabel={t("layers.basemapOpacity")}

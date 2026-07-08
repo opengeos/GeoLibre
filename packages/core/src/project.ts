@@ -40,6 +40,7 @@ import {
   DEFAULT_LAYER_GROUP_OPACITY,
   normalizeGroupContiguity,
 } from "./layer-groups";
+import { getEllipsoid } from "./ellipsoids";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -723,6 +724,10 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         (map as Partial<ProjectPreferences["map"]>).projection === "mercator"
           ? "mercator"
           : "globe",
+      // Coerce unknown/missing bodies to Earth so measurements never break.
+      ellipsoidId: getEllipsoid(
+        (map as Partial<ProjectPreferences["map"]>).ellipsoidId,
+      ).id,
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

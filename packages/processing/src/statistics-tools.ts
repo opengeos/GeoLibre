@@ -4,6 +4,7 @@ import centroid from "@turf/centroid";
 import { featureCollection, polygon as turfPolygon } from "@turf/helpers";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
+import { getActiveMeanRadiusMeters } from "@geolibre/core";
 import type { ProcessingAlgorithm, ProcessingContext } from "./types";
 
 /**
@@ -19,8 +20,14 @@ import type { ProcessingAlgorithm, ProcessingContext } from "./types";
 const MAX_WEIGHTS_FEATURES = 5000;
 /** Hard cap on KDE grid cells so a tiny cell size can't allocate forever. */
 const MAX_KDE_CELLS = 40000;
-/** Mean Earth radius in kilometres, for the haversine helper. */
-const EARTH_RADIUS_KM = 6371;
+/**
+ * Mean radius of the project's active body in kilometres, for the haversine
+ * helper. Read lazily so spatial-stats distances (KDE bandwidth, distance-band
+ * weights) are correct on the Moon/Mars, not just Earth.
+ */
+function activeMeanRadiusKm(): number {
+  return getActiveMeanRadiusMeters() / 1000;
+}
 
 const WEIGHTS_TYPE_OPTIONS = [
   { value: "knn", label: "K nearest neighbors" },
@@ -50,7 +57,7 @@ function haversineKm(
     Math.cos(lat1 * toRad) *
       Math.cos(lat2 * toRad) *
       Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(a)));
+  return 2 * activeMeanRadiusKm() * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
 /** Standard-normal CDF via an Abramowitz-Stegun erf approximation. */
