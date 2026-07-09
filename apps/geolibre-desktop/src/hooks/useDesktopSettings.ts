@@ -41,6 +41,16 @@ export interface DesktopSettings {
    */
   shareToken: string;
   /**
+   * Cesium Ion access token for the 3D-globe view (Cesium World Imagery +
+   * Terrain need one). Stored here — device-local localStorage, not the shared
+   * project file — so a personal credential is never serialized into a
+   * `.geolibre.json` a user shares. Projected into `VITE_CESIUM_TOKEN` at
+   * runtime by `useRuntimeEnvironmentVariables`, and resolved through
+   * `getCesiumIonToken`, so it overrides the build-time token with no rebuild.
+   * Same "token in localStorage" trade-off as {@link shareToken}.
+   */
+  cesiumIonToken: string;
+  /**
    * Appearance preferences (the accent color scheme). The light/dark mode is
    * handled separately by `useThemeMode` (it tracks the OS / embed preference).
    */
@@ -153,6 +163,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   layout: DEFAULT_DESKTOP_LAYOUT_SETTINGS,
   pluginManifestUrls: [],
   shareToken: "",
+  cesiumIonToken: "",
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
@@ -185,6 +196,10 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
     ),
     shareToken:
       typeof candidate.shareToken === "string" ? candidate.shareToken.trim() : "",
+    cesiumIonToken:
+      typeof candidate.cesiumIonToken === "string"
+        ? candidate.cesiumIonToken.trim()
+        : "",
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),

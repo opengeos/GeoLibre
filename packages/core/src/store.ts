@@ -258,6 +258,14 @@ export interface AppState {
   setPrimaryMapLabel: (label: string) => void;
   /** Set one secondary pane's custom label (no-op if the id is unknown). */
   setSecondaryMapLabel: (id: string, label: string) => void;
+  /**
+   * Switch one secondary pane between the 2D map and the 3D globe (no-op if the
+   * id is unknown or the kind is unchanged).
+   */
+  setSecondaryViewKind: (
+    id: string,
+    viewKind: NonNullable<SecondaryMapView["viewKind"]>
+  ) => void;
   /** Remove one secondary pane and collapse the grid back toward 1x1. */
   removeSecondaryMapView: (id: string) => void;
   setBasemapStyleUrl: (url: string) => void;
@@ -756,6 +764,20 @@ export const useAppStore = create<AppState>()(
             if (pane.id !== id) return pane;
             changed = true;
             return { ...pane, label };
+          });
+          if (!changed) return s;
+          return { secondaryMapViews, isDirty: true };
+        }),
+      setSecondaryViewKind: (id, viewKind) =>
+        set((s) => {
+          let changed = false;
+          const secondaryMapViews = s.secondaryMapViews.map((pane) => {
+            if (pane.id !== id) return pane;
+            // Treat an absent viewKind as "maplibre" so switching a legacy pane
+            // to maplibre is a no-op rather than a churned array.
+            if ((pane.viewKind ?? "maplibre") === viewKind) return pane;
+            changed = true;
+            return { ...pane, viewKind };
           });
           if (!changed) return s;
           return { secondaryMapViews, isDirty: true };

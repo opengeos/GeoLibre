@@ -2,12 +2,18 @@ import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
 import { scopeOsEnvToProject, type RuntimeEnv } from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
+import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 export function useRuntimeEnvironmentVariables() {
   const environmentVariables = useAppStore(
     (s) => s.preferences.environmentVariables,
   );
   const geocoding = useAppStore((s) => s.preferences.geocoding);
+  // Device-local Cesium Ion token (Settings → Environment). Projected below so
+  // getCesiumIonToken() picks it up as a runtime override without a rebuild.
+  const cesiumIonToken = useDesktopSettingsStore(
+    (s) => s.desktopSettings.cesiumIonToken,
+  );
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
 
@@ -52,6 +58,13 @@ export function useRuntimeEnvironmentVariables() {
         .map((variable) => [variable.key.trim(), variable.value]),
     );
 
+    // Only inject the Cesium token when set: an empty value would override (and
+    // so blank out) a build-time VITE_CESIUM_TOKEN via getRuntimeEnvironment's
+    // spread. A free-form env-var row of the same name still wins over this.
+    const cesiumEnv: Record<string, string> = cesiumIonToken.trim()
+      ? { VITE_CESIUM_TOKEN: cesiumIonToken.trim() }
+      : {};
+
     const runtimeEnv = {
       // OS-provided AI keys sit at the lowest precedence: an explicit value in
       // the project's Environment variables (or a derived geocoder var) always
@@ -60,6 +73,7 @@ export function useRuntimeEnvironmentVariables() {
       // "project always wins" guarantee holds across alias collisions too.
       ...scopeOsEnvToProject(osEnv, new Set(Object.keys(projectEnv))),
       ...geocoderEnv,
+      ...cesiumEnv,
       ...projectEnv,
     };
 
@@ -87,5 +101,5 @@ export function useRuntimeEnvironmentVariables() {
     window.dispatchEvent(
       new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }),
     );
-  }, [environmentVariables, geocoding, osEnv]);
+  }, [environmentVariables, geocoding, cesiumIonToken, osEnv]);
 }

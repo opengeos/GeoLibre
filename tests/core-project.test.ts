@@ -515,6 +515,51 @@ describe("multi-map grid persistence", () => {
     assert.equal(reparsed.primaryMapLabel, "2020");
   });
 
+  it("round-trips a secondary pane's 3D-globe viewKind", () => {
+    const secondaryMapViews = [
+      {
+        id: "globe",
+        view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        viewKind: "cesium" as const,
+        layerVisibility: {},
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Globe",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      mapLayout: { rows: 1, cols: 2, syncView: true },
+      secondaryMapViews,
+      primaryMapLabel: "",
+      metadata: {},
+    });
+    const reparsed = parseProject(serializeProject(project));
+    assert.equal(reparsed.secondaryMapViews?.[0].viewKind, "cesium");
+  });
+
+  it("drops an unknown viewKind so the pane defaults to the 2D map", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Bad kind",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        mapLayout: { rows: 1, cols: 2, syncView: true },
+        secondaryMapViews: [
+          {
+            id: "a",
+            view: { center: [1, 1], zoom: 3, bearing: 0, pitch: 0 },
+            viewKind: "webgpu",
+          },
+        ],
+      }),
+    );
+    assert.equal(reparsed.secondaryMapViews?.[0].viewKind, undefined);
+  });
+
   it("reconciles surplus secondary panes down to rows * cols - 1", () => {
     const reparsed = parseProject(
       JSON.stringify({

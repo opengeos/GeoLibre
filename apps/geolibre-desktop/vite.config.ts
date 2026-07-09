@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
+import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
@@ -54,6 +55,20 @@ if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
     FILE_ENV.GOOGLE_MAPS_API_KEY;
   if (googleMapsApiKey) {
     process.env.VITE_GOOGLE_MAPS_API_KEY = googleMapsApiKey;
+  }
+}
+
+// Cesium Ion token for the 3D-globe view: same bare→prefixed bridge as the
+// Google Maps key. A bare `CESIUM_TOKEN` (shell or .env file) is surfaced as
+// `VITE_CESIUM_TOKEN` so `import.meta.env` exposes it, and getCesiumIonToken()
+// then lets a runtime Settings override win over this build-time value.
+if (!process.env.VITE_CESIUM_TOKEN) {
+  const cesiumToken =
+    process.env.CESIUM_TOKEN ||
+    FILE_ENV.VITE_CESIUM_TOKEN ||
+    FILE_ENV.CESIUM_TOKEN;
+  if (cesiumToken) {
+    process.env.VITE_CESIUM_TOKEN = cesiumToken;
   }
 }
 
@@ -260,6 +275,18 @@ function manualChunks(id: string): string | undefined {
   // `maplibre` chunk and force DuckDB into boot. Give it its own lazy chunk.
   if (id.includes("maplibre-gl-duckdb")) return "maplibre-duckdb";
   if (id.includes("maplibre-gl")) return "maplibre";
+  // Cesium is large (~several MB) and only loads when the user opens the 3D
+  // globe view; keep it in its own lazily-fetched chunk, off the boot graph.
+  // `@cesium/engine`/`@cesium/widgets` (which the `cesium` wrapper re-exports)
+  // are only reachable through the lazy `import("cesium")`, so Rollup already
+  // groups them into this chunk; matching them explicitly keeps that intent
+  // even if some future eager import would otherwise pull them onto the boot
+  // graph.
+  if (
+    id.includes("/node_modules/cesium/") ||
+    id.includes("/node_modules/@cesium/")
+  )
+    return "cesium";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:
   // that produced a circular manual-chunks warning. Do not re-add a catch-all
@@ -655,6 +682,13 @@ function pwaPlugin(): Plugin[] {
     // its first runtime fetch and is CacheFirst-cached thereafter.
     "**/maplibre-*",
     "**/duckdb-*",
+    // CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane
+    // switches to the globe, so it is CacheFirst-cached on first use rather than
+    // bloating the app-shell precache. The `Cesium-*` (capital) glob catches the
+    // Rollup facade chunk for the dynamic `import("cesium")` boundary, which the
+    // lowercase glob misses on case-sensitive matchers.
+    "**/cesium-*",
+    "**/Cesium-*",
     // h5wasm's ~5.6 MB single-file chunk (embedded libhdf5) for the local
     // NetCDF/HDF reader. Lazily imported when a user opens a local file, so it
     // is CacheFirst-cached on first use rather than bloating the precache.
@@ -821,6 +855,7 @@ export default defineConfig({
     copyRtlText(
       path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js"),
     ),
+    copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
@@ -868,6 +903,16 @@ export default defineConfig({
       // pre-bundled via the deck.gl-geotiff static import.)
       "proj4",
       "geotiff-geokeys-to-proj4",
+      // Cesium (the 3D-globe view). Pre-bundle it up front so esbuild applies
+      // CJS→ESM interop to its CommonJS transitive deps (e.g. mersenne-twister,
+      // which has no ESM entry): without this, the dev server serves those raw
+      // and the `import x from "mersenne-twister"` default import throws. It is
+      // reached only through the lazy `import("cesium")` in CesiumCanvas, so
+      // without pre-bundling Vite would also discover it on first open and do a
+      // full-page reload to re-optimize. Cesium locates its Workers/Assets via
+      // the CESIUM_BASE_URL global (never `import.meta.url`), so pre-bundling
+      // does not mangle any asset reference.
+      "cesium",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).

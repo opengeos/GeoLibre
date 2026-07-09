@@ -612,6 +612,12 @@ export interface SecondaryMapView {
   /** Optional user-entered label shown on the pane (e.g. a date or scenario). */
   label?: string;
   /**
+   * Which rendering engine draws this pane. Defaults to `"maplibre"` (the 2D
+   * map) when absent, so existing projects and panes are unchanged. `"cesium"`
+   * renders a 3D globe (see {@link CesiumCanvas}) over the same shared layers.
+   */
+  viewKind?: "maplibre" | "cesium";
+  /**
    * Per-layer visibility overrides keyed by layer id. A layer absent from this
    * map inherits the primary map's visibility (`layer.visible`); an entry forces
    * the layer visible (`true`) or hidden (`false`) in this pane only.

@@ -31,7 +31,7 @@ GeoLibre is built with **Tauri v2**, **React**, **TypeScript**, **MapLibre GL JS
 
 - Runs across desktop (Tauri), web (browser), native Android (Tauri v2 mobile), and mobile or small screens, with a responsive, touch-friendly layout that adapts menus, dialogs, and panels (on phones the Layers/Style panels overlay the map as slide-over sheets), plus per-panel visibility through Layout settings
 - MapLibre map workspace with OpenFreeMap, Protomaps, EOX Sentinel-2 cloudless, and Openbasiskaart basemaps, stacking of multiple raster basemaps, blank background support, double-click to swap the core basemap from the layer panel, a right-click context menu for reading coordinates and quick actions, a Gridlines coordinate-grid overlay with edge labels, and toggleable navigation, fullscreen, geolocation, globe, terrain, scale, attribution, and logo controls, plus a View menu with viewport history navigation, a reset pitch and bearing control, and a distinct north arrow
-- Multi-map grid that splits the workspace into a grid of synchronized map views, so you can compare basemaps, layers, or time steps side by side
+- Multi-map grid that splits the workspace into a grid of synchronized map views, so you can compare basemaps, layers, or time steps side by side, with any pane switchable to an optional CesiumJS 3D globe (camera-synced with the 2D maps; requires a Cesium Ion token — see [Environment variables](#environment-variables))
 - Load local vector layers supported by DuckDB-WASM Spatial, including common formats such as GeoJSON, GeoParquet, GeoPackage, Shapefile, FlatGeobuf, KML/KMZ (honoring embedded symbology), GML, delimited text, GPX, and OpenStreetMap PBF extracts (parsed in-browser with osmix)
 - Reproject vector layers to EPSG:4326 on load and split dragged GPX files into named waypoint, track, and route layers
 - Large local vector layers render through client-side vector tiling, with a warning before loading very large files
@@ -367,6 +367,14 @@ VITE_MAPILLARY_ACCESS_TOKEN=your_mapillary_access_token
 ```
 
 For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
+
+The optional **Cesium 3D-globe view** — a split-pane globe rendered with [CesiumJS](https://cesium.com/platform/cesiumjs/) alongside the 2D MapLibre map — needs a [Cesium Ion](https://ion.cesium.com/) access token for its world imagery and terrain. Create a free Ion account, copy your default access token, and set it at build time:
+
+```env
+CESIUM_TOKEN=your_cesium_ion_access_token
+```
+
+`CESIUM_TOKEN` (or the `VITE_`-prefixed `VITE_CESIUM_TOKEN`) is read by `vite.config.ts` and baked into the build. A user can **also set it at runtime** — with no rebuild — in the Settings dialog's **Environment Variables** section, which has a dedicated masked **Cesium Ion token** field. That token is stored locally on the device (in browser storage on the web build), **not** in the shared project file, and overrides the build-time value; it is how a web user brings their own Ion token. (A free-form `VITE_CESIUM_TOKEN` variable in the same section still works and takes precedence, as an override.) Without a token from any source, the 3D-globe toggle is hidden entirely (the 2D map is unaffected). Ion access tokens are designed to ship in client bundles. See [docs/architecture.md](docs/architecture.md#3d-globe-view-cesiumjs) for how the globe integrates.
 
 The optional **Python (Pyodide)** vector engine loads its runtime from the public jsDelivr CDN by default. To self-host it for offline or production use, point it at a mirrored copy of the Pyodide distribution:
 

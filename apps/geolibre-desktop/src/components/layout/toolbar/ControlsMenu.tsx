@@ -1,11 +1,16 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  type CloudsAnimationState,
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
+  getCloudsAnimationState,
   HALO_EXTENT_MAX,
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
+  setCloudsFrame,
+  subscribeClouds,
+  toggleCloudsPlaying,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -27,7 +32,7 @@ import {
   Slider,
 } from "@geolibre/ui";
 import { ClipboardList, SlidersHorizontal, Video } from "lucide-react";
-import { type MouseEvent as ReactMouseEvent, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
@@ -46,6 +51,7 @@ interface ControlsMenuProps {
   directionsActive: boolean;
   reverseGeocodeActive: boolean;
   graticuleActive: boolean;
+  cloudsActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
@@ -54,6 +60,7 @@ interface ControlsMenuProps {
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
   onToggleGraticule: () => void;
+  onToggleClouds: () => void;
   onOpenFieldCollection: () => void;
   onOpenRecordTour: () => void;
 }
@@ -67,6 +74,7 @@ export function ControlsMenu({
   directionsActive,
   reverseGeocodeActive,
   graticuleActive,
+  cloudsActive,
   onToggleMapControl,
   onToggleEffects,
   getEffectsSettings,
@@ -75,6 +83,7 @@ export function ControlsMenu({
   onToggleDirections,
   onToggleReverseGeocode,
   onToggleGraticule,
+  onToggleClouds,
   onOpenFieldCollection,
   onOpenRecordTour,
 }: ControlsMenuProps) {
@@ -118,6 +127,7 @@ export function ControlsMenu({
       show(`controls.mapControl.${control.id}`),
     ) ||
     show("controls.atmosphereEffects") ||
+    show("controls.clouds") ||
     show("controls.spinGlobe") ||
     show("controls.graticule") ||
     show("controls.sun") ||
@@ -174,6 +184,9 @@ export function ControlsMenu({
               onPreview={onPreviewEffectsSettings}
               onCommit={onCommitEffectsSettings}
             />
+          )}
+          {show("controls.clouds") && (
+            <CloudsSubmenu active={cloudsActive} onToggle={onToggleClouds} />
           )}
           {show("controls.sun") && (
             <DropdownMenuItem
@@ -448,6 +461,89 @@ function AtmosphereEffectsSubmenu({
         >
           {t("toolbar.atmosphere.reset")}
         </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+interface CloudsSubmenuProps {
+  active: boolean;
+  onToggle: () => void;
+}
+
+/**
+ * Submenu for the Clouds overlay: an on/off toggle plus a time-scrub animation
+ * (play/pause + a date slider) that steps the NASA GIBS layer through the last
+ * several complete UTC days. The overlay itself lives in the Layers panel as a
+ * normal tile layer (with its own visibility/opacity); this submenu only drives
+ * the animation.
+ *
+ * Animation state lives in module state in the clouds plugin, so this mirrors it
+ * locally: seeded on mount/open and refreshed via {@link subscribeClouds} so the
+ * slider tracks playback frame by frame.
+ */
+function CloudsSubmenu({ active, onToggle }: CloudsSubmenuProps) {
+  const { t } = useTranslation();
+  const [anim, setAnim] = useState<CloudsAnimationState>(getCloudsAnimationState);
+
+  useEffect(() => {
+    setAnim(getCloudsAnimationState());
+    return subscribeClouds(() => setAnim(getCloudsAnimationState()));
+  }, []);
+
+  const showAnimation = active && anim.dates.length > 0;
+
+  return (
+    <DropdownMenuSub
+      onOpenChange={(open: boolean) => {
+        if (open) setAnim(getCloudsAnimationState());
+      }}
+    >
+      <DropdownMenuSubTrigger title={t("toolbar.item.cloudsTooltip")}>
+        {t("toolbar.item.clouds")}
+        {active ? " ✓" : ""}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-64">
+        <DropdownMenuItem
+          // onSelect (not onClick) fires for both mouse and keyboard
+          // (Enter/Space); preventDefault keeps the submenu open after toggling.
+          onSelect={(e: Event) => {
+            e.preventDefault();
+            onToggle();
+          }}
+        >
+          {t("toolbar.item.cloudsShow")}
+          {active ? " ✓" : ""}
+        </DropdownMenuItem>
+        {showAnimation && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={(e: Event) => {
+                e.preventDefault();
+                toggleCloudsPlaying();
+              }}
+            >
+              {anim.playing
+                ? t("toolbar.item.cloudsPause")
+                : t("toolbar.item.cloudsPlay")}
+            </DropdownMenuItem>
+            {/* Stop key events from reaching the menu's roving-focus/typeahead
+                handlers so the slider responds to arrow keys. */}
+            <div className="px-2 py-1.5" onKeyDown={(e) => e.stopPropagation()}>
+              <SliderRow
+                label={t("toolbar.item.cloudsDate")}
+                min={0}
+                max={anim.dates.length - 1}
+                step={1}
+                value={anim.index}
+                format={(v) => anim.dates[Math.round(v)] ?? ""}
+                onPreview={(v) => setCloudsFrame(v)}
+                onCommit={() => {}}
+              />
+            </div>
+          </>
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

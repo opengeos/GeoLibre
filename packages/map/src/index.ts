@@ -7,6 +7,19 @@ export {
   SecondaryMapCanvas,
   type SecondaryMapCanvasProps,
 } from "./SecondaryMapCanvas";
+export { CesiumCanvas, type CesiumCanvasProps } from "./CesiumCanvas";
+export { isCesiumSupportedLayerType } from "./cesium-layer-sync";
+export {
+  applyMapViewToCamera,
+  cesiumPitchToMapLibreDeg,
+  groundResolution,
+  isSameView,
+  mapLibrePitchToCesiumDeg,
+  normalizeBearing,
+  rangeToZoom,
+  readMapViewFromCamera,
+  zoomToRange,
+} from "./cesium-camera";
 export {
   MapController,
   createMapController,

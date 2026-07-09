@@ -14,6 +14,7 @@
     "@maplibre/vt-pbf": "^4.3.2",
     "@turf/bbox": "^7.3.5",
     "@turf/helpers": "^7.3.5",
+    "cesium": "^1.143.0",
     "fast-xml-parser": "^5.9.3",
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-layer-control": "^0.17.4",

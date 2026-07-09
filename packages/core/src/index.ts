@@ -76,9 +76,15 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getCesiumIonToken,
   getGoogleMapsApiKey,
   getProtomapsApiKey,
   getProtomapsStyleUrl,
   getRuntimeEnvironment,
   getSpatialExtensionPath,
 } from "./runtime-env";
+export {
+  GOOGLE_MAPS_API_KEY_HEADER,
+  isGooglePhotorealisticTilesetUrl,
+  resolveThreeDTilesRequestHeaders,
+} from "./three-d-tiles";
