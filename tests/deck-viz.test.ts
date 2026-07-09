@@ -305,7 +305,10 @@ describe("scenegraph (glTF 3D model) layer", () => {
     assert.ok(config?.scenegraph);
     assert.equal(config.scenegraph.modelUrl, "https://example.com/model.glb");
     assert.equal(config.scenegraph.sizeScale, 250);
+    assert.equal(config.scenegraph.sizeMinPixels, 1);
     assert.equal(config.scenegraph.bearing, 45);
+    assert.equal(config.scenegraph.orientationRoll, 90);
+    assert.deepEqual(config.scenegraph.translation, [0, 0, 0]);
     assert.equal(config.scenegraph.altitude, 100);
   });
 
@@ -326,7 +329,10 @@ describe("scenegraph (glTF 3D model) layer", () => {
       config?.scenegraph?.sizeScale,
       DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale,
     );
+    assert.equal(config?.scenegraph?.sizeMinPixels, 1);
     assert.equal(config?.scenegraph?.bearing, 0);
+    assert.equal(config?.scenegraph?.orientationRoll, 90);
+    assert.deepEqual(config?.scenegraph?.translation, [0, 0, 0]);
   });
 
   it("builds a ScenegraphLayer whose accessors fold in transform + columns", () => {
@@ -354,7 +360,10 @@ describe("scenegraph (glTF 3D model) layer", () => {
       scenegraph: {
         modelUrl: "https://example.com/model.glb",
         sizeScale: 300,
+        sizeMinPixels: 0,
         bearing: 10,
+        orientationRoll: 0,
+        translation: [0, 0, -500],
         altitude: 25,
       },
     });
@@ -362,6 +371,7 @@ describe("scenegraph (glTF 3D model) layer", () => {
     const props = captured.props!;
     assert.equal(props.scenegraph, "https://example.com/model.glb");
     assert.equal(props.sizeScale, 300);
+    assert.equal(props.sizeMinPixels, 0);
     assert.equal(props.opacity, 0.5);
     const record = { lng: -122.4, lat: 37.8, alt: 50, heading: 90 };
     const position = (props.getPosition as (r: unknown) => number[])(record);
@@ -370,8 +380,9 @@ describe("scenegraph (glTF 3D model) layer", () => {
     const orientation = (
       props.getOrientation as (r: unknown) => number[]
     )(record);
-    // bearing column (90) drives yaw; trailing 90° roll stands the model up
-    assert.deepEqual(orientation, [0, 90, 90]);
+    // bearing column (90) drives yaw; configured roll lets KML models opt out
+    assert.deepEqual(orientation, [0, 90, 0]);
+    assert.deepEqual(props.getTranslation, [0, 0, -500]);
   });
 
   it("uses the constant bearing/altitude when no columns are mapped", () => {

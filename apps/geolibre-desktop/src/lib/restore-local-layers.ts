@@ -62,10 +62,12 @@ export async function restoreLocalFileLayers(): Promise<void> {
     Array.from(byPath, async ([path, layers]) => {
       try {
         // A KMZ/KML file can yield image overlays alongside its vector layers;
-        // only the vector entries carry the `geojson` these layers reload.
-        const loaded = (await loadDroppedVectorPaths([path])).filter(
-          isLoadedVectorLayer,
-        );
+        // only the vector entries carry the `geojson` these layers reload. Skip
+        // the KML `<Model>` (COLLADA→GLB) conversion — including any remote-mesh
+        // fetch — since the models are discarded by the filter below anyway.
+        const loaded = (
+          await loadDroppedVectorPaths([path], { skipModels: true })
+        ).filter(isLoadedVectorLayer);
         if (loaded.length === 0) {
           dropLayers(layers, path);
           return;

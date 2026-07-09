@@ -4,10 +4,14 @@ import {
   detectGeometryColumn,
   geometryExpr,
   geometryGeoJsonSql,
+  isGenericUnsupportedWkbError,
   isGeometryColumnType,
+  isUnsupportedSurfaceWkbError,
+  normalizePropertyValue,
   quoteIdentifier,
   quoteSqlString,
   stripAutoFidColumn,
+  wkbRowsToFeatureCollection,
 } from "./duckdb-geometry";
 import {
   confirmLargeDataset,
@@ -325,6 +329,18 @@ async function registerVectorFileBuffers(
   }
 }
 
+/**
+ * The `, layer=...` argument for `ST_Read`, or "" when no (non-blank) layer is
+ * named. Shared by {@link sourceSql} and the keep_wkb fallback so both quote and
+ * trim the layer identically.
+ */
+function layerArgSql(layer?: string): string {
+  const trimmed = layer?.trim();
+  // A named layer targets one OGR layer in a multi-layer source (CAD DWG); the
+  // default (no layer=) reads the first layer.
+  return trimmed ? `, layer=${quoteSqlString(trimmed)}` : "";
+}
+
 function sourceSql(
   fileName: string,
   extension: string,
@@ -334,10 +350,7 @@ function sourceSql(
   if (isParquetExtension(extension)) {
     return `SELECT * FROM read_parquet(${quotedName})`;
   }
-  // A named layer targets one OGR layer in a multi-layer source (CAD DWG); the
-  // default (no layer=) reads the first layer.
-  const layerArg = layer ? `, layer=${quoteSqlString(layer)}` : "";
-  return `SELECT * FROM ST_Read(${quotedName}${layerArg})`;
+  return `SELECT * FROM ST_Read(${quotedName}${layerArgSql(layer)})`;
 }
 
 /**
@@ -368,7 +381,16 @@ function parquetWarmUp(
   };
 }
 
-function crsSql(fileName: string): string {
+function crsSql(fileName: string, includeWkt: boolean): string {
+  // WKT is the reprojection fallback for a CRS that GDAL could not resolve to an
+  // EPSG code (e.g. an ESRI .prj carrying a custom State Plane definition):
+  // ST_Transform accepts a WKT string source just as it does AUTHORITY:CODE, so
+  // the layer still reprojects to WGS84 instead of rendering in raw projected
+  // coordinates (issue #1121). It is selected only when `includeWkt` so
+  // readSourceCrs can retry without it if the field is ever absent.
+  const wktSelect = includeWkt
+    ? ",\n      layers[1].geometry_fields[1].crs.wkt AS wkt"
+    : "";
   return `
     SELECT
       -- Always reads the FIRST layer's first geometry field, regardless of the
@@ -379,11 +401,16 @@ function crsSql(fileName: string): string {
       -- drives reprojection instead. A future multi-layer format that DOES embed
       -- per-layer CRS would need this query to look the chosen layer up by name.
       layers[1].geometry_fields[1].crs.auth_name AS auth_name,
-      layers[1].geometry_fields[1].crs.auth_code AS auth_code
+      layers[1].geometry_fields[1].crs.auth_code AS auth_code${wktSelect}
     FROM ST_Read_Meta(${quoteSqlString(fileName)})
   `;
 }
 
+/**
+ * Resolve the source CRS of a vector file as a string ST_Transform accepts —
+ * `AUTHORITY:CODE` when GDAL identified one, otherwise the raw WKT definition, or
+ * null when the file carries no usable CRS (so reprojection is skipped).
+ */
 async function readSourceCrs(
   connection: duckdb.AsyncDuckDBConnection,
   file: DuckDbVectorFile,
@@ -395,21 +422,33 @@ async function readSourceCrs(
     return null;
   }
 
+  let row: Record<string, unknown> | undefined;
   try {
-    const row = rowsFromResult(await connection.query(crsSql(file.name)))[0];
-    if (!row) return null;
-    const authName =
-      typeof row.auth_name === "string" ? row.auth_name.trim() : "";
-    const authCode = row.auth_code != null ? String(row.auth_code).trim() : "";
-    if (!authName || !authCode) return null;
-    return `${authName.toUpperCase()}:${authCode}`;
+    row = rowsFromResult(await connection.query(crsSql(file.name, true)))[0];
   } catch (err) {
-    console.warn(
-      "[GeoLibre] Could not read CRS metadata; reprojection skipped.",
-      err,
-    );
-    return null;
+    // Selecting `crs.wkt` failed (an older ST_Read_Meta schema without that
+    // field would fail the whole query as a binder error). Retry without it so a
+    // resolvable EPSG code still drives reprojection instead of silently
+    // disabling it for every file — only the EPSG-less WKT fallback is lost.
+    try {
+      row = rowsFromResult(await connection.query(crsSql(file.name, false)))[0];
+    } catch (retryErr) {
+      console.warn(
+        "[GeoLibre] Could not read CRS metadata; reprojection skipped.",
+        retryErr,
+      );
+      return null;
+    }
   }
+  if (!row) return null;
+  const authName =
+    typeof row.auth_name === "string" ? row.auth_name.trim() : "";
+  const authCode = row.auth_code != null ? String(row.auth_code).trim() : "";
+  if (authName && authCode) return `${authName.toUpperCase()}:${authCode}`;
+  // No EPSG identity: fall back to the raw WKT so a projected file without a
+  // recognised authority code still reprojects (issue #1121).
+  const wkt = typeof row.wkt === "string" ? row.wkt.trim() : "";
+  return wkt || null;
 }
 
 function toFeatureCollection(
@@ -448,24 +487,6 @@ function toFeatureCollection(
     type: "FeatureCollection",
     features,
   };
-}
-
-function normalizePropertyValue(value: unknown): unknown {
-  if (typeof value === "bigint") {
-    const numberValue = Number(value);
-    return Number.isSafeInteger(numberValue) ? numberValue : value.toString();
-  }
-  if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(normalizePropertyValue);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        normalizePropertyValue(item),
-      ]),
-    );
-  }
-  return value;
 }
 
 async function validateDetectedGeometry(
@@ -612,34 +633,161 @@ export async function loadDuckDbVectorFile(
       throw new Error("DuckDB did not find a geometry column in this file.");
     }
 
-    // Guard against very large files before the expensive GeoJSON
-    // materialization. Only counted when a callback is attached, so the
-    // common (non-interactive) path stays single-pass.
-    if (options.onLargeDataset) {
-      const featureCount = await countFeatures(connection, sql);
-      await confirmLargeDataset({ name: file.name, featureCount }, options.onLargeDataset);
-    }
-
     // A caller-supplied CRS (CAD DXF/DWG, which carry none of their own) wins
     // over the file's metadata; a blank override falls back to the file's CRS.
+    // Resolved up front (ST_Read_Meta does not materialize geometry) so the
+    // surface-WKB fallback below can reuse it.
     const sourceCrs =
       options.overrideSourceCrs?.trim() ||
       (await readSourceCrs(connection, file));
-    const geometryJsonSql = geometryGeoJsonSql(
-      geometryExpr(detected),
-      sourceCrs,
-    );
-    const result = await connection.query(
-      `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
-        GEOMETRY_JSON_COLUMN,
-      )} FROM (${sql}) AS data`,
-    );
-    // Features may carry a null geometry; the app's layer model treats them as
-    // a regular FeatureCollection and the map ignores null geometries.
-    return toFeatureCollection(
-      rowsFromResult(result),
-      detected.column,
+
+    // Tracks whether the large-dataset guard already confirmed, so the
+    // surface-WKB fallback does not prompt a second time (or skip it entirely
+    // when the error fired on the count guard before it ran).
+    let guardConfirmed = false;
+    try {
+      // Guard against very large files before the expensive GeoJSON
+      // materialization. Only counted when a callback is attached, so the
+      // common (non-interactive) path stays single-pass.
+      if (options.onLargeDataset) {
+        const featureCount = await countFeatures(connection, sql);
+        await confirmLargeDataset(
+          { name: file.name, featureCount },
+          options.onLargeDataset,
+        );
+        guardConfirmed = true;
+      }
+
+      const geometryJsonSql = geometryGeoJsonSql(
+        geometryExpr(detected),
+        sourceCrs,
+      );
+      const result = await connection.query(
+        `SELECT *, ${geometryJsonSql} AS ${quoteIdentifier(
+          GEOMETRY_JSON_COLUMN,
+        )} FROM (${sql}) AS data`,
+      );
+      // Features may carry a null geometry; the app's layer model treats them
+      // as a regular FeatureCollection and the map ignores null geometries.
+      return toFeatureCollection(
+        rowsFromResult(result),
+        detected.column,
+      ) as FeatureCollection;
+    } catch (error) {
+      // DuckDB Spatial's WKB reader rejects surface geometries (TIN /
+      // PolyhedralSurface), which its bundled GDAL emits for ESRI MultiPatch
+      // shapefiles (3D buildings) — either as a detailed "WKB type 'TIN Z'..."
+      // or a generic "Unsupported geometry type in WKB". Depending on the build
+      // that fires on the count(*) guard or the GeoJSON read, so the whole read
+      // is wrapped. Re-read the raw WKB and decode it in JS, where TIN triangles
+      // become a MultiPolygon (issue #1121). The fallback re-reads via
+      // `ST_Read`, so a Parquet file (read via `read_parquet`, not GDAL)
+      // propagates the error instead of being mis-read through GDAL's driver.
+      //
+      // The detailed message names the surface type, so it is trusted for any
+      // format. The generic message names nothing, so it is only trusted for a
+      // shapefile, whose sole surface geometry is MultiPatch (and which cannot
+      // hold the curved geometries that share that message).
+      const isSurfaceError =
+        isUnsupportedSurfaceWkbError(error) ||
+        (file.extension === "shp" && isGenericUnsupportedWkbError(error));
+      if (isParquetExtension(file.extension) || !isSurfaceError) {
+        throw error;
+      }
+      return loadViaKeepWkbFallback(
+        db,
+        file,
+        options,
+        sourceCrs,
+        error,
+        guardConfirmed,
+      );
+    }
+  } finally {
+    await connection.close();
+  }
+}
+
+/**
+ * Load a vector file by re-reading its geometry as raw WKB (`keep_wkb=true`) and
+ * decoding it in JS, the fallback for surface geometries DuckDB Spatial cannot
+ * materialize as a GEOMETRY value (TIN / PolyhedralSurface from an ESRI
+ * MultiPatch shapefile). `keep_wkb` hands back GDAL's WKB export untouched, so
+ * the read succeeds where the normal path threw; {@link decodeWkb} then turns a
+ * TIN into a MultiPolygon. Reprojection to WGS84 runs afterwards on the decoded
+ * (now DuckDB-representable) MultiPolygon via the shared ST_Transform path.
+ *
+ * @param sourceCrs The source CRS resolved for the normal path (reused so the
+ *   fallback reprojects identically), as `AUTHORITY:CODE`, a WKT string, or null.
+ * @param originalError The error that triggered the fallback, re-thrown when
+ *   nothing decodes so an unsupported geometry still fails loudly.
+ * @param guardConfirmed Whether the normal path already confirmed the
+ *   large-dataset guard; when false (the error fired on the count guard) it is
+ *   re-run here so a huge file is not loaded without confirmation.
+ */
+async function loadViaKeepWkbFallback(
+  db: duckdb.AsyncDuckDB,
+  file: DuckDbVectorFile,
+  options: DuckDbVectorLoadOptions,
+  sourceCrs: string | null,
+  originalError: unknown,
+  guardConfirmed: boolean,
+): Promise<FeatureCollection> {
+  // Read on a fresh connection: re-running ST_Read on the connection that
+  // already scanned the file trips a "Missing DB manager" GDAL assertion in the
+  // single-threaded WASM build. The file itself is already registered on the db.
+  const connection = await db.connect();
+  try {
+    await ensureSpatialExtension(db, connection);
+    const wkbSql =
+      `SELECT * FROM ST_Read(${quoteSqlString(file.name)}, keep_wkb=true${layerArgSql(options.layer)})`;
+    // `keep_wkb` materializes the geometry as a WKB blob column named
+    // `wkb_geometry` (its DuckDB type varies by build: `BLOB` or `WKB_BLOB`), so
+    // find it by that name, falling back to any WKB/BLOB-typed column.
+    const columns = rowsFromResult(await connection.query(`DESCRIBE ${wkbSql}`));
+    const wkbColumn =
+      columns.find(
+        (column) =>
+          typeof column.column_name === "string" &&
+          column.column_name.toLowerCase() === "wkb_geometry",
+      )?.column_name ??
+      columns.find(
+        (column) =>
+          typeof column.column_type === "string" &&
+          /WKB|BLOB|BINARY/i.test(column.column_type),
+      )?.column_name;
+    if (typeof wkbColumn !== "string") {
+      throw new Error("DuckDB did not find a geometry column in this file.");
+    }
+    // Re-run the large-dataset guard when the count(*) failure above pre-empted
+    // it, so a huge MultiPatch file still prompts before every row is decoded.
+    if (options.onLargeDataset && !guardConfirmed) {
+      const featureCount = await countFeatures(connection, wkbSql);
+      await confirmLargeDataset(
+        { name: file.name, featureCount },
+        options.onLargeDataset,
+      );
+    }
+    const rows = rowsFromResult(await connection.query(wkbSql));
+    // Null geometries are legal in a FeatureCollection; the map ignores them.
+    const collection = wkbRowsToFeatureCollection(
+      rows,
+      wkbColumn,
     ) as FeatureCollection;
+    // If nothing decoded, the geometry was not a surface this fallback handles
+    // (e.g. the original error was the generic "Unsupported geometry type in
+    // WKB", which also fires for curved geometries). Surface the original error
+    // rather than adding an invisible, all-null-geometry layer.
+    if (
+      collection.features.length > 0 &&
+      collection.features.every((feature) => feature.geometry === null)
+    ) {
+      throw originalError;
+    }
+    // The decoded geometry is in the file's own CRS; reproject to WGS84 with the
+    // same source CRS the normal path resolved. Reuses the shared ST_Transform
+    // path, which handles the MultiPolygon the TIN decoded to.
+    return reprojectFeatureCollectionToWgs84(collection, sourceCrs);
   } finally {
     await connection.close();
   }
@@ -743,12 +891,21 @@ function sourceCrsFromGeoJson(fc: FeatureCollection): string | null {
  * deprecated ``crs`` member stripped either way.
  *
  * @param fc The FeatureCollection to reproject.
+ * @param explicitSourceCrs When provided (the TIN/MultiPatch fallback, whose
+ *   decoded geometry carries no ``crs`` member), the source CRS as
+ *   `AUTHORITY:CODE` or a WKT string — both accepted by ST_Transform. `null`
+ *   skips reprojection; omit it to parse the CRS from the collection's own
+ *   member instead.
  * @returns A WGS84 FeatureCollection without a ``crs`` member.
  */
 export async function reprojectFeatureCollectionToWgs84(
   fc: FeatureCollection,
+  explicitSourceCrs?: string | null,
 ): Promise<FeatureCollection> {
-  const sourceCrs = sourceCrsFromGeoJson(fc);
+  const sourceCrs =
+    explicitSourceCrs !== undefined
+      ? explicitSourceCrs
+      : sourceCrsFromGeoJson(fc);
   const { crs: _deprecatedCrs, ...stripped } = fc as FeatureCollection & {
     crs?: unknown;
   };
@@ -758,7 +915,14 @@ export async function reprojectFeatureCollectionToWgs84(
   const connection = await db.connect();
   const sourceFile = `geolibre-reproject-${(reprojectionSeq += 1)}.geojson`;
   try {
-    await db.registerFileText(sourceFile, JSON.stringify(fc));
+    // Strip GDAL's synthetic OGC_FID before ST_Read re-reads the file: a
+    // collection decoded from a prior ST_Read carries OGC_FID as a property, and
+    // GDAL's GeoJSON driver would add a second one, aborting with
+    // `duplicate column name "OGC_FID"` (issue #499).
+    await db.registerFileText(
+      sourceFile,
+      JSON.stringify(stripAutoFidColumn(fc)),
+    );
     await ensureSpatialExtension(db, connection);
 
     const sql = `SELECT * FROM ST_Read(${quoteSqlString(sourceFile)})`;

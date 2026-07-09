@@ -793,7 +793,7 @@ body,
 }
 
 #deckgl-overlay {
-  z-index: 1;
+  z-index: 5;
 }
 
 /*
@@ -3097,4 +3097,312 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   background: rgba(40, 167, 69, 0.15);
   border-color: rgba(40, 167, 69, 0.4);
   color: #7fd493;
+}
+
+/* ---------------------------------------------------------------------------
+ * Elevation Profile plugin (packages/plugins/.../elevation-profile).
+ *
+ * Ported in-house from the external plugin, whose styles shipped in their own
+ * bundle; built-in plugins do not import CSS, so the control's styles live here
+ * instead. The tokens resolve to GeoLibre's design tokens (--background,
+ * --foreground, ...) which already switch with the `.dark` class, so the panel
+ * background/text/borders follow the in-app toggle automatically. The `.dark`
+ * block below mirrors the plugin's `prefers-color-scheme: dark` values for the
+ * few decorative tokens that are not derived from a switching design token
+ * (shadow, accent-text, area fill, hover tint), so those track the in-app
+ * toggle rather than the OS preference (see the note near line 909).
+ * ------------------------------------------------------------------------- */
+.elevation-profile,
+.elevation-profile-panel {
+  --ep-bg: hsl(var(--background, 0 0% 100%));
+  --ep-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  --ep-text: hsl(var(--foreground, 222 47% 11%));
+  --ep-muted: hsl(var(--muted-foreground, 220 9% 46%));
+  --ep-border: hsl(var(--border, 220 13% 91%));
+  --ep-hover-bg: hsl(var(--foreground, 222 47% 11%) / 0.06);
+  --ep-surface: hsl(var(--secondary, 220 14% 96%));
+  --ep-accent: #f97316;
+  --ep-accent-text: #fff;
+  --ep-area: rgba(249, 115, 22, 0.18);
+}
+
+.dark .elevation-profile,
+.dark .elevation-profile-panel {
+  --ep-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+  --ep-hover-bg: hsl(var(--foreground, 210 20% 92%) / 0.1);
+  --ep-accent-text: #1f2937;
+  --ep-area: rgba(249, 115, 22, 0.22);
+}
+
+/* Container / toggle button */
+.maplibregl-ctrl-group.elevation-profile {
+  background: var(--ep-bg);
+  border-radius: 4px;
+  box-shadow: var(--ep-shadow);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Scoped under the container class so these win over GeoLibre's own
+   `.maplibregl-ctrl-group button` rules (which otherwise offset the icon). */
+.elevation-profile .elevation-profile-toggle {
+  box-sizing: border-box;
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--ep-text);
+}
+
+.elevation-profile .elevation-profile-toggle:hover {
+  background: var(--ep-hover-bg);
+}
+
+.elevation-profile .elevation-profile-toggle svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+/* Floating panel. Resizable in every dock: it is always positioned by its
+   top-left corner (see _updatePanelPosition), so the bottom-right resize handle
+   grows it down and to the right consistently. */
+.elevation-profile-panel {
+  position: absolute;
+  display: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ep-bg);
+  color: var(--ep-text);
+  border-radius: 6px;
+  box-shadow: var(--ep-shadow);
+  padding: 10px;
+  z-index: 1000;
+  font-size: 12px;
+  line-height: 1.4;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: auto;
+  resize: both;
+  min-width: 260px;
+  min-height: 170px;
+  max-width: 90vw;
+  max-height: 85vh;
+}
+
+.elevation-profile-panel.expanded {
+  display: flex;
+}
+
+/* Right-docked panels: render the resize grip in the bottom-left corner (so it
+   grows toward the map interior) by flipping the panel to RTL, then restore the
+   content's natural left-to-right flow on its children. */
+.elevation-profile-panel--anchor-right {
+  direction: rtl;
+}
+
+.elevation-profile-panel--anchor-right > * {
+  direction: ltr;
+}
+
+.elevation-profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--ep-border);
+}
+
+.elevation-profile-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.elevation-profile-close {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--ep-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.elevation-profile-close:hover {
+  color: var(--ep-text);
+}
+
+/* Actions */
+.elevation-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.elevation-profile-button {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ep-text);
+  background: var(--ep-surface);
+  border: 1px solid var(--ep-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.elevation-profile-button:hover:not(:disabled) {
+  border-color: var(--ep-accent);
+}
+
+.elevation-profile-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.elevation-profile-primary,
+.elevation-profile-button.is-active {
+  color: var(--ep-accent-text);
+  background: var(--ep-accent);
+  border-color: var(--ep-accent);
+}
+
+.elevation-profile-unit {
+  margin-left: auto;
+}
+
+/* Status line */
+.elevation-profile-status {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ep-muted);
+  overflow-wrap: break-word;
+}
+
+.elevation-profile-status:empty {
+  display: none;
+}
+
+/* Stats grid */
+.elevation-profile-stats {
+  display: none;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.elevation-profile-stats.has-data {
+  display: grid;
+}
+
+.elevation-profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 4px 2px;
+  background: var(--ep-surface);
+  border-radius: 4px;
+}
+
+.elevation-profile-stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ep-text);
+}
+
+.elevation-profile-stat-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ep-muted);
+}
+
+/* Chart. Flex-grows so a taller panel produces a taller chart. Its display is
+   toggled from JS (hidden when there is no profile) rather than via :empty, so
+   the host keeps a measurable width while the chart is being (re)drawn. */
+.elevation-profile-chart {
+  margin-top: 10px;
+  flex: 1 1 auto;
+  min-height: 130px;
+}
+
+.elevation-profile-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  background: var(--ep-surface);
+  border-radius: 4px;
+}
+
+.elevation-profile-area {
+  fill: var(--ep-area);
+  stroke: none;
+}
+
+.elevation-profile-line {
+  fill: none;
+  stroke: var(--ep-accent);
+  stroke-width: 1.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.elevation-profile-axis {
+  fill: var(--ep-muted);
+  font-size: 9px;
+}
+
+.elevation-profile-hover-line {
+  stroke: var(--ep-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.elevation-profile-hover-dot {
+  fill: var(--ep-accent);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+/* Hover readout */
+.elevation-profile-readout {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ep-text);
+  min-height: 14px;
+}
+
+.elevation-profile-readout:empty {
+  visibility: hidden;
+}
+
+/* Export row (shown only when a profile exists; toggled to flex from JS) */
+.elevation-profile-export {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.elevation-profile-export-label {
+  font-size: 11px;
+  color: var(--ep-muted);
+}
+
+.elevation-profile-button-sm {
+  padding: 4px 10px;
+  font-size: 11px;
 }

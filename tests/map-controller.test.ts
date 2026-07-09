@@ -162,6 +162,10 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
     getProjection: () => ({ type: "mercator" }),
     flyTo: record("flyTo"),
     fitBounds: record("fitBounds"),
+    cameraForBounds: (...args: unknown[]) => {
+      calls.push({ method: "cameraForBounds", args });
+      return { center: { lng: 51.9, lat: 35.7 }, zoom: 8.5 };
+    },
     addControl: record("addControl"),
     removeControl: record("removeControl"),
     once: () => {},
@@ -497,6 +501,31 @@ describe("MapController camera and query helpers", () => {
     controller.fitBounds([0, 0, Number.NaN, 1]);
 
     assert.equal(fake.calls.length, 0);
+  });
+
+  it("frames a scenegraph model layer at a tilt so it is not edge-on", () => {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+
+    controller.fitLayer(
+      pointLayer("model", {
+        type: "deckgl-viz",
+        source: { type: "deckgl-viz" },
+        geojson: undefined,
+        metadata: {
+          customLayerType: "scenegraph",
+          bounds: [51.5, 35.3, 52.3, 36.1],
+        },
+      }),
+    );
+
+    const flyTo = fake.calls.find((c) => c.method === "flyTo");
+    assert.ok(flyTo, "a scenegraph fit flies (with pitch) rather than fitBounds");
+    assert.equal((flyTo.args[0] as { pitch: number }).pitch, 60);
+    assert.ok(
+      !fake.calls.some((c) => c.method === "fitBounds"),
+      "does not also fit bounds top-down",
+    );
   });
 
   it("identifies features across a synced layer's style layers", () => {

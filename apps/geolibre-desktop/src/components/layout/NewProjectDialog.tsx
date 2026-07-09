@@ -2,6 +2,7 @@ import {
   BLANK_BASEMAP,
   createDefaultMapView,
   OPENFREEMAP_BASEMAPS,
+  PLANETARY_BASEMAPS,
   PROTOMAPS_BASEMAPS,
   useAppStore,
   type MapViewState,
@@ -50,6 +51,7 @@ const THREE_D_MAP_VIEW: MapViewState = {
 type BasemapChoice =
   | (typeof OPENFREEMAP_BASEMAPS)[number]["id"]
   | (typeof PROTOMAPS_BASEMAPS)[number]["id"]
+  | (typeof PLANETARY_BASEMAPS)[number]["id"]
   | typeof CUSTOM_BASEMAP_ID
   | typeof BLANK_BASEMAP_ID;
 
@@ -142,6 +144,12 @@ export function NewProjectDialog({
       ),
     [protomapsPresets, selectedBasemapId],
   );
+  // Planetary basemaps are a separate list because selecting one also sets the
+  // project's celestial body (so measurements use that body's radius).
+  const selectedPlanetary = useMemo(
+    () => PLANETARY_BASEMAPS.find((basemap) => basemap.id === selectedBasemapId),
+    [selectedBasemapId],
+  );
   const isCustomUrlValid = useMemo(() => {
     if (!customStyleUrl) return false;
     try {
@@ -153,7 +161,7 @@ export function NewProjectDialog({
   }, [customStyleUrl]);
   const canCreate = isCustomSelected
     ? isCustomUrlValid
-    : isBlankSelected || Boolean(selectedPreset);
+    : isBlankSelected || Boolean(selectedPreset) || Boolean(selectedPlanetary);
 
   const resetForm = () => {
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
@@ -175,12 +183,15 @@ export function NewProjectDialog({
       ? customStyleUrl
       : isBlankSelected
         ? BLANK_BASEMAP
-        : selectedPreset?.styleUrl;
+        : (selectedPreset ?? selectedPlanetary)?.styleUrl;
     if (basemapStyleUrl == null) return;
 
     newProject({
       name: projectName.trim() || DEFAULT_PROJECT_NAME,
       basemapStyleUrl,
+      // A planetary basemap seeds the matching celestial body; other basemaps
+      // leave the project on the default Earth ellipsoid.
+      ellipsoidId: selectedPlanetary?.ellipsoidId,
       mapView:
         selectedBasemapId === LIBERTY_3D_ID
           ? THREE_D_MAP_VIEW
@@ -309,6 +320,23 @@ export function NewProjectDialog({
                     </div>
                   </div>
                 ) : null}
+
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {t("basemapPicker.sectionPlanetary")}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {PLANETARY_BASEMAPS.map((basemap) => (
+                      <BasemapButton
+                        key={basemap.id}
+                        id={basemap.id}
+                        name={basemap.name}
+                        selected={selectedBasemapId === basemap.id}
+                        onSelect={setSelectedBasemapId}
+                      />
+                    ))}
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">

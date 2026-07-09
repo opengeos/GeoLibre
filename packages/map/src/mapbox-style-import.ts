@@ -1,6 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
-  MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0,
+  mercatorMetersPerPixelAtZoom0,
   type LabelStyle,
   type LayerStyle,
   type VectorStyleStop,
@@ -427,7 +427,7 @@ function parseLineWidth(
       const widthAtZoom0 = asFiniteNumber(array[4]);
       if (widthAtZoom0 !== null) {
         patch.strokeWidth =
-          widthAtZoom0 * MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0;
+          widthAtZoom0 * mercatorMetersPerPixelAtZoom0();
         patch.strokeWidthUnit = "meters";
         return;
       }

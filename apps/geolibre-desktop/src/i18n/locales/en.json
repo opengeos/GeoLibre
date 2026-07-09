@@ -96,7 +96,8 @@
   "basemapPicker": {
     "title": "Change basemap",
     "applyCustom": "Apply",
-    "invalidUrl": "Enter a valid HTTP or HTTPS style URL."
+    "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
+    "sectionPlanetary": "Planetary"
   },
   "common": {
     "pickColorFromScreen": "Pick a color from the screen",
@@ -1168,6 +1169,8 @@
       "maxZoom": "Max zoom",
       "maxPitch": "Max pitch",
       "renderWorldCopies": "Render world copies",
+      "ellipsoid": "Celestial body",
+      "ellipsoidHint": "Sets the radius used for distance, area, and scale measurements. Pick a matching planetary basemap under Add Data.",
       "errorBoundsUnavailable": "The map bounds are not available yet."
     },
     "layout": {
@@ -2524,7 +2527,6 @@
     "opacityValueInputAria": "{{label}} value",
     "opacityValueEditAria": "Edit {{label}} value",
     "basemapOpacity": "Basemap opacity",
-    "backgroundNameFixed": "The name of the background basemap is fixed and cannot be changed.",
     "newGroup": "New group",
     "basemaps": "Basemaps",
     "geoEditor": "GeoEditor",

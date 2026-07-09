@@ -1,4 +1,9 @@
-import { BLANK_BASEMAP, useAppStore } from "@geolibre/core";
+import {
+  BLANK_BASEMAP,
+  PLANETARY_BASEMAPS,
+  useAppStore,
+  type PlanetaryBasemap,
+} from "@geolibre/core";
 import {
   Button,
   cn,
@@ -73,6 +78,7 @@ export function BasemapPickerDialog({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setMapView = useAppStore((s) => s.setMapView);
+  const setPreferences = useAppStore((s) => s.setPreferences);
 
   const openFreeMapPresets = useMemo(() => getOpenFreeMapPresets(), []);
   // Protomaps styles need an API key (VITE_PROTOMAPS_API_KEY). It can come from
@@ -92,7 +98,15 @@ export function BasemapPickerDialog({
   }, [open]);
 
   const allPresets = useMemo(
-    () => [...openFreeMapPresets, ...protomapsPresets],
+    () => [
+      ...openFreeMapPresets,
+      ...protomapsPresets,
+      ...PLANETARY_BASEMAPS.map((b) => ({
+        id: b.id,
+        name: b.name,
+        styleUrl: b.styleUrl,
+      })),
+    ],
     [openFreeMapPresets, protomapsPresets],
   );
 
@@ -131,6 +145,21 @@ export function BasemapPickerDialog({
     if (preset.id === LIBERTY_3D_ID) {
       // Tilt the current view into 3D in place, preserving center and zoom.
       setMapView({ pitch: THREE_D_PITCH }, true);
+    }
+    onOpenChange(false);
+  };
+
+  // Selecting a planetary basemap also switches the project's celestial body so
+  // measurements (distance/area/scale) use that body's radius, and the globe
+  // control renders it as the correct sphere.
+  const applyPlanetary = (basemap: PlanetaryBasemap) => {
+    setBasemapStyleUrl(basemap.styleUrl);
+    const prefs = useAppStore.getState().preferences;
+    if (prefs.map.ellipsoidId !== basemap.ellipsoidId) {
+      setPreferences({
+        ...prefs,
+        map: { ...prefs.map, ellipsoidId: basemap.ellipsoidId },
+      });
     }
     onOpenChange(false);
   };
@@ -193,6 +222,22 @@ export function BasemapPickerDialog({
               </div>
             </div>
           ) : null}
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("basemapPicker.sectionPlanetary")}
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {PLANETARY_BASEMAPS.map((basemap) => (
+                <PresetButton
+                  key={basemap.id}
+                  name={basemap.name}
+                  selected={activeChoice === basemap.id}
+                  onSelect={() => applyPlanetary(basemap)}
+                />
+              ))}
+            </div>
+          </div>
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">

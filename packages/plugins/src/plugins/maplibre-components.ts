@@ -1186,18 +1186,36 @@ interface StacCogTextureHelper {
   ) => string;
 }
 
-const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
-  // Load the splatting control from maplibre-gl-splat directly: the copy
-  // re-exported (and bundled) by maplibre-gl-components lags behind, so its
-  // sample-data dropdown would be missing if taken from there.
-  // Load the dedicated splat control separately, but do not let a failure here
-  // take down every other component control. Promise.all rejects the whole
-  // shared promise if any input rejects, so a single failed splat import (a
-  // code-split chunk network hiccup, a missing dev-checkout package) would have
-  // broken BookmarkControl, MeasureControl, etc. for the life of the page. On
-  // failure, fall back to the (older) GaussianSplatControl bundled in
-  // maplibre-gl-components so the rest of the controls still load.
-  componentsConstructorsPromise ??= Promise.all([
+type ComponentsModule = typeof import("maplibre-gl-components");
+type SplatModule = typeof import("maplibre-gl-splat");
+// Both elements can be `undefined` at runtime, not just rejected: a
+// `vite:preloadError` handler that calls preventDefault() makes a failed dynamic
+// import RESOLVE to `undefined` (see getComponentsConstructors). An `undefined`
+// splat is handled the same as a rejected one (null) - both fall back to the
+// bundled GaussianSplatControl via optional chaining - so only `components`
+// being absent is fatal.
+/** @internal The dynamic-import pair {@link getComponentsConstructors} builds from. */
+export type ComponentsModules = [
+  ComponentsModule | undefined,
+  SplatModule | null | undefined,
+];
+
+// The pair of dynamic imports getComponentsConstructors builds from. Split out
+// as an injectable seam so a test can simulate the vite:preloadError +
+// preventDefault() case (see getComponentsConstructors), where a failed import
+// RESOLVES to `undefined` instead of rejecting.
+//
+// Load the splatting control from maplibre-gl-splat directly: the copy
+// re-exported (and bundled) by maplibre-gl-components lags behind, so its
+// sample-data dropdown would be missing if taken from there. Do not let a
+// failure here take down every other component control. Promise.all rejects the
+// whole shared promise if any input rejects, so a single failed splat import (a
+// code-split chunk network hiccup, a missing dev-checkout package) would have
+// broken BookmarkControl, MeasureControl, etc. for the life of the page. On
+// failure, fall back to the (older) GaussianSplatControl bundled in
+// maplibre-gl-components so the rest of the controls still load.
+const defaultLoadComponentsModules = (): Promise<ComponentsModules> =>
+  Promise.all([
     import("maplibre-gl-components"),
     import("maplibre-gl-splat").catch((error: unknown) => {
       console.warn(
@@ -1206,7 +1224,39 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       );
       return null;
     }),
-  ]).then(([components, splat]) => {
+  ]);
+
+let loadComponentsModules = defaultLoadComponentsModules;
+
+/**
+ * Test-only seam: swap the component-module loader and reset the memoized
+ * singleton. Passing `null` restores the real dynamic imports.
+ *
+ * @internal
+ */
+export function __setComponentsModuleLoaderForTests(
+  loader: (() => Promise<ComponentsModules>) | null
+): void {
+  loadComponentsModules = loader ?? defaultLoadComponentsModules;
+  componentsConstructorsPromise = null;
+}
+
+/** @internal Exported so the lazy component-control loader can be unit-tested. */
+export const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
+  componentsConstructorsPromise ??= loadComponentsModules().then(([components, splat]) => {
+    // A `vite:preloadError` handler that calls preventDefault() makes the
+    // failed dynamic import RESOLVE to `undefined` instead of rejecting. The
+    // stale-chunk reload guard (installStaleChunkReload) does exactly this when
+    // it defers a reload to protect unsaved work: a chunk orphaned by a
+    // redeploy then fails, but the reload is withheld. Destructuring that
+    // `undefined` module throws the cryptic "Cannot destructure property
+    // 'AddVectorControl' of 'undefined'"; turn it into a clear, actionable
+    // error (the .catch below keeps it from poisoning the shared singleton).
+    if (!components) {
+      throw new Error(
+        "The map controls could not be loaded, most likely because the app was updated in the background. Reload the page to finish loading them."
+      );
+    }
     const {
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
@@ -1259,6 +1309,15 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
     };
+  }).catch((error: unknown) => {
+    // Never memoize a failure. This shared singleton backs every component
+    // control (COG, FlatGeobuf, PMTiles, Zarr, Bookmark, Measure, Minimap,
+    // Search, Print, ...), so a cached rejection would break all of them for
+    // the life of the page. Clearing it lets the next action retry the import
+    // once the cause clears (a transient chunk-load hiccup, or a reload after a
+    // redeploy).
+    componentsConstructorsPromise = null;
+    throw error;
   });
   return componentsConstructorsPromise;
 };
