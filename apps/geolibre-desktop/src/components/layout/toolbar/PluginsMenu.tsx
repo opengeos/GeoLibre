@@ -7,6 +7,7 @@ import {
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
   SUN_PLUGIN_ID,
+  WEATHER_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
 } from "@geolibre/plugins";
 import {
@@ -151,6 +152,7 @@ export function PluginsMenu({
             p.id === DIRECTIONS_PLUGIN_ID ||
             p.id === REVERSE_GEOCODE_PLUGIN_ID ||
             p.id === GRATICULE_PLUGIN_ID ||
+            p.id === WEATHER_PLUGIN_ID ||
             p.id === DECK_VIZ_PLUGIN_ID ||
             p.id === COMPONENTS_PLUGIN_ID
           ) {

@@ -1422,6 +1422,7 @@
       "toggleControl": "Toggle {{name}} Control",
       "toggleAtmosphereEffects": "Toggle Atmospheric Effects",
       "toggleDirections": "Toggle Directions",
+      "toggleWeather": "Toggle Weather",
       "toggleSearch": "Toggle Search",
       "toggleColorbar": "Toggle Colorbar",
       "toggleLegend": "Toggle Legend",
@@ -1677,6 +1678,8 @@
       "atmosphereEnabled": "Enabled",
       "spinGlobe": "Spinning Globe",
       "graticule": "Gridlines",
+      "weather": "Weather",
+      "weatherTooltip": "Overlay animated precipitation radar or cloud cover from RainViewer.",
       "sun": "Sun",
       "sunTooltip": "Simulate the sun's position and the day/night terminator for any date and time.",
       "spinGlobeBoundsTitle": "Bounds are locked",
@@ -1949,6 +1952,16 @@
     "edgesAll": "All sides",
     "labelColor": "Label color",
     "labelSize": "Label size"
+  },
+  "weather": {
+    "title": "Weather · Radar",
+    "play": "Play",
+    "pause": "Pause",
+    "opacity": "Opacity",
+    "attribution": "RainViewer",
+    "loading": "Loading weather…",
+    "error": "Weather data unavailable",
+    "noData": "No weather frames available"
   },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",

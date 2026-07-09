@@ -46,6 +46,7 @@ interface ControlsMenuProps {
   directionsActive: boolean;
   reverseGeocodeActive: boolean;
   graticuleActive: boolean;
+  weatherActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
@@ -54,6 +55,7 @@ interface ControlsMenuProps {
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
   onToggleGraticule: () => void;
+  onToggleWeather: () => void;
   onOpenFieldCollection: () => void;
   onOpenRecordTour: () => void;
 }
@@ -67,6 +69,7 @@ export function ControlsMenu({
   directionsActive,
   reverseGeocodeActive,
   graticuleActive,
+  weatherActive,
   onToggleMapControl,
   onToggleEffects,
   getEffectsSettings,
@@ -75,6 +78,7 @@ export function ControlsMenu({
   onToggleDirections,
   onToggleReverseGeocode,
   onToggleGraticule,
+  onToggleWeather,
   onOpenFieldCollection,
   onOpenRecordTour,
 }: ControlsMenuProps) {
@@ -120,6 +124,7 @@ export function ControlsMenu({
     show("controls.atmosphereEffects") ||
     show("controls.spinGlobe") ||
     show("controls.graticule") ||
+    show("controls.weather") ||
     show("controls.sun") ||
     show("controls.directions") ||
     show("controls.reverseGeocode");
@@ -194,6 +199,15 @@ export function ControlsMenu({
             <DropdownMenuItem onClick={onToggleGraticule}>
               {t("toolbar.item.graticule")}
               {graticuleActive ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.weather") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.weatherTooltip")}
+              onClick={onToggleWeather}
+            >
+              {t("toolbar.item.weather")}
+              {weatherActive ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.directions") && (

@@ -26,11 +26,13 @@ import {
   setBasemapControlLabels,
   setGraticuleLabels,
   setReverseGeocodeLabels,
+  setWeatherLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
+  WEATHER_PLUGIN_ID,
 } from "@geolibre/plugins";
 import { Button, cn, Input } from "@geolibre/ui";
 import {
@@ -222,6 +224,16 @@ export function TopToolbar({
       edgesAll: t("graticule.edgesAll"),
       labelColor: t("graticule.labelColor"),
       labelSize: t("graticule.labelSize"),
+    });
+    setWeatherLabels({
+      title: t("weather.title"),
+      play: t("weather.play"),
+      pause: t("weather.pause"),
+      opacity: t("weather.opacity"),
+      attribution: t("weather.attribution"),
+      loading: t("weather.loading"),
+      error: t("weather.error"),
+      noData: t("weather.noData"),
     });
   }, [t]);
 
@@ -668,6 +680,13 @@ export function TopToolbar({
       run: consent.handleToggleDirections,
     },
     {
+      id: "control.weather",
+      title: t("toolbar.command.toggleWeather"),
+      group: t("toolbar.commandGroup.controls"),
+      keywords: "weather radar clouds precipitation rain",
+      run: () => toggle(WEATHER_PLUGIN_ID, appApi),
+    },
+    {
       id: "control.search",
       title: t("toolbar.command.toggleSearch"),
       group: t("toolbar.commandGroup.controls"),
@@ -846,9 +865,9 @@ export function TopToolbar({
       run: () => setAboutOpen(true),
     },
     // Plugins — one toggle per registered plugin. Atmospheric Effects,
-    // Directions, Reverse Geocode, Gridlines, and the deck.gl viz renderer are
-    // excluded here because they are surfaced under Controls / Add Data instead
-    // (matching the menus).
+    // Directions, Reverse Geocode, Gridlines, Weather, and the deck.gl viz
+    // renderer are excluded here because they are surfaced under Controls / Add
+    // Data instead (matching the menus).
     ...plugins
       .filter(
         (plugin) =>
@@ -856,6 +875,7 @@ export function TopToolbar({
           plugin.id !== DIRECTIONS_PLUGIN_ID &&
           plugin.id !== REVERSE_GEOCODE_PLUGIN_ID &&
           plugin.id !== GRATICULE_PLUGIN_ID &&
+          plugin.id !== WEATHER_PLUGIN_ID &&
           plugin.id !== DECK_VIZ_PLUGIN_ID,
       )
       .map((plugin) => ({
@@ -1017,6 +1037,7 @@ export function TopToolbar({
           directionsActive={isActive(DIRECTIONS_PLUGIN_ID)}
           reverseGeocodeActive={isActive(REVERSE_GEOCODE_PLUGIN_ID)}
           graticuleActive={isActive(GRATICULE_PLUGIN_ID)}
+          weatherActive={isActive(WEATHER_PLUGIN_ID)}
           onToggleMapControl={toggleMapControl}
           onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
           getEffectsSettings={getEffectsSettings}
@@ -1025,6 +1046,7 @@ export function TopToolbar({
           onToggleDirections={consent.handleToggleDirections}
           onToggleReverseGeocode={consent.handleToggleReverseGeocode}
           onToggleGraticule={() => toggle(GRATICULE_PLUGIN_ID, appApi)}
+          onToggleWeather={() => toggle(WEATHER_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
           onOpenRecordTour={() => setRecordTourOpen(true)}
         />

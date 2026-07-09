@@ -324,6 +324,86 @@ body,
   justify-content: center;
 }
 
+/*
+ * Weather overlay control (RainViewer). A plain `.maplibregl-ctrl-group` panel
+ * mapped onto the app's design tokens so it tracks the in-app `.dark` toggle: a
+ * title, a play/pause button beside an opacity slider, and a frame-time/
+ * attribution footer. The rules reset MapLibre's default `.maplibregl-ctrl-group
+ * button` chrome (fixed 29px cells, white background) so the widgets lay out as
+ * intended.
+ */
+.geolibre-weather-control {
+  background-color: hsl(var(--background)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  color: hsl(var(--foreground));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  width: 172px;
+}
+
+.geolibre-weather-control button {
+  background: transparent;
+  border-radius: 0;
+  box-sizing: border-box;
+  height: auto;
+  width: auto;
+}
+
+.geolibre-weather-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.geolibre-weather-row {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.geolibre-weather-control .geolibre-weather-play {
+  align-items: center;
+  background-color: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  display: flex !important;
+  flex: 0 0 auto;
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.geolibre-weather-control .geolibre-weather-play:hover:not(:disabled) {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.geolibre-weather-control .geolibre-weather-play:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.geolibre-weather-opacity {
+  accent-color: hsl(var(--primary));
+  cursor: pointer;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.geolibre-weather-status {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  min-height: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .geolibre-duckdb-control {
   background-color: transparent !important;
   box-shadow: none !important;

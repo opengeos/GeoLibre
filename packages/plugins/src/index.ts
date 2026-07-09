@@ -354,6 +354,16 @@ export {
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
 export {
+  maplibreWeatherPlugin,
+  WEATHER_PLUGIN_ID,
+  DEFAULT_WEATHER_SETTINGS,
+  DEFAULT_WEATHER_LABELS,
+  getWeatherSettings,
+  setWeatherLabels,
+  type WeatherSettings,
+  type WeatherLabels,
+} from "./plugins/maplibre-weather";
+export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
   getActiveTimeSliderControl,
