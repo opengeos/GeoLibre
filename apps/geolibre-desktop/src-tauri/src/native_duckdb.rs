@@ -449,18 +449,44 @@ fn read_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<S
 /// The WKT text of a shapefile's `.prj` sidecar, or `None` when it is absent or
 /// empty. Used as the CRS fallback when `ST_Read_Meta` reports no authority code.
 fn read_prj_sidecar_crs(shp_path: &str) -> Option<String> {
-    // The sidecar shares the `.shp`'s base name; try both cases since a
-    // shapefile set may ship `.prj` or `.PRJ`.
+    let path = Path::new(shp_path);
+    // Fast path: the sidecar usually shares the `.shp`'s exact base name with a
+    // `.prj` or `.PRJ` extension.
     for extension in ["prj", "PRJ"] {
-        let prj_path = Path::new(shp_path).with_extension(extension);
-        if let Ok(text) = std::fs::read_to_string(&prj_path) {
-            let trimmed = text.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
+        if let Some(crs) = read_nonempty_trimmed(&path.with_extension(extension)) {
+            return Some(crs);
+        }
+    }
+    // Fallback for a mixed-case extension (e.g. `Foo.Prj`) on a case-sensitive
+    // filesystem: scan the directory for a same-stem file whose extension is
+    // `prj` in any case.
+    let stem = path.file_stem()?;
+    let dir = path.parent()?;
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let entry_path = entry.path();
+        let matches = entry_path.file_stem() == Some(stem)
+            && entry_path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("prj"));
+        if matches {
+            if let Some(crs) = read_nonempty_trimmed(&entry_path) {
+                return Some(crs);
             }
         }
     }
     None
+}
+
+/// The trimmed contents of a file, or `None` when it cannot be read or is empty.
+fn read_nonempty_trimmed(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 fn read_geoparquet_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<String> {
@@ -929,6 +955,31 @@ mod tests {
         std::fs::write(&prj_path, "   \n").expect("write empty prj sidecar");
         assert!(read_prj_sidecar_crs(&shp_path.to_string_lossy()).is_none());
         let _ = std::fs::remove_file(&prj_path);
+    }
+
+    #[test]
+    fn read_prj_sidecar_crs_matches_mixed_case_extension() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before Unix epoch")
+            .as_nanos();
+        // A unique per-test subdirectory so the directory scan only sees this
+        // file set, independent of other tests sharing the temp dir.
+        let dir = std::env::temp_dir().join(format!(
+            "geolibre-native-prj-case-{suffix}-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("create test dir");
+        let shp_path = dir.join("Hotspots.shp");
+        // Mixed-case `.Prj` that neither the `prj` nor `PRJ` fast path matches.
+        let prj_path = dir.join("Hotspots.Prj");
+        std::fs::write(&prj_path, "PROJCS[\"OSGB\"]\n").expect("write prj sidecar");
+
+        let crs = read_prj_sidecar_crs(&shp_path.to_string_lossy())
+            .expect("mixed-case prj sidecar resolves a CRS");
+        assert_eq!(crs, "PROJCS[\"OSGB\"]");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

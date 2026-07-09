@@ -19,6 +19,7 @@ import {
 } from "./duckdb-vector-guard";
 import { ensureGpkgFeatureCount } from "./gpkg-ogr-contents";
 import { isLikelyGeoPackage, loadGeoPackageVectorFile } from "./gpkg-reader";
+import { prjSidecarCrs } from "./prj-sidecar";
 import { selectDuckDbBundle } from "./duckdb-wasm-bundles";
 import { getSpatialExtensionPath } from "./spatial-extension-config";
 
@@ -407,24 +408,6 @@ function crsSql(fileName: string, includeWkt: boolean): string {
 }
 
 /**
- * The CRS a shapefile's `.prj` sidecar carries, as its raw WKT text, or null
- * when the file has no `.prj` (or it is empty). Used as the last-resort
- * reprojection source when ST_Read_Meta cannot report the CRS: ST_Transform
- * accepts a `.prj`'s WKT string as a source CRS just as it does an
- * `AUTHORITY:CODE` (issue #1148).
- *
- * Must be read BEFORE {@link registerVectorFileBuffers}, which hands each
- * sibling's buffer to the DuckDB worker as a transferable and so detaches it —
- * afterwards `sibling.data` is a zero-length view and the WKT is lost.
- */
-function prjSidecarCrs(file: DuckDbVectorFile): string | null {
-  const prj = file.siblingFiles?.find((sibling) => sibling.extension === "prj");
-  if (!prj) return null;
-  const text = new TextDecoder().decode(prj.data).trim();
-  return text || null;
-}
-
-/**
  * Resolve the source CRS of a vector file as a string ST_Transform accepts —
  * `AUTHORITY:CODE` when GDAL identified one, otherwise the raw WKT definition,
  * else a shapefile's `.prj` sidecar text, or null when the file carries no
@@ -644,12 +627,13 @@ export async function loadDuckDbVectorFile(
   const db = await getDatabase();
   const connection = await db.connect();
 
-  // Capture the `.prj` sidecar CRS before registering the file buffers, which
-  // detaches each sibling's ArrayBuffer (transferred to the worker) and would
-  // leave the `.prj` unreadable by the reprojection fallback (issue #1148).
-  const prjCrs = prjSidecarCrs(file);
-
   try {
+    // Capture the `.prj` sidecar CRS before registering the file buffers, which
+    // detaches each sibling's ArrayBuffer (transferred to the worker) and would
+    // leave the `.prj` unreadable by the reprojection fallback (issue #1148).
+    // Inside the try so the finally still closes the connection if it throws.
+    const prjCrs = prjSidecarCrs(file);
+
     await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(
       db,
