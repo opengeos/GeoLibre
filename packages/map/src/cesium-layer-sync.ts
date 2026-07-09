@@ -117,6 +117,8 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
     case "imagery":
       return (
         firstTile(prev) !== firstTile(next) ||
+        // maxzoom bakes into UrlTemplateImageryProvider.maximumLevel at build.
+        prev.source.maxzoom !== next.source.maxzoom ||
         str(prev.source.url) !== str(next.source.url) ||
         str(prev.source.layers) !== str(next.source.layers) ||
         // WMS GetMap params baked into the provider at creation; a change must

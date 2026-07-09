@@ -383,6 +383,20 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.imageryRemoved.length, 1);
   });
 
+  it("rebuilds an xyz layer when its maxzoom changes", () => {
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "x",
+      type: "xyz",
+      source: { tiles: ["u/{z}/{x}/{y}"], maxzoom: 18 },
+    });
+    sync.sync([base]);
+    sync.sync([{ ...base, source: { ...base.source, maxzoom: 22 } }]);
+    assert.equal(f.calls.imageryAdded.length, 2, "maxzoom change rebuilds");
+    assert.equal(f.calls.imageryRemoved.length, 1);
+    assert.equal(f.calls.urlProviders[1].maximumLevel, 22);
+  });
+
   it("removes a layer's handle when it leaves the layer list", () => {
     const sync = newSync(f);
     sync.sync([mkLayer({ id: "x", type: "xyz", source: { tiles: ["u/{z}/{x}/{y}"] } })]);

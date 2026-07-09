@@ -224,6 +224,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({
             // Terrain is best-effort; the globe still renders without it.
           }
         }
+        // The unmount cleanup may have run during the terrain await (destroying
+        // the viewer); re-check before touching it, mirroring the guard after the
+        // dynamic import above and CesiumLayerSync's post-await checks. Otherwise
+        // the seed/sync/moveEnd below would run against a dead viewer and leave a
+        // moveEnd listener that cleanupInput never removes.
+        if (cancelled || viewer.isDestroyed()) return;
 
         // Seed the camera from the shared store camera before the first frame.
         const state = useAppStore.getState();
@@ -235,10 +241,6 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         // Render the store layers on the globe before the first frame.
         layerSyncRef.current?.sync(paneLayersRef.current);
 
-        // The unmount cleanup may have run during the terrain await above
-        // (which destroys the viewer); bail before registering a moveEnd
-        // listener on a dead camera that would then never be removed.
-        if (cancelled) return;
         // Mirror a user's globe navigation back into the shared camera. Echoes
         // of our own applyView are filtered by the isSameView guard.
         viewer.camera.moveEnd.addEventListener(() => {
