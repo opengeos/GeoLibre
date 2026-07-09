@@ -2674,6 +2674,7 @@ export function LayerPanel({
                               {t("layers.exportGeoTiff")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
+                              disabled={isRefreshing}
                               onSelect={() => {
                                 void handleExportRasterSubset(layer);
                               }}

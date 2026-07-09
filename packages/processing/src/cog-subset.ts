@@ -28,9 +28,11 @@ export interface CogSubsetResult {
  * Upper bound on output pixels (64M, e.g. ~8000x8000). A windowed read keeps a
  * tiny drawn box cheap even on a huge COG, but a box drawn over most of a large
  * full-resolution raster could still materialize a buffer big enough to freeze
- * the tab, so reject it with a clear message before allocating.
+ * the tab, so reject it with a clear message before allocating. Counted across
+ * all bands (width x height x samples) since every band is materialized, and at
+ * up to 8 bytes/sample this caps the pixel buffers near 512 MB.
  */
-const MAX_SUBSET_PIXELS = 64_000_000;
+const MAX_SUBSET_CELLS = 64_000_000;
 
 type TypedArray =
   | Uint8Array
@@ -70,31 +72,40 @@ function encodableBand(band: TypedArray): {
 
 /**
  * Build a transform from EPSG:4326 lon/lat to the raster's CRS from its GeoKeys.
- * Returns an identity transform when the raster is already geographic WGS84 or
- * its projection cannot be resolved (in which case the coordinates are assumed
- * to already be lon/lat).
+ * Returns an identity transform when the raster carries no CRS or is already
+ * geographic WGS84 (coordinates are then assumed to be lon/lat). Throws when the
+ * raster declares some other CRS that cannot be resolved, rather than silently
+ * treating the lon/lat box as native coordinates and exporting the wrong region.
  */
 async function makeToRaster(
   geoKeys: Record<string, unknown> | null,
 ): Promise<(lon: number, lat: number) => [number, number]> {
   const identity = (lon: number, lat: number): [number, number] => [lon, lat];
-  if (!geoKeys) return identity;
-  // A raster tagged as plain geographic WGS84 needs no transform.
-  const projected = geoKeys.ProjectedCSTypeGeoKey;
-  if (projected == null && geoKeys.GeographicTypeGeoKey === 4326) return identity;
-  try {
-    // Loaded on demand: the geokeys->proj4 EPSG database is large, so keep it
-    // out of the eager bundle and only pull it in when an export needs it.
-    const { toProj4 } = await import("geotiff-geokeys-to-proj4");
-    const projection = toProj4(geoKeys as never);
-    if (!projection?.proj4) return identity;
-    // Drop `+axis=` (proj4 mishandles it) as the raster panel's parser does.
-    const def = projection.proj4.replace(/\+axis=\w+\s*/g, "");
-    const converter = proj4("EPSG:4326", def);
-    return (lon, lat) => converter.forward([lon, lat]) as [number, number];
-  } catch {
+  const projected = geoKeys?.ProjectedCSTypeGeoKey;
+  const geographic = geoKeys?.GeographicTypeGeoKey;
+  // No CRS info, or plain geographic WGS84: the drawn box is already in the
+  // raster's coordinates.
+  if (!geoKeys || (projected == null && (geographic == null || geographic === 4326))) {
     return identity;
   }
+  // Loaded on demand: the geokeys->proj4 EPSG database is large, so keep it out
+  // of the eager bundle and only pull it in when an export needs it.
+  const { toProj4 } = await import("geotiff-geokeys-to-proj4");
+  let def: string | undefined;
+  try {
+    const projection = toProj4(geoKeys as never);
+    // Drop `+axis=` (proj4 mishandles it) as the raster panel's parser does.
+    def = projection?.proj4?.replace(/\+axis=\w+\s*/g, "");
+  } catch {
+    def = undefined;
+  }
+  if (!def) {
+    throw new Error(
+      "Could not determine this raster's coordinate system to reproject the export area.",
+    );
+  }
+  const converter = proj4("EPSG:4326", def);
+  return (lon, lat) => converter.forward([lon, lat]) as [number, number];
 }
 
 /**
@@ -172,7 +183,9 @@ export async function exportCogSubset(
   if (outW <= 0 || outH <= 0) {
     throw new Error("The selected area does not overlap this raster.");
   }
-  if (outW * outH > MAX_SUBSET_PIXELS) {
+  // Count cells across every band since all are materialized (a wide multiband
+  // window is what actually blows up memory, not the per-band pixel count).
+  if (outW * outH * image.getSamplesPerPixel() > MAX_SUBSET_CELLS) {
     throw new Error(
       "The selected area is too large to export in the browser. Zoom in or draw a smaller box.",
     );
@@ -184,9 +197,22 @@ export async function exportCogSubset(
   });
   const bands = (Array.isArray(read) ? read : [read]) as TypedArray[];
 
-  const encoded = bands.map(encodableBand);
+  let encoded = bands.map(encodableBand);
   const bandCount = encoded.length;
   const pixels = outW * outH;
+  // Bands must share one sample type to interleave into a single buffer. They
+  // normally do, but a mixed-dtype file would truncate later bands when copied
+  // into the first band's array type -- promote every band to Float64 (exact for
+  // all integer/float sample types in play) rather than silently corrupt pixels.
+  if (
+    encoded.some((band) => band.values.constructor !== encoded[0].values.constructor)
+  ) {
+    encoded = encoded.map((band) => ({
+      values: Float64Array.from(band.values),
+      bits: 64,
+      format: 3,
+    }));
+  }
   // Interleave into the flat pixel-major array the writer expects (it infers the
   // band count from values.length / (width * height)).
   const Ctor = encoded[0].values.constructor as new (n: number) => TypedArray;

@@ -116,6 +116,26 @@ describe("exportCogSubset", () => {
     assert.equal(image.getGDALNoData(), 7);
   });
 
+  it("drops the ASCII citation GeoKeys but keeps the numeric ones", async () => {
+    // geotiff writes the *CitationGeoKey ASCII keys in a form GDAL rejects,
+    // which strips the CRS off the file; only the numeric GeoKeys should survive.
+    const source = await makeGeoTiff(
+      4,
+      4,
+      0,
+      4,
+      Array.from({ length: 16 }, (_, i) => i),
+      { GTCitationGeoKey: "WGS 84", GeogCitationGeoKey: "WGS 84" },
+    );
+    const { bytes } = await exportCogSubset(source, [0, 0, 2, 2]);
+    const tiff = await fromArrayBuffer(bytes);
+    const image = await tiff.getImage();
+    const gk = image.getGeoKeys() || {};
+    assert.equal(gk.GeographicTypeGeoKey, 4326);
+    assert.equal(gk.GTCitationGeoKey, undefined);
+    assert.equal(gk.GeogCitationGeoKey, undefined);
+  });
+
   it("throws when the bbox does not overlap the raster", async () => {
     const source = await makeGeoTiff(
       4,
