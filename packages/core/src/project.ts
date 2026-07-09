@@ -539,10 +539,17 @@ export function normalizeSecondaryMapViews(
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const label = normalizeString(candidate.label);
+    // Only the known engine ids survive; an absent/unknown value is omitted so
+    // the pane defaults to the 2D map (back-compat with pre-globe projects).
+    const viewKind =
+      candidate.viewKind === "cesium" || candidate.viewKind === "maplibre"
+        ? candidate.viewKind
+        : undefined;
     views.push({
       id,
       view: normalizeMapViewState(candidate.view),
       ...(label ? { label } : {}),
+      ...(viewKind ? { viewKind } : {}),
       layerVisibility: normalizeLayerVisibility(candidate.layerVisibility),
     });
   }

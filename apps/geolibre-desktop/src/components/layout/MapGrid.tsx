@@ -1,5 +1,9 @@
 import { getCesiumIonToken, useAppStore } from "@geolibre/core";
-import { CesiumCanvas, SecondaryMapCanvas } from "@geolibre/map";
+import {
+  CesiumCanvas,
+  isCesiumSupportedLayerType,
+  SecondaryMapCanvas,
+} from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -165,7 +169,7 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
         {/* Both the 2D map and the 3D globe render the shared layers, so the
             per-pane layer-visibility toggle applies to either. */}
-        <PaneLayerToggle viewId={viewId} index={index} />
+        <PaneLayerToggle viewId={viewId} index={index} is3d={is3d} />
         {/* The 2D/3D toggle only appears when Cesium is available (a token is
             configured); otherwise the globe is not offered. */}
         {cesiumAvailable ? (
@@ -205,14 +209,17 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
 interface PaneLayerToggleProps {
   viewId: string;
   index: number;
+  /** When true this is a 3D-globe pane, so layers it can't render are flagged. */
+  is3d: boolean;
 }
 
 /**
  * A dropdown of the shared layers with a checkbox each, controlling which layers
  * are visible in this pane. A layer's checkbox reflects its effective visibility
- * (the pane's override, or the primary map's visibility when not overridden).
+ * (the pane's override, or the primary map's visibility when not overridden). On
+ * a 3D-globe pane, layer kinds the globe cannot render are tagged "2D only".
  */
-function PaneLayerToggle({ viewId, index }: PaneLayerToggleProps) {
+function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
   const { t } = useTranslation();
   const layers = useAppStore((s) => s.layers);
   const layerVisibility = useAppStore(
@@ -246,6 +253,7 @@ function PaneLayerToggle({ viewId, index }: PaneLayerToggleProps) {
           layers.map((layer) => {
             const override = layerVisibility?.[layer.id];
             const visible = override === undefined ? layer.visible : override;
+            const only2d = is3d && !isCesiumSupportedLayerType(layer);
             return (
               <DropdownMenuCheckboxItem
                 key={layer.id}
@@ -258,6 +266,11 @@ function PaneLayerToggle({ viewId, index }: PaneLayerToggleProps) {
                 onSelect={(event: Event) => event.preventDefault()}
               >
                 <span className="truncate">{layer.name}</span>
+                {only2d ? (
+                  <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
+                    {t("mapGrid.only2d")}
+                  </span>
+                ) : null}
               </DropdownMenuCheckboxItem>
             );
           })

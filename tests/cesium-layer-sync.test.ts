@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import type { GeoLibreLayer } from "../packages/core/src/types";
-import { CesiumLayerSync } from "../packages/map/src/cesium-layer-sync";
+import {
+  CesiumLayerSync,
+  isCesiumSupportedLayerType,
+} from "../packages/map/src/cesium-layer-sync";
 
 // Verifies the store → Cesium reconciler against a fake Cesium namespace + viewer
 // (the real engine never loads here — its import in the module is type-only). It
@@ -213,6 +216,15 @@ describe("CesiumLayerSync", () => {
     sync.sync([mkLayer({ id: "x", type: "xyz", source: { tiles: ["u/{z}/{x}/{y}"] } })]);
     sync.sync([]);
     assert.equal(f.calls.imageryRemoved.length, 1);
+  });
+
+  it("classifies supported vs 2D-only layer kinds", () => {
+    for (const type of ["geojson", "xyz", "raster", "wms", "wmts", "3d-tiles"] as const) {
+      assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), true, type);
+    }
+    for (const type of ["pmtiles", "mbtiles", "zarr", "lidar", "gaussian-splat", "deckgl-viz"] as const) {
+      assert.equal(isCesiumSupportedLayerType(mkLayer({ type })), false, type);
+    }
   });
 
   it("skips unsupported layer kinds and reports them", () => {

@@ -47,16 +47,25 @@ function tilesetUrl(layer: GeoLibreLayer): string | undefined {
   return str(layer.source.url) ?? str(layer.sourcePath);
 }
 
-/** Whether the globe can render this layer at all (see the module header). */
+/**
+ * Whether the globe can render this layer *kind* at all (regardless of whether
+ * its data has loaded yet). Exported so the UI can flag "2D only" layers on a
+ * globe pane. See the module header for the supported kinds.
+ */
+export function isCesiumSupportedLayerType(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "geojson" ||
+    layer.type === "3d-tiles" ||
+    IMAGERY_TYPES.has(layer.type)
+  );
+}
+
+/** Whether this layer can render on the globe now (kind supported + data ready). */
 function isSupported(layer: GeoLibreLayer): boolean {
-  if (layer.type === "geojson") {
-    return Boolean(layer.geojson?.features?.length);
-  }
+  if (!isCesiumSupportedLayerType(layer)) return false;
+  if (layer.type === "geojson") return Boolean(layer.geojson?.features?.length);
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
-  if (IMAGERY_TYPES.has(layer.type)) {
-    return Boolean(firstTile(layer) || str(layer.source.url));
-  }
-  return false;
+  return Boolean(firstTile(layer) || str(layer.source.url));
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {

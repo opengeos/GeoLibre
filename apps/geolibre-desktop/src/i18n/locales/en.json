@@ -1085,7 +1085,8 @@
     "labelLabel": "Label for map {{number}}",
     "removePane": "Remove map {{number}}",
     "show3d": "Show map {{number}} as a 3D globe",
-    "show2d": "Show map {{number}} as a 2D map"
+    "show2d": "Show map {{number}} as a 2D map",
+    "only2d": "2D only"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copy coordinates to clipboard",
