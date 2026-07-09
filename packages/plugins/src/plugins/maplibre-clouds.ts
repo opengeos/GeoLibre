@@ -81,15 +81,16 @@ function utcDaysAgo(days: number): string {
 /**
  * The last {@link HISTORY_DAYS} complete UTC days, oldest first. The current UTC
  * day is skipped because its mosaic is still being imaged (dark/partial), so the
- * newest frame is the previous full day.
+ * newest frame is the previous full day. Exported for unit testing.
  */
-function buildDates(): string[] {
+export function buildDates(): string[] {
   const out: string[] = [];
   for (let i = HISTORY_DAYS; i >= 1; i -= 1) out.push(utcDaysAgo(i));
   return out;
 }
 
-function nasaTileUrl(date: string): string {
+/** Build the GIBS tile URL for a `YYYY-MM-DD` date. Exported for unit testing. */
+export function nasaTileUrl(date: string): string {
   return NASA_VIIRS_TEMPLATE.replace("%DATE%", date);
 }
 
