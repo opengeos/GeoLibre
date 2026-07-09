@@ -480,12 +480,15 @@ fn read_prj_sidecar_crs(shp_path: &str) -> Option<String> {
 
 /// The trimmed contents of a file, or `None` when it cannot be read or is empty.
 fn read_nonempty_trimmed(path: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(path).ok()?;
-    let trimmed = text.trim();
+    // Decode lossily rather than with `read_to_string` so a `.prj` carrying a
+    // stray non-UTF-8 byte still yields its WKT instead of silently reverting to
+    // the pre-fix "no reprojection" behavior.
+    let bytes = std::fs::read(path).ok()?;
+    let trimmed = String::from_utf8_lossy(&bytes).trim().to_string();
     if trimmed.is_empty() {
         None
     } else {
-        Some(trimmed.to_string())
+        Some(trimmed)
     }
 }
 
