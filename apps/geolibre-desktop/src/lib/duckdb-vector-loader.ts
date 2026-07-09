@@ -407,13 +407,37 @@ function crsSql(fileName: string, includeWkt: boolean): string {
 }
 
 /**
+ * The CRS a shapefile's `.prj` sidecar carries, as its raw WKT text, or null
+ * when the file has no `.prj` (or it is empty). Used as the last-resort
+ * reprojection source when ST_Read_Meta cannot report the CRS: ST_Transform
+ * accepts a `.prj`'s WKT string as a source CRS just as it does an
+ * `AUTHORITY:CODE` (issue #1148).
+ *
+ * Must be read BEFORE {@link registerVectorFileBuffers}, which hands each
+ * sibling's buffer to the DuckDB worker as a transferable and so detaches it —
+ * afterwards `sibling.data` is a zero-length view and the WKT is lost.
+ */
+function prjSidecarCrs(file: DuckDbVectorFile): string | null {
+  const prj = file.siblingFiles?.find((sibling) => sibling.extension === "prj");
+  if (!prj) return null;
+  const text = new TextDecoder().decode(prj.data).trim();
+  return text || null;
+}
+
+/**
  * Resolve the source CRS of a vector file as a string ST_Transform accepts —
- * `AUTHORITY:CODE` when GDAL identified one, otherwise the raw WKT definition, or
- * null when the file carries no usable CRS (so reprojection is skipped).
+ * `AUTHORITY:CODE` when GDAL identified one, otherwise the raw WKT definition,
+ * else a shapefile's `.prj` sidecar text, or null when the file carries no
+ * usable CRS (so reprojection is skipped).
+ *
+ * `prjCrs` is the `.prj` sidecar WKT captured by {@link prjSidecarCrs} before
+ * the file buffers were registered (which detaches them), passed in because it
+ * can no longer be read from `file.siblingFiles` here.
  */
 async function readSourceCrs(
   connection: duckdb.AsyncDuckDBConnection,
   file: DuckDbVectorFile,
+  prjCrs: string | null,
 ): Promise<string | null> {
   // GeoParquet CRS is not read via ST_Read_Meta, so reprojection is skipped.
   // A spec-valid GeoParquet file not stored in WGS84 will render with wrong
@@ -433,6 +457,14 @@ async function readSourceCrs(
     try {
       row = rowsFromResult(await connection.query(crsSql(file.name, false)))[0];
     } catch (retryErr) {
+      // ST_Read_Meta cannot materialize this file's CRS metadata at all. Some
+      // GDAL/PROJ builds (notably duckdb-wasm) throw "cannot be formatted as
+      // WKT1 TOWGS84 parameters" for a datum whose transform to WGS84 is
+      // grid-based rather than a 7-parameter shift (e.g. OSGB36 / EPSG:27700),
+      // which fails even the auth-code-only query. A shapefile still carries its
+      // CRS in the `.prj` sidecar, so reproject from that before giving up
+      // (issue #1148).
+      if (prjCrs) return prjCrs;
       console.warn(
         "[GeoLibre] Could not read CRS metadata; reprojection skipped.",
         retryErr,
@@ -440,15 +472,16 @@ async function readSourceCrs(
       return null;
     }
   }
-  if (!row) return null;
+  if (!row) return prjCrs;
   const authName =
     typeof row.auth_name === "string" ? row.auth_name.trim() : "";
   const authCode = row.auth_code != null ? String(row.auth_code).trim() : "";
   if (authName && authCode) return `${authName.toUpperCase()}:${authCode}`;
   // No EPSG identity: fall back to the raw WKT so a projected file without a
-  // recognised authority code still reprojects (issue #1121).
+  // recognised authority code still reprojects (issue #1121), and to the `.prj`
+  // sidecar when even the WKT field is empty (issue #1148).
   const wkt = typeof row.wkt === "string" ? row.wkt.trim() : "";
-  return wkt || null;
+  return wkt || prjCrs;
 }
 
 function toFeatureCollection(
@@ -611,6 +644,11 @@ export async function loadDuckDbVectorFile(
   const db = await getDatabase();
   const connection = await db.connect();
 
+  // Capture the `.prj` sidecar CRS before registering the file buffers, which
+  // detaches each sibling's ArrayBuffer (transferred to the worker) and would
+  // leave the `.prj` unreadable by the reprojection fallback (issue #1148).
+  const prjCrs = prjSidecarCrs(file);
+
   try {
     await registerVectorFileBuffers(db, file);
     await ensureSpatialExtension(
@@ -639,7 +677,7 @@ export async function loadDuckDbVectorFile(
     // surface-WKB fallback below can reuse it.
     const sourceCrs =
       options.overrideSourceCrs?.trim() ||
-      (await readSourceCrs(connection, file));
+      (await readSourceCrs(connection, file, prjCrs));
 
     // Tracks whether the large-dataset guard already confirmed, so the
     // surface-WKB fallback does not prompt a second time (or skip it entirely
