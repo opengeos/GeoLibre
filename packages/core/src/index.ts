@@ -85,6 +85,10 @@ export {
 } from "./runtime-env";
 export {
   GOOGLE_MAPS_API_KEY_HEADER,
+  googleMapsApiKeyHeaderValue,
   isGooglePhotorealisticTilesetUrl,
+  nonEmptyRecord,
+  persistedThreeDTilesRequestHeaders,
   resolveThreeDTilesRequestHeaders,
+  stripGoogleMapsApiKeyHeader,
 } from "./three-d-tiles";
