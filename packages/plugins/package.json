@@ -54,7 +54,7 @@
     "maplibre-gl-swipe": "^0.10.1",
     "maplibre-gl-time-slider": "^1.1.0",
     "maplibre-gl-usgs-lidar": "^0.11.1",
-    "maplibre-gl-vector": "^0.9.1",
+    "maplibre-gl-vector": "^0.9.2",
     "netcdfjs": "^4.0.0",
     "proj4": "^2.20.9",
     "shpjs": "^6.2.0",
