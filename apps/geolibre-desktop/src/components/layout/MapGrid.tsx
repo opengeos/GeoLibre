@@ -163,9 +163,9 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
         ariaLabel={t("mapGrid.labelLabel", { number: index + 2 })}
       />
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
-        {/* The 3D globe shares the layer subset toggle, but it does not yet
-            render layers (M1), so it is only meaningful for the 2D pane. */}
-        {is3d ? null : <PaneLayerToggle viewId={viewId} index={index} />}
+        {/* Both the 2D map and the 3D globe render the shared layers, so the
+            per-pane layer-visibility toggle applies to either. */}
+        <PaneLayerToggle viewId={viewId} index={index} />
         {/* The 2D/3D toggle only appears when Cesium is available (a token is
             configured); otherwise the globe is not offered. */}
         {cesiumAvailable ? (

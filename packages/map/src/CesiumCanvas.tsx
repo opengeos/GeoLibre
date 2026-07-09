@@ -1,18 +1,25 @@
-import { useAppStore, type MapViewState } from "@geolibre/core";
+import {
+  applyGroupEffects,
+  useAppStore,
+  type GeoLibreLayer,
+  type MapViewState,
+} from "@geolibre/core";
 import type { Viewer } from "cesium";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyMapViewToCamera,
   isSameView,
   readMapViewFromCamera,
 } from "./cesium-camera";
+import { CesiumLayerSync } from "./cesium-layer-sync";
 
 // The Cesium 3D-globe view (see private/cesium-view-plan.md). M1 wired the
-// build, token, and split-pane mount; M2 (this) syncs the camera with the shared
-// store `mapView`, exactly as SecondaryMapCanvas does for the 2D panes — panning
-// or zooming any pane moves them all when sync is on. Layer/basemap sync is M3.
-// The whole Cesium engine is loaded lazily inside the mount effect so it stays
-// in its own build chunk and never touches the 2D boot path.
+// build, token, and split-pane mount; M2 synced the camera with the shared store
+// `mapView`; M3 (this) renders the store's data layers on the globe — GeoJSON,
+// XYZ/WMS/WMTS raster tiles, and 3D Tiles — reusing the same per-pane
+// layer-visibility overrides as SecondaryMapCanvas. The whole Cesium engine is
+// loaded lazily inside the mount effect so it stays in its own build chunk and
+// never touches the 2D boot path.
 
 /** Where copy-cesium-assets.ts stages Cesium's Workers/Assets/Widgets. */
 const CESIUM_BASE_URL = "/cesium";
@@ -61,6 +68,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<Viewer | null>(null);
   const cesiumRef = useRef<typeof import("cesium") | null>(null);
+  const layerSyncRef = useRef<CesiumLayerSync | null>(null);
   // The last view we pushed into the camera. Applying a view fires Cesium's
   // moveEnd with a (rounding-drifted) echo of that same view; comparing against
   // this lets the moveEnd handler tell a real user move from that echo.
@@ -84,6 +92,29 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   const entryView = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.view,
   );
+
+  // Layer sync inputs, mirrored from SecondaryMapCanvas: the shared layers with
+  // this pane's per-layer visibility overrides, then group effects folded in.
+  const layers = useAppStore((s) => s.layers);
+  const layerGroups = useAppStore((s) => s.layerGroups);
+  const layerVisibility = useAppStore(
+    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.layerVisibility,
+  );
+  const paneLayers = useMemo<GeoLibreLayer[]>(() => {
+    const withOverrides = !layerVisibility
+      ? layers
+      : layers.map((layer) => {
+          const override = layerVisibility[layer.id];
+          return override === undefined || override === layer.visible
+            ? layer
+            : { ...layer, visible: override };
+        });
+    return applyGroupEffects(withOverrides, layerGroups);
+  }, [layers, layerVisibility, layerGroups]);
+  // Read the latest layers from the mount effect's initial sync without making
+  // that dependency-free effect re-run.
+  const paneLayersRef = useRef(paneLayers);
+  paneLayersRef.current = paneLayers;
 
   // Push a store view into the camera and remember it as the expected echo.
   function applyView(view: MapViewState): void {
@@ -144,6 +175,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         }
         cesiumRef.current = Cesium;
         viewerRef.current = viewer;
+        layerSyncRef.current = new CesiumLayerSync(Cesium, viewer);
 
         // With a token, add Cesium World Terrain so tilted views show relief.
         if (token) {
@@ -160,6 +192,9 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           (p) => p.id === viewIdRef.current,
         );
         applyView(state.mapLayout.syncView ? state.mapView : pane?.view ?? state.mapView);
+
+        // Render the store layers on the globe before the first frame.
+        layerSyncRef.current?.sync(paneLayersRef.current);
 
         // Mirror a user's globe navigation back into the shared camera. Echoes
         // of our own applyView are filtered by the isSameView guard.
@@ -184,6 +219,8 @@ export const CesiumCanvas = memo(function CesiumCanvas({
 
     return () => {
       cancelled = true;
+      layerSyncRef.current?.destroy();
+      layerSyncRef.current = null;
       const viewer = viewerRef.current;
       if (viewer && !viewer.isDestroyed()) viewer.destroy();
       viewerRef.current = null;
@@ -191,6 +228,14 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Reconcile the store layers (with this pane's overrides) onto the globe
+  // whenever they change. `ready` re-runs this once the viewer exists; the
+  // mount effect's initial sync already covers the value captured at ready time.
+  useEffect(() => {
+    if (!ready) return;
+    layerSyncRef.current?.sync(paneLayers);
+  }, [ready, paneLayers]);
 
   // Synced: follow the shared global camera. Depend on primitives so an
   // equal-valued mapView object does not re-apply. `ready` re-runs this once the
