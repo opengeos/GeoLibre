@@ -303,6 +303,20 @@ describe("CesiumLayerSync", () => {
     );
   });
 
+  it("rebuilds a wms layer when a GetMap param (e.g. styles) changes", () => {
+    const sync = newSync(f);
+    const base = mkLayer({
+      id: "w",
+      type: "wms",
+      source: { url: "https://wms/service", layers: "topo", styles: "a" },
+    });
+    sync.sync([base]);
+    sync.sync([{ ...base, source: { ...base.source, styles: "b" } }]);
+    assert.equal(f.calls.wmsProviders.length, 2);
+    assert.equal(f.calls.imageryRemoved.length, 1);
+    assert.equal((f.calls.wmsProviders[1].parameters as { styles: string }).styles, "b");
+  });
+
   it("renders a 3d-tiles layer as a primitive from its tileset url", async () => {
     const sync = newSync(f);
     sync.sync([

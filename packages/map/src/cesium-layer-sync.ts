@@ -115,7 +115,13 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
       return (
         firstTile(prev) !== firstTile(next) ||
         str(prev.source.url) !== str(next.source.url) ||
-        str(prev.source.layers) !== str(next.source.layers)
+        str(prev.source.layers) !== str(next.source.layers) ||
+        // WMS GetMap params baked into the provider at creation; a change must
+        // rebuild it so the globe doesn't keep the stale WebMapServiceImageryProvider.
+        str(prev.source.styles) !== str(next.source.styles) ||
+        str(prev.source.format) !== str(next.source.format) ||
+        str(prev.source.version) !== str(next.source.version) ||
+        prev.source.transparent !== next.source.transparent
       );
     case "3dtiles":
       return (
