@@ -16,6 +16,7 @@ function makeFakes() {
   const calls = {
     imageryAdded: [] as unknown[],
     imageryRemoved: [] as unknown[],
+    imageryStack: [] as { url?: string }[],
     dataSourcesAdded: [] as unknown[],
     dataSourcesRemoved: [] as unknown[],
     primitivesAdded: [] as unknown[],
@@ -36,12 +37,26 @@ function makeFakes() {
     },
     imageryLayers: {
       addImageryProvider: (provider: unknown) => {
-        const layer = { kind: "imagery", provider, show: true, alpha: 1 };
+        const layer = {
+          kind: "imagery",
+          provider,
+          url: (provider as { url?: string }).url,
+          show: true,
+          alpha: 1,
+        };
         calls.imageryAdded.push(layer);
+        calls.imageryStack.push(layer);
         return layer;
       },
-      remove: (layer: unknown, _destroy?: boolean) =>
-        calls.imageryRemoved.push(layer),
+      remove: (layer: unknown, _destroy?: boolean) => {
+        calls.imageryRemoved.push(layer);
+        const i = calls.imageryStack.indexOf(layer as { url?: string });
+        if (i >= 0) calls.imageryStack.splice(i, 1);
+      },
+      raiseToTop: (layer: unknown) => {
+        const i = calls.imageryStack.indexOf(layer as { url?: string });
+        if (i >= 0) calls.imageryStack.push(...calls.imageryStack.splice(i, 1));
+      },
     },
     dataSources: {
       add: (ds: unknown) => {
@@ -55,12 +70,16 @@ function makeFakes() {
 
   const Cesium = {
     UrlTemplateImageryProvider: class {
+      url?: string;
       constructor(opts: Record<string, unknown>) {
+        this.url = opts.url as string | undefined;
         calls.urlProviders.push(opts);
       }
     },
     WebMapServiceImageryProvider: class {
+      url?: string;
       constructor(opts: Record<string, unknown>) {
+        this.url = opts.url as string | undefined;
         calls.wmsProviders.push(opts);
       }
     },
@@ -201,19 +220,49 @@ describe("CesiumLayerSync", () => {
     assert.equal(layer.show, false);
   });
 
-  it("renders a wms layer via WebMapServiceImageryProvider", () => {
+  it("renders a wms layer via WebMapServiceImageryProvider with its GetMap params", () => {
     const sync = newSync(f);
     sync.sync([
       mkLayer({
         id: "w",
         type: "wms",
-        source: { url: "https://wms/service", layers: "topo", tiles: ["ignored{bbox-epsg-3857}"] },
+        source: {
+          url: "https://wms/service",
+          layers: "topo",
+          styles: "boundaries",
+          format: "image/jpeg",
+          transparent: false,
+          version: "1.3.0",
+          tiles: ["ignored{bbox-epsg-3857}"],
+        },
       }),
     ]);
     assert.equal(f.calls.wmsProviders.length, 1);
     assert.equal(f.calls.wmsProviders[0].url, "https://wms/service");
     assert.equal(f.calls.wmsProviders[0].layers, "topo");
+    // The user's chosen style/format/version/transparent must pass through so
+    // the globe matches the 2D map (not silent defaults).
+    const params = f.calls.wmsProviders[0].parameters as Record<string, unknown>;
+    assert.equal(params.styles, "boundaries");
+    assert.equal(params.format, "image/jpeg");
+    assert.equal(params.version, "1.3.0");
+    assert.equal(params.transparent, false);
     assert.equal(f.calls.urlProviders.length, 0);
+  });
+
+  it("re-asserts imagery stacking in store order after a middle-layer rebuild", () => {
+    const sync = newSync(f);
+    const A = mkLayer({ id: "a", type: "xyz", source: { tiles: ["a/{z}/{x}/{y}"] } });
+    const B = mkLayer({ id: "b", type: "xyz", source: { tiles: ["b/{z}/{x}/{y}"] } });
+    const C = mkLayer({ id: "c", type: "xyz", source: { tiles: ["c/{z}/{x}/{y}"] } });
+    sync.sync([A, B, C]);
+    // Rebuild the middle layer (its handle re-appends to the top); the reorder
+    // pass must restore [a, b2, c] bottom-to-top instead of leaving [a, c, b2].
+    sync.sync([A, { ...B, source: { tiles: ["b2/{z}/{x}/{y}"] } }, C]);
+    assert.deepEqual(
+      f.calls.imageryStack.map((l) => l.url),
+      ["a/{z}/{x}/{y}", "b2/{z}/{x}/{y}", "c/{z}/{x}/{y}"],
+    );
   });
 
   it("renders a 3d-tiles layer as a primitive from its tileset url", async () => {

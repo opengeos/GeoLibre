@@ -169,6 +169,18 @@ export class CesiumLayerSync {
         this.applyAppearance(existing);
       }
     }
+
+    // addImageryProvider always appends to the top, so a rebuild (or a panel
+    // reorder, which doesn't rebuild) can leave the globe's imagery stack out of
+    // step with the store order. Re-assert it: raising each imagery layer to the
+    // top in store order leaves them stacked bottom-to-top exactly as the store
+    // lists them, while the base imagery (never raised) stays at the bottom.
+    for (const layer of layers) {
+      const entry = this.entries.get(layer.id);
+      if (entry?.kind === "imagery" && entry.handle) {
+        this.viewer.imageryLayers.raiseToTop(entry.handle as ImageryLayer);
+      }
+    }
   }
 
   /** Layer ids present but not renderable on the globe (for a UI hint). */
@@ -196,10 +208,18 @@ export class CesiumLayerSync {
     try {
       let provider;
       if (layer.type === "wms" && str(layer.source.url)) {
+        // Pass through the same GetMap params the 2D path records on the layer
+        // (WmsSource.tsx), so a non-default style/format/version or an opaque
+        // (transparent:false) overlay renders the same on the globe as on the map.
         provider = new Cesium.WebMapServiceImageryProvider({
           url: String(layer.source.url),
           layers: String(layer.source.layers ?? ""),
-          parameters: { transparent: true, format: "image/png" },
+          parameters: {
+            transparent: layer.source.transparent !== false,
+            format: str(layer.source.format) ?? "image/png",
+            styles: str(layer.source.styles) ?? "",
+            version: str(layer.source.version) ?? "1.1.1",
+          },
         });
       } else {
         const url = firstTile(layer);
