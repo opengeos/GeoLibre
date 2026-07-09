@@ -29,6 +29,7 @@ import {
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
+  CLOUDS_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
 } from "@geolibre/plugins";
@@ -856,6 +857,7 @@ export function TopToolbar({
           plugin.id !== DIRECTIONS_PLUGIN_ID &&
           plugin.id !== REVERSE_GEOCODE_PLUGIN_ID &&
           plugin.id !== GRATICULE_PLUGIN_ID &&
+          plugin.id !== CLOUDS_PLUGIN_ID &&
           plugin.id !== DECK_VIZ_PLUGIN_ID,
       )
       .map((plugin) => ({
@@ -1017,6 +1019,7 @@ export function TopToolbar({
           directionsActive={isActive(DIRECTIONS_PLUGIN_ID)}
           reverseGeocodeActive={isActive(REVERSE_GEOCODE_PLUGIN_ID)}
           graticuleActive={isActive(GRATICULE_PLUGIN_ID)}
+          cloudsActive={isActive(CLOUDS_PLUGIN_ID)}
           onToggleMapControl={toggleMapControl}
           onToggleEffects={() => toggle(EFFECTS_PLUGIN_ID, appApi)}
           getEffectsSettings={getEffectsSettings}
@@ -1025,6 +1028,7 @@ export function TopToolbar({
           onToggleDirections={consent.handleToggleDirections}
           onToggleReverseGeocode={consent.handleToggleReverseGeocode}
           onToggleGraticule={() => toggle(GRATICULE_PLUGIN_ID, appApi)}
+          onToggleClouds={() => toggle(CLOUDS_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
           onOpenRecordTour={() => setRecordTourOpen(true)}
         />

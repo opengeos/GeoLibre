@@ -354,6 +354,18 @@ export {
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
 export {
+  maplibreCloudsPlugin,
+  CLOUDS_PLUGIN_ID,
+  CLOUDS_OPACITY_MIN,
+  CLOUDS_OPACITY_MAX,
+  DEFAULT_CLOUDS_SETTINGS,
+  getCloudsSettings,
+  setCloudsSettings,
+  normalizeCloudsSettings,
+  type CloudsSettings,
+  type CloudsSource,
+} from "./plugins/maplibre-clouds";
+export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
   getActiveTimeSliderControl,

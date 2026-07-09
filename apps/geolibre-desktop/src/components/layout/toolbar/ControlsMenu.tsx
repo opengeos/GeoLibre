@@ -1,11 +1,17 @@
 import { useAppStore } from "@geolibre/core";
 import {
+  CLOUDS_OPACITY_MAX,
+  CLOUDS_OPACITY_MIN,
+  type CloudsSettings,
+  type CloudsSource,
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
+  getCloudsSettings,
   HALO_EXTENT_MAX,
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
+  setCloudsSettings,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -46,6 +52,7 @@ interface ControlsMenuProps {
   directionsActive: boolean;
   reverseGeocodeActive: boolean;
   graticuleActive: boolean;
+  cloudsActive: boolean;
   onToggleMapControl: (control: ToolbarMapControl) => void;
   onToggleEffects: () => void;
   getEffectsSettings: () => EffectsSettings;
@@ -54,6 +61,7 @@ interface ControlsMenuProps {
   onToggleDirections: () => void;
   onToggleReverseGeocode: () => void;
   onToggleGraticule: () => void;
+  onToggleClouds: () => void;
   onOpenFieldCollection: () => void;
   onOpenRecordTour: () => void;
 }
@@ -67,6 +75,7 @@ export function ControlsMenu({
   directionsActive,
   reverseGeocodeActive,
   graticuleActive,
+  cloudsActive,
   onToggleMapControl,
   onToggleEffects,
   getEffectsSettings,
@@ -75,6 +84,7 @@ export function ControlsMenu({
   onToggleDirections,
   onToggleReverseGeocode,
   onToggleGraticule,
+  onToggleClouds,
   onOpenFieldCollection,
   onOpenRecordTour,
 }: ControlsMenuProps) {
@@ -118,6 +128,7 @@ export function ControlsMenu({
       show(`controls.mapControl.${control.id}`),
     ) ||
     show("controls.atmosphereEffects") ||
+    show("controls.clouds") ||
     show("controls.spinGlobe") ||
     show("controls.graticule") ||
     show("controls.sun") ||
@@ -174,6 +185,9 @@ export function ControlsMenu({
               onPreview={onPreviewEffectsSettings}
               onCommit={onCommitEffectsSettings}
             />
+          )}
+          {show("controls.clouds") && (
+            <CloudsSubmenu active={cloudsActive} onToggle={onToggleClouds} />
           )}
           {show("controls.sun") && (
             <DropdownMenuItem
@@ -448,6 +462,94 @@ function AtmosphereEffectsSubmenu({
         >
           {t("toolbar.atmosphere.reset")}
         </DropdownMenuItem>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}
+
+interface CloudsSubmenuProps {
+  active: boolean;
+  onToggle: () => void;
+}
+
+/**
+ * Submenu for the realtime Clouds overlay: an on/off toggle, a source picker
+ * (Realtime infrared vs. Satellite true colour), and an opacity slider.
+ *
+ * Settings live in module state in the clouds plugin, so this keeps a local
+ * mirror seeded each time the submenu opens. Edits apply to the live map
+ * immediately via {@link setCloudsSettings} and persist with the project on the
+ * next save (matching the Gridlines plugin).
+ */
+function CloudsSubmenu({ active, onToggle }: CloudsSubmenuProps) {
+  const { t } = useTranslation();
+  const [settings, setSettings] = useState<CloudsSettings>(getCloudsSettings);
+
+  const update = (next: Partial<CloudsSettings>) => {
+    setSettings((prev) => ({ ...prev, ...next }));
+    setCloudsSettings(next);
+  };
+
+  const sources: Array<{ value: CloudsSource; label: string }> = [
+    { value: "realtime", label: t("toolbar.item.cloudsSourceRealtime") },
+    { value: "satellite", label: t("toolbar.item.cloudsSourceSatellite") },
+  ];
+
+  return (
+    <DropdownMenuSub
+      onOpenChange={(open: boolean) => {
+        // Re-seed from the source of truth on open so the controls reflect a
+        // project that loaded new settings while the menu was closed.
+        if (open) setSettings(getCloudsSettings());
+      }}
+    >
+      <DropdownMenuSubTrigger title={t("toolbar.item.cloudsTooltip")}>
+        {t("toolbar.item.clouds")}
+        {active ? " ✓" : ""}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-64">
+        <DropdownMenuItem
+          // onSelect (not onClick) fires for both mouse and keyboard
+          // (Enter/Space); preventDefault keeps the submenu open after toggling.
+          onSelect={(e: Event) => {
+            e.preventDefault();
+            onToggle();
+          }}
+        >
+          {t("toolbar.item.cloudsShow")}
+          {active ? " ✓" : ""}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          {t("toolbar.item.cloudsSource")}
+        </DropdownMenuLabel>
+        {sources.map((source) => (
+          <DropdownMenuItem
+            key={source.value}
+            onSelect={(e: Event) => {
+              e.preventDefault();
+              update({ source: source.value });
+            }}
+          >
+            {source.label}
+            {settings.source === source.value ? " ✓" : ""}
+          </DropdownMenuItem>
+        ))}
+        <DropdownMenuSeparator />
+        {/* Stop key events from reaching the menu's roving-focus/typeahead
+            handlers so the slider responds to arrow keys. */}
+        <div className="px-2 py-1.5" onKeyDown={(e) => e.stopPropagation()}>
+          <SliderRow
+            label={t("toolbar.item.cloudsOpacity")}
+            min={CLOUDS_OPACITY_MIN}
+            max={CLOUDS_OPACITY_MAX}
+            step={0.05}
+            value={settings.opacity}
+            format={(v) => `${Math.round(v * 100)}%`}
+            onPreview={(opacity) => update({ opacity })}
+            onCommit={() => {}}
+          />
+        </div>
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
