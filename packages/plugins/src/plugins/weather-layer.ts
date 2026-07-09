@@ -50,6 +50,12 @@ export interface WeatherLayerConfig {
   serviceUrl: string;
   /** Source maxzoom; MapLibre overzooms above it. */
   maxzoom: number;
+  /**
+   * Tile size in px (default 256). A larger size (e.g. 512) covers the viewport
+   * with far fewer tiles, so each frame swap issues a fraction of the requests —
+   * key to keeping an animated tile source under a public host's rate limit.
+   */
+  tileSize?: number;
   /** Initial layer opacity (the user adjusts it from the Layers panel). */
   opacity: number;
   /** Animation frame interval while playing, in ms. */
@@ -180,6 +186,7 @@ export function createWeatherLayer(
           url: config.serviceUrl,
           attribution: config.attribution,
           maxzoom: config.maxzoom,
+          tileSize: config.tileSize ?? 256,
           opacity: config.opacity,
           metadata: { ...frame.metadata, [config.layerFlag]: true },
         });

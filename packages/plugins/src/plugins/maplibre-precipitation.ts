@@ -25,12 +25,20 @@ const RAINVIEWER_API = "https://api.rainviewer.com/public/weather-maps.json";
 const RAINVIEWER_ATTRIBUTION =
   'Radar &copy; <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>';
 const RAINVIEWER_SERVICE_URL = "https://www.rainviewer.com/";
-/** RainViewer serves radar tiles to ~z10; overzoom above that. */
-const RAINVIEWER_MAXZOOM = 10;
+/**
+ * 512-px tiles cover the viewport with ~4× fewer tiles than 256-px, and the
+ * z6 cap (MapLibre overzooms above it) means zooming in reuses cached tiles
+ * instead of fetching new ones. Together they keep the animated radar source
+ * well under RainViewer's public rate limit — the earlier defaults flooded it
+ * and requests started failing ("Failed to fetch") while zooming/playing.
+ */
+const RAINVIEWER_TILE_SIZE = 512;
+const RAINVIEWER_MAXZOOM = 6;
 /** Colour scheme (4 = "Weather Channel") and options (`{smooth}_{snow}`). */
 const RADAR_COLOR = 4;
 const RADAR_OPTIONS = "1_1";
-const FRAME_MS = 700;
+/** Gentler cadence so tile loads for one frame settle before the next swap. */
+const FRAME_MS = 1000;
 
 interface RainViewerFrame {
   time: number;
@@ -91,7 +99,7 @@ async function loadRadarFrames(): Promise<WeatherFrame[]> {
       .map((f) => {
         const label = formatTime(f.time);
         return {
-          tileUrl: `${host}${f.path}/256/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
+          tileUrl: `${host}${f.path}/${RAINVIEWER_TILE_SIZE}/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
           label,
           metadata: precipitationMetadata(f.time, label),
         };
@@ -107,6 +115,7 @@ const controller = createWeatherLayer({
   attribution: RAINVIEWER_ATTRIBUTION,
   serviceUrl: RAINVIEWER_SERVICE_URL,
   maxzoom: RAINVIEWER_MAXZOOM,
+  tileSize: RAINVIEWER_TILE_SIZE,
   opacity: 0.8,
   frameMs: FRAME_MS,
   loadFrames: loadRadarFrames,
