@@ -40,6 +40,22 @@ The built-in global shortcuts are:
 | `Ctrl`/`Cmd` + `O` | Open project from file |
 | `Ctrl`/`Cmd` + `S` | Save project |
 | `Ctrl`/`Cmd` + `Shift` + `S` | Save project as… |
+| `N` | Reset bearing (north up) |
+| `U` | Reset pitch (top-down view) |
+| `R` | Reset pitch and bearing |
+| `[` | Previous view |
+| `]` | Next view |
+
+The single-key view shortcuts mirror Google Earth Pro (`N` for north up, `U` for top-down, `R` to reset the view) and work anywhere in the app.
+
+While the map has keyboard focus, MapLibre's own navigation keys are also available:
+
+| Key | Action |
+| --- | --- |
+| `+` / `-` | Zoom in / out |
+| Arrow keys | Pan |
+| `Shift` + `←` / `→` | Rotate |
+| `Shift` + `↑` / `↓` | Tilt |
 
 Shortcuts are ignored while you are typing in a text field, so they never interfere with search boxes or attribute editing. On macOS the `Cmd` key is used; on Windows and Linux the `Ctrl` key is used.
 

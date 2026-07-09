@@ -50,6 +50,7 @@ import {
   FolderGit2,
   FolderOpen,
   Globe,
+  Grid2x2,
   Info,
   Keyboard,
   Link2,
@@ -739,6 +740,8 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.view"),
       keywords: "back history viewport extent previous undo pan zoom",
       icon: ArrowLeft,
+      // "[" / "]" step through viewport history (unbound by MapLibre).
+      shortcut: { key: "[" },
       run: viewportHistory.goBack,
     },
     {
@@ -747,6 +750,7 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.view"),
       keywords: "forward history viewport extent next redo pan zoom",
       icon: ArrowRight,
+      shortcut: { key: "]" },
       run: viewportHistory.goForward,
     },
     {
@@ -755,7 +759,21 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.view"),
       keywords: "north bearing rotation rotate compass orientation",
       icon: Compass,
+      // Plain "N" (Google Earth Pro's north-up shortcut). No modifier, so it
+      // never clashes with ⌘/Ctrl+N (New project) and leaves MapLibre's own
+      // arrow/zoom keys untouched.
+      shortcut: { key: "n" },
       run: () => mapControllerRef.current?.resetNorth(),
+    },
+    {
+      id: "view.reset-pitch",
+      title: t("toolbar.command.resetPitch"),
+      group: t("toolbar.commandGroup.view"),
+      keywords: "pitch tilt top down overhead flat level plan 2d reset",
+      icon: Grid2x2,
+      // Plain "U" resets pitch to a top-down view (Google Earth Pro's shortcut).
+      shortcut: { key: "u" },
+      run: () => mapControllerRef.current?.resetPitch(),
     },
     {
       id: "view.reset-pitch-bearing",
@@ -763,6 +781,8 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.view"),
       keywords: "pitch bearing tilt rotation north flat level 3d",
       icon: Mountain,
+      // Plain "R" resets pitch and bearing (like Google Earth Pro's reset view).
+      shortcut: { key: "r" },
       run: () => mapControllerRef.current?.resetNorthPitch(),
     },
     {

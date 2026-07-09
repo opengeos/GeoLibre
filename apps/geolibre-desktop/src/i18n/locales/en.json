@@ -1443,6 +1443,7 @@
       "previousView": "Previous View",
       "nextView": "Next View",
       "resetNorth": "Reset Bearing",
+      "resetPitch": "Reset Pitch",
       "resetPitchBearing": "Reset Pitch & Bearing",
       "setView": "Set View",
       "zoomIn": "Zoom In",
