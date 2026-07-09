@@ -1,6 +1,6 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
-import type { RuntimeEnv } from "../lib/assistant/provider";
+import { scopeOsEnvToProject, type RuntimeEnv } from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 
 export function useRuntimeEnvironmentVariables() {
@@ -46,17 +46,21 @@ export function useRuntimeEnvironmentVariables() {
     if (geocoding.email?.trim())
       geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
 
+    const projectEnv = Object.fromEntries(
+      environmentVariables
+        .filter((variable) => variable.enabled && variable.key.trim())
+        .map((variable) => [variable.key.trim(), variable.value]),
+    );
+
     const runtimeEnv = {
       // OS-provided AI keys sit at the lowest precedence: an explicit value in
       // the project's Environment variables (or a derived geocoder var) always
-      // wins, and the OS environment only fills the gaps.
-      ...osEnv,
+      // wins, and the OS environment only fills the gaps. scopeOsEnvToProject
+      // also drops OS aliases the project defines under a different alias, so the
+      // "project always wins" guarantee holds across alias collisions too.
+      ...scopeOsEnvToProject(osEnv, new Set(Object.keys(projectEnv))),
       ...geocoderEnv,
-      ...Object.fromEntries(
-        environmentVariables
-          .filter((variable) => variable.enabled && variable.key.trim())
-          .map((variable) => [variable.key.trim(), variable.value]),
-      ),
+      ...projectEnv,
     };
 
     // Always keep the global env in sync so plugins can read it when they

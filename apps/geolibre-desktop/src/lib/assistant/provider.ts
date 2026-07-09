@@ -103,6 +103,44 @@ export const OS_ENV_VAR_NAMES: readonly string[] = [
 ];
 
 /**
+ * Groups of {@link OS_ENV_VAR_NAMES} that are interchangeable aliases for one
+ * credential. {@link firstValue} resolves aliases by *order*, not by source, so
+ * without this a project value set under a different alias than the OS value
+ * would not win — e.g. OS `GEMINI_API_KEY` would shadow a project `GOOGLE_API_KEY`
+ * because it is checked first. {@link scopeOsEnvToProject} uses these groups so a
+ * credential the project defines under any alias shadows every OS-sourced alias
+ * of the same credential, keeping the "project always wins" precedence true.
+ */
+export const OS_ENV_ALIAS_GROUPS: readonly (readonly string[])[] = [
+  ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"],
+];
+
+/**
+ * Drop OS-sourced variables that the project already provides. An exact-name
+ * collision is left to the caller's spread order, but an alias collision (the
+ * project set a *different* alias of the same credential) is resolved here by
+ * removing the whole OS-sourced alias group — see {@link OS_ENV_ALIAS_GROUPS}.
+ *
+ * @param osEnv Variables read from the OS environment.
+ * @param projectKeys The names the project's Environment variables define.
+ * @returns `osEnv` without any variable the project already covers.
+ */
+export function scopeOsEnvToProject(
+  osEnv: RuntimeEnv,
+  projectKeys: ReadonlySet<string>,
+): RuntimeEnv {
+  const scoped: RuntimeEnv = {};
+  for (const [key, value] of Object.entries(osEnv)) {
+    const group = OS_ENV_ALIAS_GROUPS.find((names) => names.includes(key));
+    const shadowed = group
+      ? group.some((name) => projectKeys.has(name))
+      : projectKeys.has(key);
+    if (!shadowed) scoped[key] = value;
+  }
+  return scoped;
+}
+
+/**
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`
  * (or the per-provider env var) or the model picker. The hosted-model ids were

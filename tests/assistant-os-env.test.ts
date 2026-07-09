@@ -4,6 +4,7 @@ import {
   OS_ENV_VAR_NAMES,
   availableProviders,
   configForProvider,
+  scopeOsEnvToProject,
 } from "../apps/geolibre-desktop/src/lib/assistant/provider";
 import { PROVIDER_FIELDS } from "../apps/geolibre-desktop/src/lib/assistant/provider-fields";
 
@@ -95,5 +96,44 @@ describe("OS env feeds provider resolution", () => {
       configForProvider("openai", undefined, merged)?.apiKey,
       "project-key",
     );
+  });
+});
+
+describe("scopeOsEnvToProject", () => {
+  const merge = (
+    osEnv: Record<string, string>,
+    projectEnv: Record<string, string>,
+  ) => ({
+    ...scopeOsEnvToProject(osEnv, new Set(Object.keys(projectEnv))),
+    ...projectEnv,
+  });
+
+  it("keeps OS values the project does not define", () => {
+    assert.deepEqual(scopeOsEnvToProject({ OPENAI_API_KEY: "os" }, new Set()), {
+      OPENAI_API_KEY: "os",
+    });
+  });
+
+  it("drops an OS value the project overrides under a different alias", () => {
+    // OS has GEMINI_API_KEY; the project overrides via the GOOGLE_API_KEY alias.
+    // Without alias-group scoping, provider.ts's firstValue would still pick the
+    // OS GEMINI_API_KEY (checked first), defeating "project always wins".
+    const merged = merge(
+      { GEMINI_API_KEY: "os-key" },
+      { GOOGLE_API_KEY: "project-key" },
+    );
+    assert.equal(
+      configForProvider("google", undefined, merged)?.apiKey,
+      "project-key",
+    );
+    assert.ok(!("GEMINI_API_KEY" in merged));
+  });
+
+  it("does not shadow across unrelated credentials", () => {
+    const scoped = scopeOsEnvToProject(
+      { GEMINI_API_KEY: "os-gem" },
+      new Set(["OPENAI_API_KEY"]),
+    );
+    assert.deepEqual(scoped, { GEMINI_API_KEY: "os-gem" });
   });
 });
