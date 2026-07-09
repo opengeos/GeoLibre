@@ -17,6 +17,7 @@ function makeFakes() {
     imageryAdded: [] as unknown[],
     imageryRemoved: [] as unknown[],
     imageryStack: [] as { url?: string }[],
+    raiseToTopCount: 0,
     dataSourcesAdded: [] as unknown[],
     dataSourcesRemoved: [] as unknown[],
     primitivesAdded: [] as unknown[],
@@ -54,6 +55,7 @@ function makeFakes() {
         if (i >= 0) calls.imageryStack.splice(i, 1);
       },
       raiseToTop: (layer: unknown) => {
+        calls.raiseToTopCount++;
         const i = calls.imageryStack.indexOf(layer as { url?: string });
         if (i >= 0) calls.imageryStack.push(...calls.imageryStack.splice(i, 1));
       },
@@ -317,6 +319,18 @@ describe("CesiumLayerSync", () => {
     assert.equal((f.calls.wmsProviders[1].parameters as { styles: string }).styles, "b");
   });
 
+  it("skips the imagery reorder pass when nothing affects stacking", () => {
+    const sync = newSync(f);
+    const A = mkLayer({ id: "a", type: "xyz", source: { tiles: ["a/{z}/{x}/{y}"] } });
+    const B = mkLayer({ id: "b", type: "xyz", source: { tiles: ["b/{z}/{x}/{y}"] } });
+    sync.sync([A, B]);
+    const afterCreate = f.calls.raiseToTopCount;
+    assert.ok(afterCreate > 0, "creating imagery re-asserts order");
+    // A pure opacity change reruns sync() but must not touch imagery stacking.
+    sync.sync([{ ...A, opacity: 0.5 }, B]);
+    assert.equal(f.calls.raiseToTopCount, afterCreate, "no redundant reorder");
+  });
+
   it("renders a 3d-tiles layer as a primitive from its tileset url", async () => {
     const sync = newSync(f);
     sync.sync([
@@ -385,7 +399,7 @@ describe("CesiumLayerSync", () => {
     }
   });
 
-  it("skips unsupported layer kinds and reports them", () => {
+  it("skips unsupported layer kinds", () => {
     const sync = newSync(f);
     const layers = [
       mkLayer({ id: "p", type: "pmtiles", source: { url: "x.pmtiles" } }),
@@ -394,8 +408,9 @@ describe("CesiumLayerSync", () => {
     sync.sync(layers);
     assert.equal(f.calls.imageryAdded.length, 0);
     assert.equal(f.calls.primitivesAdded.length, 0);
+    // The kind-level predicate the UI uses to flag "2D only" layers agrees.
     assert.deepEqual(
-      sync.unsupported(layers).map((l) => l.id),
+      layers.filter((l) => !isCesiumSupportedLayerType(l)).map((l) => l.id),
       ["p", "z"],
     );
   });

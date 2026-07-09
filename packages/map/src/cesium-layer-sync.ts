@@ -14,7 +14,7 @@ import type {
 // Cesium is the natural renderer: GeoJSON (as a draped GeoJsonDataSource), XYZ /
 // WMS / WMTS / raster tiles (as ImageryLayers), and 3D Tiles (as a
 // Cesium3DTileset). Other kinds are skipped on the globe (they still render in
-// the 2D panes); `unsupported()` reports them so the UI can hint at the gap.
+// the 2D panes); the exported `isCesiumSupportedLayerType` lets the UI flag them.
 //
 // The engine is injected (the `Cesium` namespace + a `Viewer`) so this module
 // carries only type-only Cesium imports and never pulls the engine into the
@@ -138,6 +138,8 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
 
 export class CesiumLayerSync {
   private readonly entries = new Map<string, LayerEntry>();
+  /** Imagery id order last asserted on the globe, to skip redundant reorders. */
+  private lastImageryOrder = "";
 
   constructor(
     private readonly Cesium: CesiumNs,
@@ -154,6 +156,10 @@ export class CesiumLayerSync {
       }
     }
 
+    // Tracks a create/rebuild of an imagery layer this pass (which re-appends it
+    // to the top), so the reorder pass below runs even when the store id order
+    // is unchanged.
+    let imageryRebuilt = false;
     for (const layer of layers) {
       if (!isSupported(layer)) {
         // A previously-supported layer that became unrenderable (e.g. its data
@@ -169,32 +175,39 @@ export class CesiumLayerSync {
       const existing = this.entries.get(layer.id);
       if (!existing) {
         this.createEntry(layer);
+        if (entryKind(layer) === "imagery") imageryRebuilt = true;
       } else if (needsRebuild(existing.layer, layer)) {
         this.destroyEntry(existing);
         this.entries.delete(layer.id);
         this.createEntry(layer);
+        if (entryKind(layer) === "imagery") imageryRebuilt = true;
       } else {
         existing.layer = layer;
         this.applyAppearance(existing);
       }
     }
 
-    // addImageryProvider always appends to the top, so a rebuild (or a panel
-    // reorder, which doesn't rebuild) can leave the globe's imagery stack out of
-    // step with the store order. Re-assert it: raising each imagery layer to the
-    // top in store order leaves them stacked bottom-to-top exactly as the store
-    // lists them, while the base imagery (never raised) stays at the bottom.
-    for (const layer of layers) {
-      const entry = this.entries.get(layer.id);
-      if (entry?.kind === "imagery" && entry.handle) {
-        this.viewer.imageryLayers.raiseToTop(entry.handle as ImageryLayer);
+    // addImageryProvider always appends to the top, so a rebuild/create re-adds
+    // imagery above its store neighbours, and a panel reorder (which doesn't
+    // rebuild) changes the intended order without touching the globe. Re-assert
+    // store order by raising each imagery layer to the top in turn (the base
+    // imagery, never raised, stays at the bottom) — but only when the order
+    // could actually have changed. sync() also runs on unrelated changes (e.g.
+    // an opacity drag), and each raiseToTop is O(n), so reordering every time
+    // would be a needless O(n²) on that hot path.
+    const imageryOrder = layers
+      .filter((l) => this.entries.get(l.id)?.kind === "imagery")
+      .map((l) => l.id)
+      .join("\n");
+    if (imageryRebuilt || imageryOrder !== this.lastImageryOrder) {
+      for (const layer of layers) {
+        const entry = this.entries.get(layer.id);
+        if (entry?.kind === "imagery" && entry.handle) {
+          this.viewer.imageryLayers.raiseToTop(entry.handle as ImageryLayer);
+        }
       }
+      this.lastImageryOrder = imageryOrder;
     }
-  }
-
-  /** Layer ids present but not renderable on the globe (for a UI hint). */
-  unsupported(layers: GeoLibreLayer[]): GeoLibreLayer[] {
-    return layers.filter((l) => !isSupported(l));
   }
 
   destroy(): void {
