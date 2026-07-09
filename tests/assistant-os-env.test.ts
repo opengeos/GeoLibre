@@ -42,16 +42,22 @@ describe("OS_ENV_VAR_NAMES", () => {
     }
   });
 
-  it("includes the strong-intent hosted AI keys and overrides", () => {
+  it("includes every strong-intent hosted AI key and override", () => {
+    // The full expected set — keep this exhaustive so removing any allowlisted
+    // name (not just the common ones) fails here, not only via the Rust sync test.
     for (const name of [
       "GEOLIBRE_ASSISTANT_PROVIDER",
       "GEOLIBRE_ASSISTANT_MODEL",
       "GEMINI_API_KEY",
       "GOOGLE_API_KEY",
+      "GOOGLE_GENAI_API_KEY",
       "ANTHROPIC_API_KEY",
       "OPENAI_API_KEY",
-      "OPENAI_COMPATIBLE_API_KEY",
       "OLLAMA_BASE_URL",
+      "OLLAMA_MODEL",
+      "OPENAI_COMPATIBLE_BASE_URL",
+      "OPENAI_COMPATIBLE_API_KEY",
+      "OPENAI_COMPATIBLE_MODEL",
       "TAVILY_API_KEY",
     ]) {
       assert.ok(allowlist.has(name), `missing expected name: ${name}`);
