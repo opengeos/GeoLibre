@@ -32,11 +32,23 @@ describe("radarFramesFromResponse", () => {
     assert.deepEqual(radarFramesFromResponse({}), []);
   });
 
-  it("rejects a non-https or missing host (untrusted API response)", () => {
+  it("rejects a non-https, non-rainviewer, or missing host (untrusted API response)", () => {
     const past = [{ time: 1_700_000_000, path: "/v2/radar/aaaa" }];
-    assert.deepEqual(radarFramesFromResponse({ host: "http://evil.example", radar: { past } }), []);
+    assert.deepEqual(radarFramesFromResponse({ host: "http://tilecache.rainviewer.com", radar: { past } }), []);
+    assert.deepEqual(radarFramesFromResponse({ host: "https://evil.example", radar: { past } }), []);
     assert.deepEqual(radarFramesFromResponse({ host: "ftp://x", radar: { past } }), []);
     assert.deepEqual(radarFramesFromResponse({ radar: { past } }), []);
+    // Userinfo trick: real authority is evil.example, not rainviewer.com.
+    assert.deepEqual(
+      radarFramesFromResponse({ host: "https://tilecache.rainviewer.com@evil.example", radar: { past } }),
+      [],
+    );
+  });
+
+  it("accepts any rainviewer.com subdomain over https", () => {
+    const past = [{ time: 1_700_000_000, path: "/v2/radar/aaaa" }];
+    assert.equal(radarFramesFromResponse({ host: "https://rainviewer.com", radar: { past } }).length, 1);
+    assert.equal(radarFramesFromResponse({ host: "https://cdn.rainviewer.com", radar: { past } }).length, 1);
   });
 
   it("drops malformed frame entries (missing path/time)", () => {

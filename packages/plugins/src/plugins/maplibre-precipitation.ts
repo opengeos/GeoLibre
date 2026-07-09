@@ -79,17 +79,36 @@ function precipitationMetadata(unixSeconds: number, label: string): Record<strin
 }
 
 /**
+ * Whether `host` is an `https://` URL whose authority is a rainviewer.com host.
+ * Parsed via `URL` (not a regex) so the userinfo trick
+ * (`https://tilecache.rainviewer.com@evil.example/x`, whose real host is
+ * `evil.example`) is rejected. Defense-in-depth: the API response is untrusted
+ * and the Tauri CSP has no per-host tile allowlist, and `host` is spliced
+ * straight into the tile URL.
+ */
+function isTrustedRainviewerHost(host: string): boolean {
+  try {
+    const url = new URL(host);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "rainviewer.com" ||
+        url.hostname.endsWith(".rainviewer.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Turn a parsed RainViewer weather-maps response into {@link WeatherFrame}s.
- * `host` is validated as an `https://` URL before being spliced into the tile
- * template (defense-in-depth: the API response is untrusted and the Tauri CSP
- * has no per-host tile allowlist). Returns an empty list for a missing/invalid
- * host or no frames. Exported for unit testing.
+ * A missing/untrusted `host` (see {@link isTrustedRainviewerHost}) or no frames
+ * yields an empty list. Exported for unit testing.
  */
 export function radarFramesFromResponse(
   data: RainViewerResponse,
 ): WeatherFrame[] {
   const host =
-    typeof data.host === "string" && /^https:\/\/[^/]+/.test(data.host)
+    typeof data.host === "string" && isTrustedRainviewerHost(data.host)
       ? data.host
       : "";
   const past = Array.isArray(data.radar?.past) ? data.radar.past : [];
