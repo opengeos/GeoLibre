@@ -9,7 +9,7 @@ import {
 } from "../packages/core/src/index";
 import { syncLayer } from "../packages/map/src/layer-sync";
 import {
-  buildElevation3dLayer,
+  buildElevation3dLayers,
   isElevation3dLayer,
 } from "../packages/plugins/src/plugins/deckgl-viz/elevation";
 import type { GeoLibreDeckGL } from "../packages/plugins/src/types";
@@ -279,8 +279,15 @@ describe("isElevation3dLayer", () => {
   });
 });
 
-describe("buildElevation3dLayer", () => {
+describe("buildElevation3dLayers", () => {
   class FakeGeoJsonLayer {
+    props: Record<string, unknown>;
+
+    constructor(props: Record<string, unknown>) {
+      this.props = props;
+    }
+  }
+  class FakeIconLayer {
     props: Record<string, unknown>;
 
     constructor(props: Record<string, unknown>) {
@@ -289,7 +296,7 @@ describe("buildElevation3dLayer", () => {
   }
 
   const fakeDeckGL = {
-    layers: { GeoJsonLayer: FakeGeoJsonLayer },
+    layers: { GeoJsonLayer: FakeGeoJsonLayer, IconLayer: FakeIconLayer },
   } as unknown as GeoLibreDeckGL;
 
   it("maps the layer style onto billboarded deck.gl props", () => {
@@ -305,19 +312,17 @@ describe("buildElevation3dLayer", () => {
         fillOpacity: 0.5,
       },
     });
-    const built = buildElevation3dLayer(
+    const [built] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
+    ) as unknown as FakeGeoJsonLayer[];
     assert.equal(built.props.id, "layer-1");
     assert.equal(built.props.opacity, 0.5);
     assert.equal(built.props.lineBillboard, true);
-    assert.equal(built.props.pointBillboard, true);
     assert.equal(built.props.extruded, false);
     assert.deepEqual(built.props.getLineColor, [0, 255, 0, 255]);
     assert.deepEqual(built.props.getFillColor, [255, 0, 0, 128]);
     assert.equal(built.props.getLineWidth, 4);
-    assert.equal(built.props.getPointRadius, 9);
     // The identity transform still sanitizes into a copy; the copy is cached
     // so subsequent rebuilds reuse it.
     const coordinates = (
@@ -326,10 +331,10 @@ describe("buildElevation3dLayer", () => {
       }
     ).coordinates;
     assert.deepEqual(coordinates[0], [6.86, 45.83, 1035]);
-    const rebuilt = buildElevation3dLayer(
+    const [rebuilt] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
+    ) as unknown as FakeGeoJsonLayer[];
     assert.equal(rebuilt.props.data, built.props.data);
   });
 
@@ -342,10 +347,10 @@ describe("buildElevation3dLayer", () => {
         strokeColor: "transparent",
       },
     });
-    const built = buildElevation3dLayer(
+    const [built] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
+    ) as unknown as FakeGeoJsonLayer[];
     assert.deepEqual(built.props.getFillColor, [0, 0, 0, 0]);
     assert.deepEqual(built.props.getLineColor, [0, 0, 0, 0]);
   });
@@ -358,14 +363,14 @@ describe("buildElevation3dLayer", () => {
         strokeWidthUnit: "meters",
       },
     });
-    const built = buildElevation3dLayer(
+    const [built] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
+    ) as unknown as FakeGeoJsonLayer[];
     assert.equal(built.props.lineWidthUnits, "meters");
   });
 
-  it("forces pixel widths for point-only data even with a meters unit", () => {
+  it("skips GeoJsonLayer entirely for point-only data", () => {
     const layer = geojsonLayer({
       style: {
         ...DEFAULT_LAYER_STYLE,
@@ -383,11 +388,97 @@ describe("buildElevation3dLayer", () => {
         ],
       },
     });
-    const built = buildElevation3dLayer(
+    const [built] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
-    assert.equal(built.props.lineWidthUnits, "pixels");
+    ) as unknown as FakeIconLayer[];
+    assert.equal(built.props.id, "layer-1-points");
+    assert.equal(built.props.sizeUnits, "pixels");
+    assert.equal(built.props.billboard, true);
+  });
+
+  it("renders high-altitude points with a solid IconLayer dot instead of GeoJsonLayer points", () => {
+    const layer = geojsonLayer({
+      opacity: 0.75,
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        elevation3dEnabled: true,
+        fillColor: "#336699",
+        fillOpacity: 0.5,
+        circleRadius: 8,
+      },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "MultiPoint",
+              coordinates: [
+                [6.86, 45.83, 3150],
+                [6.87, 45.84, 3627],
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const built = buildElevation3dLayers(fakeDeckGL, layer) as unknown as [
+      FakeIconLayer,
+    ];
+    assert.equal(built.length, 1);
+    assert.equal(built[0].props.id, "layer-1-points");
+    assert.equal(built[0].props.getSize, 16);
+    assert.deepEqual(built[0].props.getColor, [51, 102, 153, 128]);
+    assert.equal(built[0].props.opacity, 0.75);
+    const data = built[0].props.data as Array<{ position: number[] }>;
+    assert.deepEqual(data.map((datum) => datum.position), [
+      [6.86, 45.83, 3150],
+      [6.87, 45.84, 3627],
+    ]);
+  });
+
+  it("splits mixed geometry so GeoJsonLayer never owns the point sublayer", () => {
+    const layer = geojsonLayer({
+      style: { ...DEFAULT_LAYER_STYLE, elevation3dEnabled: true },
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            properties: {},
+            geometry: { type: "Point", coordinates: [6.86, 45.83, 3150] },
+          },
+          {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "LineString",
+              coordinates: [
+                [6.86, 45.83, 3150],
+                [6.87, 45.84, 3627],
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    const built = buildElevation3dLayers(fakeDeckGL, layer) as unknown as [
+      FakeGeoJsonLayer,
+      FakeIconLayer,
+    ];
+    assert.equal(built.length, 2);
+    assert.equal(built[0].props.id, "layer-1");
+    assert.equal(
+      ((built[0].props.data as FeatureCollection).features[0].geometry as {
+        type: string;
+      }).type,
+      "LineString",
+    );
+    assert.equal(built[1].props.id, "layer-1-points");
   });
 
   it("rescales Z values when exaggeration or offset are set", () => {
@@ -399,10 +490,10 @@ describe("buildElevation3dLayer", () => {
         elevation3dOffset: 100,
       },
     });
-    const built = buildElevation3dLayer(
+    const [built] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
+    ) as unknown as FakeGeoJsonLayer[];
     const data = built.props.data as FeatureCollection;
     const coordinates = (
       data.features[0].geometry as { coordinates: number[][] }
@@ -411,10 +502,10 @@ describe("buildElevation3dLayer", () => {
     assert.deepEqual(coordinates[1], [6.87, 45.84, 4360]);
 
     // The rescan is cached per source collection and transform.
-    const rebuilt = buildElevation3dLayer(
+    const [rebuilt] = buildElevation3dLayers(
       fakeDeckGL,
       layer,
-    ) as unknown as FakeGeoJsonLayer;
+    ) as unknown as FakeGeoJsonLayer[];
     assert.equal(rebuilt.props.data, data);
   });
 });

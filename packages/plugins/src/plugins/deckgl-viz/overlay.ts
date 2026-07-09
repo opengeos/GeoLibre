@@ -6,7 +6,7 @@ import {
   ensureSharedDeckOverlay,
   setSharedDeckLayers,
 } from "../shared-deck-overlay";
-import { buildElevation3dLayer, isElevation3dLayer } from "./elevation";
+import { buildElevation3dLayers, isElevation3dLayer } from "./elevation";
 import {
   type DeckVizBuildContext,
   getDeckVizLayerDef,
@@ -153,7 +153,7 @@ function renderDeckVizLayers(): void {
           }),
         );
       } else if (isElevation3dLayer(layer)) {
-        deckLayers.push(buildElevation3dLayer(deckGL, layer));
+        deckLayers.push(...buildElevation3dLayers(deckGL, layer));
       }
     } catch (error) {
       console.warn("[GeoLibre] deckgl-viz: failed to build layer", error);
