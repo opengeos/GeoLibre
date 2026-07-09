@@ -632,6 +632,7 @@ export async function loadDuckDbVectorFile(
     // detaches each sibling's ArrayBuffer (transferred to the worker) and would
     // leave the `.prj` unreadable by the reprojection fallback (issue #1148).
     // Inside the try so the finally still closes the connection if it throws.
+    // `prjSidecarCrs` is `.shp`-scoped, so a non-shapefile's siblings are safe.
     const prjCrs = prjSidecarCrs(file);
 
     await registerVectorFileBuffers(db, file);

@@ -457,19 +457,22 @@ fn read_prj_sidecar_crs(shp_path: &str) -> Option<String> {
             return Some(crs);
         }
     }
-    // Fallback for a mixed-case extension (e.g. `Foo.Prj`) on a case-sensitive
-    // filesystem: scan the directory for a same-stem file whose extension is
-    // `prj` in any case.
-    let stem = path.file_stem()?;
+    // Fallback for mixed-case naming (e.g. `Foo.Prj`, or a `Foo.shp` whose
+    // sidecar is `foo.PRJ`) on a case-sensitive filesystem: scan the directory
+    // for a file whose stem and `prj` extension both match case-insensitively.
+    let stem = path.file_stem()?.to_str()?;
     let dir = path.parent()?;
     for entry in std::fs::read_dir(dir).ok()?.flatten() {
         let entry_path = entry.path();
-        let matches = entry_path.file_stem() == Some(stem)
-            && entry_path
-                .extension()
-                .and_then(|extension| extension.to_str())
-                .is_some_and(|extension| extension.eq_ignore_ascii_case("prj"));
-        if matches {
+        let stem_matches = entry_path
+            .file_stem()
+            .and_then(|entry_stem| entry_stem.to_str())
+            .is_some_and(|entry_stem| entry_stem.eq_ignore_ascii_case(stem));
+        let is_prj = entry_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("prj"));
+        if stem_matches && is_prj {
             if let Some(crs) = read_nonempty_trimmed(&entry_path) {
                 return Some(crs);
             }
@@ -973,9 +976,10 @@ mod tests {
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).expect("create test dir");
-        let shp_path = dir.join("Hotspots.shp");
-        // Mixed-case `.Prj` that neither the `prj` nor `PRJ` fast path matches.
-        let prj_path = dir.join("Hotspots.Prj");
+        // A mixed-case sidecar extension AND basename (`hotspots.shp` vs
+        // `Hotspots.PRJ`) that neither the `prj` nor `PRJ` fast path matches.
+        let shp_path = dir.join("hotspots.shp");
+        let prj_path = dir.join("Hotspots.PRJ");
         std::fs::write(&prj_path, "PROJCS[\"OSGB\"]\n").expect("write prj sidecar");
 
         let crs = read_prj_sidecar_crs(&shp_path.to_string_lossy())
