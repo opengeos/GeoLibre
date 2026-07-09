@@ -143,4 +143,23 @@ describe("isSameView", () => {
       false,
     );
   });
+
+  it("handles longitude wraparound across the antimeridian", () => {
+    // Two points ~2e-6° apart straddling ±180°: same view despite a ~360 raw diff.
+    assert.equal(
+      isSameView(
+        { ...base, center: [179.999999, 40] },
+        { ...base, center: [-179.999999, 40] },
+      ),
+      true,
+    );
+    // A genuine move near the antimeridian is still a different view.
+    assert.equal(
+      isSameView(
+        { ...base, center: [179.9, 40] },
+        { ...base, center: [-179.9, 40] },
+      ),
+      false,
+    );
+  });
 });

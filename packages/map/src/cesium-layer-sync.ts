@@ -32,6 +32,8 @@ interface LayerEntry {
   handle: ImageryLayer | DataSource | Cesium3DTileset | null;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
+  /** Last fill alpha applied in place to a geojson entry (skips redundant restyles). */
+  appliedAlpha?: number;
 }
 
 function str(value: unknown): string | undefined {
@@ -65,7 +67,11 @@ function isSupported(layer: GeoLibreLayer): boolean {
   if (!isCesiumSupportedLayerType(layer)) return false;
   if (layer.type === "geojson") return Boolean(layer.geojson?.features?.length);
   if (layer.type === "3d-tiles") return Boolean(tilesetUrl(layer));
-  return Boolean(firstTile(layer) || str(layer.source.url));
+  // Mirror createImagery's real capability: WMS builds from source.url, but
+  // xyz/raster/wmts need a tile template — a url alone would render nothing.
+  return layer.type === "wms"
+    ? Boolean(str(layer.source.url))
+    : Boolean(firstTile(layer));
 }
 
 function entryKind(layer: GeoLibreLayer): EntryKind {
@@ -74,12 +80,15 @@ function entryKind(layer: GeoLibreLayer): EntryKind {
   return "imagery";
 }
 
+// Fill/stroke *colours*, stroke width, and marker colour bake into the GeoJSON
+// entities at load, so a change to any of them forces a rebuild. Opacity
+// (layer.opacity × fill opacity) is deliberately excluded: it is re-applied in
+// place by applyGeoJsonStyle, so dragging the opacity slider restyles the fill
+// alpha instead of reloading the whole GeoJsonDataSource on every tick.
 function styleSignature(layer: GeoLibreLayer): string {
   const style = layer.style ?? {};
   return [
-    layer.opacity,
     style.fillColor,
-    style.fillOpacity,
     style.strokeColor,
     style.strokeWidth,
     style.markerColor,
@@ -91,7 +100,8 @@ function styleSignature(layer: GeoLibreLayer): string {
  * from `prev` to `next`. Live-settable appearance (visibility, imagery alpha) is
  * excluded; only source/data/geometry changes force a rebuild. The GeoJSON
  * FeatureCollection is compared by reference (the store swaps it on edit) and
- * its style/opacity fold into the Cesium colours at load, so both rebuild.
+ * its fill/stroke colours bake into the Cesium colours at load, so a colour
+ * change rebuilds; opacity is restyled in place (see styleSignature).
  */
 function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
   if (prev.type !== next.type) return true;
@@ -183,27 +193,32 @@ export class CesiumLayerSync {
   private createImagery(entry: LayerEntry): void {
     const { Cesium, viewer } = this;
     const layer = entry.layer;
-    let provider;
-    if (layer.type === "wms" && str(layer.source.url)) {
-      provider = new Cesium.WebMapServiceImageryProvider({
-        url: String(layer.source.url),
-        layers: String(layer.source.layers ?? ""),
-        parameters: { transparent: true, format: "image/png" },
-      });
-    } else {
-      const url = firstTile(layer);
-      if (!url) return;
-      const maxLevel = Number(layer.source.maxzoom);
-      provider = new Cesium.UrlTemplateImageryProvider({
-        url,
-        maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
-      });
+    try {
+      let provider;
+      if (layer.type === "wms" && str(layer.source.url)) {
+        provider = new Cesium.WebMapServiceImageryProvider({
+          url: String(layer.source.url),
+          layers: String(layer.source.layers ?? ""),
+          parameters: { transparent: true, format: "image/png" },
+        });
+      } else {
+        const url = firstTile(layer);
+        if (!url) return;
+        const maxLevel = Number(layer.source.maxzoom);
+        provider = new Cesium.UrlTemplateImageryProvider({
+          url,
+          maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
+        });
+      }
+      // addImageryProvider appends above the base imagery (and earlier store
+      // layers), so store order maps to Cesium's bottom-to-top stacking.
+      const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
+      entry.handle = imageryLayer;
+      this.applyAppearance(entry);
+    } catch {
+      // A provider that throws synchronously (e.g. malformed WMS params) should
+      // not abort the sync pass; mirror createGeoJson/createTileset's best-effort.
     }
-    // addImageryProvider appends above the base imagery (and earlier store
-    // layers), so store order maps to Cesium's bottom-to-top stacking.
-    const imageryLayer = viewer.imageryLayers.addImageryProvider(provider);
-    entry.handle = imageryLayer;
-    this.applyAppearance(entry);
   }
 
   private async createGeoJson(entry: LayerEntry): Promise<void> {
@@ -215,13 +230,15 @@ export class CesiumLayerSync {
     const stroke = Cesium.Color.fromCssColorString(
       style.strokeColor ?? "#1e40af",
     );
+    // Fold the layer + fill opacity into the fill colour (a GeoJsonDataSource has
+    // no global alpha). A later opacity change re-applies this alpha in place
+    // (applyGeoJsonStyle) rather than reloading the whole data source.
+    const fillAlpha = (style.fillOpacity ?? 0.6) * layer.opacity;
     try {
       const dataSource = await Cesium.GeoJsonDataSource.load(layer.geojson, {
         stroke,
         strokeWidth: style.strokeWidth ?? 2,
-        // Fold the layer + fill opacity into the fill colour (a GeoJsonDataSource
-        // has no global alpha); an opacity change rebuilds via identity().
-        fill: fill.withAlpha((style.fillOpacity ?? 0.6) * layer.opacity),
+        fill: fill.withAlpha(fillAlpha),
         markerColor: Cesium.Color.fromCssColorString(
           style.markerColor ?? "#3b82f6",
         ),
@@ -234,6 +251,7 @@ export class CesiumLayerSync {
         return;
       }
       entry.handle = dataSource;
+      entry.appliedAlpha = fillAlpha;
       this.applyAppearance(entry);
     } catch {
       // A malformed FeatureCollection should not break the whole sync.
@@ -301,8 +319,34 @@ export class CesiumLayerSync {
       imagery.alpha = layer.opacity;
     } else if (entry.kind === "geojson") {
       (handle as DataSource).show = layer.visible;
+      this.applyGeoJsonStyle(entry);
     } else {
       (handle as Cesium3DTileset).show = layer.visible;
+    }
+  }
+
+  /**
+   * Re-apply a GeoJSON layer's fill alpha (layer opacity × fill opacity) in
+   * place, so dragging the opacity slider restyles the polygons instead of
+   * reloading the whole GeoJsonDataSource. The fill colour itself bakes in at
+   * load (a colour change rebuilds), so only the alpha is updated here; the
+   * `appliedAlpha` guard makes a no-op call cheap on unrelated syncs.
+   */
+  private applyGeoJsonStyle(entry: LayerEntry): void {
+    const dataSource = entry.handle as DataSource | null;
+    if (!dataSource) return;
+    const style = entry.layer.style ?? {};
+    const alpha = (style.fillOpacity ?? 0.6) * entry.layer.opacity;
+    if (entry.appliedAlpha === alpha) return;
+    entry.appliedAlpha = alpha;
+    const { Cesium } = this;
+    const fill = Cesium.Color.fromCssColorString(
+      style.fillColor ?? "#3b82f6",
+    ).withAlpha(alpha);
+    for (const feature of dataSource.entities.values) {
+      if (feature.polygon) {
+        feature.polygon.material = new Cesium.ColorMaterialProperty(fill);
+      }
     }
   }
 

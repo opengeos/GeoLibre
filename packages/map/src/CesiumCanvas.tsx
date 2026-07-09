@@ -21,8 +21,16 @@ import { CesiumLayerSync } from "./cesium-layer-sync";
 // loaded lazily inside the mount effect so it stays in its own build chunk and
 // never touches the 2D boot path.
 
-/** Where copy-cesium-assets.ts stages Cesium's Workers/Assets/Widgets. */
-const CESIUM_BASE_URL = "/cesium";
+/**
+ * Where copy-cesium-assets.ts stages Cesium's Workers/Assets/Widgets. Derived
+ * from the app's base path (not a hardcoded `/cesium`) so it resolves under a
+ * sub-path deploy — e.g. the `/demo/` build served with a relative base, where
+ * an absolute `/cesium` would 404 the Workers/Assets and crash the render loop.
+ */
+const APP_BASE_URL =
+  (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env?.BASE_URL ??
+  "/";
+const CESIUM_BASE_URL = `${APP_BASE_URL}cesium`;
 /** id for the one-time <link> to Cesium's widget stylesheet (served from base). */
 const CESIUM_CSS_LINK_ID = "cesium-widgets-css";
 

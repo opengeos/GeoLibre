@@ -157,7 +157,11 @@ function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps)
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       {is3d ? (
-        <CesiumCanvas viewId={viewId} ionToken={cesiumToken} />
+        // Key on the token so changing the Cesium Ion token in Settings remounts
+        // the globe: `Cesium.Ion.defaultAccessToken` is applied once at viewer
+        // creation, so without a remount a swapped (e.g. corrected) token would
+        // never take effect on an already-mounted pane.
+        <CesiumCanvas key={cesiumToken} viewId={viewId} ionToken={cesiumToken} />
       ) : (
         <SecondaryMapCanvas viewId={viewId} />
       )}

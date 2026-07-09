@@ -67,8 +67,17 @@ function makeFakes() {
     GeoJsonDataSource: {
       load: (data: unknown, options: Record<string, unknown>) => {
         calls.geojsonLoads.push({ data, options });
-        return Promise.resolve({ kind: "geojson", show: true });
+        return Promise.resolve({
+          kind: "geojson",
+          show: true,
+          // One polygon entity so in-place restyle (applyGeoJsonStyle) has
+          // something to update; its material starts as the load-time fill.
+          entities: { values: [{ polygon: { material: options.fill } }] },
+        });
       },
+    },
+    ColorMaterialProperty: class {
+      constructor(public color: unknown) {}
     },
     Cesium3DTileset: {
       fromUrl: (url: unknown) => {
@@ -146,6 +155,31 @@ describe("CesiumLayerSync", () => {
     ]);
     await f.flush();
     assert.equal(f.calls.geojsonLoads.length, 0);
+  });
+
+  it("restyles a geojson layer's fill opacity in place without reloading", async () => {
+    const sync = newSync(f);
+    const fc = { type: "FeatureCollection", features: [{}] };
+    const base = mkLayer({
+      type: "geojson",
+      geojson: fc as never,
+      opacity: 1,
+      style: { fillOpacity: 0.6 },
+    });
+    sync.sync([base]);
+    await f.flush();
+    assert.equal(f.calls.geojsonLoads.length, 1);
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: { values: { polygon: { material: { color?: { alpha: number } } } }[] };
+    };
+
+    // Change only the layer opacity: no reload, no teardown — the fill alpha is
+    // updated on the existing entity (0.6 fill opacity × 0.3 layer opacity).
+    sync.sync([{ ...base, opacity: 0.3 }]);
+    assert.equal(f.calls.geojsonLoads.length, 1, "opacity change must not reload");
+    assert.equal(f.calls.dataSourcesRemoved.length, 0, "opacity change must not tear down");
+    const alpha = ds.entities.values[0].polygon.material.color?.alpha;
+    assert.ok(alpha !== undefined && Math.abs(alpha - 0.18) < 1e-9);
   });
 
   it("renders xyz/raster tiles as an imagery layer with opacity + visibility", () => {
