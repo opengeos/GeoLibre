@@ -5,6 +5,8 @@ import {
   DEFAULT_SEGMENT_SECONDS,
   END_HOLD_MS,
   estimateTourDurationMs,
+  countPathCoordinates,
+  generateTourKeyframesFromPath,
   MAX_FPS,
   MAX_HOLD_SECONDS,
   MAX_SEGMENT_SECONDS,
@@ -20,6 +22,7 @@ import {
   type TourKeyframe,
   TOUR_MIME_CANDIDATES,
 } from "../apps/geolibre-desktop/src/lib/tour-recorder";
+import type { FeatureCollection } from "geojson";
 
 describe("pickSupportedMimeType", () => {
   it("returns the first candidate the browser supports", () => {
@@ -75,6 +78,107 @@ describe("estimateTourDurationMs", () => {
       { holdMs: 0, transitionMs: 0 },
     ]);
     assert.equal(total, 0);
+  });
+});
+
+describe("generateTourKeyframesFromPath", () => {
+  it("samples a LineString into evenly spaced keyframes with path bearings", () => {
+    const geojson: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [10, 0],
+            ],
+          },
+        },
+      ],
+    };
+
+    assert.equal(countPathCoordinates(geojson), 2);
+    const keyframes = generateTourKeyframesFromPath(geojson, {
+      keyframeCount: 3,
+      zoom: 12,
+      pitch: 45,
+      holdSeconds: 1,
+      transitionSeconds: 2,
+    });
+
+    assert.equal(keyframes.length, 3);
+    assert.deepEqual(keyframes.map((kf) => kf.center), [
+      [0, 0],
+      [5, 0],
+      [10, 0],
+    ]);
+    assert.deepEqual(keyframes.map((kf) => kf.bearing), [90, 90, 90]);
+    assert.equal(keyframes[0].zoom, 12);
+    assert.equal(keyframes[0].pitch, 45);
+    assert.equal(keyframes[0].holdMs, 1000);
+    assert.equal(keyframes[0].transitionMs, 2000);
+  });
+
+  it("uses line and geometry collection members and ignores non-line geometry", () => {
+    const geojson: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "MultiLineString",
+            coordinates: [
+              [
+                [0, 0],
+                [0, 1],
+              ],
+            ],
+          },
+        },
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "GeometryCollection",
+            geometries: [
+              { type: "Point", coordinates: [100, 0] },
+              {
+                type: "LineString",
+                coordinates: [
+                  [0, 1],
+                  [0, 2],
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    assert.equal(countPathCoordinates(geojson), 4);
+    const keyframes = generateTourKeyframesFromPath(geojson, {
+      keyframeCount: 3,
+      zoom: 30,
+      pitch: 100,
+      holdSeconds: -1,
+      transitionSeconds: 100,
+    });
+
+    assert.equal(keyframes.length, 3);
+    assert.deepEqual(keyframes.map((kf) => kf.center), [
+      [0, 0],
+      [0, 1],
+      [0, 2],
+    ]);
+    assert.deepEqual(keyframes.map((kf) => kf.bearing), [0, 0, 0]);
+    assert.equal(keyframes[0].zoom, 24);
+    assert.equal(keyframes[0].pitch, 85);
+    assert.equal(keyframes[0].holdMs, MIN_HOLD_SECONDS * 1000);
+    assert.equal(keyframes[0].transitionMs, MAX_SEGMENT_SECONDS * 1000);
   });
 });
 

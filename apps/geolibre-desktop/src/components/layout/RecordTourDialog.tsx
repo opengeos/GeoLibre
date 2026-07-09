@@ -1,5 +1,6 @@
+import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { Button, cn, Input, Label } from "@geolibre/ui";
+import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   ArrowDown,
   ArrowUp,
@@ -10,12 +11,13 @@ import {
   GripHorizontal,
   MapPin,
   Plus,
+  Route,
   Save,
   Trash2,
   Video,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFileNamePrompt } from "../../hooks/useFileNamePrompt";
 import {
@@ -29,6 +31,8 @@ import {
   DEFAULT_HOLD_SECONDS,
   DEFAULT_SEGMENT_SECONDS,
   estimateTourDurationMs,
+  countPathCoordinates,
+  generateTourKeyframesFromPath,
   isTourRecordingSupported,
   MAX_FPS,
   MAX_HOLD_SECONDS,
@@ -65,6 +69,12 @@ const MIN_PANEL_HEIGHT = 280;
 // Pixels each arrow-key press grows or shrinks the panel when a resize handle is
 // focused (keyboard equivalent of dragging a corner).
 const RESIZE_KEY_STEP = 16;
+
+const MIN_PATH_KEYFRAMES = 2;
+const MAX_PATH_KEYFRAMES = 100;
+const DEFAULT_PATH_KEYFRAMES = 12;
+const DEFAULT_PATH_ZOOM = 15;
+const DEFAULT_PATH_PITCH = 60;
 
 function createId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -106,6 +116,7 @@ export function RecordTourDialog({
   mapControllerRef,
 }: RecordTourDialogProps) {
   const { t } = useTranslation();
+  const layers = useAppStore((s) => s.layers);
   const [keyframes, setKeyframes] = useState<TourKeyframe[]>([]);
   const [fps, setFps] = useState(DEFAULT_FPS);
   // Mirror the FPS as editable text so the field can be cleared and retyped;
@@ -131,6 +142,16 @@ export function RecordTourDialog({
   // clicks on Tauri/Chromium (which skip the filename prompt) would open the
   // native save dialog twice.
   const savingConfigRef = useRef(false);
+  const [pathLayerId, setPathLayerId] = useState("");
+  const [pathKeyframeCount, setPathKeyframeCount] = useState(
+    DEFAULT_PATH_KEYFRAMES,
+  );
+  const [pathZoom, setPathZoom] = useState(DEFAULT_PATH_ZOOM);
+  const [pathPitch, setPathPitch] = useState(DEFAULT_PATH_PITCH);
+  const [pathHoldSeconds, setPathHoldSeconds] = useState(DEFAULT_HOLD_SECONDS);
+  const [pathTransitionSeconds, setPathTransitionSeconds] = useState(
+    DEFAULT_SEGMENT_SECONDS,
+  );
 
   // Drag-to-reposition. `pos` is null until first dragged, when the default
   // corner placement (CSS class) applies; afterwards it pins to explicit coords.
@@ -163,6 +184,19 @@ export function RecordTourDialog({
   // makes dropping the take a deliberate Discard click rather than a one-click
   // accident from an edit whose warning may have scrolled out of view.
   const editingFrozen = busy || status === "ready";
+
+  const pathLayers = useMemo(
+    () =>
+      layers
+        .map((layer) => {
+          const count = layer.geojson ? countPathCoordinates(layer.geojson) : 0;
+          return { layer, count };
+        })
+        .filter((item) => item.count >= 2),
+    [layers],
+  );
+  const selectedPathLayer =
+    pathLayers.find((item) => item.layer.id === pathLayerId) ?? pathLayers[0];
 
   // Clear the last save/record outcome banner. Called by every edit that
   // actually changes the tour (add, recapture, remove, an in-range reorder, a
@@ -399,6 +433,34 @@ export function RecordTourDialog({
       [next[index], next[target]] = [next[target], next[index]];
       return next;
     });
+  };
+
+  const generateFromPath = () => {
+    const layer = selectedPathLayer?.layer;
+    if (!layer?.geojson) return;
+    if (
+      keyframes.length > 0 &&
+      !window.confirm(t("recordTour.pathConfirmReplace"))
+    ) {
+      return;
+    }
+    const generated = generateTourKeyframesFromPath(layer.geojson, {
+      keyframeCount: pathKeyframeCount,
+      zoom: pathZoom,
+      pitch: pathPitch,
+      holdSeconds: pathHoldSeconds,
+      transitionSeconds: pathTransitionSeconds,
+    });
+    if (generated.length < 2) {
+      clearResultMessages();
+      setError(t("recordTour.pathGenerateError"));
+      return;
+    }
+    clearResultMessages();
+    setKeyframes(generated.map((kf) => ({ ...kf, id: createId() })));
+    setConfigMessage(
+      t("recordTour.pathGenerated", { count: generated.length }),
+    );
   };
 
   const setHoldSeconds = (id: string, seconds: number) => {
@@ -736,6 +798,106 @@ export function RecordTourDialog({
           </span>
         </div>
 
+        <div className="space-y-2 rounded-md border border-input p-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Route className="h-4 w-4 text-muted-foreground" />
+            {t("recordTour.pathTitle")}
+          </div>
+          {pathLayers.length === 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {t("recordTour.pathNoLayers")}
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="record-tour-path-layer">
+                  {t("recordTour.pathLayer")}
+                </Label>
+                <Select
+                  id="record-tour-path-layer"
+                  disabled={editingFrozen}
+                  value={selectedPathLayer?.layer.id ?? ""}
+                  onChange={(event) => setPathLayerId(event.target.value)}
+                >
+                  {pathLayers.map(({ layer, count }) => (
+                    <option key={layer.id} value={layer.id}>
+                      {t("recordTour.pathLayerOption", {
+                        name: layer.name,
+                        count,
+                      })}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField
+                  id="record-tour-path-count"
+                  label={t("recordTour.pathKeyframes")}
+                  value={pathKeyframeCount}
+                  min={MIN_PATH_KEYFRAMES}
+                  max={MAX_PATH_KEYFRAMES}
+                  step={1}
+                  disabled={editingFrozen}
+                  onCommit={(value) => setPathKeyframeCount(Math.round(value))}
+                />
+                <NumberField
+                  id="record-tour-path-zoom"
+                  label={t("recordTour.pathZoom")}
+                  value={pathZoom}
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  disabled={editingFrozen}
+                  onCommit={setPathZoom}
+                />
+                <NumberField
+                  id="record-tour-path-pitch"
+                  label={t("recordTour.pathPitch")}
+                  value={pathPitch}
+                  min={0}
+                  max={85}
+                  step={1}
+                  disabled={editingFrozen}
+                  onCommit={setPathPitch}
+                />
+                <NumberField
+                  id="record-tour-path-transition"
+                  label={t("recordTour.pathTransition")}
+                  value={pathTransitionSeconds}
+                  min={MIN_SEGMENT_SECONDS}
+                  max={MAX_SEGMENT_SECONDS}
+                  step={0.5}
+                  disabled={editingFrozen}
+                  onCommit={setPathTransitionSeconds}
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <NumberField
+                  id="record-tour-path-hold"
+                  label={t("recordTour.pathHold")}
+                  value={pathHoldSeconds}
+                  min={MIN_HOLD_SECONDS}
+                  max={MAX_HOLD_SECONDS}
+                  step={0.5}
+                  disabled={editingFrozen}
+                  onCommit={setPathHoldSeconds}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mb-px flex-1"
+                  disabled={editingFrozen || !selectedPathLayer}
+                  onClick={generateFromPath}
+                >
+                  <Route className="mr-1.5 h-3.5 w-3.5" />
+                  {t("recordTour.pathGenerate")}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+
         {keyframes.length === 0 ? (
           <p className="rounded-md border border-dashed border-input p-4 text-center text-sm text-muted-foreground">
             {t("recordTour.empty")}
@@ -977,6 +1139,63 @@ interface SecondsFieldProps {
   max: number;
   disabled: boolean;
   onCommit: (seconds: number) => void;
+}
+
+interface NumberFieldProps {
+  id: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled: boolean;
+  onCommit: (value: number) => void;
+}
+
+function NumberField({
+  id,
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onCommit,
+}: NumberFieldProps) {
+  const [text, setText] = useState(String(value));
+
+  return (
+    <label htmlFor={id} className="min-w-0 space-y-1">
+      <span className="block truncate text-xs text-muted-foreground">
+        {label}
+      </span>
+      <Input
+        id={id}
+        type="number"
+        inputMode="decimal"
+        className="h-8 w-full"
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        value={text}
+        onChange={(event) => {
+          const raw = event.target.value;
+          setText(raw);
+          if (raw === "") return;
+          const next = Number(raw);
+          if (Number.isFinite(next) && next >= min && next <= max) {
+            onCommit(next);
+          }
+        }}
+        onBlur={() => {
+          const next = clamp(Number(text), min, max, value);
+          onCommit(next);
+          setText(String(next));
+        }}
+      />
+    </label>
+  );
 }
 
 /**
