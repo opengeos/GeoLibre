@@ -484,7 +484,23 @@ export function SettingsDialog({
     () => ({ ...osEnv, ...draftEnv }),
     [osEnv, draftEnv],
   );
-  const hasOsEnv = useMemo(() => Object.keys(osEnv).length > 0, [osEnv]);
+  // Show the OS-environment banner only when the environment actually supplies a
+  // variable that backs a visible provider credential field. Bare overrides
+  // (GEOLIBRE_ASSISTANT_*) or the web-search key have no field/badge here, so
+  // keying the banner off raw osEnv length would be a confusing false positive.
+  const hasOsEnv = useMemo(() => {
+    const credentialNames = new Set<string>();
+    const providerFields = Object.values(
+      PROVIDER_FIELDS,
+    ) as readonly (readonly ProviderField[])[];
+    for (const fields of providerFields) {
+      for (const field of fields) {
+        credentialNames.add(field.envKey);
+        for (const alias of field.aliases ?? []) credentialNames.add(alias);
+      }
+    }
+    return Object.keys(osEnv).some((key) => credentialNames.has(key));
+  }, [osEnv]);
   const configuredProviders = useMemo(
     () => new Set(availableProviders(effectiveEnv)),
     [effectiveEnv],
