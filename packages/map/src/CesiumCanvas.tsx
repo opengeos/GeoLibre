@@ -178,6 +178,9 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           selectionIndicator: false,
           // Without an Ion token, fall back to keyless OpenStreetMap imagery so
           // the globe still renders (Ion's default imagery requires a token).
+          // MapGrid only mounts this pane once a token is set, but CesiumCanvas
+          // is a public @geolibre/map export with an optional `ionToken`, so the
+          // no-token path stays supported for that direct use.
           baseLayer: token
             ? undefined
             : Cesium.ImageryLayer.fromProviderAsync(
@@ -196,6 +199,15 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         cesiumRef.current = Cesium;
         viewerRef.current = viewer;
         layerSyncRef.current = new CesiumLayerSync(Cesium, viewer);
+
+        // Drop Cesium's default double-click "track entity" gesture: it flies to
+        // and camera-locks a picked feature, which fights the store-driven camera
+        // sync and isn't wired to GeoLibre. Removing it also means every camera
+        // move now comes through the pointer/wheel/touch input the moveEnd
+        // handler watches, so a real move is never mistaken for an autonomous one.
+        viewer.screenSpaceEventHandler.removeInputAction(
+          Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK,
+        );
 
         // Flag genuine camera-moving input on the globe so the moveEnd handler
         // can tell a real move from an autonomous settle. Only motion events

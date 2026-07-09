@@ -117,8 +117,9 @@ function needsRebuild(prev: GeoLibreLayer, next: GeoLibreLayer): boolean {
     case "imagery":
       return (
         firstTile(prev) !== firstTile(next) ||
-        // maxzoom bakes into UrlTemplateImageryProvider.maximumLevel at build.
+        // min/maxzoom bake into UrlTemplateImageryProvider's min/maximumLevel.
         prev.source.maxzoom !== next.source.maxzoom ||
+        prev.source.minzoom !== next.source.minzoom ||
         str(prev.source.url) !== str(next.source.url) ||
         str(prev.source.layers) !== str(next.source.layers) ||
         // WMS GetMap params baked into the provider at creation; a change must
@@ -249,9 +250,13 @@ export class CesiumLayerSync {
         const url = firstTile(layer);
         if (!url) return;
         const maxLevel = Number(layer.source.maxzoom);
+        const minLevel = Number(layer.source.minzoom);
         provider = new Cesium.UrlTemplateImageryProvider({
           url,
           maximumLevel: Number.isFinite(maxLevel) ? maxLevel : undefined,
+          // Honour the service's min-zoom floor so the globe doesn't request
+          // (and 404 on) tiles below the levels the service actually serves.
+          minimumLevel: Number.isFinite(minLevel) ? minLevel : undefined,
         });
       }
       // addImageryProvider appends above the base imagery (and earlier store
