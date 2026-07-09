@@ -353,7 +353,10 @@ export {
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
-export type { WeatherAnimationState } from "./plugins/weather-layer";
+export type {
+  WeatherAnimationState,
+  WeatherLayerController,
+} from "./plugins/weather-layer";
 export {
   maplibreCloudsPlugin,
   CLOUDS_PLUGIN_ID,

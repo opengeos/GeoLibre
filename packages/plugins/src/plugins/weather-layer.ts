@@ -95,6 +95,13 @@ export function createWeatherLayer(
   /** Recent tile-load-failure timestamps for this layer's source (ms). */
   let errorTimestamps: number[] = [];
   let mapErrorHandler: ((event: unknown) => void) | null = null;
+  /**
+   * Bumped on every activate() and deactivate() so an async activation (the
+   * RainViewer fetch takes real network time) can tell it was superseded by a
+   * toggle-off or a re-toggle that happened while its `loadFrames()` was still
+   * in flight — and bail instead of resurrecting or duplicating the layer.
+   */
+  let activationGeneration = 0;
 
   const notify = (): void => {
     for (const listener of listeners) listener();
@@ -153,6 +160,16 @@ export function createWeatherLayer(
     playing = true;
     errorTimestamps = [];
     frameTimer = setInterval(() => {
+      // If the layer was deleted from the Layers panel mid-playback, halt so the
+      // loop doesn't keep advancing/notifying against a layer that's gone.
+      if (
+        layerId === null ||
+        !useAppStore.getState().layers.some((l) => l.id === layerId)
+      ) {
+        stopPlaying();
+        notify();
+        return;
+      }
       index = (index + 1) % frames.length;
       // Live source swap only per tick; avoid churning the store (and its dirty
       // flag) every frame — the resting frame is written on pause.
@@ -192,12 +209,18 @@ export function createWeatherLayer(
 
   return {
     activate: async (app: GeoLibreAppAPI): Promise<boolean> => {
-      appRef = app;
-      frames = await config.loadFrames();
-      if (frames.length === 0) {
-        appRef = null;
+      const generation = (activationGeneration += 1);
+      // Nothing is mutated until after the await + the supersede check, so a
+      // toggle-off/on during the fetch can't leave partial state behind.
+      const loaded = await config.loadFrames();
+      if (generation !== activationGeneration) {
+        return false; // a deactivate() or newer activate() superseded this one
+      }
+      if (loaded.length === 0) {
         return false; // source unavailable — the manager rolls the toggle back
       }
+      appRef = app;
+      frames = loaded;
       index = frames.length - 1; // newest frame
       playing = false;
 
@@ -238,6 +261,9 @@ export function createWeatherLayer(
     },
 
     deactivate: (): void => {
+      // Invalidate any activate() whose loadFrames() is still in flight so it
+      // won't re-add the layer after the user turned it off.
+      activationGeneration += 1;
       stopPlaying();
       const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
       if (map && mapErrorHandler) map.off("error", mapErrorHandler);

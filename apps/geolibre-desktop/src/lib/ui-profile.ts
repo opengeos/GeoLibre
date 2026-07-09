@@ -270,7 +270,11 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.sun", menuId: "controls", labelKey: "toolbar.item.sun", tier: "intermediate" },
   { id: "controls.spinGlobe", menuId: "controls", labelKey: "toolbar.item.spinGlobe", tier: "intermediate" },
   { id: "controls.graticule", menuId: "controls", labelKey: "toolbar.item.graticule", tier: "intermediate" },
-  { id: "controls.weather", menuId: "controls", labelKey: "toolbar.item.weather", tier: "intermediate" },
+  // Id kept as `controls.clouds` (not renamed to `controls.weather`) so a
+  // persisted `hiddenMenuItems: ["controls.clouds"]` from before the Clouds →
+  // Weather rename keeps hiding this (now Weather) submenu instead of silently
+  // reappearing. Hiding it hides both weather overlays, which is the intent.
+  { id: "controls.clouds", menuId: "controls", labelKey: "toolbar.item.weather", tier: "intermediate" },
   { id: "controls.directions", menuId: "controls", labelKey: "toolbar.item.directions", tier: "intermediate" },
   { id: "controls.reverseGeocode", menuId: "controls", labelKey: "toolbar.item.reverseGeocode", tier: "intermediate" },
   { id: "controls.search", menuId: "controls", labelKey: "toolbar.item.search", tier: "basic" },

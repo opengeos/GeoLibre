@@ -15,6 +15,7 @@ import {
   toggleCloudsPlaying,
   togglePrecipitationPlaying,
   type WeatherAnimationState,
+  type WeatherLayerController,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -135,7 +136,7 @@ export function ControlsMenu({
       show(`controls.mapControl.${control.id}`),
     ) ||
     show("controls.atmosphereEffects") ||
-    show("controls.weather") ||
+    show("controls.clouds") ||
     show("controls.spinGlobe") ||
     show("controls.graticule") ||
     show("controls.sun") ||
@@ -193,7 +194,7 @@ export function ControlsMenu({
               onCommit={onCommitEffectsSettings}
             />
           )}
-          {show("controls.weather") && (
+          {show("controls.clouds") && (
             <WeatherSubmenu
               cloudsActive={cloudsActive}
               onToggleClouds={onToggleClouds}
@@ -530,21 +531,22 @@ function WeatherSubmenu({
 }
 
 /** The plugin animation hooks a {@link WeatherLayerSubmenu} drives. */
-interface WeatherLayerController {
-  getState: () => WeatherAnimationState;
-  setFrame: (index: number) => void;
-  togglePlaying: () => void;
-  subscribe: (listener: () => void) => () => void;
-}
+// The subset of the plugin's WeatherLayerController this submenu drives (the
+// activate/deactivate lifecycle is the plugin's, not the menu's). Derived via
+// Pick so it can't drift from the exported type.
+type WeatherControllerHandle = Pick<
+  WeatherLayerController,
+  "getState" | "setFrame" | "togglePlaying" | "subscribe"
+>;
 
 // Stable module-level controllers so each submenu's subscribe effect runs once.
-const CLOUDS_CONTROLLER: WeatherLayerController = {
+const CLOUDS_CONTROLLER: WeatherControllerHandle = {
   getState: getCloudsAnimationState,
   setFrame: setCloudsFrame,
   togglePlaying: toggleCloudsPlaying,
   subscribe: subscribeClouds,
 };
-const PRECIPITATION_CONTROLLER: WeatherLayerController = {
+const PRECIPITATION_CONTROLLER: WeatherControllerHandle = {
   getState: getPrecipitationAnimationState,
   setFrame: setPrecipitationFrame,
   togglePlaying: togglePrecipitationPlaying,
@@ -558,7 +560,7 @@ interface WeatherLayerSubmenuProps {
   sliderLabel: string;
   active: boolean;
   onToggle: () => void;
-  controller: WeatherLayerController;
+  controller: WeatherControllerHandle;
 }
 
 /**

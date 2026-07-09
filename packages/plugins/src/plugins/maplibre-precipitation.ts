@@ -79,31 +79,49 @@ function precipitationMetadata(unixSeconds: number, label: string): Record<strin
 }
 
 /**
- * Fetch RainViewer's radar frames and turn each into a {@link WeatherFrame}.
- * Returns an empty list on any failure so activation fails cleanly (the toggle
- * rolls back) rather than adding a layer that renders nothing.
+ * Turn a parsed RainViewer weather-maps response into {@link WeatherFrame}s.
+ * `host` is validated as an `https://` URL before being spliced into the tile
+ * template (defense-in-depth: the API response is untrusted and the Tauri CSP
+ * has no per-host tile allowlist). Returns an empty list for a missing/invalid
+ * host or no frames. Exported for unit testing.
+ */
+export function radarFramesFromResponse(
+  data: RainViewerResponse,
+): WeatherFrame[] {
+  const host =
+    typeof data.host === "string" && /^https:\/\/[^/]+/.test(data.host)
+      ? data.host
+      : "";
+  const past = Array.isArray(data.radar?.past) ? data.radar.past : [];
+  if (!host || past.length === 0) return [];
+  return past
+    .filter(
+      (f): f is RainViewerFrame =>
+        !!f && typeof f.path === "string" && typeof f.time === "number",
+    )
+    .map((f) => {
+      const label = formatTime(f.time);
+      return {
+        tileUrl: `${host}${f.path}/${RAINVIEWER_TILE_SIZE}/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
+        label,
+        metadata: precipitationMetadata(f.time, label),
+      };
+    });
+}
+
+/**
+ * Fetch RainViewer's radar frames. Returns an empty list on any failure so
+ * activation fails cleanly (the toggle rolls back) rather than adding a layer
+ * that renders nothing. A timeout guards against a hung endpoint leaving the
+ * toggle stuck optimistically "on" with no layer ever added.
  */
 async function loadRadarFrames(): Promise<WeatherFrame[]> {
   try {
-    const response = await fetch(RAINVIEWER_API);
+    const response = await fetch(RAINVIEWER_API, {
+      signal: AbortSignal.timeout(8000),
+    });
     if (!response.ok) return [];
-    const data = (await response.json()) as RainViewerResponse;
-    const host = typeof data.host === "string" ? data.host : "";
-    const past = Array.isArray(data.radar?.past) ? data.radar.past : [];
-    if (!host || past.length === 0) return [];
-    return past
-      .filter(
-        (f): f is RainViewerFrame =>
-          !!f && typeof f.path === "string" && typeof f.time === "number",
-      )
-      .map((f) => {
-        const label = formatTime(f.time);
-        return {
-          tileUrl: `${host}${f.path}/${RAINVIEWER_TILE_SIZE}/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
-          label,
-          metadata: precipitationMetadata(f.time, label),
-        };
-      });
+    return radarFramesFromResponse((await response.json()) as RainViewerResponse);
   } catch {
     return [];
   }
