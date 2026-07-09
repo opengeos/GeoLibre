@@ -75,8 +75,8 @@ const PROVIDER_KEY_NAMES: Partial<
  * bill the user's AWS account for LLM calls they never intended) and the ambient
  * `OLLAMA_HOST`. Those providers remain available by entering credentials in
  * Settings → Environment Variables. The Rust `read_env_vars` command enforces
- * the same allowlist server-side; the `assistant-os-env` test guards both the
- * inclusions and the exclusions.
+ * the same allowlist server-side (the `assistant-os-env` test asserts the two
+ * lists match); that test also guards the inclusions and the exclusions.
  */
 export const OS_ENV_VAR_NAMES: readonly string[] = [
   // Provider / model selection overrides.

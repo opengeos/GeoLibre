@@ -432,8 +432,9 @@ fn read_admin_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
 /// run in the same (unsandboxed) webview can `invoke("read_env_vars", …)` with
 /// arbitrary names, so the allowlist cannot live in the frontend alone or a
 /// malicious caller could exfiltrate unrelated shell secrets (SSH_AUTH_SOCK,
-/// GITHUB_TOKEN, ambient cloud credentials, …). Keep in sync with
-/// `OS_ENV_VAR_NAMES` in `apps/geolibre-desktop/src/lib/assistant/provider.ts`.
+/// GITHUB_TOKEN, ambient cloud credentials, …). Kept in sync with
+/// `OS_ENV_VAR_NAMES` in `apps/geolibre-desktop/src/lib/assistant/provider.ts`
+/// — the `assistant-os-env` test parses this list and asserts the two match.
 const ALLOWED_ENV_VARS: &[&str] = &[
     "GEOLIBRE_ASSISTANT_PROVIDER",
     "GEOLIBRE_ASSISTANT_MODEL",
