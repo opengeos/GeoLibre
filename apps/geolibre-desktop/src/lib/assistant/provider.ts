@@ -94,6 +94,8 @@ export const ASSISTANT_ENV_VAR_NAMES: readonly string[] = [
   "OPENAI_COMPATIBLE_BASE_URL",
   "OPENAI_COMPATIBLE_API_KEY",
   "OPENAI_COMPATIBLE_MODEL",
+  // Web-search tool (Tavily).
+  "TAVILY_API_KEY",
 ];
 
 /**

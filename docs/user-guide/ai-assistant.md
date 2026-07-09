@@ -55,6 +55,44 @@ When more than one provider key is configured, a **provider** dropdown appears i
 the panel header; a **model** dropdown lets you switch models for the selected
 provider. Your choice is remembered across sessions.
 
+### Reading keys from your system environment (desktop)
+
+On the **desktop app**, GeoLibre also reads the assistant's keys directly from
+your operating system's environment variables — the ones you export from your
+shell profile or set in the Windows *Environment Variables* dialog. Set a
+supported variable in your OS environment, restart the app, and the matching
+provider is configured automatically: you never type the key into Settings, and
+because it is not entered there, it is **never written to the saved
+`.geolibre.json` project file**. This is the recommended way to keep API keys out
+of project files that you share or commit.
+
+Only the following allowlisted names are read from your environment — GeoLibre
+never reads any other system variable (your `PATH`, `HOME`, and the like never
+reach the app):
+
+| Group | Variables read from the OS environment |
+| --- | --- |
+| Provider / model overrides | `GEOLIBRE_ASSISTANT_PROVIDER`, `GEOLIBRE_ASSISTANT_MODEL` |
+| Google Gemini | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_GENAI_API_KEY` |
+| Anthropic | `ANTHROPIC_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Ollama | `OLLAMA_BASE_URL`, `OLLAMA_HOST`, `OLLAMA_MODEL` |
+| Amazon Bedrock | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_DEFAULT_REGION`, `BEDROCK_MODEL` |
+| Custom (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, `OPENAI_COMPATIBLE_MODEL` |
+| Web search | `TAVILY_API_KEY` |
+
+**Precedence:** a value you enter in **Settings → Environment Variables** always
+wins; the OS environment only fills in the gaps. In the AI settings, any field
+supplied by the environment shows a note naming the variable backing it — leave
+that field blank to keep using the environment value.
+
+!!! note "Desktop only"
+    Reading OS environment variables requires the native backend, so it applies
+    to the **desktop app** only. The browser and Jupyter builds cannot read the
+    system environment; there, enter keys in **Settings → Environment Variables**
+    (or bake them in at build time). Changes to OS variables are picked up on the
+    next app launch.
+
 ## Using it
 
 Type a request and press **Ctrl/Cmd + Enter** (or click **Send**). The

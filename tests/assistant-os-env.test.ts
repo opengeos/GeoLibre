@@ -30,13 +30,14 @@ describe("ASSISTANT_ENV_VAR_NAMES", () => {
     }
   });
 
-  it("covers the provider/model selection overrides", () => {
+  it("covers the provider/model overrides and the web-search key", () => {
     for (const name of [
       "GEOLIBRE_ASSISTANT_PROVIDER",
       "GEOLIBRE_ASSISTANT_MODEL",
       "OLLAMA_HOST",
       "AWS_DEFAULT_REGION",
       "BEDROCK_MODEL",
+      "TAVILY_API_KEY",
     ]) {
       assert.ok(allowlist.has(name), `missing override name: ${name}`);
     }
