@@ -92,6 +92,9 @@ export function createWeatherLayer(
   let playing = false;
   let frameTimer: ReturnType<typeof setInterval> | null = null;
   const listeners = new Set<() => void>();
+  /** Recent tile-load-failure timestamps for this layer's source (ms). */
+  let errorTimestamps: number[] = [];
+  let mapErrorHandler: ((event: unknown) => void) | null = null;
 
   const notify = (): void => {
     for (const listener of listeners) listener();
@@ -148,6 +151,7 @@ export function createWeatherLayer(
   const startPlaying = (): void => {
     if (playing || layerId === null || frames.length <= 1) return;
     playing = true;
+    errorTimestamps = [];
     frameTimer = setInterval(() => {
       index = (index + 1) % frames.length;
       // Live source swap only per tick; avoid churning the store (and its dirty
@@ -155,6 +159,35 @@ export function createWeatherLayer(
       applyFrameToMap();
       notify();
     }, config.frameMs);
+  };
+
+  /**
+   * Break the failure cascade: if this layer's source starts failing to fetch
+   * tiles while the loop is running (the tile host rate-limiting the animation),
+   * `setTiles` would keep re-requesting them every frame — spamming errors
+   * non-stop and starving the rest of the map. Detect a burst of source errors
+   * and stop the loop so the map stays responsive; the user can press Play to
+   * retry. Only failures for THIS layer's source count.
+   */
+  const handleMapError = (event: unknown): void => {
+    if (!playing || layerId === null) return;
+    const record = event as
+      | { sourceId?: string; error?: { sourceId?: string } }
+      | null
+      | undefined;
+    const sourceId = record?.sourceId ?? record?.error?.sourceId;
+    if (sourceId !== rasterSourceId(layerId)) return;
+    const now = Date.now();
+    errorTimestamps.push(now);
+    errorTimestamps = errorTimestamps.filter((t) => now - t < 2500);
+    if (errorTimestamps.length >= 5) {
+      errorTimestamps = [];
+      stopPlaying();
+      console.warn(
+        `[${config.layerName}] tile requests are failing; paused the animation to keep the map responsive. Press Play to retry.`,
+      );
+      notify();
+    }
   };
 
   return {
@@ -191,12 +224,25 @@ export function createWeatherLayer(
           metadata: { ...frame.metadata, [config.layerFlag]: true },
         });
       }
+
+      // Watch for this source's tile failures so a rate-limited animation can
+      // stop itself instead of spiralling (see handleMapError).
+      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+      if (map) {
+        mapErrorHandler = handleMapError;
+        map.on("error", mapErrorHandler);
+      }
+
       notify();
       return true;
     },
 
     deactivate: (): void => {
       stopPlaying();
+      const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
+      if (map && mapErrorHandler) map.off("error", mapErrorHandler);
+      mapErrorHandler = null;
+      errorTimestamps = [];
       if (layerId !== null) {
         const store = useAppStore.getState();
         if (store.layers.some((l) => l.id === layerId)) {
