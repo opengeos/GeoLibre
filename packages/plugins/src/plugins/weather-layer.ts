@@ -82,10 +82,11 @@ function rasterSourceId(layerId: string): string {
 }
 
 /**
- * Order-independent shallow equality for a layer's flat metadata record, so
- * `syncStore` can skip a no-op write without being sensitive to JSON key order
- * (a saved project round-trips through JSON, and the metadata builders could be
- * reordered in future).
+ * Shallow equality for a layer's flat metadata record that ignores top-level
+ * key order, so `syncStore` can skip a no-op write even after a JSON round-trip
+ * or a future reordering of the metadata builders. Weather metadata values are
+ * primitives; the per-value `JSON.stringify` compare would be order-sensitive
+ * for a nested object value, but none are used here.
  */
 function metadataEqual(
   a: Record<string, unknown>,
