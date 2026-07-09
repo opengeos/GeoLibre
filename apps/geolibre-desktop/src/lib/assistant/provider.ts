@@ -60,14 +60,25 @@ const PROVIDER_KEY_NAMES: Partial<
 };
 
 /**
- * Every environment variable name the assistant resolves a provider from. This
- * is the allowlist the desktop app reads out of the user's OS environment (via
+ * The environment variables GeoLibre sources from the user's OS environment (via
  * the `read_env_vars` Tauri command) so API keys can live in the system/shell
- * environment instead of the saved project file (issue #1141). Keep it in sync
- * with the names read across this module and {@link ./provider-fields}; the
- * `assistant-os-env` test asserts it stays complete.
+ * environment instead of the saved project file (issue #1141).
+ *
+ * This is deliberately a **curated subset** of the names the assistant can read,
+ * not every one. It is limited to variables whose presence is a strong signal of
+ * intent to use that provider with GeoLibre: the hosted AI keys, the
+ * GeoLibre/Ollama/OpenAI-compatible-specific names, and the web-search key.
+ *
+ * Generic cloud credentials that developers routinely have in their shell for
+ * unrelated work are **excluded** so GeoLibre never silently adopts them — most
+ * importantly `AWS_*` (which would otherwise auto-activate Amazon Bedrock and
+ * bill the user's AWS account for LLM calls they never intended) and the ambient
+ * `OLLAMA_HOST`. Those providers remain available by entering credentials in
+ * Settings → Environment Variables. The Rust `read_env_vars` command enforces
+ * the same allowlist server-side; the `assistant-os-env` test guards both the
+ * inclusions and the exclusions.
  */
-export const ASSISTANT_ENV_VAR_NAMES: readonly string[] = [
+export const OS_ENV_VAR_NAMES: readonly string[] = [
   // Provider / model selection overrides.
   "GEOLIBRE_ASSISTANT_PROVIDER",
   "GEOLIBRE_ASSISTANT_MODEL",
@@ -79,17 +90,10 @@ export const ASSISTANT_ENV_VAR_NAMES: readonly string[] = [
   "ANTHROPIC_API_KEY",
   // OpenAI.
   "OPENAI_API_KEY",
-  // Ollama (local).
+  // Ollama (local). `OLLAMA_HOST` is intentionally omitted — it is the ambient
+  // Ollama variable; `OLLAMA_BASE_URL` is GeoLibre's own documented setting.
   "OLLAMA_BASE_URL",
-  "OLLAMA_HOST",
   "OLLAMA_MODEL",
-  // Amazon Bedrock.
-  "AWS_ACCESS_KEY_ID",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_SESSION_TOKEN",
-  "AWS_REGION",
-  "AWS_DEFAULT_REGION",
-  "BEDROCK_MODEL",
   // Custom OpenAI-compatible endpoint.
   "OPENAI_COMPATIBLE_BASE_URL",
   "OPENAI_COMPATIBLE_API_KEY",

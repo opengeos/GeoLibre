@@ -427,17 +427,42 @@ fn read_admin_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }
 }
 
-/// Read a caller-supplied allowlist of variables from the OS environment.
+/// The only environment variable names `read_env_vars` will ever return. This
+/// is a hard, server-side boundary: external plugins and any other JavaScript
+/// run in the same (unsandboxed) webview can `invoke("read_env_vars", …)` with
+/// arbitrary names, so the allowlist cannot live in the frontend alone or a
+/// malicious caller could exfiltrate unrelated shell secrets (SSH_AUTH_SOCK,
+/// GITHUB_TOKEN, ambient cloud credentials, …). Keep in sync with
+/// `OS_ENV_VAR_NAMES` in `apps/geolibre-desktop/src/lib/assistant/provider.ts`.
+const ALLOWED_ENV_VARS: &[&str] = &[
+    "GEOLIBRE_ASSISTANT_PROVIDER",
+    "GEOLIBRE_ASSISTANT_MODEL",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_GENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
+    "OPENAI_COMPATIBLE_BASE_URL",
+    "OPENAI_COMPATIBLE_API_KEY",
+    "OPENAI_COMPATIBLE_MODEL",
+    "TAVILY_API_KEY",
+];
+
+/// Read the AI Assistant's allowlisted variables from the OS environment.
 ///
-/// Only the names the frontend asks for are returned, and only when present and
-/// non-empty, so the desktop app never leaks the full process environment into
-/// the webview. This lets the AI Assistant source provider API keys from the
-/// user's system/shell environment instead of the project file (issue #1141),
-/// which keeps secrets out of the saved `.geolibre.json`.
+/// Only names in `ALLOWED_ENV_VARS` that the caller requests are returned,
+/// and only when present and non-empty, so the desktop app never leaks the full
+/// process environment — nor any variable outside the allowlist — into the
+/// webview. This lets the assistant source provider API keys from the user's
+/// system/shell environment instead of the project file (issue #1141), keeping
+/// secrets out of the saved `.geolibre.json`.
 #[tauri::command]
 fn read_env_vars(names: Vec<String>) -> std::collections::HashMap<String, String> {
     names
         .into_iter()
+        .filter(|name| ALLOWED_ENV_VARS.contains(&name.as_str()))
         .filter_map(|name| {
             let value = env::var(&name).ok()?;
             let trimmed = value.trim();

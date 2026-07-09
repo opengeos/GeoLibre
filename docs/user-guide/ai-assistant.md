@@ -68,7 +68,8 @@ of project files that you share or commit.
 
 Only the following allowlisted names are read from your environment — GeoLibre
 never reads any other system variable (your `PATH`, `HOME`, and the like never
-reach the app):
+reach the app), and this allowlist is enforced in the native backend, not just
+the UI:
 
 | Group | Variables read from the OS environment |
 | --- | --- |
@@ -76,8 +77,7 @@ reach the app):
 | Google Gemini | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_GENAI_API_KEY` |
 | Anthropic | `ANTHROPIC_API_KEY` |
 | OpenAI | `OPENAI_API_KEY` |
-| Ollama | `OLLAMA_BASE_URL`, `OLLAMA_HOST`, `OLLAMA_MODEL` |
-| Amazon Bedrock | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION`, `AWS_DEFAULT_REGION`, `BEDROCK_MODEL` |
+| Ollama | `OLLAMA_BASE_URL`, `OLLAMA_MODEL` |
 | Custom (OpenAI-compatible) | `OPENAI_COMPATIBLE_BASE_URL`, `OPENAI_COMPATIBLE_API_KEY`, `OPENAI_COMPATIBLE_MODEL` |
 | Web search | `TAVILY_API_KEY` |
 
@@ -85,6 +85,14 @@ reach the app):
 wins; the OS environment only fills in the gaps. In the AI settings, any field
 supplied by the environment shows a note naming the variable backing it — leave
 that field blank to keep using the environment value.
+
+!!! warning "Amazon Bedrock is not sourced from the OS environment"
+    Bedrock's `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` credentials (and the
+    ambient `OLLAMA_HOST`) are deliberately **excluded** from OS-environment
+    reading: developers commonly have AWS credentials exported in their shell for
+    unrelated work, and silently adopting them could auto-activate Bedrock and
+    bill their AWS account for LLM calls they never intended. To use Bedrock,
+    enter the credentials in **Settings → Environment Variables**.
 
 !!! note "Desktop only"
     Reading OS environment variables requires the native backend, so it applies

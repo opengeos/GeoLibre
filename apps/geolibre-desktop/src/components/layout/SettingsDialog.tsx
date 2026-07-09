@@ -106,8 +106,9 @@ import {
   PROVIDER_LABELS,
   availableProviders,
   type AssistantProviderId,
+  type RuntimeEnv,
 } from "../../lib/assistant/provider";
-import { readOsEnv } from "../../lib/assistant/os-env";
+import { loadOsEnvVars, readOsEnv } from "../../lib/assistant/os-env";
 import {
   PROVIDER_DOCS_URL,
   PROVIDER_FIELDS,
@@ -462,10 +463,21 @@ export function SettingsDialog({
     }
     return env;
   }, [draftPreferences.environmentVariables]);
-  // AI keys read from the user's OS environment (desktop only). Loaded once at
-  // startup; captured when the dialog mounts so provider status and the badges
-  // below reflect env-sourced credentials the user never typed here.
-  const osEnv = useMemo(() => readOsEnv(), []);
+  // AI keys read from the user's OS environment (desktop only). This dialog is
+  // mounted eagerly at startup — before the App-root loader populates the cache
+  // and before the async Tauri read resolves — so a mount-only read would freeze
+  // at `{}`. Load it here through state (mirroring useRuntimeEnvironmentVariables)
+  // so provider status and the badges below reflect env-sourced credentials.
+  const [osEnv, setOsEnv] = useState<RuntimeEnv>(() => readOsEnv());
+  useEffect(() => {
+    let cancelled = false;
+    loadOsEnvVars().then((env) => {
+      if (!cancelled) setOsEnv(env);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Merge OS env under the draft so a provider configured purely via a system
   // environment variable still reports "ready" — draft values win the overlap.
   const effectiveEnv = useMemo(
