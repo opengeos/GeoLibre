@@ -154,6 +154,11 @@ let settings: WeatherSettings = { ...DEFAULT_WEATHER_SETTINGS };
 let map: MapLibreMap | null = null;
 let control: WeatherControl | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
+/** Map interaction handlers, kept so they can be detached on deactivate. */
+let onMoveStart: (() => void) | null = null;
+let onMoveEnd: (() => void) | null = null;
+let onZoomStart: (() => void) | null = null;
+let onZoomEnd: (() => void) | null = null;
 
 /** Tile host from the most recent maps index. */
 let tileHost = "";
@@ -336,6 +341,17 @@ function ensureLayer(activeMap: MapLibreMap): void {
 function teardownLayer(activeMap: MapLibreMap): void {
   if (activeMap.getLayer(LAYER_ID)) activeMap.removeLayer(LAYER_ID);
   if (activeMap.getSource(SOURCE_ID)) activeMap.removeSource(SOURCE_ID);
+}
+
+/**
+ * Show or hide the overlay layer. Hiding sets `visibility: none`, which stops
+ * MapLibre from requesting or rendering the source's tiles — used to take the
+ * overlay out of the pipeline while the user is actively zooming, so the zoom
+ * stays smooth and no intermediate-zoom tiles are requested only to be aborted.
+ */
+function setLayerHidden(hidden: boolean): void {
+  if (!map?.getLayer(LAYER_ID)) return;
+  map.setLayoutProperty(LAYER_ID, "visibility", hidden ? "none" : "visible");
 }
 
 /** Point the raster source at the given frame's tiles and update the control. */
@@ -602,6 +618,25 @@ export const maplibreWeatherPlugin: GeoLibrePlugin = {
       });
     });
 
+    // Keep the overlay out of the way of map interaction. While the map is
+    // moving the animation is paused (no per-frame tile swaps competing with the
+    // pan), and during a zoom the layer is hidden entirely so MapLibre neither
+    // renders nor requests intermediate-zoom tiles — that is what kept the zoom
+    // laggy and flooded the console with aborted-tile errors. When movement ends
+    // the layer reappears and playback resumes, loading just the settled view.
+    onMoveStart = () => stopAnimation();
+    onMoveEnd = () => {
+      if (settings.playing && status === "ready") {
+        startAnimation(INITIAL_PLAY_DELAY_MS);
+      }
+    };
+    onZoomStart = () => setLayerHidden(true);
+    onZoomEnd = () => setLayerHidden(false);
+    activeMap.on("movestart", onMoveStart);
+    activeMap.on("moveend", onMoveEnd);
+    activeMap.on("zoomstart", onZoomStart);
+    activeMap.on("zoomend", onZoomEnd);
+
     void loadFrames();
     // Refresh the frame index periodically so the loop keeps up with new radar.
     refreshTimer = setInterval(() => void loadFrames(true), REFRESH_INTERVAL_MS);
@@ -616,6 +651,13 @@ export const maplibreWeatherPlugin: GeoLibrePlugin = {
     loadToken += 1;
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    if (map) {
+      if (onMoveStart) map.off("movestart", onMoveStart);
+      if (onMoveEnd) map.off("moveend", onMoveEnd);
+      if (onZoomStart) map.off("zoomstart", onZoomStart);
+      if (onZoomEnd) map.off("zoomend", onZoomEnd);
+    }
+    onMoveStart = onMoveEnd = onZoomStart = onZoomEnd = null;
     if (control) {
       app.removeMapControl(control);
       control = null;
