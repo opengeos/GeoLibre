@@ -1083,7 +1083,9 @@
     "noLayers": "No layers yet",
     "labelPlaceholder": "Label",
     "labelLabel": "Label for map {{number}}",
-    "removePane": "Remove map {{number}}"
+    "removePane": "Remove map {{number}}",
+    "show3d": "Show map {{number}} as a 3D globe",
+    "show2d": "Show map {{number}} as a 2D map"
   },
   "mapContextMenu": {
     "copyCoordinatesHint": "Copy coordinates to clipboard",

@@ -3,6 +3,12 @@
 
 declare const __GEOLIBRE_VERSION__: string;
 
+// Cesium Ion access token for the 3D-globe view, injected by vite.config.ts from
+// the CESIUM_TOKEN env var. Empty string when unset (the globe then uses the
+// plain ellipsoid + a keyless imagery provider). Ion tokens are designed to ship
+// in the client bundle.
+declare const __CESIUM_ION_TOKEN__: string;
+
 // True only in the Microsoft Store MSIX build (GEOLIBRE_STORE_BUILD=1), where the
 // in-app update checker is removed so the app updates solely through the Store
 // (Microsoft policy 10.2.5). false in every other build. See vite.config.ts.

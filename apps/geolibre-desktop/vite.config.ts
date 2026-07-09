@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
+import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
@@ -260,6 +261,9 @@ function manualChunks(id: string): string | undefined {
   // `maplibre` chunk and force DuckDB into boot. Give it its own lazy chunk.
   if (id.includes("maplibre-gl-duckdb")) return "maplibre-duckdb";
   if (id.includes("maplibre-gl")) return "maplibre";
+  // Cesium is large (~several MB) and only loads when the user opens the 3D
+  // globe view; keep it in its own lazily-fetched chunk, off the boot graph.
+  if (id.includes("/node_modules/cesium/")) return "cesium";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:
   // that produced a circular manual-chunks warning. Do not re-add a catch-all
@@ -655,6 +659,10 @@ function pwaPlugin(): Plugin[] {
     // its first runtime fetch and is CacheFirst-cached thereafter.
     "**/maplibre-*",
     "**/duckdb-*",
+    // CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane
+    // switches to the globe, so it is CacheFirst-cached on first use rather than
+    // bloating the app-shell precache.
+    "**/cesium-*",
     // h5wasm's ~5.6 MB single-file chunk (embedded libhdf5) for the local
     // NetCDF/HDF reader. Lazily imported when a user opens a local file, so it
     // is CacheFirst-cached on first use rather than bloating the precache.
@@ -821,6 +829,7 @@ export default defineConfig({
     copyRtlText(
       path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js"),
     ),
+    copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
@@ -835,6 +844,13 @@ export default defineConfig({
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
     __GDAL3_CDN_PATHS__: JSON.stringify(GDAL3_CDN_PATHS),
+    // Cesium Ion access token for the 3D-globe view, bridged from the
+    // CESIUM_TOKEN env var (or VITE_CESIUM_TOKEN) at build time. Ion tokens are
+    // designed to ship in the client bundle. Empty string when unset — the globe
+    // then falls back to the plain ellipsoid + a keyless imagery provider.
+    __CESIUM_ION_TOKEN__: JSON.stringify(
+      process.env.CESIUM_TOKEN ?? process.env.VITE_CESIUM_TOKEN ?? "",
+    ),
   },
   server: {
     port: 5173,
@@ -868,6 +884,16 @@ export default defineConfig({
       // pre-bundled via the deck.gl-geotiff static import.)
       "proj4",
       "geotiff-geokeys-to-proj4",
+      // Cesium (the 3D-globe view). Pre-bundle it up front so esbuild applies
+      // CJS→ESM interop to its CommonJS transitive deps (e.g. mersenne-twister,
+      // which has no ESM entry): without this, the dev server serves those raw
+      // and the `import x from "mersenne-twister"` default import throws. It is
+      // reached only through the lazy `import("cesium")` in CesiumCanvas, so
+      // without pre-bundling Vite would also discover it on first open and do a
+      // full-page reload to re-optimize. Cesium locates its Workers/Assets via
+      // the CESIUM_BASE_URL global (never `import.meta.url`), so pre-bundling
+      // does not mangle any asset reference.
+      "cesium",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).

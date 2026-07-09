@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { SecondaryMapCanvas } from "@geolibre/map";
+import { CesiumCanvas, SecondaryMapCanvas } from "@geolibre/map";
 import {
   Button,
   DropdownMenu,
@@ -9,9 +9,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import { Layers, X } from "lucide-react";
+import { Globe, Layers, Map as MapIcon, X } from "lucide-react";
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+
+// Cesium Ion access token, injected at build time from the CESIUM_TOKEN env var
+// (see vite.config.ts). Empty when unset. Cesium World Imagery + Terrain require
+// a token, so without one the 3D-globe view is not offered at all: the per-pane
+// globe toggle is hidden. In the web build a deployer supplies the token via the
+// CESIUM_TOKEN build env; a runtime user-entered token (Settings) is a follow-up.
+const CESIUM_ION_TOKEN: string = __CESIUM_ION_TOKEN__;
+const CESIUM_AVAILABLE: boolean = CESIUM_ION_TOKEN.trim().length > 0;
 
 /**
  * An editable label shown centered at the top of a map pane. Empty by default;
@@ -107,20 +115,58 @@ function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
   const setSecondaryMapLabel = useAppStore((s) => s.setSecondaryMapLabel);
+  const setSecondaryViewKind = useAppStore((s) => s.setSecondaryViewKind);
   const label = useAppStore(
     (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.label ?? "",
+  );
+  // Absent viewKind means the default 2D map (back-compat with older panes).
+  // Only honor a 3D pane when Cesium is actually available (a token is present);
+  // otherwise a project saved with a globe pane silently opens as the 2D map.
+  const is3d = useAppStore(
+    (s) =>
+      CESIUM_AVAILABLE &&
+      s.secondaryMapViews.find((p) => p.id === viewId)?.viewKind === "cesium",
   );
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
-      <SecondaryMapCanvas viewId={viewId} />
+      {is3d ? (
+        <CesiumCanvas viewId={viewId} ionToken={CESIUM_ION_TOKEN} />
+      ) : (
+        <SecondaryMapCanvas viewId={viewId} />
+      )}
       <PaneLabel
         value={label}
         onChange={(value) => setSecondaryMapLabel(viewId, value)}
         ariaLabel={t("mapGrid.labelLabel", { number: index + 2 })}
       />
       <div className="absolute left-2 top-2 z-10 flex items-center gap-1.5">
-        <PaneLayerToggle viewId={viewId} index={index} />
+        {/* The 3D globe shares the layer subset toggle, but it does not yet
+            render layers (M1), so it is only meaningful for the 2D pane. */}
+        {is3d ? null : <PaneLayerToggle viewId={viewId} index={index} />}
+        {/* The 2D/3D toggle only appears when Cesium is available (a token is
+            configured); otherwise the globe is not offered. */}
+        {CESIUM_AVAILABLE ? (
+          <button
+            type="button"
+            className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
+            aria-label={
+              is3d
+                ? t("mapGrid.show2d", { number: index + 2 })
+                : t("mapGrid.show3d", { number: index + 2 })
+            }
+            aria-pressed={is3d}
+            onClick={() =>
+              setSecondaryViewKind(viewId, is3d ? "maplibre" : "cesium")
+            }
+          >
+            {is3d ? (
+              <MapIcon className="h-4 w-4" />
+            ) : (
+              <Globe className="h-4 w-4" />
+            )}
+          </button>
+        ) : null}
         <button
           type="button"
           className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
