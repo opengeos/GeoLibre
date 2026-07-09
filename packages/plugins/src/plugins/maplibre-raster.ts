@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import type { Layer } from "@deck.gl/core";
 import type {
   RasterControl,
   RasterControlEventHandler,
@@ -6,6 +7,11 @@ import type {
 } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import {
+  ensureSharedDeckOverlay,
+  onSharedDeckDevice,
+  setSharedDeckLayers,
+} from "./shared-deck-overlay";
 import {
   isRasterControlStoreLayer,
   resetRasterStoreSyncSuspension,
@@ -83,9 +89,11 @@ type RasterLayerManagerInternals = {
       map: MapControlHost,
       options: OverlayFactoryOptions,
     ) => OverlayLike;
+    removeOverlay?: (map: MapControlHost, overlay: OverlayLike) => void;
     loadGeoTIFF?: (url: string) => Promise<unknown>;
     geolibreTransparentOverlayPatched?: boolean;
     geolibreTauriNodataPatched?: boolean;
+    geolibreSharedOverlayPatched?: boolean;
   };
 };
 type RasterTileArray = {
@@ -110,6 +118,10 @@ let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
 let restorePanelExpandTimeout: number | null = null;
 let rasterControlInterleaved = true;
+// Unsubscribes the web raster overlay proxy from the shared Deck's device
+// notifications when the control's overlay is torn down (see
+// patchWebRasterOverlayFactory).
+let rasterSharedOverlayDeviceUnsubscribe: (() => void) | null = null;
 
 /**
  * Details of a raster that the panel could not render because it is a striped
@@ -451,6 +463,10 @@ async function ensureRasterControl(
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
+    // On web the control renders interleaved, which shares deck.gl's per-map
+    // Deck with the other interleaved overlays; route it through the shared
+    // overlay so it coexists with them (#1149). No-op on Tauri (overlaid).
+    patchWebRasterOverlayFactory(app, rasterControl);
     // Patch the deck.gl render path so classified single-band rasters sample a
     // custom stepped colormap. Must run after addMapControl: the LayerManager
     // (and its _renderTileFor / _device) is created in the control's onAdd,
@@ -651,6 +667,58 @@ async function patchTauriRasterOverlayFactory(
       patchGeoTiffNumericNodata(await loadGeoTIFF(url));
     deps.geolibreTauriNodataPatched = true;
   }
+}
+
+/**
+ * On web the raster control renders interleaved, so its deck.gl overlay reuses
+ * deck.gl's single per-map Deck (`map.__deck`) -- and each interleaved overlay's
+ * setProps overwrites that Deck's whole layer list with only its own layers, so
+ * a raster and a Google/deckgl-viz overlay silently erase each other
+ * (opengeos/GeoLibre#1149). This routes the control's interleaved layers through
+ * the single shared deck overlay (./shared-deck-overlay.ts) instead: createOverlay
+ * returns a lightweight proxy whose only job is to forward the control's setProps
+ * into the shared overlay under the "raster" source, and the shared Deck's luma
+ * device is fed to the control's onDeviceInitialized so its classification
+ * colormap textures still allocate against the right GPU context.
+ *
+ * No-op on Tauri, which renders overlaid (a separate deck canvas that owns its
+ * own Deck) and so never touches the shared interleaved Deck.
+ *
+ * @param app - The host application API (drives the shared overlay).
+ * @param control - The mounted maplibre-gl-raster control.
+ */
+function patchWebRasterOverlayFactory(
+  app: GeoLibreAppAPI,
+  control: RasterControl,
+): void {
+  if (isTauriRuntime()) return;
+
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  const deps = manager?._deps;
+  if (!deps || deps.geolibreSharedOverlayPatched) return;
+
+  deps.createOverlay = (_map, options) => {
+    void ensureSharedDeckOverlay(app);
+    // Feed the shared Deck's device to the control so its GPU colormap textures
+    // allocate against the same context its COGLayers render in.
+    rasterSharedOverlayDeviceUnsubscribe?.();
+    rasterSharedOverlayDeviceUnsubscribe = onSharedDeckDevice((device) => {
+      options.onDeviceInitialized(device);
+    });
+    return {
+      setProps: (props: { layers?: unknown[] }) => {
+        setSharedDeckLayers("raster", (props.layers ?? []) as Layer[]);
+      },
+    };
+  };
+
+  deps.removeOverlay = () => {
+    rasterSharedOverlayDeviceUnsubscribe?.();
+    rasterSharedOverlayDeviceUnsubscribe = null;
+    setSharedDeckLayers("raster", []);
+  };
+
+  deps.geolibreSharedOverlayPatched = true;
 }
 
 function patchGeoTiffNumericNodata(tiff: unknown): unknown {

@@ -1,8 +1,11 @@
 import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
-import type { MapboxOverlay } from "@deck.gl/mapbox";
 import type { GeoLibreAppAPI, GeoLibreDeckGL } from "../../types";
 import { ensureMercatorProjection } from "../map-projection-utils";
+import {
+  ensureSharedDeckOverlay,
+  setSharedDeckLayers,
+} from "../shared-deck-overlay";
 import { buildElevation3dLayer, isElevation3dLayer } from "./elevation";
 import {
   type DeckVizBuildContext,
@@ -11,31 +14,22 @@ import {
 import { deckVizRows, isDeckVizLayer, readDeckVizConfig } from "./store-layer";
 
 /**
- * Owns the single deck.gl overlay that renders every Deck.gl Layer in the
- * store, plus ordinary vector layers whose style enables 3D Z-value rendering
- * (see ./elevation.ts). Mirrors the store-subscription pattern of the raster
- * overlay: the store is the source of truth, this module rebuilds the
- * overlay's layer list whenever the layer set, visibility, or opacity
- * changes, and drives an animation clock for animated layer types (Trips).
+ * Renders every Deck.gl Layer in the store, plus ordinary vector layers whose
+ * style enables 3D Z-value rendering (see ./elevation.ts), into the shared
+ * interleaved deck overlay (../shared-deck-overlay.ts) under the "deckviz"
+ * source. The store is the source of truth: this module rebuilds its layer list
+ * whenever the layer set, visibility, or opacity changes, and drives an
+ * animation clock for animated layer types (Trips). The shared overlay owns the
+ * single MapboxOverlay so these layers coexist with Google 3D Tiles and the COG
+ * raster overlay instead of clobbering deck.gl's per-map Deck (see #1149).
  */
 
 // Data-time units advanced per real second for animated layers.
 const ANIMATION_SPEED = 60;
 
-let overlay: MapboxOverlay | null = null;
-let overlayMounted = false;
 let storeUnsubscribe: (() => void) | null = null;
 let deckGL: GeoLibreDeckGL | null = null;
 let appRef: GeoLibreAppAPI | null = null;
-// The map the current overlay is bound to; on map re-init a new overlay is
-// created and re-attached, mirroring restoreDirections.
-let boundMap: unknown;
-
-// Bounds the lazy-mount retry so a restore that races map init still mounts
-// (the store subscription only fires on layer-set changes), without spinning
-// forever if the map never becomes ready.
-const MAX_MOUNT_RETRIES = 120;
-let mountRetries = 0;
 
 let rafHandle: number | null = null;
 // Signature of the current animated-layer set; when it changes the loop length
@@ -92,27 +86,10 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
   if (!app.getDeckGL) return;
   deckGL ??= await app.getDeckGL();
 
-  const map = app.getMap?.() ?? null;
-  if (overlay && boundMap === map) {
-    // Already bound to this map; just refresh the rendered layers.
-    renderDeckVizLayers();
-    return;
-  }
-
-  // First attach, or the map was reinitialised (e.g. a projection/globe
-  // toggle). Drop the stale overlay before building a fresh one so its widget
-  // container cannot leak onto the new map.
-  if (overlay && overlayMounted) {
-    try {
-      app.removeMapControl(overlay);
-    } catch (error) {
-      // The old map may already be gone; surface anything unexpected.
-      console.debug("[GeoLibre] deckgl-viz: overlay cleanup", error);
-    }
-  }
-  boundMap = map;
-  overlay = new deckGL.mapbox.MapboxOverlay({ interleaved: true, layers: [] });
-  overlayMounted = false;
+  // The shared overlay owns the single interleaved MapboxOverlay and its map
+  // binding (including rebind on a globe/projection toggle); this module only
+  // supplies the "deckviz" layer list.
+  await ensureSharedDeckOverlay(app);
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) renderDeckVizLayers();
   });
@@ -120,60 +97,38 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
 }
 
 /**
- * Tears down the overlay and store subscription. Store layers are left intact
- * so re-activation (or a project still holding them) re-renders.
+ * Tears down the store subscription and clears this module's contribution to
+ * the shared overlay. Store layers are left intact so re-activation (or a
+ * project still holding them) re-renders.
  *
- * @param app - The host application API.
+ * @param _app - The host application API (unused; the shared overlay owns the
+ *   MapboxOverlay lifecycle).
  */
-export function deactivateDeckViz(app: GeoLibreAppAPI): void {
+export function deactivateDeckViz(_app: GeoLibreAppAPI): void {
   storeUnsubscribe?.();
   storeUnsubscribe = null;
   stopAnimation();
-  overlay?.setProps({ layers: [] });
-  if (overlay && overlayMounted) {
-    app.removeMapControl(overlay);
-  }
-  overlay = null;
-  overlayMounted = false;
-  boundMap = undefined;
-  // Reset so a session that exhausted the retries can re-mount after
-  // reactivation.
-  mountRetries = 0;
+  setSharedDeckLayers("deckviz", []);
 }
 
 function renderDeckVizLayers(): void {
-  if (!overlay || !deckGL || !appRef) return;
+  if (!deckGL || !appRef) return;
 
   const storeLayers = useAppStore.getState().layers;
   const vizLayers = storeLayers.filter(isDeckVizLayer);
   const hasRenderableLayers =
     vizLayers.length > 0 || storeLayers.some(isElevation3dLayer);
 
+  if (!hasRenderableLayers) {
+    setSharedDeckLayers("deckviz", []);
+    stopAnimation();
+    return;
+  }
+
   // The deck.gl overlay renders in a Mercator viewport and does not align with
   // MapLibre's globe projection, so force Mercator while deck layers are shown
   // (same contract as the DuckDB deck overlay).
-  if (hasRenderableLayers) {
-    ensureMercatorProjection(appRef.getMap?.());
-  }
-
-  // Mount lazily: the map must be ready for addMapControl to succeed. Retry on
-  // the next animation frame so a project restore that races map init does not
-  // depend on a later store change to mount.
-  if (!overlayMounted) {
-    if (!hasRenderableLayers) return;
-    // Add at top-left for consistency with other deck.gl controls. Interleaved
-    // mode renders through MapLibre's WebGL context, so bearing/pitch camera
-    // updates stay in lockstep with the map for large geospatial models.
-    if (!appRef.addMapControl(overlay, "top-left")) {
-      if (mountRetries < MAX_MOUNT_RETRIES) {
-        mountRetries += 1;
-        requestAnimationFrame(() => renderDeckVizLayers());
-      }
-      return;
-    }
-    mountRetries = 0;
-    overlayMounted = true;
-  }
+  ensureMercatorProjection(appRef.getMap?.());
 
   const contexts = vizLayers
     .filter((layer) => layer.visible)
@@ -208,7 +163,7 @@ function renderDeckVizLayers(): void {
   // Reverse so the topmost layer in the panel draws last (on top), matching the
   // store's first-is-top ordering.
   deckLayers.reverse();
-  overlay.setProps({ layers: deckLayers });
+  setSharedDeckLayers("deckviz", deckLayers);
 
   if (animationRange > 0) startAnimation();
   else stopAnimation();

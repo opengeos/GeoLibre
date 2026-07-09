@@ -11,7 +11,6 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import type { Layer } from "@deck.gl/core";
-import type { MapboxOverlay } from "@deck.gl/mapbox";
 import {
   DEFAULT_TILESET_URL,
   ThreeDTilesControl,
@@ -30,6 +29,10 @@ import {
   acquireMercatorProjectionLock,
   releaseMercatorProjectionLock,
 } from "./map-projection-utils";
+import {
+  ensureSharedDeckOverlay,
+  setSharedDeckLayers,
+} from "./shared-deck-overlay";
 import {
   addArcgisI3sTilesLayer,
   arcgisI3sSceneLayerName,
@@ -95,18 +98,15 @@ let threeDTilesStoreSyncSuspended = 0;
 let threeDTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
 let activeThreeDTilesApp: GeoLibreAppAPI | null = null;
 
-let googleTilesOverlay: MapboxOverlay | null = null;
-let googleTilesOverlayMounted = false;
+// The Google tiles render through the shared interleaved deck overlay
+// (./shared-deck-overlay.ts) under the "google-3d-tiles" source, so they coexist
+// with the deckgl-viz overlay and the COG raster overlay instead of clobbering
+// deck.gl's per-map Deck (see #1149). This module only builds the layer list;
+// the shared overlay owns the MapboxOverlay and its map binding.
 let googleTilesStoreUnsubscribe: (() => void) | null = null;
 let googleTilesDeckGL: GeoLibreDeckGL | null = null;
 let googleTilesApp: GeoLibreAppAPI | null = null;
-let googleTilesBoundMap: unknown;
 let ensureGoogleTilesOverlayInFlight: Promise<void> | null = null;
-let googleTilesMountRetryScheduled = false;
-let googleTilesMountRetries = 0;
-// Latches once the bounded mount retry gives up, so the warning logs once
-// rather than on every subsequent store-driven render.
-let googleTilesMountGaveUp = false;
 /** Ref-counted mercator lock key for this overlay (see map-projection-utils). */
 const GOOGLE_PROJECTION_LOCK_KEY = "google-photorealistic";
 let googleAltitudeOffsetTile3DLayerClass: DeckTile3DLayerClass | null = null;
@@ -115,13 +115,11 @@ let googleAltitudeOffsetTile3DLayerClass: DeckTile3DLayerClass | null = null;
 // picks up an API-key change without reopening the project.
 let googleTilesRuntimeEnvUnsubscribe: (() => void) | null = null;
 // The last rendered Google-layer signature, used to skip rebuilding deck layers
-// when an unrelated layer mutation fires the store subscription.
+// when an unrelated layer mutation fires the store subscription. Non-null means
+// Google layers are currently contributed to the shared overlay.
 let lastGoogleTilesLayerSignature: string | null = null;
 const googleTilesApiKeysByLayerId = new Map<string, string>();
 const googleTilesApiKeysByPanel = new WeakMap<HTMLElement, string>();
-// ~1s at 60fps: bound the mount retry so a map that never initializes cannot
-// spin requestAnimationFrame forever.
-const GOOGLE_TILES_MAX_MOUNT_RETRIES = 60;
 
 type ThreeDTilesLayerInstance = InstanceType<typeof ThreeDTilesLayer>;
 
@@ -1271,35 +1269,12 @@ async function runEnsureGooglePhotorealisticTilesOverlay(
   if (!app.getDeckGL) return;
   googleTilesDeckGL ??= await app.getDeckGL();
 
-  const map = app.getMap?.() ?? null;
-  if (googleTilesOverlay && googleTilesBoundMap === map) {
-    renderGooglePhotorealisticTilesLayers();
-    return;
-  }
-
-  if (googleTilesOverlay && googleTilesOverlayMounted) {
-    // The previously bound map may already be torn down (style reload / project
-    // open), in which case removeMapControl can throw. Guard it like the other
-    // overlays in this repo so a stale-map cleanup does not break the rebind.
-    try {
-      app.removeMapControl(googleTilesOverlay);
-    } catch (error) {
-      console.warn(
-        "[GeoLibre] Failed to detach the Google 3D Tiles overlay from the previous map",
-        error,
-      );
-    }
-  }
-  googleTilesBoundMap = map;
-  googleTilesOverlay = new googleTilesDeckGL.mapbox.MapboxOverlay({
-    interleaved: true,
-    layers: [],
-  });
-  googleTilesOverlayMounted = false;
-  // A fresh overlay instance holds no layers and no prior mount attempts.
+  // The shared overlay owns the single interleaved MapboxOverlay and its map
+  // binding (including rebind on a globe/projection toggle); this module only
+  // supplies the "google-3d-tiles" layer list. Clearing the signature forces the
+  // next render to rebuild the layers into the (possibly fresh) shared overlay.
+  await ensureSharedDeckOverlay(app);
   lastGoogleTilesLayerSignature = null;
-  googleTilesMountRetries = 0;
-  googleTilesMountGaveUp = false;
   addGoogleTilesRuntimeEnvListener();
   googleTilesStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) {
@@ -1344,55 +1319,26 @@ function addGoogleTilesRuntimeEnvListener(): void {
 }
 
 function renderGooglePhotorealisticTilesLayers(): void {
-  if (!googleTilesOverlay || !googleTilesDeckGL || !googleTilesApp) return;
+  if (!googleTilesDeckGL || !googleTilesApp) return;
 
   const layers = useAppStore
     .getState()
     .layers.filter(isGooglePhotorealisticTilesLayer);
 
-  // Tear the overlay back down once the last Google tileset is gone, mirroring
-  // the lazy mount below, so an empty deck.gl overlay is not left attached to
-  // the map for the rest of the session.
+  // Drop our contribution and release the mercator lock once the last Google
+  // tileset is gone. A non-null signature means we currently hold layers, so
+  // this clears exactly once on the transition to empty (the store subscription
+  // fires on ANY layer change).
   if (layers.length === 0) {
-    if (googleTilesOverlayMounted) {
-      try {
-        googleTilesApp.removeMapControl(googleTilesOverlay);
-      } catch (error) {
-        console.warn(
-          "[GeoLibre] Failed to remove the empty Google 3D Tiles overlay",
-          error,
-        );
-      }
-      googleTilesOverlayMounted = false;
+    if (lastGoogleTilesLayerSignature !== null) {
+      setSharedDeckLayers("google-3d-tiles", []);
+      lastGoogleTilesLayerSignature = null;
+      restoreGooglePhotorealisticPreviousProjection();
     }
-    lastGoogleTilesLayerSignature = null;
-    googleTilesMountRetries = 0;
-    googleTilesMountGaveUp = false;
-    restoreGooglePhotorealisticPreviousProjection();
     return;
   }
 
   forceGooglePhotorealisticMercatorProjection(googleTilesApp);
-
-  if (!googleTilesOverlayMounted) {
-    if (!googleTilesApp.addMapControl(googleTilesOverlay, "top-left")) {
-      // The map may still be initializing (e.g. during project restore). The
-      // store subscription only fires on layer-set changes, so schedule a
-      // bounded retry on the next animation frame rather than leaving the tiles
-      // permanently unmounted.
-      scheduleGoogleTilesMountRetry();
-      return;
-    }
-    googleTilesOverlayMounted = true;
-    googleTilesMountRetries = 0;
-    googleTilesMountGaveUp = false;
-    // The successful mount can happen on a later async retry, after the map
-    // becomes ready; record the map it actually bound to so a subsequent
-    // ensure() call does not see a stale null and needlessly tear down/refetch.
-    googleTilesBoundMap = googleTilesApp.getMap?.() ?? null;
-    // A fresh mount starts with no layers, so force the setProps below.
-    lastGoogleTilesLayerSignature = null;
-  }
 
   // The store subscription fires on ANY layer-set change, not just Google ones.
   // Rebuilding hands deck.gl new loadOptions/fetch object references each time,
@@ -1408,32 +1354,7 @@ function renderGooglePhotorealisticTilesLayers(): void {
     .filter((layer): layer is Layer => layer !== null)
     .reverse();
 
-  googleTilesOverlay.setProps({ layers: deckLayers });
-}
-
-function scheduleGoogleTilesMountRetry(): void {
-  if (
-    googleTilesMountRetryScheduled ||
-    googleTilesMountGaveUp ||
-    typeof requestAnimationFrame === "undefined"
-  ) {
-    return;
-  }
-  if (googleTilesMountRetries >= GOOGLE_TILES_MAX_MOUNT_RETRIES) {
-    // Latch so this warns once, not on every subsequent store-driven render.
-    // A later inline addMapControl attempt can still recover and clear this.
-    googleTilesMountGaveUp = true;
-    console.warn(
-      "[GeoLibre] Gave up mounting the Google 3D Tiles overlay after repeated addMapControl failures.",
-    );
-    return;
-  }
-  googleTilesMountRetries += 1;
-  googleTilesMountRetryScheduled = true;
-  requestAnimationFrame(() => {
-    googleTilesMountRetryScheduled = false;
-    renderGooglePhotorealisticTilesLayers();
-  });
+  setSharedDeckLayers("google-3d-tiles", deckLayers);
 }
 
 function googleTilesLayerSignature(layers: GeoLibreLayer[]): string {
