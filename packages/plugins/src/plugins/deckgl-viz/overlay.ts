@@ -111,7 +111,7 @@ async function runEnsureDeckVizOverlay(app: GeoLibreAppAPI): Promise<void> {
     }
   }
   boundMap = map;
-  overlay = new deckGL.mapbox.MapboxOverlay({ interleaved: false, layers: [] });
+  overlay = new deckGL.mapbox.MapboxOverlay({ interleaved: true, layers: [] });
   overlayMounted = false;
   storeUnsubscribe ??= useAppStore.subscribe((state, previous) => {
     if (state.layers !== previous.layers) renderDeckVizLayers();
@@ -161,10 +161,9 @@ function renderDeckVizLayers(): void {
   // depend on a later store change to mount.
   if (!overlayMounted) {
     if (!hasRenderableLayers) return;
-    // Add at top-left: MapboxOverlay's overlaid canvas is positioned `left:0`
-    // to fill the map, which only aligns when its control container is the
-    // left corner. The host's addControl otherwise defaults to top-right,
-    // pushing the canvas a full map-width to the right (off screen).
+    // Add at top-left for consistency with other deck.gl controls. Interleaved
+    // mode renders through MapLibre's WebGL context, so bearing/pitch camera
+    // updates stay in lockstep with the map for large geospatial models.
     if (!appRef.addMapControl(overlay, "top-left")) {
       if (mountRetries < MAX_MOUNT_RETRIES) {
         mountRetries += 1;
