@@ -114,8 +114,14 @@ import {
   setLayerRefreshConfig,
 } from "../../lib/layer-refresh";
 import {
+  clearPrintExtent,
+  drawPrintExtent,
+  type PrintExtent,
+} from "../../lib/print-extent";
+import {
   canExportRasterLayer,
   exportRasterLayer,
+  exportRasterSubset,
 } from "../../lib/raster-export";
 import {
   exportVectorLayer,
@@ -196,6 +202,10 @@ const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+
+// Distinct extent-box source prefix for the raster subset export so its drawn
+// box never shares a map source with the Print Layout dialog's extent box.
+const EXPORT_EXTENT_PREFIX = "geolibre-export-extent";
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -1445,6 +1455,75 @@ export function LayerPanel({
     [clearRefreshStatusTimer, scheduleStatusClear, t],
   );
 
+  // Export only the pixels inside a box the user drags on the map, so a small
+  // area of a large cloud-hosted COG downloads cheaply (GH #1155). Uses its own
+  // extent-box source prefix so it never clobbers the Print Layout extent box.
+  const handleExportRasterSubset = useCallback(
+    async (layer: GeoLibreLayer) => {
+      const map = mapControllerRef.current?.getMap();
+      if (!map) return;
+      clearRefreshStatusTimer(layer.id);
+      const clearStatus = () =>
+        setRefreshStatuses((current) => {
+          const { [layer.id]: _omit, ...rest } = current;
+          return rest;
+        });
+      // Prompt the drag-a-box interaction; the status line doubles as the hint.
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: { type: "refreshing", message: t("layers.exportSubsetDraw") },
+      }));
+      let bbox: PrintExtent | null = null;
+      try {
+        bbox = await drawPrintExtent(map, { idPrefix: EXPORT_EXTENT_PREFIX });
+      } finally {
+        clearPrintExtent(map, EXPORT_EXTENT_PREFIX);
+      }
+      // A null extent means the user pressed Escape or clicked without dragging.
+      if (!bbox) {
+        clearStatus();
+        return;
+      }
+      setRefreshStatuses((current) => ({
+        ...current,
+        [layer.id]: {
+          type: "refreshing",
+          message: t("layers.exportSubsetWorking"),
+        },
+      }));
+      try {
+        const savedPath = await exportRasterSubset(
+          layer,
+          bbox,
+          sanitizeExportFileName(layer.name),
+        );
+        if (savedPath === null) {
+          // The user cancelled the save dialog, so leave no note.
+          clearStatus();
+          return;
+        }
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: {
+            type: "success",
+            message: t("layers.exportRasterSuccess"),
+          },
+        }));
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : t("layers.exportRasterError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+      }
+      scheduleStatusClear(layer.id);
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
   // Read through a ref inside interval callbacks so long-lived timers never
   // capture a stale handleRefreshLayer closure.
   const handleRefreshLayerRef = useRef(handleRefreshLayer);
@@ -2593,6 +2672,13 @@ export function LayerPanel({
                               }}
                             >
                               {t("layers.exportGeoTiff")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                void handleExportRasterSubset(layer);
+                              }}
+                            >
+                              {t("layers.exportGeoTiffSubset")}
                             </DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>

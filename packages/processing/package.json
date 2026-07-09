@@ -34,7 +34,9 @@
     "@turf/voronoi": "^7.3.5",
     "fflate": "^0.8.3",
     "geolibre-wasm": "^0.5.3",
-    "geotiff": "^3.0.5"
+    "geotiff": "^3.0.5",
+    "geotiff-geokeys-to-proj4": "^2024.4.13",
+    "proj4": "^2.20.9"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

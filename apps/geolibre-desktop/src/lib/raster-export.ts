@@ -1,4 +1,5 @@
 import type { GeoLibreLayer } from "@geolibre/core";
+import { type Bbox4326, exportCogSubset } from "@geolibre/processing";
 
 import { saveBinaryFileWithFallback } from "./tauri-io";
 import { fetchableUrl } from "./url-utils";
@@ -56,6 +57,52 @@ export async function exportRasterLayer(
   const bytes = new Uint8Array(await response.arrayBuffer());
   return saveBinaryFileWithFallback(bytes, {
     defaultName: `${baseName}.tif`,
+    filters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
+    browserTypes: [
+      { description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } },
+    ],
+    mimeType: "image/tiff",
+  });
+}
+
+/**
+ * Clip a raster layer to a drawn map extent and save the subset to disk. Unlike
+ * {@link exportRasterLayer} (which downloads the whole source file), this reads
+ * only the pixels inside `bbox`, so a small area of a large cloud-hosted COG is
+ * cheap. The output preserves the source's raw data values (opengeos/GeoLibre#1155).
+ *
+ * A remote COG is opened by URL so the windowed read fetches just the tiles it
+ * needs via HTTP range requests; a local/blob-backed raster is fetched into
+ * memory first (blob URLs do not support range requests).
+ *
+ * @param layer - The raster/COG store layer to subset.
+ * @param bbox - The export extent `[west, south, east, north]` in EPSG:4326.
+ * @param baseName - A sanitized base file name (without extension).
+ * @returns The saved path, or null if the user cancelled the save dialog.
+ * @throws If the raster has no downloadable source or the extent does not overlap it.
+ */
+export async function exportRasterSubset(
+  layer: GeoLibreLayer,
+  bbox: Bbox4326,
+  baseName: string,
+): Promise<string | null> {
+  const url = rasterExportUrl(layer);
+  if (!url) {
+    throw new Error("This raster has no downloadable source file.");
+  }
+  // Remote COGs read efficiently by URL (range requests); blob/local URLs must
+  // be pulled into memory since they do not honour range requests.
+  let source: string | ArrayBuffer = url;
+  if (!/^https?:/i.test(url)) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error("Could not read the raster's data for export.");
+    }
+    source = await response.arrayBuffer();
+  }
+  const { bytes } = await exportCogSubset(source, bbox);
+  return saveBinaryFileWithFallback(new Uint8Array(bytes), {
+    defaultName: `${baseName}_subset.tif`,
     filters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     browserTypes: [
       { description: "GeoTIFF", accept: { "image/tiff": [".tif", ".tiff"] } },

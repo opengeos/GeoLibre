@@ -78,6 +78,11 @@ export {
   type FocalStatistic,
 } from "./raster-client";
 export {
+  exportCogSubset,
+  type Bbox4326,
+  type CogSubsetResult,
+} from "./cog-subset";
+export {
   checkSidecarHealth,
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchConversionJob,

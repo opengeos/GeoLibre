@@ -16,9 +16,19 @@ import type {
 /** A geographic bounding box as `[west, south, east, north]`. */
 export type PrintExtent = [number, number, number, number];
 
-const SOURCE_ID = "geolibre-print-extent";
-const FILL_LAYER_ID = "geolibre-print-extent-fill";
-const LINE_LAYER_ID = "geolibre-print-extent-line";
+/** Default source/layer id prefix for the Print Layout dialog's extent box. */
+const PRINT_EXTENT_PREFIX = "geolibre-print-extent";
+
+/** Derive the source and fill/line layer ids for an extent box from a prefix.
+ * A distinct prefix (e.g. the raster subset export in {@link drawPrintExtent})
+ * keeps two independent extent boxes from clobbering each other's map source. */
+function extentIds(prefix: string): {
+  source: string;
+  fill: string;
+  line: string;
+} {
+  return { source: prefix, fill: `${prefix}-fill`, line: `${prefix}-line` };
+}
 
 /** Wrap a longitude into the (-180, 180] range. Mapping the wrap point to +180
  * (not -180) avoids a near-world-wide bbox when a drag endpoint lands exactly on
@@ -49,20 +59,21 @@ function extentToFeature(extent: PrintExtent): GeoJSON.Feature<GeoJSON.Polygon> 
 }
 
 /** Add the fill/line layers for the extent source if they are not present. */
-function ensurePrintExtentLayers(map: MapLibreMap): void {
-  if (!map.getLayer(FILL_LAYER_ID)) {
+function ensurePrintExtentLayers(map: MapLibreMap, prefix: string): void {
+  const ids = extentIds(prefix);
+  if (!map.getLayer(ids.fill)) {
     map.addLayer({
-      id: FILL_LAYER_ID,
+      id: ids.fill,
       type: "fill",
-      source: SOURCE_ID,
+      source: ids.source,
       paint: { "fill-color": "#2563eb", "fill-opacity": 0.12 },
     });
   }
-  if (!map.getLayer(LINE_LAYER_ID)) {
+  if (!map.getLayer(ids.line)) {
     map.addLayer({
-      id: LINE_LAYER_ID,
+      id: ids.line,
       type: "line",
-      source: SOURCE_ID,
+      source: ids.source,
       paint: {
         "line-color": "#2563eb",
         "line-width": 2,
@@ -73,20 +84,25 @@ function ensurePrintExtentLayers(map: MapLibreMap): void {
 }
 
 /** Ensure the extent source + layers exist, then set them to show `extent`. */
-export function showPrintExtent(map: MapLibreMap, extent: PrintExtent): void {
+export function showPrintExtent(
+  map: MapLibreMap,
+  extent: PrintExtent,
+  idPrefix: string = PRINT_EXTENT_PREFIX,
+): void {
   const data = extentToFeature(extent);
-  const existing = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
+  const ids = extentIds(idPrefix);
+  const existing = map.getSource(ids.source) as GeoJSONSource | undefined;
   if (existing) {
     existing.setData(data);
     // Re-add the layers if they were removed externally (e.g. a style mutation)
     // while the source was left in place, and make them visible again -- they
     // may have been hidden by setPrintExtentVisible during a capture.
-    ensurePrintExtentLayers(map);
-    setPrintExtentVisible(map, true);
+    ensurePrintExtentLayers(map, idPrefix);
+    setPrintExtentVisible(map, true, idPrefix);
     return;
   }
-  map.addSource(SOURCE_ID, { type: "geojson", data });
-  ensurePrintExtentLayers(map);
+  map.addSource(ids.source, { type: "geojson", data });
+  ensurePrintExtentLayers(map, idPrefix);
 }
 
 /**
@@ -97,18 +113,24 @@ export function showPrintExtent(map: MapLibreMap, extent: PrintExtent): void {
 export function setPrintExtentVisible(
   map: MapLibreMap,
   visible: boolean,
+  idPrefix: string = PRINT_EXTENT_PREFIX,
 ): void {
   const value = visible ? "visible" : "none";
-  for (const id of [FILL_LAYER_ID, LINE_LAYER_ID]) {
+  const ids = extentIds(idPrefix);
+  for (const id of [ids.fill, ids.line]) {
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", value);
   }
 }
 
 /** Remove the extent box from the map (no-op if it was never drawn). */
-export function clearPrintExtent(map: MapLibreMap): void {
-  if (map.getLayer(LINE_LAYER_ID)) map.removeLayer(LINE_LAYER_ID);
-  if (map.getLayer(FILL_LAYER_ID)) map.removeLayer(FILL_LAYER_ID);
-  if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+export function clearPrintExtent(
+  map: MapLibreMap,
+  idPrefix: string = PRINT_EXTENT_PREFIX,
+): void {
+  const ids = extentIds(idPrefix);
+  if (map.getLayer(ids.line)) map.removeLayer(ids.line);
+  if (map.getLayer(ids.fill)) map.removeLayer(ids.fill);
+  if (map.getSource(ids.source)) map.removeSource(ids.source);
 }
 
 /**
@@ -139,6 +161,10 @@ export interface DrawPrintExtentOptions {
   aspect?: number;
   /** Aborts the interaction (resolves with `null`) e.g. on dialog unmount. */
   signal?: AbortSignal;
+  /** Source/layer id prefix for the drawn box. Defaults to the print box; pass
+   * a distinct prefix (e.g. for the raster subset export) to keep the two boxes
+   * from sharing one map source. Clear the box with the same prefix. */
+  idPrefix?: string;
 }
 
 /**
@@ -153,6 +179,7 @@ export function drawPrintExtent(
   map: MapLibreMap,
   options: DrawPrintExtentOptions = {},
 ): Promise<PrintExtent | null> {
+  const idPrefix = options.idPrefix ?? PRINT_EXTENT_PREFIX;
   return new Promise((resolve) => {
     // Already-aborted signal: resolve immediately without touching the map.
     if (options.signal?.aborted) return resolve(null);
@@ -235,7 +262,11 @@ export function drawPrintExtent(
 
     const preview = (raw: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return;
-      showPrintExtent(map, extentFromPixels(start, settlePoint(raw, shiftKey)));
+      showPrintExtent(
+        map,
+        extentFromPixels(start, settlePoint(raw, shiftKey)),
+        idPrefix,
+      );
     };
 
     const commit = (raw: { x: number; y: number }, shiftKey: boolean) => {
@@ -252,7 +283,7 @@ export function drawPrintExtent(
         return finish(null);
       }
       const extent = extentFromPixels(start, end);
-      showPrintExtent(map, extent);
+      showPrintExtent(map, extent, idPrefix);
       finish(extent);
     };
 
