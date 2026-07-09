@@ -353,6 +353,7 @@ export {
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
+export type { WeatherAnimationState } from "./plugins/weather-layer";
 export {
   maplibreCloudsPlugin,
   CLOUDS_PLUGIN_ID,
@@ -360,8 +361,15 @@ export {
   setCloudsFrame,
   toggleCloudsPlaying,
   subscribeClouds,
-  type CloudsAnimationState,
 } from "./plugins/maplibre-clouds";
+export {
+  maplibrePrecipitationPlugin,
+  PRECIPITATION_PLUGIN_ID,
+  getPrecipitationAnimationState,
+  setPrecipitationFrame,
+  togglePrecipitationPlaying,
+  subscribePrecipitation,
+} from "./plugins/maplibre-precipitation";
 export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,

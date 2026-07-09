@@ -1,0 +1,134 @@
+import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import {
+  createWeatherLayer,
+  type WeatherAnimationState,
+  type WeatherFrame,
+} from "./weather-layer";
+
+/**
+ * Realtime precipitation (weather radar) overlay.
+ *
+ * Backed by **RainViewer**'s public weather-maps API (no key, CORS-enabled),
+ * which returns a global radar composite as a series of timestamped frames over
+ * roughly the past two hours at ~10-minute steps. It is one of the two Weather
+ * overlays (with Clouds) and shares the store-layer + time-scrub engine in
+ * {@link createWeatherLayer}, so scrubbing/playing animates the radar loop.
+ */
+
+export const PRECIPITATION_PLUGIN_ID = "maplibre-gl-precipitation";
+
+/** Marks the store layer as the one this plugin owns (for adopt-on-restore). */
+const PRECIPITATION_LAYER_FLAG = "precipitationLayer";
+
+/** RainViewer weather-maps metadata endpoint (radar + satellite frame index). */
+const RAINVIEWER_API = "https://api.rainviewer.com/public/weather-maps.json";
+const RAINVIEWER_ATTRIBUTION =
+  'Radar &copy; <a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>';
+const RAINVIEWER_SERVICE_URL = "https://www.rainviewer.com/";
+/** RainViewer serves radar tiles to ~z10; overzoom above that. */
+const RAINVIEWER_MAXZOOM = 10;
+/** Colour scheme (4 = "Weather Channel") and options (`{smooth}_{snow}`). */
+const RADAR_COLOR = 4;
+const RADAR_OPTIONS = "1_1";
+const FRAME_MS = 700;
+
+interface RainViewerFrame {
+  time: number;
+  path: string;
+}
+interface RainViewerResponse {
+  host?: string;
+  radar?: { past?: RainViewerFrame[]; nowcast?: RainViewerFrame[] };
+}
+
+/** Local `HH:MM` label for a RainViewer unix-second timestamp. */
+function formatTime(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * Descriptive metadata shown in the Layers panel's metadata view. `time` /
+ * `timestamp` reflect the frame currently displayed.
+ */
+function precipitationMetadata(unixSeconds: number, label: string): Record<string, unknown> {
+  return {
+    title: "Precipitation (weather radar)",
+    description:
+      "Near-real-time global radar composite of precipitation. Play a radar loop from the Controls → Weather → Precipitation menu.",
+    provider: "RainViewer",
+    product: "Global radar composite",
+    time: label,
+    timestamp: new Date(unixSeconds * 1000).toISOString(),
+    updateFrequency: "~10 minutes (last ~2 hours)",
+    coverage: "Global",
+    attribution: "RainViewer",
+    license: "Free public API — attribution required",
+    documentation: "https://www.rainviewer.com/api.html",
+  };
+}
+
+/**
+ * Fetch RainViewer's radar frames and turn each into a {@link WeatherFrame}.
+ * Returns an empty list on any failure so activation fails cleanly (the toggle
+ * rolls back) rather than adding a layer that renders nothing.
+ */
+async function loadRadarFrames(): Promise<WeatherFrame[]> {
+  try {
+    const response = await fetch(RAINVIEWER_API);
+    if (!response.ok) return [];
+    const data = (await response.json()) as RainViewerResponse;
+    const host = typeof data.host === "string" ? data.host : "";
+    const past = Array.isArray(data.radar?.past) ? data.radar.past : [];
+    if (!host || past.length === 0) return [];
+    return past
+      .filter(
+        (f): f is RainViewerFrame =>
+          !!f && typeof f.path === "string" && typeof f.time === "number",
+      )
+      .map((f) => {
+        const label = formatTime(f.time);
+        return {
+          tileUrl: `${host}${f.path}/256/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`,
+          label,
+          metadata: precipitationMetadata(f.time, label),
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
+const controller = createWeatherLayer({
+  layerName: "Precipitation",
+  layerFlag: PRECIPITATION_LAYER_FLAG,
+  attribution: RAINVIEWER_ATTRIBUTION,
+  serviceUrl: RAINVIEWER_SERVICE_URL,
+  maxzoom: RAINVIEWER_MAXZOOM,
+  opacity: 0.8,
+  frameMs: FRAME_MS,
+  loadFrames: loadRadarFrames,
+});
+
+export function getPrecipitationAnimationState(): WeatherAnimationState {
+  return controller.getState();
+}
+export function setPrecipitationFrame(index: number): void {
+  controller.setFrame(index);
+}
+export function togglePrecipitationPlaying(): void {
+  controller.togglePlaying();
+}
+export function subscribePrecipitation(listener: () => void): () => void {
+  return controller.subscribe(listener);
+}
+
+export const maplibrePrecipitationPlugin: GeoLibrePlugin = {
+  id: PRECIPITATION_PLUGIN_ID,
+  name: "Precipitation",
+  version: "0.1.0",
+  activate: (app: GeoLibreAppAPI) => controller.activate(app),
+  deactivate: () => controller.deactivate(),
+};
