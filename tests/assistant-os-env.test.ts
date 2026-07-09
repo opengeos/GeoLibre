@@ -137,6 +137,20 @@ describe("scopeOsEnvToProject", () => {
     assert.deepEqual(scoped, { GEMINI_API_KEY: "os-gem" });
   });
 
+  it("shadows the Ollama alias pair (OLLAMA_BASE_URL / OLLAMA_HOST)", () => {
+    // OS supplies OLLAMA_BASE_URL; the project overrides via the OLLAMA_HOST
+    // alias. The OS value must be dropped so the project's host wins.
+    const merged = merge(
+      { OLLAMA_BASE_URL: "http://os-host:11434" },
+      { OLLAMA_HOST: "localhost:11434" },
+    );
+    assert.equal(
+      configForProvider("ollama", undefined, merged)?.baseURL,
+      "http://localhost:11434/v1",
+    );
+    assert.ok(!("OLLAMA_BASE_URL" in merged));
+  });
+
   it("shadows the OS alias group even when the project row is empty", () => {
     // An enabled-but-empty project GOOGLE_API_KEY row must drop the OS
     // GEMINI_API_KEY (same alias group), so the dialog's effectiveEnv agrees

@@ -39,31 +39,41 @@ let loadPromise: Promise<RuntimeEnv> | null = null;
  * variables (PATH, HOME, …) never enter the webview. Outside Tauri this is a
  * no-op that caches an empty map.
  *
- * The result is memoized: the first call performs the read and every later call
- * returns the same snapshot without re-invoking the backend. A failed read is
- * swallowed to an empty map (a missing capability must never block startup) and,
- * crucially, does **not** overwrite an already-cached successful snapshot.
+ * The result of a *successful* read is memoized: concurrent startup callers
+ * share the one in-flight request, and later calls return the cached snapshot
+ * without re-invoking the backend. A failed read is swallowed (a missing
+ * capability must never block startup), logged for diagnosis, and — crucially —
+ * does **not** poison the memo: `loadPromise` is reset so a later call retries
+ * rather than the whole feature silently no-op-ing for the session after one
+ * transient IPC hiccup. A failure also never clobbers an already-cached snapshot.
  */
 export function loadOsEnvVars(): Promise<RuntimeEnv> {
-  loadPromise ??= (async () => {
-    if (!isTauri()) {
-      cacheOsEnv({});
-      return {};
-    }
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const env = await invoke<RuntimeEnv>("read_env_vars", {
-        names: OS_ENV_VAR_NAMES,
-      });
-      cacheOsEnv(env);
-      return env;
-    } catch {
-      // Preserve any previously cached values rather than clobbering them with
-      // an empty map on a transient IPC failure.
-      return readOsEnv();
-    }
-  })();
+  loadPromise ??= readOsEnvVars();
   return loadPromise;
+}
+
+async function readOsEnvVars(): Promise<RuntimeEnv> {
+  if (!isTauri()) {
+    cacheOsEnv({});
+    return {};
+  }
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const env = await invoke<RuntimeEnv>("read_env_vars", {
+      names: OS_ENV_VAR_NAMES,
+    });
+    cacheOsEnv(env);
+    return env;
+  } catch (error) {
+    // Let a later call retry instead of memoizing the failure, and preserve any
+    // previously cached values rather than clobbering them with an empty map.
+    loadPromise = null;
+    console.warn(
+      "[geolibre] Could not read OS environment variables for the AI assistant:",
+      error,
+    );
+    return readOsEnv();
+  }
 }
 
 function cacheOsEnv(env: RuntimeEnv): void {

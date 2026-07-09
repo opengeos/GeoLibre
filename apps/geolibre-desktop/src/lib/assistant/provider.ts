@@ -113,6 +113,8 @@ export const OS_ENV_VAR_NAMES: readonly string[] = [
  */
 export const OS_ENV_ALIAS_GROUPS: readonly (readonly string[])[] = [
   ["GEMINI_API_KEY", "GOOGLE_API_KEY", "GOOGLE_GENAI_API_KEY"],
+  // ollamaBaseUrl() resolves OLLAMA_BASE_URL then OLLAMA_HOST for one credential.
+  ["OLLAMA_BASE_URL", "OLLAMA_HOST"],
 ];
 
 /**
