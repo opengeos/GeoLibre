@@ -1,4 +1,7 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import {
+  resolveThreeDTilesRequestHeaders,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type {
   Cesium3DTileset,
   DataSource,
@@ -291,9 +294,13 @@ export class CesiumLayerSync {
     const layer = entry.layer;
     const url = tilesetUrl(layer);
     if (!url) return;
-    const headers = layer.source.requestHeaders as
-      | Record<string, string>
-      | undefined;
+    // Google Photorealistic tiles strip their X-GOOG-API-KEY from the store, so
+    // resolve it back (from runtime env) exactly as the 2D render path does —
+    // otherwise the tileset would silently 401/403 and never render on the globe.
+    const headers = resolveThreeDTilesRequestHeaders(
+      url,
+      layer.source.requestHeaders as Record<string, string> | undefined,
+    );
     const resource =
       headers && Object.keys(headers).length
         ? new Cesium.Resource({ url, headers })

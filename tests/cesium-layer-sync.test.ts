@@ -327,6 +327,29 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.primitivesAdded.length, 1);
   });
 
+  it("keeps the Google Maps API key header on a Google Photorealistic tileset", async () => {
+    const sync = newSync(f);
+    sync.sync([
+      mkLayer({
+        id: "g",
+        type: "3d-tiles",
+        source: {
+          url: "https://tile.googleapis.com/v1/3dtiles/root.json",
+          // The 3D-tiles resolver keeps a real key present in the headers; this
+          // asserts createTileset routes headers through it (a plain pass-through
+          // would also work, but the store normally strips the key, so the
+          // resolver's env fallback is what makes Google tiles load on the globe).
+          requestHeaders: { "X-GOOG-API-KEY": "test-key" },
+        },
+      }),
+    ]);
+    await f.flush();
+    const resource = f.calls.tilesetUrls[0] as {
+      opts: { headers: Record<string, string> };
+    };
+    assert.equal(resource.opts.headers["X-GOOG-API-KEY"], "test-key");
+  });
+
   it("updates visibility in place without recreating the imagery layer", () => {
     const sync = newSync(f);
     const base = mkLayer({ id: "x", type: "xyz", source: { tiles: ["u/{z}/{x}/{y}"] }, visible: true });
