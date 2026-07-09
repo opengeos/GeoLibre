@@ -89,14 +89,23 @@ function makeFakes() {
         return Promise.resolve({
           kind: "geojson",
           show: true,
-          // One polygon entity so in-place restyle (applyGeoJsonStyle) has
-          // something to update; its material starts as the load-time fill.
-          entities: { values: [{ polygon: { material: options.fill } }] },
+          // One entity of each kind so in-place restyle (applyGeoJsonStyle) can
+          // be checked for polygons, lines, and points.
+          entities: {
+            values: [
+              { polygon: { material: options.fill } },
+              { polyline: { material: options.stroke } },
+              { billboard: { color: undefined } },
+            ],
+          },
         });
       },
     },
     ColorMaterialProperty: class {
       constructor(public color: unknown) {}
+    },
+    ConstantProperty: class {
+      constructor(public value: unknown) {}
     },
     Cesium3DTileset: {
       fromUrl: (url: unknown) => {
@@ -115,6 +124,7 @@ function makeFakes() {
         css,
         withAlpha: (a: number) => ({ css, alpha: a }),
       }),
+      WHITE: { withAlpha: (a: number) => ({ css: "WHITE", alpha: a }) },
     },
     Resource: class {
       constructor(public opts: Record<string, unknown>) {}
@@ -199,6 +209,34 @@ describe("CesiumLayerSync", () => {
     assert.equal(f.calls.dataSourcesRemoved.length, 0, "opacity change must not tear down");
     const alpha = ds.entities.values[0].polygon.material.color?.alpha;
     assert.ok(alpha !== undefined && Math.abs(alpha - 0.18) < 1e-9);
+  });
+
+  it("fades polygon fill, line stroke, and point markers by layer opacity", async () => {
+    const sync = newSync(f);
+    const fc = { type: "FeatureCollection", features: [{}] };
+    sync.sync([
+      mkLayer({
+        type: "geojson",
+        geojson: fc as never,
+        opacity: 0.4,
+        style: { fillOpacity: 0.5 },
+      }),
+    ]);
+    await f.flush();
+    const ds = f.calls.dataSourcesAdded[0] as {
+      entities: {
+        values: [
+          { polygon: { material: { color: { alpha: number } } } },
+          { polyline: { material: { color: { alpha: number } } } },
+          { billboard: { color: { value: { alpha: number } } } },
+        ];
+      };
+    };
+    const v = ds.entities.values;
+    // fill = 0.5 fill opacity × 0.4 layer opacity; stroke/markers = layer opacity.
+    assert.ok(Math.abs(v[0].polygon.material.color.alpha - 0.2) < 1e-9);
+    assert.ok(Math.abs(v[1].polyline.material.color.alpha - 0.4) < 1e-9);
+    assert.ok(Math.abs(v[2].billboard.color.value.alpha - 0.4) < 1e-9);
   });
 
   it("renders xyz/raster tiles as an imagery layer with opacity + visibility", () => {

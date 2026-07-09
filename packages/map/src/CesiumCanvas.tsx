@@ -214,8 +214,22 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           }
           lastAppliedRef.current = view;
           const live = useAppStore.getState();
-          if (live.mapLayout.syncView) live.setMapView(view, true);
-          live.setSecondaryMapView(viewIdRef.current, view, true);
+          // Mirror SecondaryMapCanvas's guards: only write (and dirty) when the
+          // view actually differs from the stored camera. Cesium's moveEnd has no
+          // user-driven signal, so without this a lossy round-trip settle that
+          // drifts just past the echo tolerance would mark an untouched project
+          // dirty. `setMapView` has no same-camera guard in the store, and
+          // `setSecondaryMapView`'s guard uses exact equality (which Cesium's
+          // readback never hits), so both are gated here with isSameView.
+          if (live.mapLayout.syncView && !isSameView(view, live.mapView)) {
+            live.setMapView(view, true);
+          }
+          const paneView = live.secondaryMapViews.find(
+            (p) => p.id === viewIdRef.current,
+          )?.view;
+          if (!paneView || !isSameView(view, paneView)) {
+            live.setSecondaryMapView(viewIdRef.current, view, true);
+          }
         });
 
         if (!cancelled) setReady(true);

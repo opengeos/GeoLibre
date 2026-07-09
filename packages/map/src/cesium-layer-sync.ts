@@ -32,8 +32,8 @@ interface LayerEntry {
   handle: ImageryLayer | DataSource | Cesium3DTileset | null;
   /** Set when the entry is removed mid-load so the resolved handle is discarded. */
   cancelled: boolean;
-  /** Last fill alpha applied in place to a geojson entry (skips redundant restyles). */
-  appliedAlpha?: number;
+  /** Last opacity key applied in place to a geojson entry (skips redundant restyles). */
+  appliedAlpha?: string;
 }
 
 function str(value: unknown): string | undefined {
@@ -271,7 +271,9 @@ export class CesiumLayerSync {
         return;
       }
       entry.handle = dataSource;
-      entry.appliedAlpha = fillAlpha;
+      // applyAppearance → applyGeoJsonStyle fades every entity kind (fill,
+      // stroke, marker) by the layer opacity right after load, so points/lines
+      // match the 2D map instead of rendering fully opaque.
       this.applyAppearance(entry);
     } catch {
       // A malformed FeatureCollection should not break the whole sync.
@@ -346,26 +348,44 @@ export class CesiumLayerSync {
   }
 
   /**
-   * Re-apply a GeoJSON layer's fill alpha (layer opacity × fill opacity) in
-   * place, so dragging the opacity slider restyles the polygons instead of
-   * reloading the whole GeoJsonDataSource. The fill colour itself bakes in at
-   * load (a colour change rebuilds), so only the alpha is updated here; the
-   * `appliedAlpha` guard makes a no-op call cheap on unrelated syncs.
+   * Re-apply a GeoJSON layer's opacity in place, so dragging the opacity slider
+   * restyles the entities instead of reloading the whole GeoJsonDataSource.
+   * Polygon fill uses layer opacity × fill opacity; polyline stroke and point
+   * markers use the layer opacity alone (matching the 2D map, where opacity
+   * fades lines and points too). Colours themselves bake in at load, so a colour
+   * change still rebuilds; the `appliedAlpha` guard makes a no-op call cheap on
+   * unrelated syncs.
    */
   private applyGeoJsonStyle(entry: LayerEntry): void {
     const dataSource = entry.handle as DataSource | null;
     if (!dataSource) return;
     const style = entry.layer.style ?? {};
-    const alpha = (style.fillOpacity ?? 0.6) * entry.layer.opacity;
-    if (entry.appliedAlpha === alpha) return;
-    entry.appliedAlpha = alpha;
+    const opacity = entry.layer.opacity;
+    const fillAlpha = (style.fillOpacity ?? 0.6) * opacity;
+    // Key on both alphas so any opacity change is picked up (e.g. a lines-only
+    // layer whose fill alpha never varies).
+    const key = `${fillAlpha}|${opacity}`;
+    if (entry.appliedAlpha === key) return;
+    entry.appliedAlpha = key;
     const { Cesium } = this;
     const fill = Cesium.Color.fromCssColorString(
       style.fillColor ?? "#3b82f6",
-    ).withAlpha(alpha);
+    ).withAlpha(fillAlpha);
+    const stroke = Cesium.Color.fromCssColorString(
+      style.strokeColor ?? "#1e40af",
+    ).withAlpha(opacity);
+    // Point pins keep their baked-in colour; multiplying by white+alpha only
+    // fades them.
+    const marker = Cesium.Color.WHITE.withAlpha(opacity);
     for (const feature of dataSource.entities.values) {
       if (feature.polygon) {
         feature.polygon.material = new Cesium.ColorMaterialProperty(fill);
+      }
+      if (feature.polyline) {
+        feature.polyline.material = new Cesium.ColorMaterialProperty(stroke);
+      }
+      if (feature.billboard) {
+        feature.billboard.color = new Cesium.ConstantProperty(marker);
       }
     }
   }
