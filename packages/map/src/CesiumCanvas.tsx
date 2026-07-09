@@ -192,10 +192,13 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         viewerRef.current = viewer;
         layerSyncRef.current = new CesiumLayerSync(Cesium, viewer);
 
-        // Flag genuine user input on the globe (a pointer/touch drag or a wheel
-        // zoom drives Cesium's default camera controls) so the moveEnd handler
-        // can tell a real move from an autonomous settle. A hover with no button
-        // down is not a camera move, so pointermove only counts while dragging.
+        // Flag genuine camera-moving input on the globe so the moveEnd handler
+        // can tell a real move from an autonomous settle. Only motion events
+        // count: Cesium's moveEnd fires solely on actual camera movement, so a
+        // plain click/tap (pointerdown/touchstart) that doesn't move the camera
+        // must NOT arm the flag — otherwise a later autonomous settle (terrain,
+        // resize) would consume that stale flag and dirty the project. A hover
+        // isn't a move either, so pointermove only counts while a button is down.
         const markUserMove = () => {
           userMovedRef.current = true;
         };
@@ -204,16 +207,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         };
         const canvas = viewer.canvas;
         const opts: AddEventListenerOptions = { passive: true };
-        canvas.addEventListener("pointerdown", markUserMove, opts);
         canvas.addEventListener("pointermove", markUserDrag, opts);
         canvas.addEventListener("wheel", markUserMove, opts);
-        canvas.addEventListener("touchstart", markUserMove, opts);
         canvas.addEventListener("touchmove", markUserMove, opts);
         cleanupInput = () => {
-          canvas.removeEventListener("pointerdown", markUserMove, opts);
           canvas.removeEventListener("pointermove", markUserDrag, opts);
           canvas.removeEventListener("wheel", markUserMove, opts);
-          canvas.removeEventListener("touchstart", markUserMove, opts);
           canvas.removeEventListener("touchmove", markUserMove, opts);
         };
 
@@ -236,6 +235,10 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         // Render the store layers on the globe before the first frame.
         layerSyncRef.current?.sync(paneLayersRef.current);
 
+        // The unmount cleanup may have run during the terrain await above
+        // (which destroys the viewer); bail before registering a moveEnd
+        // listener on a dead camera that would then never be removed.
+        if (cancelled) return;
         // Mirror a user's globe navigation back into the shared camera. Echoes
         // of our own applyView are filtered by the isSameView guard.
         viewer.camera.moveEnd.addEventListener(() => {
