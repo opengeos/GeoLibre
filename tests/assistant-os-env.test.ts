@@ -136,4 +136,16 @@ describe("scopeOsEnvToProject", () => {
     );
     assert.deepEqual(scoped, { GEMINI_API_KEY: "os-gem" });
   });
+
+  it("shadows the OS alias group even when the project row is empty", () => {
+    // An enabled-but-empty project GOOGLE_API_KEY row must drop the OS
+    // GEMINI_API_KEY (same alias group), so the dialog's effectiveEnv agrees
+    // with the runtime: the provider is NOT configured. Presence, not value,
+    // decides shadowing.
+    const merged = merge(
+      { GEMINI_API_KEY: "os-key" },
+      { GOOGLE_API_KEY: "" },
+    );
+    assert.equal(configForProvider("google", undefined, merged), null);
+  });
 });

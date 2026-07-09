@@ -105,6 +105,7 @@ import {
   ASSISTANT_PROVIDER_IDS,
   PROVIDER_LABELS,
   availableProviders,
+  scopeOsEnvToProject,
   type AssistantProviderId,
   type RuntimeEnv,
 } from "../../lib/assistant/provider";
@@ -478,29 +479,21 @@ export function SettingsDialog({
       cancelled = true;
     };
   }, []);
+  // Scope OS values against the draft exactly as the runtime merge does
+  // (useRuntimeEnvironmentVariables), so this dialog's notion of "configured"
+  // and the field badges match what the assistant will actually resolve — a
+  // plain spread would disagree in the alias-collision case (e.g. an empty
+  // project GOOGLE_API_KEY row shadows the whole Google OS alias group).
+  const scopedOsEnv = useMemo(
+    () => scopeOsEnvToProject(osEnv, new Set(Object.keys(draftEnv))),
+    [osEnv, draftEnv],
+  );
   // Merge OS env under the draft so a provider configured purely via a system
   // environment variable still reports "ready" — draft values win the overlap.
   const effectiveEnv = useMemo(
-    () => ({ ...osEnv, ...draftEnv }),
-    [osEnv, draftEnv],
+    () => ({ ...scopedOsEnv, ...draftEnv }),
+    [scopedOsEnv, draftEnv],
   );
-  // Show the OS-environment banner only when the environment actually supplies a
-  // variable that backs a visible provider credential field. Bare overrides
-  // (GEOLIBRE_ASSISTANT_*) or the web-search key have no field/badge here, so
-  // keying the banner off raw osEnv length would be a confusing false positive.
-  const hasOsEnv = useMemo(() => {
-    const credentialNames = new Set<string>();
-    const providerFields = Object.values(
-      PROVIDER_FIELDS,
-    ) as readonly (readonly ProviderField[])[];
-    for (const fields of providerFields) {
-      for (const field of fields) {
-        credentialNames.add(field.envKey);
-        for (const alias of field.aliases ?? []) credentialNames.add(alias);
-      }
-    }
-    return Object.keys(osEnv).some((key) => credentialNames.has(key));
-  }, [osEnv]);
   const configuredProviders = useMemo(
     () => new Set(availableProviders(effectiveEnv)),
     [effectiveEnv],
@@ -535,11 +528,15 @@ export function SettingsDialog({
     );
     // Land the AI section on a provider the user already configured, so editing
     // existing credentials needs no extra click.
-    const seededEnv: Record<string, string> = { ...readOsEnv() };
+    const seededProjectEnv: Record<string, string> = {};
     for (const variable of seededPreferences.environmentVariables) {
       const key = variable.key.trim();
-      if (variable.enabled && key) seededEnv[key] = variable.value;
+      if (variable.enabled && key) seededProjectEnv[key] = variable.value;
     }
+    const seededEnv = {
+      ...scopeOsEnvToProject(readOsEnv(), new Set(Object.keys(seededProjectEnv))),
+      ...seededProjectEnv,
+    };
     setAiProvider(availableProviders(seededEnv)[0] ?? "google");
     setRevealedValueIds(new Set());
     setError(null);
@@ -680,7 +677,7 @@ export function SettingsDialog({
   // so a user sees a key is already covered without typing (or saving) it here.
   const osFieldEnvName = (field: ProviderField): string | null => {
     for (const key of fieldEnvKeys(field)) {
-      if (osEnv[key]?.trim()) return key;
+      if (scopedOsEnv[key]?.trim()) return key;
     }
     return null;
   };
@@ -2283,7 +2280,9 @@ export function SettingsDialog({
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{t("settings.env.secretsWarning")}</span>
                   </div>
-                  {hasOsEnv ? (
+                  {PROVIDER_FIELDS[aiProvider].some(
+                    (field) => osFieldEnvName(field) !== null,
+                  ) ? (
                     <div className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
                       <Terminal className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{t("settings.ai.osEnvNote")}</span>
