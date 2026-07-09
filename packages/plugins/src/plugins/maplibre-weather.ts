@@ -1,7 +1,6 @@
 import type {
   IControl,
   Map as MapLibreMap,
-  RasterTileSource,
 } from "maplibre-gl";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
@@ -14,19 +13,23 @@ import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
  * the free, key-less RainViewer API (https://www.rainviewer.com/api.html),
  * which publishes ~2h of past radar frames plus short-range nowcast frames.
  *
- * The overlay is a single MapLibre `raster` layer whose tile template is
- * swapped per animation frame via `RasterTileSource.setTiles`. Each advance is
- * gated on the map reaching `idle` (the current frame's tiles finished loading)
- * so a cold frame is never swapped out mid-load, which would abort its tile
- * requests. It is a transient map overlay (like the graticule) rather than a
- * Layers-panel entry, matching the always-on-top behaviour of Google Earth's
- * weather layer.
+ * Each frame is its own MapLibre `raster` layer, loaded once and then animated
+ * purely by toggling `raster-opacity` — the approach RainViewer's own player
+ * uses. This is the crucial difference from swapping one source's tiles per
+ * frame: that re-fetches every visible tile on every frame, which hammers the
+ * free tile server (rate-limited `Failed to fetch` errors) and keeps the render
+ * pipeline busy (an unresponsive map). Frames are created lazily on the first
+ * (idle-gated) playthrough so there is no initial request burst; after that,
+ * playback is a network-free opacity crossfade. The overlay is a transient map
+ * overlay (like the graticule) rather than a Layers-panel entry, matching the
+ * always-on-top behaviour of Google Earth's weather layer.
  */
 
 export const WEATHER_PLUGIN_ID = "maplibre-gl-weather";
 
-const SOURCE_ID = "geolibre-weather-source";
-const LAYER_ID = "geolibre-weather-layer";
+/** Per-frame source/layer id prefixes (one raster source + layer per frame). */
+const SOURCE_PREFIX = "geolibre-weather-source-";
+const LAYER_PREFIX = "geolibre-weather-layer-";
 
 /** RainViewer maps index: the list of available frames and the tile host. */
 const MAPS_API_URL = "https://api.rainviewer.com/public/weather-maps.json";
@@ -38,9 +41,18 @@ const TILE_SIZE = 256;
  */
 const RADAR_COLOR = 4;
 const RADAR_OPTIONS = "1_1";
+/**
+ * Cap the number of animated frames. RainViewer publishes ~13 past frames; each
+ * frame is a raster layer that reloads its viewport tiles on pan/zoom, so the
+ * cap bounds how many parallel tile requests a navigation triggers. The most
+ * recent frames are kept.
+ */
+const MAX_FRAMES = 13;
 /** Milliseconds between animation frames, and how long to rest on the last one. */
 const FRAME_INTERVAL_MS = 500;
 const LOOP_REST_MS = 1500;
+/** Opacity crossfade between consecutive frames, in ms. */
+const CROSSFADE_MS = 220;
 /**
  * Delay before the *first* frame advance so the initial (current) frame renders
  * before playback begins.
@@ -133,6 +145,8 @@ let tileHost = "";
 /** Frames for the overlay, oldest first (nowcast, if any, last). */
 let frames: WeatherFrame[] = [];
 let frameIndex = 0;
+/** Frame indices whose raster layer has been created (lazy load). */
+const createdFrames = new Set<number>();
 let animationTimer: ReturnType<typeof setTimeout> | null = null;
 /** Cancellation flag for the in-flight animation loop (idle waits can't clear). */
 let animationRun: { cancelled: boolean } | null = null;
@@ -150,19 +164,37 @@ export function getWeatherSettings(): WeatherSettings {
 // Data loading
 // ---------------------------------------------------------------------------
 
+function frameSourceId(index: number): string {
+  return `${SOURCE_PREFIX}${index}`;
+}
+
+function frameLayerId(index: number): string {
+  return `${LAYER_PREFIX}${index}`;
+}
+
 /** Build the XYZ tile template for a radar frame. */
 function frameTileUrl(frame: WeatherFrame): string {
   return `${tileHost}${frame.path}/${TILE_SIZE}/{z}/{x}/{y}/${RADAR_COLOR}/${RADAR_OPTIONS}.png`;
 }
 
-/** Extract the radar frame list (past + nowcast) from a maps index. */
+/** Extract the radar frame list (past + nowcast), capped to the most recent. */
 function framesFromMaps(maps: RainViewerMaps): WeatherFrame[] {
   const past = (maps.radar?.past ?? []).map((f) => ({ ...f, nowcast: false }));
   const nowcast = (maps.radar?.nowcast ?? []).map((f) => ({
     ...f,
     nowcast: true,
   }));
-  return [...past, ...nowcast];
+  const all = [...past, ...nowcast];
+  // Keep the most recent MAX_FRAMES (nowcast frames, being newest, are kept).
+  return all.length > MAX_FRAMES ? all.slice(all.length - MAX_FRAMES) : all;
+}
+
+/** True when two frame lists reference the same times/paths in the same order. */
+function framesUnchanged(a: WeatherFrame[], b: WeatherFrame[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (frame, index) => frame.path === b[index].path && frame.time === b[index].time,
+  );
 }
 
 /**
@@ -187,8 +219,12 @@ async function loadFrames(silent = false): Promise<void> {
     maps = (await response.json()) as RainViewerMaps;
   } catch {
     if (token !== loadToken || !map) return;
-    status = "error";
-    control?.refresh();
+    if (status !== "ready") {
+      // Only surface an error when there is nothing already on screen; a failed
+      // background refresh should leave the current overlay untouched.
+      status = "error";
+      control?.refresh();
+    }
     return;
   }
   if (token !== loadToken || !map) return;
@@ -196,12 +232,23 @@ async function loadFrames(silent = false): Promise<void> {
   tileHost = maps.host ?? "https://tilecache.rainviewer.com";
   const nextFrames = framesFromMaps(maps);
   if (nextFrames.length === 0) {
-    frames = [];
-    status = "empty";
-    control?.refresh();
+    if (status !== "ready") {
+      frames = [];
+      status = "empty";
+      control?.refresh();
+    }
     return;
   }
 
+  // A silent refresh with an unchanged frame set is a no-op — never tear down a
+  // running animation just to rebuild identical layers.
+  if (silent && status === "ready" && framesUnchanged(frames, nextFrames)) {
+    return;
+  }
+
+  // Rebuild for a new frame set: the per-frame layers are indexed by position,
+  // so a changed list must drop the old layers before showing the new ones.
+  teardownLayers(map);
   frames = nextFrames;
   // Start on the most recent observed (non-nowcast) frame so the overlay shows
   // current conditions the moment it appears — whether it will animate or stay
@@ -212,7 +259,6 @@ async function loadFrames(silent = false): Promise<void> {
   );
   status = "ready";
 
-  ensureLayer(map);
   showFrame(frameIndex);
   // Defer the first advance so the current frame renders before playback swaps.
   if (settings.playing) startAnimation(INITIAL_PLAY_DELAY_MS);
@@ -237,50 +283,83 @@ function firstSymbolLayerId(activeMap: MapLibreMap): string | undefined {
   return undefined;
 }
 
-function ensureLayer(activeMap: MapLibreMap): void {
-  if (!activeMap.getSource(SOURCE_ID)) {
-    activeMap.addSource(SOURCE_ID, {
+/**
+ * Create the raster source + layer for a frame if it does not exist yet. The
+ * layer starts fully transparent; {@link showFrame} raises the active frame's
+ * opacity. Lazy creation means each frame's tiles load once, the first time the
+ * animation reaches it, rather than all frames loading up front.
+ */
+function ensureFrameLayer(activeMap: MapLibreMap, index: number): void {
+  const sourceId = frameSourceId(index);
+  const layerId = frameLayerId(index);
+  if (!activeMap.getSource(sourceId)) {
+    activeMap.addSource(sourceId, {
       type: "raster",
-      tiles: [],
+      tiles: [frameTileUrl(frames[index])],
       tileSize: TILE_SIZE,
       attribution:
         '<a href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>',
     });
   }
-  if (!activeMap.getLayer(LAYER_ID)) {
+  if (!activeMap.getLayer(layerId)) {
     activeMap.addLayer(
       {
-        id: LAYER_ID,
+        id: layerId,
         type: "raster",
-        source: SOURCE_ID,
+        source: sourceId,
         paint: {
-          "raster-opacity": settings.opacity,
-          // A short crossfade smooths the per-frame tile swap during playback.
-          "raster-fade-duration": 250,
+          "raster-opacity": 0,
+          // Animate opacity changes for a smooth crossfade between frames.
+          "raster-opacity-transition": { duration: CROSSFADE_MS, delay: 0 },
+          // We own the crossfade via opacity; MapLibre's own tile fade would
+          // stack a second, laggier dissolve on top of it.
+          "raster-fade-duration": 0,
         },
       },
       firstSymbolLayerId(activeMap),
     );
   }
+  createdFrames.add(index);
 }
 
-function teardownLayer(activeMap: MapLibreMap): void {
-  if (activeMap.getLayer(LAYER_ID)) activeMap.removeLayer(LAYER_ID);
-  if (activeMap.getSource(SOURCE_ID)) activeMap.removeSource(SOURCE_ID);
+function teardownLayers(activeMap: MapLibreMap): void {
+  for (const index of createdFrames) {
+    const layerId = frameLayerId(index);
+    const sourceId = frameSourceId(index);
+    if (activeMap.getLayer(layerId)) activeMap.removeLayer(layerId);
+    if (activeMap.getSource(sourceId)) activeMap.removeSource(sourceId);
+  }
+  createdFrames.clear();
 }
 
-/** Point the raster source at the given frame's tiles and update the control. */
+/**
+ * Make `index` the visible frame: ensure its layer exists, then raise its
+ * opacity while dropping every other created frame's to 0. No tiles are fetched
+ * unless this frame's layer is new (lazy load) or the viewport changed.
+ */
 function showFrame(index: number): void {
   if (!map || frames.length === 0) return;
   frameIndex = ((index % frames.length) + frames.length) % frames.length;
-  const source = map.getSource(SOURCE_ID) as RasterTileSource | undefined;
-  source?.setTiles([frameTileUrl(frames[frameIndex])]);
+  ensureFrameLayer(map, frameIndex);
+  for (const created of createdFrames) {
+    const layerId = frameLayerId(created);
+    if (!map.getLayer(layerId)) continue;
+    map.setPaintProperty(
+      layerId,
+      "raster-opacity",
+      created === frameIndex ? settings.opacity : 0,
+    );
+  }
   control?.refresh();
 }
 
 function applyOpacity(): void {
-  if (map?.getLayer(LAYER_ID)) {
-    map.setPaintProperty(LAYER_ID, "raster-opacity", settings.opacity);
+  if (map?.getLayer(frameLayerId(frameIndex))) {
+    map.setPaintProperty(
+      frameLayerId(frameIndex),
+      "raster-opacity",
+      settings.opacity,
+    );
   }
 }
 
@@ -290,11 +369,12 @@ function applyOpacity(): void {
 
 /**
  * Advance the radar loop, gating each step on BOTH a minimum interval and the
- * map reaching `idle`. Waiting for idle means the frame just shown has finished
- * loading its tiles before the next swap replaces them — swapping a raster
- * source mid-load aborts the in-flight tile requests, which Chromium surfaces as
- * a burst of CORS/ERR_FAILED console noise on a cold cache. On a warm cache
- * idle fires immediately, so playback runs at the plain frame interval.
+ * map reaching `idle`. Waiting for idle means a frame whose layer is being
+ * created (or whose viewport tiles are still loading) finishes before the next
+ * advance, so playback naturally paces itself to the network on the first loop
+ * and while panning. Once every frame's layer exists and its tiles are cached,
+ * idle fires immediately and playback runs at the plain frame interval with no
+ * further fetching — just an opacity crossfade.
  */
 function startAnimation(initialDelay = FRAME_INTERVAL_MS): void {
   stopAnimation();
@@ -520,14 +600,17 @@ export const maplibreWeatherPlugin: GeoLibrePlugin = {
       return false;
     }
 
-    // setStyle (basemap change) drops our source/layer, so rebuild afterward
+    // setStyle (basemap change) drops our sources/layers, so rebuild afterward
     // once the new style is ready.
     unsubscribeBasemap = app.onBasemapChange(() => {
       if (!map) return;
       map.once("idle", () => {
         if (!map || status !== "ready" || frames.length === 0) return;
-        ensureLayer(map);
+        // setStyle already removed the layers; forget them so showFrame/
+        // startAnimation recreate them lazily rather than skip "existing" ids.
+        createdFrames.clear();
         showFrame(frameIndex);
+        if (settings.playing) startAnimation(INITIAL_PLAY_DELAY_MS);
       });
     });
 
@@ -549,7 +632,7 @@ export const maplibreWeatherPlugin: GeoLibrePlugin = {
       app.removeMapControl(control);
       control = null;
     }
-    if (map) teardownLayer(map);
+    if (map) teardownLayers(map);
     map = null;
     frames = [];
     frameIndex = 0;
