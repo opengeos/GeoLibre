@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "p. ej., categoría",
     "defaultValuePlaceholder": "Dejar en blanco para vacío",
     "newFieldNamePlaceholder": "Nombre del nuevo campo",
+    "showFields": "Mostrar campos",
+    "noFields": "Sin campos",
+    "showAllFields": "Mostrar todos los campos",
+    "buttons": {
+      "edit": "Editar",
+      "calculate": "Calcular",
+      "fields": "Campos",
+      "explore": "Explorar",
+      "statistics": "Estadísticas",
+      "export": "Exportar"
+    },
     "chart": {
       "field": "Campo",
       "xAxis": "Eje X",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Estilo de capa",
     "panelLabelCollapsed": "Estilo de capa (contraído)",
+    "heading": "Estilo",
+    "headingWithLayer": "Estilo - {{name}}",
     "resizePanel": "Cambiar el tamaño del panel de estilo",
     "expand": "Expandir estilo",
     "collapse": "Contraer estilo",

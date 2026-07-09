@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "es. categoria",
     "defaultValuePlaceholder": "Lascia vuoto per nessun valore",
     "newFieldNamePlaceholder": "Nome del nuovo campo",
+    "showFields": "Mostra campi",
+    "noFields": "Nessun campo",
+    "showAllFields": "Mostra tutti i campi",
+    "buttons": {
+      "edit": "Modifica",
+      "calculate": "Calcola",
+      "fields": "Campi",
+      "explore": "Esplora",
+      "statistics": "Statistiche",
+      "export": "Esporta"
+    },
     "chart": {
       "field": "Campo",
       "xAxis": "Asse X",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Stile del livello",
     "panelLabelCollapsed": "Stile del livello (compresso)",
+    "heading": "Stile",
+    "headingWithLayer": "Stile - {{name}}",
     "resizePanel": "Ridimensiona il pannello Stile",
     "expand": "Espandi stile",
     "collapse": "Comprimi stile",

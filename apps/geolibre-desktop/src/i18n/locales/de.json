@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "z. B. Kategorie",
     "defaultValuePlaceholder": "Für leer freilassen",
     "newFieldNamePlaceholder": "Neuer Feldname",
+    "showFields": "Felder anzeigen",
+    "noFields": "Keine Felder",
+    "showAllFields": "Alle Felder anzeigen",
+    "buttons": {
+      "edit": "Bearbeiten",
+      "calculate": "Berechnen",
+      "fields": "Felder",
+      "explore": "Erkunden",
+      "statistics": "Statistik",
+      "export": "Exportieren"
+    },
     "chart": {
       "field": "Feld",
       "xAxis": "X-Achse",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Ebenenstil",
     "panelLabelCollapsed": "Ebenenstil (eingeklappt)",
+    "heading": "Stil",
+    "headingWithLayer": "Stil - {{name}}",
     "resizePanel": "Größe des Stil-Panels ändern",
     "expand": "Stil einblenden",
     "collapse": "Stil ausblenden",

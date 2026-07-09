@@ -2362,6 +2362,17 @@
     "newFieldPlaceholder": "예: category",
     "defaultValuePlaceholder": "비워두면 빈 값으로 설정됩니다",
     "newFieldNamePlaceholder": "새 필드 이름",
+    "showFields": "필드 표시",
+    "noFields": "필드 없음",
+    "showAllFields": "모든 필드 표시",
+    "buttons": {
+      "edit": "편집",
+      "calculate": "계산",
+      "fields": "필드",
+      "explore": "탐색",
+      "statistics": "통계",
+      "export": "내보내기"
+    },
     "chart": {
       "field": "필드",
       "xAxis": "X축",
@@ -2373,6 +2384,8 @@
   "style": {
     "panelLabel": "레이어 스타일",
     "panelLabelCollapsed": "레이어 스타일(접힘)",
+    "heading": "스타일",
+    "headingWithLayer": "스타일 - {{name}}",
     "resizePanel": "스타일 패널 크기 조정",
     "expand": "스타일 펼치기",
     "collapse": "스타일 접기",

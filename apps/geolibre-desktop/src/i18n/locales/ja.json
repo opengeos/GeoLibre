@@ -2362,6 +2362,17 @@
     "newFieldPlaceholder": "例: category",
     "defaultValuePlaceholder": "空欄のままにすると空になります",
     "newFieldNamePlaceholder": "新しいフィールド名",
+    "showFields": "フィールドを表示",
+    "noFields": "フィールドなし",
+    "showAllFields": "すべてのフィールドを表示",
+    "buttons": {
+      "edit": "編集",
+      "calculate": "計算",
+      "fields": "フィールド",
+      "explore": "探索",
+      "statistics": "統計",
+      "export": "エクスポート"
+    },
     "chart": {
       "field": "フィールド",
       "xAxis": "X軸",
@@ -2373,6 +2384,8 @@
   "style": {
     "panelLabel": "レイヤースタイル",
     "panelLabelCollapsed": "レイヤースタイル (折りたたみ済み)",
+    "heading": "スタイル",
+    "headingWithLayer": "スタイル - {{name}}",
     "resizePanel": "スタイルパネルのサイズを変更",
     "expand": "スタイルを展開",
     "collapse": "スタイルを折りたたむ",

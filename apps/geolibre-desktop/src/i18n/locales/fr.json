@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "p. ex. catégorie",
     "defaultValuePlaceholder": "Laisser vide pour une valeur vide",
     "newFieldNamePlaceholder": "Nom du nouveau champ",
+    "showFields": "Afficher les champs",
+    "noFields": "Aucun champ",
+    "showAllFields": "Afficher tous les champs",
+    "buttons": {
+      "edit": "Modifier",
+      "calculate": "Calculer",
+      "fields": "Champs",
+      "explore": "Explorer",
+      "statistics": "Statistiques",
+      "export": "Exporter"
+    },
     "chart": {
       "field": "Champ",
       "xAxis": "Axe X",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Style de la couche",
     "panelLabelCollapsed": "Style de la couche (réduit)",
+    "heading": "Style",
+    "headingWithLayer": "Style - {{name}}",
     "resizePanel": "Redimensionner le panneau Style",
     "expand": "Développer le style",
     "collapse": "Réduire le style",

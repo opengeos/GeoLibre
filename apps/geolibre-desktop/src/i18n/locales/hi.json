@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "उदा. श्रेणी",
     "defaultValuePlaceholder": "खाली छोड़ने के लिए रिक्त रखें",
     "newFieldNamePlaceholder": "नया फ़ील्ड नाम",
+    "showFields": "फ़ील्ड दिखाएं",
+    "noFields": "कोई फ़ील्ड नहीं",
+    "showAllFields": "सभी फ़ील्ड दिखाएं",
+    "buttons": {
+      "edit": "संपादित करें",
+      "calculate": "गणना करें",
+      "fields": "फ़ील्ड",
+      "explore": "एक्सप्लोर करें",
+      "statistics": "सांख्यिकी",
+      "export": "निर्यात करें"
+    },
     "chart": {
       "field": "फ़ील्ड",
       "xAxis": "X अक्ष",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "लेयर शैली",
     "panelLabelCollapsed": "लेयर शैली (संक्षिप्त)",
+    "heading": "शैली",
+    "headingWithLayer": "शैली - {{name}}",
     "resizePanel": "शैली पैनल का आकार बदलें",
     "expand": "शैली विस्तृत करें",
     "collapse": "शैली संक्षिप्त करें",

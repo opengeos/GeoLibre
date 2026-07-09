@@ -1292,7 +1292,7 @@ export function StylePanel({
       <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
-          <span className="text-sm font-semibold">Style</span>
+          <span className="text-sm font-semibold">{t("style.heading")}</span>
           <Button
             variant="ghost"
             size="icon"
@@ -3122,7 +3122,7 @@ export function StylePanel({
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
-            Style - {layer.name}
+            {t("style.headingWithLayer", { name: layer.name })}
           </span>
           <Button
             variant="ghost"
@@ -3274,7 +3274,7 @@ export function StylePanel({
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
-            Style - {layer.name}
+            {t("style.headingWithLayer", { name: layer.name })}
           </span>
           <Button
             variant="ghost"
@@ -3304,7 +3304,7 @@ export function StylePanel({
       {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
-          Style - {layer.name}
+          {t("style.headingWithLayer", { name: layer.name })}
         </span>
         <Button
           variant="ghost"

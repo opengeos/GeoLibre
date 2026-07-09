@@ -1873,7 +1873,7 @@ export function LayerPanel({
         onPointerDown={onResizeStart}
       />
       <div className="flex items-center justify-between border-b px-3 py-1.5">
-        <span className="text-sm font-semibold">Layers</span>
+        <span className="text-sm font-semibold">{t("sharedRail.layers")}</span>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"

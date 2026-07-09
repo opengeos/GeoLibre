@@ -2362,6 +2362,17 @@
     "newFieldPlaceholder": "例如 category",
     "defaultValuePlaceholder": "留空表示空值",
     "newFieldNamePlaceholder": "新字段名称",
+    "showFields": "显示字段",
+    "noFields": "无字段",
+    "showAllFields": "显示所有字段",
+    "buttons": {
+      "edit": "编辑",
+      "calculate": "计算",
+      "fields": "字段",
+      "explore": "浏览",
+      "statistics": "统计",
+      "export": "导出"
+    },
     "chart": {
       "field": "字段",
       "xAxis": "X 轴",
@@ -2373,6 +2384,8 @@
   "style": {
     "panelLabel": "图层样式",
     "panelLabelCollapsed": "图层样式（已折叠）",
+    "heading": "样式",
+    "headingWithLayer": "样式 - {{name}}",
     "resizePanel": "调整样式面板大小",
     "expand": "展开样式",
     "collapse": "折叠样式",

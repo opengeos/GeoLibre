@@ -1251,7 +1251,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           onClick={toggleEditing}
         >
           <Pencil className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Edit</span>
+          <span className="hidden sm:inline">{t("attributeTable.buttons.edit")}</span>
         </Button>
         <Button
           variant="default"
@@ -1269,7 +1269,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Save</span>
+          <span className="hidden sm:inline">{t("common.save")}</span>
         </Button>
         {canManageColumns && !isEditing ? (
           <Button
@@ -1281,7 +1281,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             onClick={openAddColumn}
           >
             <Plus className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Add field</span>
+            <span className="hidden sm:inline">{t("attributeTable.addField")}</span>
           </Button>
         ) : null}
         {canManageColumns && !isEditing ? (
@@ -1294,7 +1294,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             onClick={openCalculator}
           >
             <Calculator className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Calculate</span>
+            <span className="hidden sm:inline">{t("attributeTable.buttons.calculate")}</span>
           </Button>
         ) : null}
         {canManageColumns && !isEditing ? (
@@ -1308,14 +1308,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 aria-label={t("attributeTable.manageFields")}
               >
                 <Columns3 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Fields</span>
+                <span className="hidden sm:inline">{t("attributeTable.buttons.fields")}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
-              <DropdownMenuLabel>Show fields</DropdownMenuLabel>
+              <DropdownMenuLabel>{t("attributeTable.showFields")}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               {discoveredColumns.length === 0 ? (
-                <DropdownMenuItem disabled>No fields</DropdownMenuItem>
+                <DropdownMenuItem disabled>{t("attributeTable.noFields")}</DropdownMenuItem>
               ) : (
                 discoveredColumns.map((col) => (
                   <DropdownMenuCheckboxItem
@@ -1333,7 +1333,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={handleShowAllColumns}>
-                    Show all fields
+                    {t("attributeTable.showAllFields")}
                   </DropdownMenuItem>
                 </>
               ) : null}
@@ -1355,7 +1355,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             onClick={() => setExplorerOpen(true)}
           >
             <Telescope className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Explore</span>
+            <span className="hidden sm:inline">{t("attributeTable.buttons.explore")}</span>
           </Button>
         ) : null}
         {!isEditing ? (
@@ -1373,7 +1373,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             onClick={() => setStatsOpen(true)}
           >
             <Sigma className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Statistics</span>
+            <span className="hidden sm:inline">{t("attributeTable.buttons.statistics")}</span>
           </Button>
         ) : null}
         {!isEditing ? (
@@ -1391,7 +1391,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             onClick={() => setChartOpen(true)}
           >
             <ChartColumn className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Charts</span>
+            <span className="hidden sm:inline">{t("attributeTable.charts")}</span>
           </Button>
         ) : null}
         {!isEditing ? (
@@ -1404,7 +1404,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             onClick={() => setDashboardOpen(true)}
           >
             <LayoutDashboard className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Dashboard</span>
+            <span className="hidden sm:inline">{t("attributeTable.dashboard")}</span>
           </Button>
         ) : null}
         <DropdownMenu>
@@ -1422,7 +1422,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               disabled={!layer?.geojson}
             >
               <Download className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Export</span>
+              <span className="hidden sm:inline">{t("attributeTable.buttons.export")}</span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">

@@ -2494,6 +2494,17 @@
     "newFieldPlaceholder": "например, категория",
     "defaultValuePlaceholder": "Оставьте пустым для пустого значения",
     "newFieldNamePlaceholder": "Имя нового поля",
+    "showFields": "Показать поля",
+    "noFields": "Нет полей",
+    "showAllFields": "Показать все поля",
+    "buttons": {
+      "edit": "Редактировать",
+      "calculate": "Вычислить",
+      "fields": "Поля",
+      "explore": "Изучить",
+      "statistics": "Статистика",
+      "export": "Экспорт"
+    },
     "chart": {
       "field": "Поле",
       "xAxis": "Ось X",
@@ -2505,6 +2516,8 @@
   "style": {
     "panelLabel": "Стиль слоя",
     "panelLabelCollapsed": "Стиль слоя (свёрнуто)",
+    "heading": "Стиль",
+    "headingWithLayer": "Стиль - {{name}}",
     "resizePanel": "Изменить размер панели стилей",
     "expand": "Развернуть стиль",
     "collapse": "Свернуть стиль",

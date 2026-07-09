@@ -2362,6 +2362,17 @@
     "newFieldPlaceholder": "mis. kategori",
     "defaultValuePlaceholder": "Biarkan kosong untuk kosong",
     "newFieldNamePlaceholder": "Nama bidang baru",
+    "showFields": "Tampilkan bidang",
+    "noFields": "Tidak ada bidang",
+    "showAllFields": "Tampilkan semua bidang",
+    "buttons": {
+      "edit": "Edit",
+      "calculate": "Hitung",
+      "fields": "Bidang",
+      "explore": "Jelajahi",
+      "statistics": "Statistik",
+      "export": "Ekspor"
+    },
     "chart": {
       "field": "Bidang",
       "xAxis": "Sumbu X",
@@ -2373,6 +2384,8 @@
   "style": {
     "panelLabel": "Gaya layer",
     "panelLabelCollapsed": "Gaya layer (diciutkan)",
+    "heading": "Gaya",
+    "headingWithLayer": "Gaya - {{name}}",
     "resizePanel": "Ubah ukuran panel Gaya",
     "expand": "Perluas gaya",
     "collapse": "Ciutkan gaya",

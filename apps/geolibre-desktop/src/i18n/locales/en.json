@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "e.g. category",
     "defaultValuePlaceholder": "Leave blank for empty",
     "newFieldNamePlaceholder": "New field name",
+    "showFields": "Show fields",
+    "noFields": "No fields",
+    "showAllFields": "Show all fields",
+    "buttons": {
+      "edit": "Edit",
+      "calculate": "Calculate",
+      "fields": "Fields",
+      "explore": "Explore",
+      "statistics": "Statistics",
+      "export": "Export"
+    },
     "chart": {
       "field": "Field",
       "xAxis": "X axis",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Layer style",
     "panelLabelCollapsed": "Layer style (collapsed)",
+    "heading": "Style",
+    "headingWithLayer": "Style - {{name}}",
     "resizePanel": "Resize Style panel",
     "expand": "Expand style",
     "collapse": "Collapse style",

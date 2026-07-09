@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "örn. kategori",
     "defaultValuePlaceholder": "Boş bırakmak için boş bırakın",
     "newFieldNamePlaceholder": "Yeni alan adı",
+    "showFields": "Alanları göster",
+    "noFields": "Alan yok",
+    "showAllFields": "Tüm alanları göster",
+    "buttons": {
+      "edit": "Düzenle",
+      "calculate": "Hesapla",
+      "fields": "Alanlar",
+      "explore": "Keşfet",
+      "statistics": "İstatistikler",
+      "export": "Dışa Aktar"
+    },
     "chart": {
       "field": "Alan",
       "xAxis": "X ekseni",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Katman stili",
     "panelLabelCollapsed": "Katman stili (daraltıldı)",
+    "heading": "Stil",
+    "headingWithLayer": "Stil - {{name}}",
     "resizePanel": "Stil panelini yeniden boyutlandır",
     "expand": "Stili genişlet",
     "collapse": "Stili daralt",

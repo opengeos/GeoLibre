@@ -2406,6 +2406,17 @@
     "newFieldPlaceholder": "bijv. categorie",
     "defaultValuePlaceholder": "Leeg laten voor een lege waarde",
     "newFieldNamePlaceholder": "Naam van nieuw veld",
+    "showFields": "Velden tonen",
+    "noFields": "Geen velden",
+    "showAllFields": "Alle velden tonen",
+    "buttons": {
+      "edit": "Bewerken",
+      "calculate": "Berekenen",
+      "fields": "Velden",
+      "explore": "Verkennen",
+      "statistics": "Statistieken",
+      "export": "Exporteren"
+    },
     "chart": {
       "field": "Veld",
       "xAxis": "X-as",
@@ -2417,6 +2428,8 @@
   "style": {
     "panelLabel": "Laagstijl",
     "panelLabelCollapsed": "Laagstijl (ingeklapt)",
+    "heading": "Stijl",
+    "headingWithLayer": "Stijl - {{name}}",
     "resizePanel": "Grootte van het stijlpaneel wijzigen",
     "expand": "Stijl uitklappen",
     "collapse": "Stijl inklappen",
