@@ -126,6 +126,10 @@ async function runEnsureSharedDeckOverlay(
   overlayMounted = false;
   mountRetries = 0;
   mountGaveUp = false;
+  // Also clear the retry latch: a mount-retry rAF may still be queued for the
+  // previous overlay, and leaving this true would make the fresh overlay's own
+  // scheduleMountRetry a no-op if its first addMapControl attempt also fails.
+  mountRetryScheduled = false;
   // Re-apply any layers producers registered before this (re)bind.
   renderSharedDeckOverlay();
   return overlay;

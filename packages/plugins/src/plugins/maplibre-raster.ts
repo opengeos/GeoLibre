@@ -712,6 +712,13 @@ function patchWebRasterOverlayFactory(
     };
   };
 
+  // maplibre-gl-raster v0.6.3 calls `_deps.removeOverlay(this._map, this._overlay)`
+  // from its LayerManager teardown (after the last raster is removed / the
+  // control is destroyed); re-verify this hook exists when bumping the
+  // dependency. Even if a future version stopped calling it, the control still
+  // pushes an empty layer list through the proxy's setProps first, so the
+  // "raster" source is cleared regardless -- this only also drops the device
+  // subscription.
   deps.removeOverlay = () => {
     rasterSharedOverlayDeviceUnsubscribe?.();
     rasterSharedOverlayDeviceUnsubscribe = null;
