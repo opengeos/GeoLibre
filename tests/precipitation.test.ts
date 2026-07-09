@@ -68,6 +68,21 @@ describe("radarFramesFromResponse", () => {
     );
   });
 
+  it("drops frames whose path would redirect off the rainviewer host", () => {
+    const frames = radarFramesFromResponse({
+      host: validHost,
+      radar: {
+        past: [
+          { time: 1, path: "/v2/radar/ok" },
+          // `@evil.example` turns the validated host into userinfo.
+          { time: 2, path: "@evil.example/v2/radar/x" },
+        ],
+      },
+    });
+    assert.equal(frames.length, 1);
+    assert.ok(frames[0].tileUrl.includes("/v2/radar/ok/"));
+  });
+
   it("drops malformed frame entries (missing path/time)", () => {
     const frames = radarFramesFromResponse({
       host: validHost,

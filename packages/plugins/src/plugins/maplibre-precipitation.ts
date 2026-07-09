@@ -118,6 +118,10 @@ export function radarFramesFromResponse(
       (f): f is RainViewerFrame =>
         !!f && typeof f.path === "string" && typeof f.time === "number",
     )
+    // `path` is also untrusted: validate the combined `host + path` still
+    // resolves to a rainviewer.com host, so a crafted path (e.g. "@evil.example/…"
+    // making the validated host the userinfo) can't redirect tile requests.
+    .filter((f) => isTrustedRainviewerHost(`${host}${f.path}`))
     // Sort oldest → newest so the engine's "newest = last" contract holds even
     // if the API ever returns `past` out of order (it's currently ordered).
     .sort((a, b) => a.time - b.time)
