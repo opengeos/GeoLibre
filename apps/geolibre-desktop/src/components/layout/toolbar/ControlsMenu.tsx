@@ -589,7 +589,9 @@ function WeatherLayerSubmenu({
     return controller.subscribe(() => setAnim(controller.getState()));
   }, [controller]);
 
-  const showAnimation = active && anim.labels.length > 0;
+  // Need at least two frames to animate/scrub; hide the Play + slider otherwise
+  // (a single-frame source can't animate, and startPlaying() would no-op).
+  const showAnimation = active && anim.labels.length > 1;
 
   return (
     <DropdownMenuSub
