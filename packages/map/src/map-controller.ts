@@ -2277,6 +2277,10 @@ export class MapController {
   private removeTerrainControl(): void {
     if (this.map?.getTerrain()?.source === TERRAIN_SOURCE_ID) {
       this.map.setTerrain(null);
+      // Mirror TerrainControl.setEnabled(false): restore MapLibre's default
+      // center-clamping, which the control turned off to stop terrain from
+      // recomputing (and snapping) the zoom while zooming over steep relief.
+      this.map.setCenterClampedToGround(true);
     }
     if (!this.terrainControl) return;
     this.removeControl(this.terrainControl);

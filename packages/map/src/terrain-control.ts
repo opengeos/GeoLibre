@@ -160,6 +160,19 @@ export class TerrainControl implements maplibregl.IControl {
     if (!this.map) return;
     if (enabled) {
       if (!this.isEnabled()) {
+        // Unclamp the map center from the terrain surface before enabling
+        // terrain. With the default (clamped) behavior MapLibre re-solves the
+        // zoom every frame to hold the camera at a constant height above the
+        // terrain elevation *under the center*; over steep terrain that sampled
+        // elevation jumps as higher-resolution DEM tiles stream in, so a
+        // cursor-anchored scroll-zoom snaps backward by up to ~2 zoom levels
+        // (zoom-in gestures fail to accumulate) and the camera can dip toward
+        // the surface, producing flicker / black flashes over high, steep relief
+        // (e.g. zooming into a mountain-summit track). Anchoring the center at
+        // sea level removes the per-frame zoom recomputation so zoom accumulates
+        // smoothly, and keeps the camera above ground at steep pitch (per
+        // MapLibre's own guidance for setCenterClampedToGround).
+        this.map.setCenterClampedToGround(false);
         this.map.setTerrain({
           source: this.source,
           exaggeration: this.exaggeration,
@@ -167,6 +180,8 @@ export class TerrainControl implements maplibregl.IControl {
       }
     } else if (this.isEnabled()) {
       this.map.setTerrain(null);
+      // Restore MapLibre's default center clamping now that terrain is off.
+      this.map.setCenterClampedToGround(true);
     }
   }
 
