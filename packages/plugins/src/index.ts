@@ -356,14 +356,11 @@ export {
 export {
   maplibreCloudsPlugin,
   CLOUDS_PLUGIN_ID,
-  CLOUDS_OPACITY_MIN,
-  CLOUDS_OPACITY_MAX,
-  DEFAULT_CLOUDS_SETTINGS,
-  getCloudsSettings,
-  setCloudsSettings,
-  normalizeCloudsSettings,
-  type CloudsSettings,
-  type CloudsSource,
+  getCloudsAnimationState,
+  setCloudsFrame,
+  toggleCloudsPlaying,
+  subscribeClouds,
+  type CloudsAnimationState,
 } from "./plugins/maplibre-clouds";
 export {
   maplibreTimeSliderPlugin,

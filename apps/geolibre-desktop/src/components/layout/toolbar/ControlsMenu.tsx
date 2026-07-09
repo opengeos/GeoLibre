@@ -1,17 +1,16 @@
 import { useAppStore } from "@geolibre/core";
 import {
-  CLOUDS_OPACITY_MAX,
-  CLOUDS_OPACITY_MIN,
-  type CloudsSettings,
-  type CloudsSource,
+  type CloudsAnimationState,
   DEFAULT_EFFECTS_SETTINGS,
   type EffectsSettings,
-  getCloudsSettings,
+  getCloudsAnimationState,
   HALO_EXTENT_MAX,
   HALO_EXTENT_MIN,
   HALO_OPACITY_MAX,
   HALO_OPACITY_MIN,
-  setCloudsSettings,
+  setCloudsFrame,
+  subscribeClouds,
+  toggleCloudsPlaying,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -33,7 +32,7 @@ import {
   Slider,
 } from "@geolibre/ui";
 import { ClipboardList, SlidersHorizontal, Video } from "lucide-react";
-import { type MouseEvent as ReactMouseEvent, useState } from "react";
+import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
@@ -473,34 +472,31 @@ interface CloudsSubmenuProps {
 }
 
 /**
- * Submenu for the realtime Clouds overlay: an on/off toggle, a source picker
- * (Realtime infrared vs. Satellite true colour), and an opacity slider.
+ * Submenu for the Clouds overlay: an on/off toggle plus a time-scrub animation
+ * (play/pause + a date slider) that steps the NASA GIBS layer through the last
+ * several complete UTC days. The overlay itself lives in the Layers panel as a
+ * normal tile layer (with its own visibility/opacity); this submenu only drives
+ * the animation.
  *
- * Settings live in module state in the clouds plugin, so this keeps a local
- * mirror seeded each time the submenu opens. Edits apply to the live map
- * immediately via {@link setCloudsSettings} and persist with the project on the
- * next save (matching the Gridlines plugin).
+ * Animation state lives in module state in the clouds plugin, so this mirrors it
+ * locally: seeded on mount/open and refreshed via {@link subscribeClouds} so the
+ * slider tracks playback frame by frame.
  */
 function CloudsSubmenu({ active, onToggle }: CloudsSubmenuProps) {
   const { t } = useTranslation();
-  const [settings, setSettings] = useState<CloudsSettings>(getCloudsSettings);
+  const [anim, setAnim] = useState<CloudsAnimationState>(getCloudsAnimationState);
 
-  const update = (next: Partial<CloudsSettings>) => {
-    setSettings((prev) => ({ ...prev, ...next }));
-    setCloudsSettings(next);
-  };
+  useEffect(() => {
+    setAnim(getCloudsAnimationState());
+    return subscribeClouds(() => setAnim(getCloudsAnimationState()));
+  }, []);
 
-  const sources: Array<{ value: CloudsSource; label: string }> = [
-    { value: "realtime", label: t("toolbar.item.cloudsSourceRealtime") },
-    { value: "satellite", label: t("toolbar.item.cloudsSourceSatellite") },
-  ];
+  const showAnimation = active && anim.dates.length > 0;
 
   return (
     <DropdownMenuSub
       onOpenChange={(open: boolean) => {
-        // Re-seed from the source of truth on open so the controls reflect a
-        // project that loaded new settings while the menu was closed.
-        if (open) setSettings(getCloudsSettings());
+        if (open) setAnim(getCloudsAnimationState());
       }}
     >
       <DropdownMenuSubTrigger title={t("toolbar.item.cloudsTooltip")}>
@@ -519,37 +515,35 @@ function CloudsSubmenu({ active, onToggle }: CloudsSubmenuProps) {
           {t("toolbar.item.cloudsShow")}
           {active ? " ✓" : ""}
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-          {t("toolbar.item.cloudsSource")}
-        </DropdownMenuLabel>
-        {sources.map((source) => (
-          <DropdownMenuItem
-            key={source.value}
-            onSelect={(e: Event) => {
-              e.preventDefault();
-              update({ source: source.value });
-            }}
-          >
-            {source.label}
-            {settings.source === source.value ? " ✓" : ""}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        {/* Stop key events from reaching the menu's roving-focus/typeahead
-            handlers so the slider responds to arrow keys. */}
-        <div className="px-2 py-1.5" onKeyDown={(e) => e.stopPropagation()}>
-          <SliderRow
-            label={t("toolbar.item.cloudsOpacity")}
-            min={CLOUDS_OPACITY_MIN}
-            max={CLOUDS_OPACITY_MAX}
-            step={0.05}
-            value={settings.opacity}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onPreview={(opacity) => update({ opacity })}
-            onCommit={() => {}}
-          />
-        </div>
+        {showAnimation && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={(e: Event) => {
+                e.preventDefault();
+                toggleCloudsPlaying();
+              }}
+            >
+              {anim.playing
+                ? t("toolbar.item.cloudsPause")
+                : t("toolbar.item.cloudsPlay")}
+            </DropdownMenuItem>
+            {/* Stop key events from reaching the menu's roving-focus/typeahead
+                handlers so the slider responds to arrow keys. */}
+            <div className="px-2 py-1.5" onKeyDown={(e) => e.stopPropagation()}>
+              <SliderRow
+                label={t("toolbar.item.cloudsDate")}
+                min={0}
+                max={anim.dates.length - 1}
+                step={1}
+                value={anim.index}
+                format={(v) => anim.dates[Math.round(v)] ?? ""}
+                onPreview={(v) => setCloudsFrame(v)}
+                onCommit={() => {}}
+              />
+            </div>
+          </>
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
