@@ -1278,6 +1278,9 @@
       "getCredentials": "Where to get {{provider}} credentials",
       "showValue": "Show {{name}}",
       "hideValue": "Hide {{name}}",
+      "osEnvNote": "The desktop app also reads matching API keys from your system environment variables. Those are used automatically and are never saved to the project file — leave a field blank to keep using the environment value.",
+      "osEnvField": "Read from your system environment variable {{name}}.",
+      "osEnvPlaceholder": "Set in your system environment",
       "field": {
         "apiKey": "API key",
         "baseUrl": "Base URL",

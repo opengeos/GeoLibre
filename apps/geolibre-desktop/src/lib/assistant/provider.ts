@@ -60,6 +60,43 @@ const PROVIDER_KEY_NAMES: Partial<
 };
 
 /**
+ * Every environment variable name the assistant resolves a provider from. This
+ * is the allowlist the desktop app reads out of the user's OS environment (via
+ * the `read_env_vars` Tauri command) so API keys can live in the system/shell
+ * environment instead of the saved project file (issue #1141). Keep it in sync
+ * with the names read across this module and {@link ./provider-fields}; the
+ * `assistant-os-env` test asserts it stays complete.
+ */
+export const ASSISTANT_ENV_VAR_NAMES: readonly string[] = [
+  // Provider / model selection overrides.
+  "GEOLIBRE_ASSISTANT_PROVIDER",
+  "GEOLIBRE_ASSISTANT_MODEL",
+  // Google Gemini.
+  "GEMINI_API_KEY",
+  "GOOGLE_API_KEY",
+  "GOOGLE_GENAI_API_KEY",
+  // Anthropic.
+  "ANTHROPIC_API_KEY",
+  // OpenAI.
+  "OPENAI_API_KEY",
+  // Ollama (local).
+  "OLLAMA_BASE_URL",
+  "OLLAMA_HOST",
+  "OLLAMA_MODEL",
+  // Amazon Bedrock.
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AWS_REGION",
+  "AWS_DEFAULT_REGION",
+  "BEDROCK_MODEL",
+  // Custom OpenAI-compatible endpoint.
+  "OPENAI_COMPATIBLE_BASE_URL",
+  "OPENAI_COMPATIBLE_API_KEY",
+  "OPENAI_COMPATIBLE_MODEL",
+];
+
+/**
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`
  * (or the per-provider env var) or the model picker. The hosted-model ids were

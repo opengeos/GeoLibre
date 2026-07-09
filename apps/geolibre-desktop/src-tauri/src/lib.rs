@@ -205,6 +205,7 @@ pub fn run() {
             native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
             read_admin_profile,
+            read_env_vars,
             read_local_file,
             read_project_file,
             read_shapefile_siblings,
@@ -424,6 +425,29 @@ fn read_admin_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("Could not read admin profile: {error}")),
     }
+}
+
+/// Read a caller-supplied allowlist of variables from the OS environment.
+///
+/// Only the names the frontend asks for are returned, and only when present and
+/// non-empty, so the desktop app never leaks the full process environment into
+/// the webview. This lets the AI Assistant source provider API keys from the
+/// user's system/shell environment instead of the project file (issue #1141),
+/// which keeps secrets out of the saved `.geolibre.json`.
+#[tauri::command]
+fn read_env_vars(names: Vec<String>) -> std::collections::HashMap<String, String> {
+    names
+        .into_iter()
+        .filter_map(|name| {
+            let value = env::var(&name).ok()?;
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some((name, trimmed.to_string()))
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]

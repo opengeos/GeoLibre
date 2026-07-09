@@ -1,5 +1,7 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { RuntimeEnv } from "../lib/assistant/provider";
+import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 
 export function useRuntimeEnvironmentVariables() {
   const environmentVariables = useAppStore(
@@ -8,6 +10,20 @@ export function useRuntimeEnvironmentVariables() {
   const geocoding = useAppStore((s) => s.preferences.geocoding);
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
+
+  // AI provider keys sourced from the user's OS environment (desktop only).
+  // Loaded once at startup; feeding it through state re-runs the merge below so
+  // the runtime env picks up the values once the async read resolves.
+  const [osEnv, setOsEnv] = useState<RuntimeEnv>(() => readOsEnv());
+  useEffect(() => {
+    let cancelled = false;
+    loadOsEnvVars().then((env) => {
+      if (!cancelled) setOsEnv(env);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -31,6 +47,10 @@ export function useRuntimeEnvironmentVariables() {
       geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
 
     const runtimeEnv = {
+      // OS-provided AI keys sit at the lowest precedence: an explicit value in
+      // the project's Environment variables (or a derived geocoder var) always
+      // wins, and the OS environment only fills the gaps.
+      ...osEnv,
       ...geocoderEnv,
       ...Object.fromEntries(
         environmentVariables
@@ -63,5 +83,5 @@ export function useRuntimeEnvironmentVariables() {
     window.dispatchEvent(
       new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }),
     );
-  }, [environmentVariables, geocoding]);
+  }, [environmentVariables, geocoding, osEnv]);
 }
