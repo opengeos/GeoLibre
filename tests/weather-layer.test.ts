@@ -1,0 +1,103 @@
+import assert from "node:assert/strict";
+import { beforeEach, describe, it } from "node:test";
+import { useAppStore } from "../packages/core/src/store";
+import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import {
+  createWeatherLayer,
+  type WeatherFrame,
+  type WeatherLayerConfig,
+} from "../packages/plugins/src/plugins/weather-layer";
+
+const FLAG = "weatherLayerTestFlag";
+
+const frame: WeatherFrame = {
+  tileUrl: "https://example.test/{z}/{x}/{y}.png",
+  label: "frame-1",
+  metadata: { title: "Test" },
+};
+
+// A map-less app: getMap() → null makes the engine skip all MapLibre work
+// (setTiles, the error listener), leaving the store-driven logic under test.
+const app = { getMap: () => null } as unknown as GeoLibreAppAPI;
+
+function makeConfig(over: Partial<WeatherLayerConfig> = {}): WeatherLayerConfig {
+  return {
+    layerName: "TestWeather",
+    layerFlag: FLAG,
+    attribution: "",
+    serviceUrl: "https://example.test/",
+    maxzoom: 6,
+    tileSize: 512,
+    opacity: 0.8,
+    frameMs: 1000,
+    loadFrames: async () => [frame],
+    ...over,
+  };
+}
+
+const ownedLayers = () =>
+  useAppStore.getState().layers.filter((l) => l.metadata?.[FLAG] === true);
+
+beforeEach(() => {
+  useAppStore.setState({ layers: [], layerGroups: [], selectedLayerId: null });
+});
+
+describe("createWeatherLayer", () => {
+  it("adds one store layer on activate and removes it on deactivate", async () => {
+    const c = createWeatherLayer(makeConfig());
+    assert.equal(await c.activate(app), true);
+    assert.equal(ownedLayers().length, 1);
+    c.deactivate();
+    assert.equal(ownedLayers().length, 0);
+  });
+
+  it("does NOT resurrect the layer when deactivate() races an in-flight activate()", async () => {
+    let release: (() => void) | undefined;
+    const c = createWeatherLayer(
+      makeConfig({
+        loadFrames: () =>
+          new Promise<WeatherFrame[]>((resolve) => {
+            release = () => resolve([frame]);
+          }),
+      }),
+    );
+    const activating = c.activate(app); // suspends at the await
+    c.deactivate(); // user toggled off before the fetch resolved
+    release?.(); // fetch now resolves
+    assert.equal(await activating, false); // superseded → bailed
+    assert.equal(ownedLayers().length, 0); // no orphaned layer added
+  });
+
+  it("fails (rolls back) when loadFrames() is empty and nothing to adopt", async () => {
+    const c = createWeatherLayer(makeConfig({ loadFrames: async () => [] }));
+    assert.equal(await c.activate(app), false);
+    assert.equal(ownedLayers().length, 0);
+  });
+
+  it("adopts a restored layer (keeping it) when loadFrames() is empty on restore", async () => {
+    // Simulate a project restore: the tagged layer is already in the store.
+    useAppStore.getState().addTileLayer("TestWeather", {
+      type: "xyz",
+      tiles: ["https://example.test/old/{z}/{x}/{y}.png"],
+      metadata: { [FLAG]: true },
+    });
+    assert.equal(ownedLayers().length, 1);
+
+    const c = createWeatherLayer(makeConfig({ loadFrames: async () => [] }));
+    assert.equal(await c.activate(app), true); // adopted despite no fresh frames
+    assert.equal(ownedLayers().length, 1); // not duplicated, not removed
+    c.deactivate();
+    assert.equal(ownedLayers().length, 0); // deactivate removes the adopted layer
+  });
+
+  it("adopts (not duplicates) a restored layer when fresh frames are available", async () => {
+    useAppStore.getState().addTileLayer("TestWeather", {
+      type: "xyz",
+      tiles: ["https://example.test/old/{z}/{x}/{y}.png"],
+      metadata: { [FLAG]: true },
+    });
+    const c = createWeatherLayer(makeConfig());
+    assert.equal(await c.activate(app), true);
+    assert.equal(ownedLayers().length, 1); // exactly one — adopted, no duplicate
+  });
+});

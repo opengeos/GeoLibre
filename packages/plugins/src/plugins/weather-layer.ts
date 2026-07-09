@@ -272,7 +272,13 @@ export function createWeatherLayer(
       // Invalidate any activate() whose loadFrames() is still in flight so it
       // won't re-add the layer after the user turned it off.
       activationGeneration += 1;
-      stopPlaying();
+      // Stop the timer directly rather than via stopPlaying(): its syncStore()
+      // persistence write would be pure waste right before removeLayer() below.
+      if (frameTimer) {
+        clearInterval(frameTimer);
+        frameTimer = null;
+      }
+      playing = false;
       const map = appRef?.getMap?.() as MapLibreMap | null | undefined;
       if (map && mapErrorHandler) map.off("error", mapErrorHandler);
       mapErrorHandler = null;
