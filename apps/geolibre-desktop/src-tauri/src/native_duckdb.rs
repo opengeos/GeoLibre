@@ -416,21 +416,51 @@ fn read_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<S
          FROM ST_Read_Meta({})",
         quote_sql_string(&options.path.replace('\\', "/"))
     );
-    conn.query_row(&meta_sql, [], |row| {
-        let auth_name: Option<String> = row.get(0)?;
-        let auth_code: Option<String> = row.get(1)?;
-        Ok((auth_name, auth_code))
-    })
-    .ok()
-    .and_then(|(auth_name, auth_code)| {
-        let auth_name = auth_name?.trim().to_ascii_uppercase();
-        let auth_code = auth_code?.trim().to_string();
-        if auth_name.is_empty() || auth_code.is_empty() {
-            None
-        } else {
-            Some(format!("{auth_name}:{auth_code}"))
+    let auth_crs = conn
+        .query_row(&meta_sql, [], |row| {
+            let auth_name: Option<String> = row.get(0)?;
+            let auth_code: Option<String> = row.get(1)?;
+            Ok((auth_name, auth_code))
+        })
+        .ok()
+        .and_then(|(auth_name, auth_code)| {
+            let auth_name = auth_name?.trim().to_ascii_uppercase();
+            let auth_code = auth_code?.trim().to_string();
+            if auth_name.is_empty() || auth_code.is_empty() {
+                None
+            } else {
+                Some(format!("{auth_name}:{auth_code}"))
+            }
+        });
+    if auth_crs.is_some() {
+        return auth_crs;
+    }
+    // ST_Read_Meta resolved no EPSG authority code (e.g. a custom ESRI `.prj`
+    // without an AUTHORITY tag). Fall back to the shapefile's `.prj` sidecar
+    // WKT, which ST_Transform accepts, mirroring the DuckDB-WASM loader so a
+    // projected shapefile still reprojects instead of loading in source
+    // coordinates (issue #1148).
+    if options.extension == "shp" {
+        return read_prj_sidecar_crs(&options.path);
+    }
+    None
+}
+
+/// The WKT text of a shapefile's `.prj` sidecar, or `None` when it is absent or
+/// empty. Used as the CRS fallback when `ST_Read_Meta` reports no authority code.
+fn read_prj_sidecar_crs(shp_path: &str) -> Option<String> {
+    // The sidecar shares the `.shp`'s base name; try both cases since a
+    // shapefile set may ship `.prj` or `.PRJ`.
+    for extension in ["prj", "PRJ"] {
+        let prj_path = Path::new(shp_path).with_extension(extension);
+        if let Ok(text) = std::fs::read_to_string(&prj_path) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
         }
-    })
+    }
+    None
 }
 
 fn read_geoparquet_source_crs(conn: &Connection, options: &NativeVectorOptions) -> Option<String> {
@@ -851,6 +881,54 @@ mod tests {
         let options = native_options(path.clone(), None, None).expect("native options");
         assert_eq!(options.path, path);
         let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn read_prj_sidecar_crs_returns_trimmed_wkt() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before Unix epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "geolibre-native-prj-{suffix}-{}",
+            std::process::id()
+        ));
+        let shp_path = base.with_extension("shp");
+        let prj_path = base.with_extension("prj");
+        std::fs::write(
+            &prj_path,
+            "  PROJCS[\"British_National_Grid\",GEOGCS[\"GCS_OSGB_1936\"]]\n",
+        )
+        .expect("write prj sidecar");
+
+        let crs = read_prj_sidecar_crs(&shp_path.to_string_lossy())
+            .expect("prj sidecar resolves a CRS");
+        assert_eq!(
+            crs,
+            "PROJCS[\"British_National_Grid\",GEOGCS[\"GCS_OSGB_1936\"]]"
+        );
+
+        let _ = std::fs::remove_file(&prj_path);
+    }
+
+    #[test]
+    fn read_prj_sidecar_crs_is_none_when_absent_or_empty() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time before Unix epoch")
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!(
+            "geolibre-native-prj-missing-{suffix}-{}",
+            std::process::id()
+        ));
+        let shp_path = base.with_extension("shp");
+
+        assert!(read_prj_sidecar_crs(&shp_path.to_string_lossy()).is_none());
+
+        let prj_path = base.with_extension("prj");
+        std::fs::write(&prj_path, "   \n").expect("write empty prj sidecar");
+        assert!(read_prj_sidecar_crs(&shp_path.to_string_lossy()).is_none());
+        let _ = std::fs::remove_file(&prj_path);
     }
 
     #[test]
