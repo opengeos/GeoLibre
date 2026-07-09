@@ -1,6 +1,8 @@
-import { Box3, LoadingManager, Mesh, Vector3 } from "three";
+import { Box3, LoadingManager, Mesh, Object3D, Vector3 } from "three";
 import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
 import { GLTFExporter } from "three/addons/exporters/GLTFExporter.js";
+
+const LARGE_MODEL_HORIZONTAL_SPAN_METERS = 1000;
 
 /** The result of converting a COLLADA `.dae` to a GLB. */
 export interface ConvertedModel {
@@ -15,6 +17,10 @@ export interface ConvertedModel {
    * anchor. `0` when the scene is empty.
    */
   radiusMeters: number;
+  /** Minimum model-space up-axis coordinate after COLLADA unit/up-axis handling. */
+  verticalMinMeters: number;
+  /** Maximum model-space up-axis coordinate after COLLADA unit/up-axis handling. */
+  verticalMaxMeters: number;
 }
 
 // The largest distance from the origin (0,0,0) to any of the 8 corners of a
@@ -32,6 +38,41 @@ function radiusFromOrigin(box: Box3): number {
     }
   }
   return max;
+}
+
+function horizontalSpan(box: Box3): number {
+  if (box.isEmpty()) return 0;
+  return Math.max(box.max.x - box.min.x, box.max.z - box.min.z);
+}
+
+function recenterAuthoredHorizontalGeometry(scene: Object3D): void {
+  const authoredBox = new Box3();
+  const visited = new Set<string>();
+  scene.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const geometry = object.geometry;
+    const position = geometry.getAttribute("position");
+    if (!position) return;
+    const key = geometry.uuid;
+    if (visited.has(key)) return;
+    visited.add(key);
+    const geometryBox =
+      geometry.boundingBox ?? new Box3().setFromBufferAttribute(position);
+    authoredBox.union(geometryBox);
+  });
+  if (authoredBox.isEmpty()) return;
+
+  const centerX = (authoredBox.min.x + authoredBox.max.x) / 2;
+  const centerY = (authoredBox.min.y + authoredBox.max.y) / 2;
+  visited.clear();
+  scene.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    const geometry = object.geometry;
+    const key = geometry.uuid;
+    if (visited.has(key)) return;
+    visited.add(key);
+    geometry.translate(-centerX, -centerY, 0);
+  });
 }
 
 /**
@@ -97,7 +138,21 @@ export async function convertDaeToGlb(
   // Measure the model (world-space, so the DAE's <unit> scale and Z-up→Y-up
   // conversion are already baked in) before exporting, so the caller can frame
   // the whole thing.
-  const radiusMeters = radiusFromOrigin(new Box3().setFromObject(collada.scene));
+  const sourceBox = new Box3().setFromObject(collada.scene);
+  if (horizontalSpan(sourceBox) >= LARGE_MODEL_HORIZONTAL_SPAN_METERS) {
+    // SketchUp/KMZ geological sections and terrain slabs often carry large
+    // local east/north offsets, leaving the visual mesh kilometers away from
+    // the KML <Location>. Recenter the authored vertices for large horizontal
+    // models; building-scale assets keep their authored origin.
+    recenterAuthoredHorizontalGeometry(collada.scene);
+  }
+  const box = new Box3().setFromObject(collada.scene);
+  const radiusMeters = radiusFromOrigin(box);
+  // ColladaLoader normalizes Z_UP assets to glTF's Y-up frame before export.
+  // That Y axis becomes deck.gl's vertical axis after ScenegraphLayer's
+  // standard glTF roll, so carry it for KML vertical anchoring.
+  const verticalMinMeters = box.isEmpty() ? 0 : box.min.y;
+  const verticalMaxMeters = box.isEmpty() ? 0 : box.max.y;
 
   // Wait for textures only when a load actually started during parse; otherwise
   // there are none and there is nothing to wait for. A missing/hanging texture
@@ -121,5 +176,10 @@ export async function convertDaeToGlb(
       { binary: true },
     );
   });
-  return { glb: new Uint8Array(glb), radiusMeters };
+  return {
+    glb: new Uint8Array(glb),
+    radiusMeters,
+    verticalMinMeters,
+    verticalMaxMeters,
+  };
 }

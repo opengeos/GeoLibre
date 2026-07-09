@@ -86,8 +86,14 @@ export interface DeckVizScenegraphConfig {
   modelUrl: string;
   /** Overall size multiplier in meters (ScenegraphLayer `sizeScale`). */
   sizeScale: number;
+  /** Minimum rendered pixels for one model unit. */
+  sizeMinPixels?: number;
   /** Heading in degrees clockwise from north, applied as the model's yaw. */
   bearing: number;
+  /** Extra roll in degrees applied after yaw. Defaults to deck.gl's glTF example. */
+  orientationRoll?: number;
+  /** Constant translation from the anchor point, [x, y, z] in meters. */
+  translation?: [number, number, number];
   /**
    * Constant altitude in meters, added to the per-instance altitude (or used
    * alone when no altitude column is mapped).
@@ -98,7 +104,10 @@ export interface DeckVizScenegraphConfig {
 export const DEFAULT_DECK_VIZ_SCENEGRAPH: DeckVizScenegraphConfig = {
   modelUrl: "",
   sizeScale: 1000,
+  sizeMinPixels: 1,
   bearing: 0,
+  orientationRoll: 90,
+  translation: [0, 0, 0],
   altitude: 0,
 };
 
@@ -867,7 +876,8 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         // Floor the on-screen size so distant models stay visible; leave the
         // ceiling unset so zooming in scales the model up naturally instead of
         // clamping a single large asset (building, turbine) to a small dot.
-        sizeMinPixels: 1,
+        sizeMinPixels:
+          sg.sizeMinPixels ?? DEFAULT_DECK_VIZ_SCENEGRAPH.sizeMinPixels ?? 1,
         getPosition: (record: AnyRecord) => {
           const [lng, lat] = position(record);
           const altitude =
@@ -879,8 +889,10 @@ const DEFINITIONS: DeckVizLayerDef[] = [
         getOrientation: (record: AnyRecord): [number, number, number] => [
           0,
           hasBearing ? readNumber(record, bearingKey) : sg.bearing,
-          90,
+          sg.orientationRoll ?? DEFAULT_DECK_VIZ_SCENEGRAPH.orientationRoll ?? 90,
         ],
+        getTranslation:
+          sg.translation ?? DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0],
         ...(hasScale
           ? {
               getScale: (record: AnyRecord): [number, number, number] => {

@@ -793,7 +793,7 @@ body,
 }
 
 #deckgl-overlay {
-  z-index: 1;
+  z-index: 5;
 }
 
 /*

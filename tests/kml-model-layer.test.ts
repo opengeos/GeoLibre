@@ -4,6 +4,7 @@ import {
   kmlModelBounds,
   kmlModelDisplayName,
   kmlModelRow,
+  kmlModelTranslation,
   kmlModelUniformScale,
   modelNameFromPath,
 } from "../apps/geolibre-desktop/src/lib/kml-model";
@@ -23,6 +24,8 @@ function model(patch: Partial<LoadedModel> = {}): LoadedModel {
     roll: 0,
     scale: { x: 1, y: 1, z: 1 },
     radiusMeters: 0,
+    verticalMinMeters: 0,
+    verticalMaxMeters: 0,
     ...patch,
   };
 }
@@ -86,6 +89,24 @@ describe("kmlModelBounds", () => {
     const [w, s, e, n] = kmlModelBounds(model({ radiusMeters: 0 }));
     assert.ok(Math.abs(e - w - 0.004) < 1e-9, "longitude pad is 2 * minPad");
     assert.ok(Math.abs(n - s - 0.004) < 1e-9, "latitude pad is 2 * minPad");
+  });
+});
+
+describe("kmlModelTranslation", () => {
+  it("leaves building-scale vertical models anchored normally", () => {
+    assert.deepEqual(
+      kmlModelTranslation(model({ verticalMinMeters: 0, verticalMaxMeters: 50 })),
+      [0, 0, 0],
+    );
+  });
+
+  it("lowers kilometer-scale vertical models so their top aligns to the anchor", () => {
+    assert.deepEqual(
+      kmlModelTranslation(
+        model({ verticalMinMeters: 0, verticalMaxMeters: 5_600 }),
+      ),
+      [0, 0, -5_600],
+    );
   });
 });
 

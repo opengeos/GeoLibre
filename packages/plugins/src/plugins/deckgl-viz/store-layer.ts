@@ -183,11 +183,30 @@ function readScenegraphConfig(
     sizeScale: Number.isFinite(candidate.sizeScale)
       ? (candidate.sizeScale as number)
       : DEFAULT_DECK_VIZ_SCENEGRAPH.sizeScale,
+    sizeMinPixels: Number.isFinite(candidate.sizeMinPixels)
+      ? (candidate.sizeMinPixels as number)
+      : DEFAULT_DECK_VIZ_SCENEGRAPH.sizeMinPixels,
     bearing: Number.isFinite(candidate.bearing)
       ? (candidate.bearing as number)
       : DEFAULT_DECK_VIZ_SCENEGRAPH.bearing,
+    orientationRoll: Number.isFinite(candidate.orientationRoll)
+      ? (candidate.orientationRoll as number)
+      : DEFAULT_DECK_VIZ_SCENEGRAPH.orientationRoll,
+    translation: readScenegraphTranslation(candidate.translation),
     altitude: Number.isFinite(candidate.altitude)
       ? (candidate.altitude as number)
       : DEFAULT_DECK_VIZ_SCENEGRAPH.altitude,
   };
+}
+
+function readScenegraphTranslation(
+  raw: unknown,
+): [number, number, number] {
+  if (!Array.isArray(raw) || raw.length !== 3) {
+    return DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0];
+  }
+  const values = raw.map((value) => Number(value));
+  return values.every((value) => Number.isFinite(value))
+    ? (values as [number, number, number])
+    : DEFAULT_DECK_VIZ_SCENEGRAPH.translation ?? [0, 0, 0];
 }

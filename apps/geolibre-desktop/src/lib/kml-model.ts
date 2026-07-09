@@ -51,6 +51,25 @@ export function kmlModelRow(model: LoadedModel): {
   };
 }
 
+/**
+ * Large KML models such as geological cross-sections often encode depth/elevation
+ * as positive local-up coordinates from the model origin. In deck.gl that makes
+ * the whole wall tower into the sky. For kilometer-scale vertical models, shift
+ * the converted scene down so its top aligns with the KML anchor altitude; leave
+ * normal building-scale models untouched.
+ */
+export function kmlModelTranslation(model: LoadedModel): [number, number, number] {
+  const min = Number.isFinite(model.verticalMinMeters)
+    ? model.verticalMinMeters
+    : 0;
+  const max = Number.isFinite(model.verticalMaxMeters)
+    ? model.verticalMaxMeters
+    : 0;
+  const verticalSpan = max - min;
+  if (verticalSpan < 1000 || max <= 0) return [0, 0, 0];
+  return [0, 0, -max * kmlModelUniformScale(model.scale)];
+}
+
 // Meters per degree of latitude (WGS84 mean). Longitude degrees shrink by
 // cos(latitude), so a fixed meter extent spans more longitude near the poles.
 const METERS_PER_DEGREE_LAT = 111320;

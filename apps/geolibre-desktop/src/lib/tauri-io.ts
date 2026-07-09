@@ -240,6 +240,9 @@ export interface LoadedModel {
    * bounding-box corner), used to frame it on load. `0` when unknown.
    */
   radiusMeters: number;
+  /** Model-space vertical bounds after COLLADA unit/up-axis handling. */
+  verticalMinMeters: number;
+  verticalMaxMeters: number;
 }
 
 /**
@@ -768,7 +771,12 @@ function kmlModelName(
 
 function kmlModelLayer(
   model: KmlModel,
-  converted: { url: string; radiusMeters: number },
+  converted: {
+    url: string;
+    radiusMeters: number;
+    verticalMinMeters: number;
+    verticalMaxMeters: number;
+  },
   path: string,
   index: number,
   total: number,
@@ -786,6 +794,8 @@ function kmlModelLayer(
     roll: model.roll,
     scale: model.scale,
     radiusMeters: converted.radiusMeters,
+    verticalMinMeters: converted.verticalMinMeters,
+    verticalMaxMeters: converted.verticalMaxMeters,
   };
 }
 
@@ -799,7 +809,12 @@ async function daeToGlbDataUrl(
   href: string,
   resolveTexture?: (path: string) => Uint8Array | undefined,
   basePath = "",
-): Promise<{ url: string; radiusMeters: number } | null> {
+): Promise<{
+  url: string;
+  radiusMeters: number;
+  verticalMinMeters: number;
+  verticalMaxMeters: number;
+} | null> {
   const blobUrls: string[] = [];
   const modifier = resolveTexture
     ? (url: string): string | undefined => {
@@ -814,11 +829,12 @@ async function daeToGlbDataUrl(
     : undefined;
   try {
     const { convertDaeToGlb } = await import("./collada-to-glb");
-    const { glb, radiusMeters } = await convertDaeToGlb(
-      daeText,
-      modifier,
-      basePath,
-    );
+    const { glb, radiusMeters, verticalMinMeters, verticalMaxMeters } =
+      await convertDaeToGlb(
+        daeText,
+        modifier,
+        basePath,
+      );
     if (glb.length > MAX_MODEL_GLB_BYTES) {
       console.warn(
         `Skipping a KML model: "${href}" converts to ${Math.round(glb.length / (1024 * 1024))} MB, over the ${Math.round(MAX_MODEL_GLB_BYTES / (1024 * 1024))} MB inline limit.`,
@@ -826,7 +842,7 @@ async function daeToGlbDataUrl(
       return null;
     }
     const url = await bytesToDataUrl(glb, "model/gltf-binary");
-    return { url, radiusMeters };
+    return { url, radiusMeters, verticalMinMeters, verticalMaxMeters };
   } catch (error) {
     console.warn(`Could not convert the KML model "${href}" to glTF.`, error);
     return null;
@@ -916,7 +932,12 @@ async function modelsFromKmz(
 // skipped). Returns null on any failure.
 async function fetchDaeAsGlbDataUrl(
   href: string,
-): Promise<{ url: string; radiusMeters: number } | null> {
+): Promise<{
+  url: string;
+  radiusMeters: number;
+  verticalMinMeters: number;
+  verticalMaxMeters: number;
+} | null> {
   try {
     // Bound the fetch so an unresponsive host can't hang the whole KML/KMZ load
     // (models are resolved sequentially), mirroring the texture-load timeout.

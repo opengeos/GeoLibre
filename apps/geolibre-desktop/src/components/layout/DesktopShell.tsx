@@ -1031,10 +1031,14 @@ export function DesktopShell({
         if (importedLayer.type === "deckgl-viz") {
           const layerId = importedLayer.id;
           requestAnimationFrame(() => {
-            const current = useAppStore
-              .getState()
-              .layers.find((layer) => layer.id === layerId);
-            if (current) mapControllerRef.current?.fitLayer(current);
+            requestAnimationFrame(() => {
+              window.setTimeout(() => {
+                const current = useAppStore
+                  .getState()
+                  .layers.find((layer) => layer.id === layerId);
+                if (current) mapControllerRef.current?.fitLayer(current);
+              }, 50);
+            });
           });
         } else {
           mapControllerRef.current?.fitLayer(importedLayer);
