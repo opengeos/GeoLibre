@@ -81,6 +81,12 @@ export const CesiumCanvas = memo(function CesiumCanvas({
   // moveEnd with a (rounding-drifted) echo of that same view; comparing against
   // this lets the moveEnd handler tell a real user move from that echo.
   const lastAppliedRef = useRef<MapViewState | null>(null);
+  // Set by real pointer/wheel/touch input on the globe canvas and consumed by
+  // the moveEnd handler. Cesium's camera.moveEnd carries no user-driven flag
+  // (unlike MapLibre's moveend.originalEvent), so this stands in for it: an
+  // autonomous camera settle (terrain streaming in, a container resize) leaves
+  // it false and must not mark the project dirty.
+  const userMovedRef = useRef(false);
   // Flips true once the viewer exists so the store-driven apply effects re-run
   // and drive the freshly created camera.
   const [ready, setReady] = useState(false);
@@ -139,6 +145,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
     if (!containerRef.current || viewerRef.current) return;
     const container = containerRef.current;
     let cancelled = false;
+    let cleanupInput: (() => void) | undefined;
 
     prepareCesiumEnvironment();
 
@@ -185,6 +192,31 @@ export const CesiumCanvas = memo(function CesiumCanvas({
         viewerRef.current = viewer;
         layerSyncRef.current = new CesiumLayerSync(Cesium, viewer);
 
+        // Flag genuine user input on the globe (a pointer/touch drag or a wheel
+        // zoom drives Cesium's default camera controls) so the moveEnd handler
+        // can tell a real move from an autonomous settle. A hover with no button
+        // down is not a camera move, so pointermove only counts while dragging.
+        const markUserMove = () => {
+          userMovedRef.current = true;
+        };
+        const markUserDrag = (event: PointerEvent) => {
+          if (event.buttons !== 0) userMovedRef.current = true;
+        };
+        const canvas = viewer.canvas;
+        const opts: AddEventListenerOptions = { passive: true };
+        canvas.addEventListener("pointerdown", markUserMove, opts);
+        canvas.addEventListener("pointermove", markUserDrag, opts);
+        canvas.addEventListener("wheel", markUserMove, opts);
+        canvas.addEventListener("touchstart", markUserMove, opts);
+        canvas.addEventListener("touchmove", markUserMove, opts);
+        cleanupInput = () => {
+          canvas.removeEventListener("pointerdown", markUserMove, opts);
+          canvas.removeEventListener("pointermove", markUserDrag, opts);
+          canvas.removeEventListener("wheel", markUserMove, opts);
+          canvas.removeEventListener("touchstart", markUserMove, opts);
+          canvas.removeEventListener("touchmove", markUserMove, opts);
+        };
+
         // With a token, add Cesium World Terrain so tilted views show relief.
         if (token) {
           try {
@@ -213,22 +245,25 @@ export const CesiumCanvas = memo(function CesiumCanvas({
             return;
           }
           lastAppliedRef.current = view;
+          // Only the moves that follow real user input dirty the project; an
+          // autonomous settle still syncs the camera (markDirty=false) so the
+          // panes stay in step without flipping isDirty on a freshly opened
+          // project. Mirrors SecondaryMapCanvas's `userDriven` semantics.
+          const userDriven = userMovedRef.current;
+          userMovedRef.current = false;
           const live = useAppStore.getState();
-          // Mirror SecondaryMapCanvas's guards: only write (and dirty) when the
-          // view actually differs from the stored camera. Cesium's moveEnd has no
-          // user-driven signal, so without this a lossy round-trip settle that
-          // drifts just past the echo tolerance would mark an untouched project
-          // dirty. `setMapView` has no same-camera guard in the store, and
+          // Write only when the view actually differs from the stored camera:
+          // `setMapView` has no same-camera guard in the store, and
           // `setSecondaryMapView`'s guard uses exact equality (which Cesium's
-          // readback never hits), so both are gated here with isSameView.
+          // lossy readback never hits), so both are gated here with isSameView.
           if (live.mapLayout.syncView && !isSameView(view, live.mapView)) {
-            live.setMapView(view, true);
+            live.setMapView(view, userDriven);
           }
           const paneView = live.secondaryMapViews.find(
             (p) => p.id === viewIdRef.current,
           )?.view;
           if (!paneView || !isSameView(view, paneView)) {
-            live.setSecondaryMapView(viewIdRef.current, view, true);
+            live.setSecondaryMapView(viewIdRef.current, view, userDriven);
           }
         });
 
@@ -241,6 +276,7 @@ export const CesiumCanvas = memo(function CesiumCanvas({
 
     return () => {
       cancelled = true;
+      cleanupInput?.();
       layerSyncRef.current?.destroy();
       layerSyncRef.current = null;
       const viewer = viewerRef.current;

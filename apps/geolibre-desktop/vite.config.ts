@@ -277,7 +277,16 @@ function manualChunks(id: string): string | undefined {
   if (id.includes("maplibre-gl")) return "maplibre";
   // Cesium is large (~several MB) and only loads when the user opens the 3D
   // globe view; keep it in its own lazily-fetched chunk, off the boot graph.
-  if (id.includes("/node_modules/cesium/")) return "cesium";
+  // `@cesium/engine`/`@cesium/widgets` (which the `cesium` wrapper re-exports)
+  // are only reachable through the lazy `import("cesium")`, so Rollup already
+  // groups them into this chunk; matching them explicitly keeps that intent
+  // even if some future eager import would otherwise pull them onto the boot
+  // graph.
+  if (
+    id.includes("/node_modules/cesium/") ||
+    id.includes("/node_modules/@cesium/")
+  )
+    return "cesium";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:
   // that produced a circular manual-chunks warning. Do not re-add a catch-all
@@ -675,8 +684,11 @@ function pwaPlugin(): Plugin[] {
     "**/duckdb-*",
     // CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane
     // switches to the globe, so it is CacheFirst-cached on first use rather than
-    // bloating the app-shell precache.
+    // bloating the app-shell precache. The `Cesium-*` (capital) glob catches the
+    // Rollup facade chunk for the dynamic `import("cesium")` boundary, which the
+    // lowercase glob misses on case-sensitive matchers.
     "**/cesium-*",
+    "**/Cesium-*",
     // h5wasm's ~5.6 MB single-file chunk (embedded libhdf5) for the local
     // NetCDF/HDF reader. Lazily imported when a user opens a local file, so it
     // is CacheFirst-cached on first use rather than bloating the precache.
