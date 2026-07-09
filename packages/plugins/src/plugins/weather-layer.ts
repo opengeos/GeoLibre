@@ -216,25 +216,33 @@ export function createWeatherLayer(
       if (generation !== activationGeneration) {
         return false; // a deactivate() or newer activate() superseded this one
       }
-      if (loaded.length === 0) {
-        return false; // source unavailable — the manager rolls the toggle back
-      }
-      appRef = app;
-      frames = loaded;
-      index = frames.length - 1; // newest frame
-      playing = false;
-
       const store = useAppStore.getState();
-      // Adopt a layer restored from the project (avoids a duplicate on reload),
-      // otherwise add a fresh one. No beforeLayerId — the overlay sits on top.
+      // A layer restored from the saved project (tagged with our flag), if any.
       const existing = store.layers.find(
         (l) => l.metadata?.[config.layerFlag] === true,
       );
+      // No fresh frames (offline / source briefly down): adopt a restored layer
+      // and keep its last-saved tiles so it isn't orphaned in the panel with no
+      // menu control; only fail (rolling the toggle back) when there's nothing
+      // to show at all.
+      if (loaded.length === 0 && !existing) return false;
+
+      appRef = app;
+      frames = loaded;
+      index = Math.max(0, frames.length - 1); // newest frame (0 when none)
+      playing = false;
+
       if (existing) {
         layerId = existing.id;
-        syncStore(true); // refresh a stale saved frame + enrich its metadata
-        applyFrameToMap();
+        // Refresh to the latest frame only when a fresh fetch succeeded;
+        // otherwise leave the restored layer's saved tiles/metadata in place.
+        if (frames.length > 0) {
+          syncStore(true);
+          applyFrameToMap();
+        }
       } else {
+        // Guaranteed frames.length > 0 here (the empty + no-existing case
+        // returned above). No beforeLayerId — the overlay sits on top.
         const frame = frames[index];
         layerId = store.addTileLayer(config.layerName, {
           type: "xyz",

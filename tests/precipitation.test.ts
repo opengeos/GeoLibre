@@ -51,6 +51,23 @@ describe("radarFramesFromResponse", () => {
     assert.equal(radarFramesFromResponse({ host: "https://cdn.rainviewer.com", radar: { past } }).length, 1);
   });
 
+  it("sorts frames oldest → newest even if the API returns them out of order", () => {
+    const frames = radarFramesFromResponse({
+      host: validHost,
+      radar: {
+        past: [
+          { time: 300, path: "/v2/radar/c" },
+          { time: 100, path: "/v2/radar/a" },
+          { time: 200, path: "/v2/radar/b" },
+        ],
+      },
+    });
+    assert.deepEqual(
+      frames.map((f) => f.tileUrl.match(/radar\/(\w)/)?.[1]),
+      ["a", "b", "c"],
+    );
+  });
+
   it("drops malformed frame entries (missing path/time)", () => {
     const frames = radarFramesFromResponse({
       host: validHost,

@@ -505,6 +505,9 @@ function WeatherSubmenu({
     <DropdownMenuSub>
       <DropdownMenuSubTrigger title={t("toolbar.item.weatherTooltip")}>
         {t("toolbar.item.weather")}
+        {/* Aggregate indicator so an active overlay shows without opening the
+            submenu (parity with the old top-level Clouds entry). */}
+        {cloudsActive || precipitationActive ? " ✓" : ""}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         <WeatherLayerSubmenu

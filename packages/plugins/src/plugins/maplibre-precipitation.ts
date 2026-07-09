@@ -118,6 +118,9 @@ export function radarFramesFromResponse(
       (f): f is RainViewerFrame =>
         !!f && typeof f.path === "string" && typeof f.time === "number",
     )
+    // Sort oldest → newest so the engine's "newest = last" contract holds even
+    // if the API ever returns `past` out of order (it's currently ordered).
+    .sort((a, b) => a.time - b.time)
     .map((f) => {
       const label = formatTime(f.time);
       return {
