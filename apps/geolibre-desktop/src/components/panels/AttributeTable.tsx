@@ -773,7 +773,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       setExportError(
         error instanceof Error
           ? error.message
-          : "Could not export the selected layer.",
+          : t("attributeTable.exportFailed"),
       );
     }
   };
@@ -979,13 +979,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         return {
           kind: "runtime",
           message:
-            error instanceof Error ? error.message : "Evaluation failed.",
+            error instanceof Error
+              ? error.message
+              : t("attributeTable.evaluationFailed"),
         };
       }
     } catch (error) {
       return {
         kind: "syntax",
-        message: error instanceof Error ? error.message : "Invalid expression.",
+        message:
+          error instanceof Error
+            ? error.message
+            : t("attributeTable.invalidExpression"),
       };
     }
     // Keyed on the stable strings above rather than the rebuilt arrays/objects.
@@ -1022,7 +1027,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       scope,
     );
     if (!result) {
-      setCalcError("Could not apply the calculation to this layer.");
+      setCalcError(t("attributeTable.calcCouldNotApply"));
       return;
     }
     if ("error" in result) {
@@ -1035,7 +1040,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       // null. Keep the dialog open and report it rather than showing a silent
       // success over a column of nulls.
       setCalcError(
-        `Applied, but ${result.errors} of ${result.evaluated} feature(s) errored and were written as null.`,
+        t("attributeTable.calcAppliedWithErrors", {
+          errors: result.errors,
+          evaluated: result.evaluated,
+        }),
       );
       return;
     }
@@ -1056,7 +1064,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label={`Resize ${label} column`}
+        aria-label={t("attributeTable.resizeColumn", { name: label })}
         className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
         onMouseDown={(event) => startColumnResize(key, event)}
       />
@@ -1070,7 +1078,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           <Input
             autoFocus
             className="h-7 min-w-0 flex-1 px-2 text-xs"
-            aria-label={`Rename field ${col}`}
+            aria-label={t("attributeTable.renameFieldAria", { name: col })}
             value={editingColumnName}
             onClick={(event) => event.stopPropagation()}
             onFocus={(event) => event.currentTarget.select()}
@@ -1090,7 +1098,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           <div
             role="separator"
             aria-orientation="vertical"
-            aria-label={`Resize ${col} column`}
+            aria-label={t("attributeTable.resizeColumn", { name: col })}
             className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
             onMouseDown={(event) => startColumnResize(col, event)}
           />
@@ -1118,8 +1126,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               variant="ghost"
               size="icon"
               className="h-5 w-5 shrink-0 text-muted-foreground"
-              title={`Manage field "${col}"`}
-              aria-label={`Manage field ${col}`}
+              title={t("attributeTable.manageFieldTitle", { name: col })}
+              aria-label={t("attributeTable.manageFieldAria", { name: col })}
               onClick={(event) => event.stopPropagation()}
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
@@ -1128,25 +1136,25 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => beginColumnRename(col)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
-              Rename field
+              {t("attributeTable.renameField")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => handleToggleHidden(col)}>
               <EyeOff className="mr-2 h-3.5 w-3.5" />
-              Hide field
+              {t("attributeTable.hideField")}
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={index === 0}
               onSelect={() => handleMoveColumn(col, "left")}
             >
               <ArrowLeft className="mr-2 h-3.5 w-3.5" />
-              Move left
+              {t("attributeTable.moveLeft")}
             </DropdownMenuItem>
             <DropdownMenuItem
               disabled={index === columns.length - 1}
               onSelect={() => handleMoveColumn(col, "right")}
             >
               <ArrowRight className="mr-2 h-3.5 w-3.5" />
-              Move right
+              {t("attributeTable.moveRight")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -1154,14 +1162,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="mr-2 h-3.5 w-3.5" />
-              Delete field
+              {t("attributeTable.deleteField")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label={`Resize ${col} column`}
+          aria-label={t("attributeTable.resizeColumn", { name: col })}
           className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
           onMouseDown={(event) => startColumnResize(col, event)}
         />
@@ -1198,14 +1206,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       />
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 md:flex-nowrap">
         <TableProperties className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">Attribute table</span>
+        <span className="text-sm font-semibold">
+          {t("attributeTable.title")}
+        </span>
         {layer ? (
           <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
-            - {layer.name}
+            {t("attributeTable.selectedLayerName", { name: layer.name })}
           </span>
         ) : (
           <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground md:max-w-56">
-            - select a layer with attributes
+            {t("attributeTable.noLayerSelected")}
           </span>
         )}
         {exportError ? (
@@ -1470,7 +1480,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               setZoomToSelectedFeature(event.target.checked)
             }
           />
-          Zoom to selection
+          {t("attributeTable.zoomToSelection")}
         </label>
         <Button
           variant="outline"
@@ -1530,8 +1540,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           {!hasAttributeSource ? (
             <p className="p-4 text-xs text-muted-foreground">
               {loadingVectorGeojson
-                ? "Loading layer attributes…"
-                : "Attribute table requires a vector or DuckDB query layer."}
+                ? t("attributeTable.loadingAttributes")
+                : t("attributeTable.requiresVectorLayer")}
             </p>
           ) : (
             <table
@@ -1600,9 +1610,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                                 className={inputClassName}
                                 aria-invalid={invalid || undefined}
                                 title={
-                                  invalid ? "Invalid JSON" : undefined
+                                  invalid
+                                    ? t("attributeTable.invalidJson")
+                                    : undefined
                                 }
-                                aria-label={`Edit ${col} for feature ${featureId}`}
+                                aria-label={t("attributeTable.editCellAria", {
+                                  col,
+                                  featureId,
+                                })}
                                 value={draft ?? formatAttributeValue(value)}
                                 onClick={(event) => event.stopPropagation()}
                                 onChange={(event) =>
@@ -1644,9 +1659,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete field</DialogTitle>
+            <DialogTitle>{t("attributeTable.deleteField")}</DialogTitle>
             <DialogDescription>
-              {`This permanently removes the field "${columnPendingDelete ?? ""}" from every feature in "${layer?.name ?? ""}". Styling or labels that reference it will be cleared. This cannot be undone.`}
+              {t("attributeTable.deleteFieldConfirm", {
+                field: columnPendingDelete ?? "",
+                layer: layer?.name ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -1654,10 +1672,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               variant="outline"
               onClick={() => setColumnPendingDelete(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button variant="destructive" onClick={confirmDeleteColumn}>
-              Delete field
+              {t("attributeTable.deleteField")}
             </Button>
           </div>
         </DialogContent>
@@ -1668,14 +1686,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Add field</DialogTitle>
+            <DialogTitle>{t("attributeTable.addField")}</DialogTitle>
             <DialogDescription>
-              {`Add a new field to every feature in "${layer?.name ?? ""}".`}
+              {t("attributeTable.addFieldDescription", {
+                layer: layer?.name ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-1">
             <div className="grid gap-1.5">
-              <Label htmlFor="new-field-name">Field name</Label>
+              <Label htmlFor="new-field-name">
+                {t("attributeTable.fieldName")}
+              </Label>
               <Input
                 id="new-field-name"
                 autoFocus
@@ -1692,12 +1714,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               />
               {newColumnCollides ? (
                 <span className="text-xs text-destructive">
-                  A field named "{newColumnNameTrimmed}" already exists.
+                  {t("attributeTable.fieldExists", {
+                    name: newColumnNameTrimmed,
+                  })}
                 </span>
               ) : null}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="new-field-type">Type</Label>
+              <Label htmlFor="new-field-type">
+                {t("attributeTable.fieldType")}
+              </Label>
               <Select
                 id="new-field-type"
                 value={newColumnType}
@@ -1705,20 +1731,26 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                   changeNewColumnType(event.target.value as NewColumnType)
                 }
               >
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="boolean">Boolean</option>
+                <option value="text">{t("attributeTable.typeText")}</option>
+                <option value="number">
+                  {t("attributeTable.typeNumber")}
+                </option>
+                <option value="boolean">
+                  {t("attributeTable.typeBoolean")}
+                </option>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="new-field-default">Default value</Label>
+              <Label htmlFor="new-field-default">
+                {t("attributeTable.defaultValue")}
+              </Label>
               {newColumnType === "boolean" ? (
                 <Select
                   id="new-field-default"
                   value={newColumnDefault}
                   onChange={(event) => setNewColumnDefault(event.target.value)}
                 >
-                  <option value="">(no default)</option>
+                  <option value="">{t("attributeTable.noDefault")}</option>
                   <option value="false">false</option>
                   <option value="true">true</option>
                 </Select>
@@ -1740,16 +1772,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </div>
             {!canAddColumn ? (
               <span className="text-xs text-destructive">
-                This layer has no features to add a field to.
+                {t("attributeTable.noFeaturesForField")}
               </span>
             ) : null}
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setAddingColumn(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button disabled={!canSubmitNewColumn} onClick={confirmAddColumn}>
-              Add field
+              {t("attributeTable.addField")}
             </Button>
           </div>
         </DialogContent>
@@ -1763,14 +1795,18 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       >
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Field calculator</DialogTitle>
+            <DialogTitle>{t("attributeTable.fieldCalculator")}</DialogTitle>
             <DialogDescription>
-              {`Compute values from a JavaScript expression and write them to a field in "${layer?.name ?? ""}".`}
+              {t("attributeTable.calcDescription", {
+                layer: layer?.name ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-1">
             <div className="grid gap-1.5">
-              <Label htmlFor="calc-target">Target field</Label>
+              <Label htmlFor="calc-target">
+                {t("attributeTable.targetField")}
+              </Label>
               <div className="flex gap-2">
                 <Select
                   id="calc-target-mode"
@@ -1784,9 +1820,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                     value="update"
                     disabled={discoveredColumns.length === 0}
                   >
-                    Update field
+                    {t("attributeTable.updateField")}
                   </option>
-                  <option value="create">Create field</option>
+                  <option value="create">
+                    {t("attributeTable.createField")}
+                  </option>
                 </Select>
                 {calcMode === "create" ? (
                   <Input
@@ -1814,12 +1852,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               </div>
               {calcNameCollides ? (
                 <span className="text-xs text-destructive">
-                  A field named "{calcNewNameTrimmed}" already exists.
+                  {t("attributeTable.fieldExists", {
+                    name: calcNewNameTrimmed,
+                  })}
                 </span>
               ) : null}
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="calc-output-type">Output type</Label>
+              <Label htmlFor="calc-output-type">
+                {t("attributeTable.outputType")}
+              </Label>
               <Select
                 id="calc-output-type"
                 value={calcOutputType}
@@ -1827,31 +1869,41 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                   setCalcOutputType(event.target.value as CalcOutputType)
                 }
               >
-                <option value="auto">Auto (keep computed type)</option>
-                <option value="text">Text</option>
-                <option value="number">Number</option>
-                <option value="boolean">Boolean</option>
+                <option value="auto">
+                  {t("attributeTable.outputAuto")}
+                </option>
+                <option value="text">{t("attributeTable.typeText")}</option>
+                <option value="number">
+                  {t("attributeTable.typeNumber")}
+                </option>
+                <option value="boolean">
+                  {t("attributeTable.typeBoolean")}
+                </option>
               </Select>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="calc-expression">Expression</Label>
+              <Label htmlFor="calc-expression">
+                {t("attributeTable.expression")}
+              </Label>
               <Textarea
                 id="calc-expression"
                 ref={calcExpressionRef}
                 className="min-h-20 font-mono text-xs"
                 value={calcExpression}
-                placeholder='e.g. pop / area, or upper(name), or pop > 100 ? "big" : "small"'
+                placeholder={t("attributeTable.calcExpressionPlaceholder")}
                 onChange={(event) => setCalcExpression(event.target.value)}
               />
               {discoveredColumns.length > 0 ? (
                 <div className="flex flex-wrap items-center gap-1">
-                  <span className="text-xs text-muted-foreground">Fields:</span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("attributeTable.fieldsLabel")}
+                  </span>
                   {discoveredColumns.map((col) => (
                     <button
                       key={col}
                       type="button"
                       className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
-                      title={`Insert ${col}`}
+                      title={t("attributeTable.insertField", { name: col })}
                       onClick={() => insertExpressionSnippet(fieldReference(col))}
                     >
                       {col}
@@ -1861,14 +1913,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               ) : null}
               <div className="flex flex-wrap items-center gap-1">
                 <span className="text-xs text-muted-foreground">
-                  Functions:
+                  {t("attributeTable.functionsLabel")}
                 </span>
                 {Object.keys(EXPRESSION_HELPERS).map((fn) => (
                   <button
                     key={fn}
                     type="button"
                     className="rounded border border-input bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted"
-                    title={`Insert ${fn}()`}
+                    title={t("attributeTable.insertFunction", { name: fn })}
                     onClick={() =>
                       // Land the caret between the parens so the user can type
                       // the argument straight away.
@@ -1886,11 +1938,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               </span>
             ) : calcPreview.kind === "runtime" ? (
               <span className="text-xs text-amber-600 dark:text-amber-500">
-                {`Sample row errored (other rows may still compute): ${calcPreview.message}`}
+                {t("attributeTable.sampleRowErrored", {
+                  message: calcPreview.message,
+                })}
               </span>
             ) : calcPreview.kind === "ok" ? (
               <span className="truncate text-xs text-muted-foreground">
-                Preview:{" "}
+                {t("attributeTable.preview")}{" "}
                 <span className="font-mono text-foreground">
                   {formatAttributeValue(calcPreview.value)}
                 </span>
@@ -1903,7 +1957,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 disabled={!calcHasSelection}
                 onChange={(event) => setCalcSelectedOnly(event.target.checked)}
               />
-              Only update the selected feature
+              {t("attributeTable.onlySelectedFeature")}
             </label>
             {calcError ? (
               <span className="text-xs text-destructive">{calcError}</span>
@@ -1911,10 +1965,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setCalcOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button disabled={!calcCanSubmit} onClick={confirmCalculate}>
-              Calculate
+              {t("attributeTable.buttons.calculate")}
             </Button>
           </div>
         </DialogContent>

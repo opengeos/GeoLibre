@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
+import type { ParseKeys, TFunction } from "i18next";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
@@ -183,13 +183,16 @@ interface LayerPanelProps {
 
 const BACKGROUND_SELECTION_ID = "__geolibre-background__";
 
-const REFRESH_INTERVAL_OPTIONS = [
-  { label: "Off", intervalMs: 0 },
-  { label: "15 seconds", intervalMs: 15_000 },
-  { label: "30 seconds", intervalMs: 30_000 },
-  { label: "1 minute", intervalMs: 60_000 },
-  { label: "5 minutes", intervalMs: 5 * 60_000 },
-  { label: "15 minutes", intervalMs: 15 * 60_000 },
+const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
+  labelKey: ParseKeys;
+  intervalMs: number;
+}> = [
+  { labelKey: "layers.refreshIntervals.off", intervalMs: 0 },
+  { labelKey: "layers.refreshIntervals.s15", intervalMs: 15_000 },
+  { labelKey: "layers.refreshIntervals.s30", intervalMs: 30_000 },
+  { labelKey: "layers.refreshIntervals.m1", intervalMs: 60_000 },
+  { labelKey: "layers.refreshIntervals.m5", intervalMs: 5 * 60_000 },
+  { labelKey: "layers.refreshIntervals.m15", intervalMs: 15 * 60_000 },
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
@@ -740,7 +743,9 @@ export function LayerPanel({
         ...current,
         [layer.id]: {
           type: "refreshing",
-          message: automatic ? "Auto refreshing..." : "Refreshing...",
+          message: automatic
+            ? t("layers.refreshingAuto")
+            : t("layers.refreshing"),
         },
       }));
 
@@ -762,9 +767,7 @@ export function LayerPanel({
               });
               return;
             }
-            throw new Error(
-              "Could not refresh this layer. Try re-opening the Add Vector Layer panel.",
-            );
+            throw new Error(t("layers.refreshVectorControlError"));
           }
           // reloadLayer fires `layerupdated`, which drives
           // syncVectorLayersToStore to persist the refreshed featureCount (and
@@ -780,8 +783,10 @@ export function LayerPanel({
               type: "success",
               message:
                 featureCount === null
-                  ? "Refreshed."
-                  : `Refreshed ${featureCount.toLocaleString()} features.`,
+                  ? t("layers.refreshed")
+                  : t("layers.refreshedCount", {
+                      count: featureCount.toLocaleString(),
+                    }),
             },
           }));
           scheduleStatusClear(layer.id);
@@ -805,7 +810,9 @@ export function LayerPanel({
           ...current,
           [layer.id]: {
             type: "success",
-            message: `Refreshed ${featureCount.toLocaleString()} features.`,
+            message: t("layers.refreshedCount", {
+              count: featureCount.toLocaleString(),
+            }),
           },
         }));
         scheduleStatusClear(layer.id);
@@ -813,7 +820,7 @@ export function LayerPanel({
         const message =
           error instanceof Error
             ? error.message
-            : "Could not refresh this layer.";
+            : t("layers.refreshError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: {
@@ -826,7 +833,7 @@ export function LayerPanel({
         refreshingLayerIdsRef.current.delete(layer.id);
       }
     },
-    [clearRefreshStatusTimer, scheduleStatusClear, updateLayer],
+    [clearRefreshStatusTimer, scheduleStatusClear, t, updateLayer],
   );
 
   const handleExportLayer = useCallback(
@@ -843,8 +850,8 @@ export function LayerPanel({
           // features, so the two cases get different diagnostics.
           const message =
             geojsonVectorSourceId(layer) !== null
-              ? "Layer data is not ready yet. Try again in a moment."
-              : "Export requires a vector layer with features.";
+              ? t("layers.exportStyleDataNotReady")
+              : t("layers.exportNeedsFeatures");
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: { type: "error", message },
@@ -869,9 +876,11 @@ export function LayerPanel({
               warnings.length > 0
                 ? {
                     type: "warning",
-                    message: `Layer exported. ${warnings.join(" ")}`,
+                    message: t("layers.exportedWithWarnings", {
+                      warnings: warnings.join(" "),
+                    }),
                   }
-                : { type: "success", message: "Layer exported." },
+                : { type: "success", message: t("layers.exported") },
           }));
           scheduleStatusClear(layer.id);
         }
@@ -879,7 +888,7 @@ export function LayerPanel({
         const message =
           error instanceof Error
             ? error.message
-            : "Could not export this layer.";
+            : t("layers.exportLayerError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -887,7 +896,7 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
   );
 
   // Shared symbology-export flow: resolve the layer's features, build the style
@@ -1853,7 +1862,7 @@ export function LayerPanel({
         <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
           <Layers className="h-4 w-4" />
           <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
-            Layers
+            {t("sharedRail.layers")}
           </span>
         </div>
       </aside>
@@ -1928,9 +1937,15 @@ export function LayerPanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title={allLayersVisible ? "Hide all layers" : "Show all layers"}
+            title={
+              allLayersVisible
+                ? t("layers.hideAllLayers")
+                : t("layers.showAllLayers")
+            }
             aria-label={
-              allLayersVisible ? "Hide all layers" : "Show all layers"
+              allLayersVisible
+                ? t("layers.hideAllLayers")
+                : t("layers.showAllLayers")
             }
             onClick={toggleAllLayers}
           >
@@ -2103,7 +2118,9 @@ export function LayerPanel({
                     tabIndex={0}
                     draggable
                     title={t("layers.dragToReorder")}
-                    aria-label={`Drag ${layer.name} to reorder`}
+                    aria-label={t("layers.dragNamedToReorder", {
+                      name: layer.name,
+                    })}
                     className="cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
                     onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                     onDragStart={(e) => handleLayerDragStart(e, layer.id)}
@@ -2113,8 +2130,16 @@ export function LayerPanel({
                   <button
                     type="button"
                     className="rounded p-0.5 hover:bg-muted"
-                    title={layer.visible ? "Hide layer" : "Show layer"}
-                    aria-label={layer.visible ? "Hide layer" : "Show layer"}
+                    title={
+                      layer.visible
+                        ? t("layers.hideLayer")
+                        : t("layers.showLayer")
+                    }
+                    aria-label={
+                      layer.visible
+                        ? t("layers.hideLayer")
+                        : t("layers.showLayer")
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerVisibility(layer.id, !layer.visible);
@@ -2132,7 +2157,7 @@ export function LayerPanel({
                       type="text"
                       className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
                       value={editingName}
-                      aria-label={`Rename ${layer.name}`}
+                      aria-label={t("layers.renameNamed", { name: layer.name })}
                       onChange={(e) => setEditingName(e.target.value)}
                       onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                       onFocus={(e) => e.currentTarget.select()}
@@ -2194,7 +2219,7 @@ export function LayerPanel({
                   <div className="mt-1 flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-1">
                     <PencilRuler className="h-3 w-3 text-primary" />
                     <span className="flex-1 text-[10px] font-medium text-primary">
-                      Editing geometry
+                      {t("layers.editingGeometry")}
                     </span>
                     <Button
                       variant="default"
@@ -2206,7 +2231,7 @@ export function LayerPanel({
                         onToggleGeometryEdit(layer.id);
                       }}
                     >
-                      Save
+                      {t("common.save")}
                     </Button>
                     <Button
                       variant="ghost"
@@ -2218,7 +2243,7 @@ export function LayerPanel({
                         onCancelGeometryEdit();
                       }}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </div>
                 )}
@@ -2320,7 +2345,7 @@ export function LayerPanel({
                         }}
                       >
                         <Pencil className="mr-2 h-3.5 w-3.5" />
-                        Rename
+                        {t("layers.rename")}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       {/* The Rename item above keeps preventDefault so the
@@ -2376,7 +2401,7 @@ export function LayerPanel({
                             }}
                           >
                             <Table2 className="mr-2 h-3.5 w-3.5" />
-                            Materialize to editable layer
+                            {t("layers.materializeToEditable")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                         </>
@@ -2392,8 +2417,8 @@ export function LayerPanel({
                         >
                           <PencilRuler className="mr-2 h-3.5 w-3.5" />
                           {geometryEditActive
-                            ? "Finish editing geometry"
-                            : "Edit geometry"}
+                            ? t("layers.finishEditingGeometry")
+                            : t("layers.editGeometry")}
                         </DropdownMenuItem>
                       )}
                       {canLoadIntoEditor && (
@@ -2415,7 +2440,7 @@ export function LayerPanel({
                           }}
                         >
                           <TableProperties className="mr-2 h-3.5 w-3.5" />
-                          Open attribute table
+                          {t("layers.openAttributeTable")}
                         </DropdownMenuItem>
                       )}
                       {canBindTimeSlider && (
@@ -2438,7 +2463,7 @@ export function LayerPanel({
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Download className="h-3.5 w-3.5" />
-                            Export
+                            {t("layers.export")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
                             <DropdownMenuItem
@@ -2559,7 +2584,7 @@ export function LayerPanel({
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Download className="h-3.5 w-3.5" />
-                            Export
+                            {t("layers.export")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
                             <DropdownMenuItem
@@ -2583,7 +2608,7 @@ export function LayerPanel({
                             isRefreshing ? "animate-spin" : ""
                           }`}
                         />
-                        Refresh
+                        {t("layers.refresh")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={!canRefresh}
@@ -2593,14 +2618,14 @@ export function LayerPanel({
                       >
                         <Timer className="mr-2 h-3.5 w-3.5" />
                         {refreshConfig.enabled
-                          ? "Auto refresh on"
-                          : "Auto refresh"}
+                          ? t("layers.autoRefreshOn")
+                          : t("layers.autoRefresh")}
                       </DropdownMenuItem>
                       {!canRefresh && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem disabled>
-                            WFS and GeoJSON URLs only
+                            {t("layers.refreshWfsGeojsonOnly")}
                           </DropdownMenuItem>
                         </>
                       )}
@@ -2809,15 +2834,19 @@ export function LayerPanel({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {refreshSettingsLayer?.name ?? "Layer"} Auto Refresh
+              {t("layers.autoRefreshDialogTitle", {
+                name: refreshSettingsLayer?.name ?? t("layers.layerFallback"),
+              })}
             </DialogTitle>
             <DialogDescription>
-              Reload this layer from its source on a fixed interval.
+              {t("layers.autoRefreshDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           {refreshSettingsLayer && (
             <div className="space-y-3">
-              <Label htmlFor="layer-refresh-interval">Interval</Label>
+              <Label htmlFor="layer-refresh-interval">
+                {t("layers.interval")}
+              </Label>
               <Select
                 id="layer-refresh-interval"
                 value={refreshIntervalChoice}
@@ -2837,15 +2866,17 @@ export function LayerPanel({
               >
                 {REFRESH_INTERVAL_OPTIONS.map((option) => (
                   <option key={option.intervalMs} value={option.intervalMs}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </option>
                 ))}
-                <option value={CUSTOM_REFRESH_INTERVAL_VALUE}>Custom</option>
+                <option value={CUSTOM_REFRESH_INTERVAL_VALUE}>
+                  {t("layers.custom")}
+                </option>
               </Select>
               {refreshIntervalChoice === CUSTOM_REFRESH_INTERVAL_VALUE && (
                 <div className="space-y-2">
                   <Label htmlFor="layer-refresh-custom-seconds">
-                    Custom interval (seconds)
+                    {t("layers.customIntervalSeconds")}
                   </Label>
                   <div className="flex gap-2">
                     <Input
@@ -2882,12 +2913,12 @@ export function LayerPanel({
                         );
                       }}
                     >
-                      Apply
+                      {t("layers.apply")}
                     </Button>
                   </div>
                   {!customRefreshIntervalMs && customRefreshSeconds.trim() && (
                     <p className="text-xs text-destructive">
-                      Enter a positive number of seconds.
+                      {t("layers.enterPositiveSeconds")}
                     </p>
                   )}
                 </div>
@@ -2900,7 +2931,7 @@ export function LayerPanel({
               variant="ghost"
               onClick={() => setRefreshSettingsLayerId(null)}
             >
-              Close
+              {t("common.close")}
             </Button>
           </div>
         </DialogContent>
@@ -2913,9 +2944,11 @@ export function LayerPanel({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{metadataLayer?.name} Metadata</DialogTitle>
+            <DialogTitle>
+              {t("layers.metadataDialogTitle", { name: metadataLayer?.name })}
+            </DialogTitle>
             <DialogDescription>
-              Layer metadata and source information
+              {t("layers.metadataDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-80">
@@ -2934,10 +2967,11 @@ export function LayerPanel({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove layer?</DialogTitle>
+            <DialogTitle>{t("layers.removeLayerConfirmTitle")}</DialogTitle>
             <DialogDescription>
-              This removes {layerPendingRemoval?.name ?? "this layer"} from the
-              project and map.
+              {t("layers.removeLayerConfirmBody", {
+                name: layerPendingRemoval?.name ?? t("layers.thisLayerFallback"),
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -2946,7 +2980,7 @@ export function LayerPanel({
               variant="ghost"
               onClick={() => setLayerPendingRemoval(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -2960,7 +2994,7 @@ export function LayerPanel({
                 setLayerPendingRemoval(null);
               }}
             >
-              Remove
+              {t("common.remove")}
             </Button>
           </div>
         </DialogContent>
