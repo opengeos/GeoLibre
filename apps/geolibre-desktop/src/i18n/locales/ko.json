@@ -2210,11 +2210,6 @@
       "chooseInputFile": "입력 파일 선택",
       "chooseOutputFile": "출력 파일 선택"
     },
-    "conversion": {
-      "longitudePlaceholder": "경도",
-      "latitudePlaceholder": "위도",
-      "dataPlaceholder": "데이터"
-    },
     "searchTools": "도구 검색",
     "refreshCatalog": "카탈로그 새로고침",
     "increaseValue": "값 증가",

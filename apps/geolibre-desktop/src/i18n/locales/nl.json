@@ -2254,11 +2254,6 @@
       "chooseInputFile": "Invoerbestand kiezen",
       "chooseOutputFile": "Uitvoerbestand kiezen"
     },
-    "conversion": {
-      "longitudePlaceholder": "lengtegraad",
-      "latitudePlaceholder": "breedtegraad",
-      "dataPlaceholder": "gegevens"
-    },
     "searchTools": "Hulpmiddelen zoeken",
     "refreshCatalog": "Catalogus vernieuwen",
     "increaseValue": "Waarde verhogen",

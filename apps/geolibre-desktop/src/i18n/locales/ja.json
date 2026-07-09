@@ -2210,11 +2210,6 @@
       "chooseInputFile": "入力ファイルを選択",
       "chooseOutputFile": "出力ファイルを選択"
     },
-    "conversion": {
-      "longitudePlaceholder": "経度",
-      "latitudePlaceholder": "緯度",
-      "dataPlaceholder": "データ"
-    },
     "searchTools": "ツールを検索",
     "refreshCatalog": "カタログを更新",
     "increaseValue": "値を増やす",

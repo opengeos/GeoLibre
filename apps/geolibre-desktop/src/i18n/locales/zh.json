@@ -2210,11 +2210,6 @@
       "chooseInputFile": "选择输入文件",
       "chooseOutputFile": "选择输出文件"
     },
-    "conversion": {
-      "longitudePlaceholder": "经度",
-      "latitudePlaceholder": "纬度",
-      "dataPlaceholder": "数据"
-    },
     "searchTools": "搜索工具",
     "refreshCatalog": "刷新目录",
     "increaseValue": "增加数值",

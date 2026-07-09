@@ -2210,11 +2210,6 @@
       "chooseInputFile": "Pilih file masukan",
       "chooseOutputFile": "Pilih file keluaran"
     },
-    "conversion": {
-      "longitudePlaceholder": "bujur",
-      "latitudePlaceholder": "lintang",
-      "dataPlaceholder": "data"
-    },
     "searchTools": "Cari alat",
     "refreshCatalog": "Segarkan katalog",
     "increaseValue": "Naikkan nilai",

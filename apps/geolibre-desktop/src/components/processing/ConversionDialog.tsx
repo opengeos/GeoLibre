@@ -951,7 +951,7 @@ export function ConversionDialog() {
                   <Input
                     id="conversion-lon"
                     value={lonColumn}
-                    placeholder={t("processing.conversion.longitudePlaceholder")}
+                    placeholder="longitude"
                     onChange={(event) => setLonColumn(event.target.value)}
                   />
                 )}
@@ -974,7 +974,7 @@ export function ConversionDialog() {
                   <Input
                     id="conversion-lat"
                     value={latColumn}
-                    placeholder={t("processing.conversion.latitudePlaceholder")}
+                    placeholder="latitude"
                     onChange={(event) => setLatColumn(event.target.value)}
                   />
                 )}
@@ -1021,7 +1021,7 @@ export function ConversionDialog() {
                 <Input
                   id="conversion-layer"
                   value={layerName}
-                  placeholder={t("processing.conversion.dataPlaceholder")}
+                  placeholder="data"
                   onChange={(event) => setLayerName(event.target.value)}
                 />
               </div>

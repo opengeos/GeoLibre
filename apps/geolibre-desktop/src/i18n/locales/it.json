@@ -2254,11 +2254,6 @@
       "chooseInputFile": "Scegli file di input",
       "chooseOutputFile": "Scegli file di output"
     },
-    "conversion": {
-      "longitudePlaceholder": "longitudine",
-      "latitudePlaceholder": "latitudine",
-      "dataPlaceholder": "dati"
-    },
     "searchTools": "Cerca strumenti",
     "refreshCatalog": "Aggiorna catalogo",
     "increaseValue": "Aumenta valore",

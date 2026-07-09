@@ -2254,11 +2254,6 @@
       "chooseInputFile": "Girdi dosyası seç",
       "chooseOutputFile": "Çıktı dosyası seç"
     },
-    "conversion": {
-      "longitudePlaceholder": "boylam",
-      "latitudePlaceholder": "enlem",
-      "dataPlaceholder": "veri"
-    },
     "searchTools": "Araçları ara",
     "refreshCatalog": "Kataloğu yenile",
     "increaseValue": "Değeri artır",

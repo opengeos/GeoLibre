@@ -2342,11 +2342,6 @@
       "chooseInputFile": "Выбрать входной файл",
       "chooseOutputFile": "Выбрать выходной файл"
     },
-    "conversion": {
-      "longitudePlaceholder": "долгота",
-      "latitudePlaceholder": "широта",
-      "dataPlaceholder": "данные"
-    },
     "searchTools": "Поиск инструментов",
     "refreshCatalog": "Обновить каталог",
     "increaseValue": "Увеличить значение",

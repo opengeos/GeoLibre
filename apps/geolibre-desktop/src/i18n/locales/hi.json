@@ -2254,11 +2254,6 @@
       "chooseInputFile": "इनपुट फ़ाइल चुनें",
       "chooseOutputFile": "आउटपुट फ़ाइल चुनें"
     },
-    "conversion": {
-      "longitudePlaceholder": "देशांतर",
-      "latitudePlaceholder": "अक्षांश",
-      "dataPlaceholder": "डेटा"
-    },
     "searchTools": "टूल खोजें",
     "refreshCatalog": "कैटलॉग रीफ़्रेश करें",
     "increaseValue": "मान बढ़ाएं",
