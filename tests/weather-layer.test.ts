@@ -104,6 +104,21 @@ describe("createWeatherLayer", () => {
     assert.equal(useAppStore.getState().isDirty, false); // no-op adopt stays clean
   });
 
+  it("treats metadata equality as key-order-independent (no spurious dirty)", async () => {
+    // Same content as the engine builds ({ title, [FLAG] }) but reversed order,
+    // as a JSON round-trip or a future builder tweak could produce.
+    useAppStore.getState().addTileLayer("TestWeather", {
+      type: "xyz",
+      tiles: [frame.tileUrl],
+      metadata: { [FLAG]: true, title: "Test" },
+    });
+    useAppStore.setState({ isDirty: false });
+
+    const c = createWeatherLayer(makeConfig());
+    assert.equal(await c.activate(app), true);
+    assert.equal(useAppStore.getState().isDirty, false); // order-independent → clean
+  });
+
   it("refreshes (marking dirty) when the adopted layer's saved tile is stale", async () => {
     useAppStore.getState().addTileLayer("TestWeather", {
       type: "xyz",

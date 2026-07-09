@@ -81,6 +81,26 @@ function rasterSourceId(layerId: string): string {
   return `source-${layerId}`;
 }
 
+/**
+ * Order-independent shallow equality for a layer's flat metadata record, so
+ * `syncStore` can skip a no-op write without being sensitive to JSON key order
+ * (a saved project round-trips through JSON, and the metadata builders could be
+ * reordered in future).
+ */
+function metadataEqual(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every(
+    (key) =>
+      Object.prototype.hasOwnProperty.call(b, key) &&
+      JSON.stringify(a[key]) === JSON.stringify(b[key]),
+  );
+}
+
 export function createWeatherLayer(
   config: WeatherLayerConfig,
 ): WeatherLayerController {
@@ -142,7 +162,7 @@ export function createWeatherLayer(
       : undefined;
     const unchanged =
       currentTile === frame.tileUrl &&
-      JSON.stringify(layer.metadata) === JSON.stringify(nextMetadata);
+      metadataEqual(layer.metadata, nextMetadata);
     if (unchanged) return;
     store.updateLayer(layerId, {
       source: { ...layer.source, tiles: [frame.tileUrl] },
