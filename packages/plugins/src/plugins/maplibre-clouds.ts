@@ -38,8 +38,33 @@ const NASA_VIIRS_TEMPLATE =
   "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/%DATE%/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg";
 const NASA_ATTRIBUTION =
   'Imagery &copy; <a href="https://earthdata.nasa.gov/gibs" target="_blank" rel="noopener">NASA EOSDIS GIBS</a>';
+/** Plain-text attribution for the metadata panel (the source one is HTML). */
+const NASA_ATTRIBUTION_TEXT = "NASA EOSDIS GIBS";
 const NASA_MAXZOOM = 8;
 const NASA_SERVICE_URL = "https://gibs.earthdata.nasa.gov/";
+
+/**
+ * Descriptive metadata shown in the Layers panel's "Layer metadata and source
+ * information" view. `date` reflects the frame currently displayed; the rest is
+ * static provider/product info so the layer is self-describing.
+ */
+function cloudsMetadata(date: string): Record<string, unknown> {
+  return {
+    [CLOUDS_LAYER_FLAG]: true,
+    title: "Realtime Clouds",
+    description:
+      "Near-real-time global satellite imagery of cloud cover. Play a day-by-day animation from the Controls → Clouds menu.",
+    provider: "NASA GIBS (Global Imagery Browse Services)",
+    product: "VIIRS (Suomi NPP) Corrected Reflectance — True Color",
+    date,
+    updateFrequency: "Daily (previous full UTC day)",
+    tileMatrixSet: "GoogleMapsCompatible · EPSG:3857",
+    maxZoom: NASA_MAXZOOM,
+    attribution: NASA_ATTRIBUTION_TEXT,
+    license: "NASA EOSDIS open data (no restrictions)",
+    documentation: "https://nasa-gibs.github.io/gibs-api-docs/",
+  };
+}
 
 /** How many complete UTC days the scrubber covers. */
 const HISTORY_DAYS = 10;
@@ -126,13 +151,17 @@ function syncStoreTiles(): void {
     layerId = null;
     return;
   }
-  const nextTile = nasaTileUrl(dates[frameIndex]);
+  const date = dates[frameIndex];
+  const nextTile = nasaTileUrl(date);
   const currentTile = Array.isArray(layer.source.tiles)
     ? layer.source.tiles[0]
     : undefined;
-  if (currentTile === nextTile) return;
+  if (currentTile === nextTile && layer.metadata?.date === date) return;
   store.updateLayer(layerId, {
     source: { ...layer.source, tiles: [nextTile] },
+    // Refresh the metadata so the shown date tracks the scrubber and a layer
+    // adopted from an older project picks up the richer descriptive fields.
+    metadata: cloudsMetadata(date),
   });
 }
 
@@ -234,7 +263,7 @@ export const maplibreCloudsPlugin: GeoLibrePlugin = {
         attribution: NASA_ATTRIBUTION,
         maxzoom: NASA_MAXZOOM,
         opacity: DEFAULT_OPACITY,
-        metadata: { [CLOUDS_LAYER_FLAG]: true },
+        metadata: cloudsMetadata(dates[frameIndex]),
       });
     }
     notify();
