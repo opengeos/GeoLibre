@@ -58,6 +58,20 @@ if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
   }
 }
 
+// Cesium Ion token for the 3D-globe view: same bare→prefixed bridge as the
+// Google Maps key. A bare `CESIUM_TOKEN` (shell or .env file) is surfaced as
+// `VITE_CESIUM_TOKEN` so `import.meta.env` exposes it, and getCesiumIonToken()
+// then lets a runtime Settings override win over this build-time value.
+if (!process.env.VITE_CESIUM_TOKEN) {
+  const cesiumToken =
+    process.env.CESIUM_TOKEN ||
+    FILE_ENV.VITE_CESIUM_TOKEN ||
+    FILE_ENV.CESIUM_TOKEN;
+  if (cesiumToken) {
+    process.env.VITE_CESIUM_TOKEN = cesiumToken;
+  }
+}
+
 // Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
 // (`npm run build`), so their presence flags a desktop build. Used below to drop
 // the service worker from the desktop bundle.
@@ -844,13 +858,6 @@ export default defineConfig({
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
     __GDAL3_CDN_PATHS__: JSON.stringify(GDAL3_CDN_PATHS),
-    // Cesium Ion access token for the 3D-globe view, bridged from the
-    // CESIUM_TOKEN env var (or VITE_CESIUM_TOKEN) at build time. Ion tokens are
-    // designed to ship in the client bundle. Empty string when unset — the globe
-    // then falls back to the plain ellipsoid + a keyless imagery provider.
-    __CESIUM_ION_TOKEN__: JSON.stringify(
-      process.env.CESIUM_TOKEN ?? process.env.VITE_CESIUM_TOKEN ?? "",
-    ),
   },
   server: {
     port: 5173,

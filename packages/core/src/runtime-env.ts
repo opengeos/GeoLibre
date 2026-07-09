@@ -96,6 +96,30 @@ export function getGoogleMapsApiKey(
 }
 
 /**
+ * Resolves the Cesium Ion access token from the runtime environment.
+ *
+ * The 3D-globe view's world imagery and terrain need a Cesium Ion token. It is
+ * supplied via `VITE_CESIUM_TOKEN` (baked in at build time from the bare
+ * `CESIUM_TOKEN` env var, which `vite.config.ts` copies into the prefixed name)
+ * or set at runtime through Settings → Environment variables
+ * (`window.__GEOLIBRE_RUNTIME_ENV__`, which bypasses Vite's envPrefix allowlist,
+ * so a bare `CESIUM_TOKEN` entry works there too). When unset, the globe cannot
+ * render and the 3D view is not offered.
+ *
+ * @param env - Environment record (defaults to the runtime environment);
+ *   injectable for testing.
+ * @returns The trimmed token, or undefined when unset.
+ */
+export function getCesiumIonToken(
+  env?: Record<string, string | undefined>,
+): string | undefined {
+  const runtimeEnv = env ?? getRuntimeEnvironment();
+  const trimmed =
+    runtimeEnv.VITE_CESIUM_TOKEN?.trim() || runtimeEnv.CESIUM_TOKEN?.trim();
+  return trimmed || undefined;
+}
+
+/**
  * Builds a full Protomaps v5 style URL for a flavor, injecting the API key.
  *
  * @param flavor - The Protomaps flavor name (e.g. `light`, `dark`, `white`,

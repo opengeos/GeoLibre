@@ -76,6 +76,7 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getCesiumIonToken,
   getGoogleMapsApiKey,
   getProtomapsApiKey,
   getProtomapsStyleUrl,

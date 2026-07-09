@@ -374,7 +374,7 @@ The optional **Cesium 3D-globe view** — a split-pane globe rendered with [Cesi
 CESIUM_TOKEN=your_cesium_ion_access_token
 ```
 
-`CESIUM_TOKEN` (or the `VITE_`-prefixed `VITE_CESIUM_TOKEN`) is read by `vite.config.ts` and baked into the build, so a deployer configures it once for the whole app — **there is no per-user token entry in the web version**, and without a token the 3D-globe toggle is hidden entirely (the 2D map is unaffected). Ion access tokens are designed to ship in client bundles. See [docs/architecture.md](docs/architecture.md#3d-globe-view-cesiumjs) for how the globe integrates.
+`CESIUM_TOKEN` (or the `VITE_`-prefixed `VITE_CESIUM_TOKEN`) is read by `vite.config.ts` and baked into the build. It can **also be set at runtime** — with no rebuild — through the Settings dialog's **Environment Variables** section: add a `VITE_CESIUM_TOKEN` variable and the runtime value takes over, which is how a web user brings their own Ion token. Without a token from either source, the 3D-globe toggle is hidden entirely (the 2D map is unaffected). Ion access tokens are designed to ship in client bundles. See [docs/architecture.md](docs/architecture.md#3d-globe-view-cesiumjs) for how the globe integrates.
 
 The optional **Python (Pyodide)** vector engine loads its runtime from the public jsDelivr CDN by default. To self-host it for offline or production use, point it at a mirrored copy of the Pyodide distribution:
 

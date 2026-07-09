@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { getCesiumIonToken, useAppStore } from "@geolibre/core";
 import { CesiumCanvas, SecondaryMapCanvas } from "@geolibre/map";
 import {
   Button,
@@ -10,16 +10,30 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import { Globe, Layers, Map as MapIcon, X } from "lucide-react";
-import { type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-// Cesium Ion access token, injected at build time from the CESIUM_TOKEN env var
-// (see vite.config.ts). Empty when unset. Cesium World Imagery + Terrain require
-// a token, so without one the 3D-globe view is not offered at all: the per-pane
-// globe toggle is hidden. In the web build a deployer supplies the token via the
-// CESIUM_TOKEN build env; a runtime user-entered token (Settings) is a follow-up.
-const CESIUM_ION_TOKEN: string = __CESIUM_ION_TOKEN__;
-const CESIUM_AVAILABLE: boolean = CESIUM_ION_TOKEN.trim().length > 0;
+/**
+ * The current Cesium Ion token, re-resolved whenever the runtime environment
+ * changes. It can come from the build (the `CESIUM_TOKEN` env var) or from
+ * Settings → Environment variables (`VITE_CESIUM_TOKEN`), so the 3D-globe view
+ * can be enabled at runtime in the web build with no rebuild. Cesium World
+ * Imagery + Terrain require a token, so without one the globe is not offered
+ * (the per-pane toggle is hidden).
+ */
+function useCesiumIonToken(): string | undefined {
+  const [token, setToken] = useState<string | undefined>(() =>
+    getCesiumIonToken(),
+  );
+  useEffect(() => {
+    const refresh = () => setToken(getCesiumIonToken());
+    refresh();
+    window.addEventListener("geolibre:runtime-env-change", refresh);
+    return () =>
+      window.removeEventListener("geolibre:runtime-env-change", refresh);
+  }, []);
+  return token;
+}
 
 /**
  * An editable label shown centered at the top of a map pane. Empty by default;
@@ -76,6 +90,7 @@ export function MapGrid({ children }: MapGridProps) {
   const secondaryMapViews = useAppStore((s) => s.secondaryMapViews);
   const primaryMapLabel = useAppStore((s) => s.primaryMapLabel);
   const setPrimaryMapLabel = useAppStore((s) => s.setPrimaryMapLabel);
+  const cesiumToken = useCesiumIonToken();
 
   if (rows * cols <= 1) {
     return <>{children}</>;
@@ -99,7 +114,12 @@ export function MapGrid({ children }: MapGridProps) {
         />
       </div>
       {secondaryMapViews.map((pane, index) => (
-        <SecondaryMapPane key={pane.id} viewId={pane.id} index={index} />
+        <SecondaryMapPane
+          key={pane.id}
+          viewId={pane.id}
+          index={index}
+          cesiumToken={cesiumToken}
+        />
       ))}
     </div>
   );
@@ -109,10 +129,13 @@ interface SecondaryMapPaneProps {
   viewId: string;
   /** Zero-based index among secondary panes, shown in the pane label. */
   index: number;
+  /** Current Cesium Ion token; when absent the 3D-globe view is not offered. */
+  cesiumToken?: string;
 }
 
-function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
+function SecondaryMapPane({ viewId, index, cesiumToken }: SecondaryMapPaneProps) {
   const { t } = useTranslation();
+  const cesiumAvailable = Boolean(cesiumToken);
   const removeSecondaryMapView = useAppStore((s) => s.removeSecondaryMapView);
   const setSecondaryMapLabel = useAppStore((s) => s.setSecondaryMapLabel);
   const setSecondaryViewKind = useAppStore((s) => s.setSecondaryViewKind);
@@ -122,16 +145,15 @@ function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
   // Absent viewKind means the default 2D map (back-compat with older panes).
   // Only honor a 3D pane when Cesium is actually available (a token is present);
   // otherwise a project saved with a globe pane silently opens as the 2D map.
-  const is3d = useAppStore(
-    (s) =>
-      CESIUM_AVAILABLE &&
-      s.secondaryMapViews.find((p) => p.id === viewId)?.viewKind === "cesium",
+  const wantsCesium = useAppStore(
+    (s) => s.secondaryMapViews.find((p) => p.id === viewId)?.viewKind === "cesium",
   );
+  const is3d = cesiumAvailable && wantsCesium;
 
   return (
     <div className="relative isolate min-h-0 min-w-0 overflow-hidden bg-background">
       {is3d ? (
-        <CesiumCanvas viewId={viewId} ionToken={CESIUM_ION_TOKEN} />
+        <CesiumCanvas viewId={viewId} ionToken={cesiumToken} />
       ) : (
         <SecondaryMapCanvas viewId={viewId} />
       )}
@@ -146,7 +168,7 @@ function SecondaryMapPane({ viewId, index }: SecondaryMapPaneProps) {
         {is3d ? null : <PaneLayerToggle viewId={viewId} index={index} />}
         {/* The 2D/3D toggle only appears when Cesium is available (a token is
             configured); otherwise the globe is not offered. */}
-        {CESIUM_AVAILABLE ? (
+        {cesiumAvailable ? (
           <button
             type="button"
             className="flex h-7 w-7 items-center justify-center rounded-md border border-input bg-background/90 text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground"
