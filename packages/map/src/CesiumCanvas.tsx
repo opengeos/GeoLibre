@@ -171,6 +171,11 @@ export const CesiumCanvas = memo(function CesiumCanvas({
           timeline: false,
           animation: false,
           fullscreenButton: false,
+          // No default click popup / selection outline: clicking a GeoJSON
+          // feature must not pop Cesium's unstyled InfoBox (it isn't wired to
+          // GeoLibre's identify UI and would overflow a small grid pane).
+          infoBox: false,
+          selectionIndicator: false,
           // Without an Ion token, fall back to keyless OpenStreetMap imagery so
           // the globe still renders (Ion's default imagery requires a token).
           baseLayer: token
