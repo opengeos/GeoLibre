@@ -843,7 +843,7 @@ export function RasterSymbologySection({
             </Select>
           </div>
           <NumberField
-            label="Gamma"
+            label={t("rasterSymbology.gamma")}
             value={state.gamma}
             step={0.1}
             min={0.1}
@@ -1003,6 +1003,7 @@ function ClassificationControls({
   onManualBreaks: (breaks: number[]) => void;
   onRange: (range: [number, number]) => void;
 }) {
+  const { t } = useTranslation();
   const min = symbology.breaks[0];
   const max = symbology.breaks[symbology.breaks.length - 1];
   return (
@@ -1046,14 +1047,14 @@ function ClassificationControls({
       {symbology.method !== "manual" && (
         <div className="grid grid-cols-2 gap-3">
           <NumberField
-            label="Min"
+            label={t("rasterSymbology.min")}
             value={min}
             step={Number.isFinite(max - min) ? (max - min) / 100 || 0.1 : 0.1}
             disabled={symbology.method === "quantile"}
             onCommit={(value) => onRange([value, max])}
           />
           <NumberField
-            label="Max"
+            label={t("rasterSymbology.max")}
             value={max}
             step={Number.isFinite(max - min) ? (max - min) / 100 || 0.1 : 0.1}
             disabled={symbology.method === "quantile"}
@@ -1097,6 +1098,7 @@ function RescaleControls({
   rescale: [number, number][] | null;
   onChange: (rescale: [number, number][] | null) => void;
 }) {
+  const { t } = useTranslation();
   const range = rescale?.[0];
   // The rescale data model is all-or-nothing ([min, max] or null = auto), so
   // clearing either bound drops back to auto-stretch on both — a single bound
@@ -1104,9 +1106,9 @@ function RescaleControls({
   return (
     <div className="grid grid-cols-2 gap-3">
       <NumberField
-        label="Min"
+        label={t("rasterSymbology.min")}
         value={range?.[0] ?? ""}
-        placeholder="auto"
+        placeholder={t("rasterSymbology.autoPlaceholder")}
         step={0.1}
         onCommit={(value, empty) => {
           if (empty) return onChange(null);
@@ -1114,9 +1116,9 @@ function RescaleControls({
         }}
       />
       <NumberField
-        label="Max"
+        label={t("rasterSymbology.max")}
         value={range?.[1] ?? ""}
-        placeholder="auto"
+        placeholder={t("rasterSymbology.autoPlaceholder")}
         step={0.1}
         onCommit={(value, empty) => {
           if (empty) return onChange(null);
@@ -1134,6 +1136,7 @@ function NodataControl({
   state: RasterStateRecord;
   onChange: (nodata: number | "auto" | "off") => void;
 }) {
+  const { t } = useTranslation();
   const mode =
     state.nodata === "off"
       ? "off"
@@ -1161,7 +1164,7 @@ function NodataControl({
       </div>
       {mode === "custom" && (
         <NumberField
-          label="Value"
+          label={t("rasterSymbology.value")}
           value={typeof state.nodata === "number" ? state.nodata : 0}
           step={1}
           onCommit={(value) => onChange(value)}

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
 import {
   getDuckDBLayerRows,
@@ -257,6 +258,7 @@ interface AttributeTableProps {
 }
 
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
+  const { t } = useTranslation();
   const tableSectionRef = useRef<HTMLElement>(null);
   const tableResizeGuideRef = useRef<HTMLDivElement>(null);
   // The Radix ScrollArea viewport, used as the virtualizer's scroll container.
@@ -1177,7 +1179,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   return (
     <section
       ref={tableSectionRef}
-      aria-label="Attribute table"
+      aria-label={t("attributeTable.title")}
       className="relative flex shrink-0 flex-col border-t bg-card"
       style={{ height: collapsed ? undefined : tableHeight }}
     >
@@ -1185,7 +1187,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         <div
           role="separator"
           aria-orientation="horizontal"
-          aria-label="Resize attribute table"
+          aria-label={t("attributeTable.resize")}
           className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
           onMouseDown={startTableResize}
         />
@@ -1224,19 +1226,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           className="ml-auto h-7 px-2"
           title={
             isGeometryEditing
-              ? "Finish geometry editing to edit attributes"
+              ? t("attributeTable.editTitleFinishGeometry")
               : isReadOnlyVectorLayer
-                ? "Editing is not available for Add Vector Layer layers"
+                ? t("attributeTable.editTitleReadOnly")
                 : isEditing
                   ? hasEdits
-                    ? "Use Save or Cancel to finish editing"
-                    : "Exit edit mode"
+                    ? t("attributeTable.editTitleUseSaveCancel")
+                    : t("attributeTable.exitEditMode")
                   : isDuckDBLayer
-                    ? "Edit displayed DuckDB query attributes in memory"
-                    : "Edit attribute values"
+                    ? t("attributeTable.editTitleDuckdb")
+                    : t("attributeTable.editValues")
           }
           aria-label={
-            isEditing && !hasEdits ? "Exit edit mode" : "Edit attribute values"
+            isEditing && !hasEdits
+              ? t("attributeTable.exitEditMode")
+              : t("attributeTable.editValues")
           }
           disabled={
             !hasAttributeSource ||
@@ -1255,12 +1259,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           className="h-7 px-2"
           title={
             hasInvalidDrafts
-              ? "Fix invalid JSON before saving"
+              ? t("attributeTable.saveTitleInvalid")
               : isDuckDBLayer
-                ? "Save in-memory DuckDB attribute edits"
-                : "Save attribute edits"
+                ? t("attributeTable.saveTitleDuckdb")
+                : t("attributeTable.saveEdits")
           }
-          aria-label="Save attribute edits"
+          aria-label={t("attributeTable.saveEdits")}
           disabled={!isEditing || !hasEdits || hasInvalidDrafts}
           onClick={saveDrafts}
         >
@@ -1272,8 +1276,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             variant="outline"
             size="sm"
             className="h-7 px-2"
-            title="Add a new field"
-            aria-label="Add field"
+            title={t("attributeTable.addFieldTitle")}
+            aria-label={t("attributeTable.addField")}
             onClick={openAddColumn}
           >
             <Plus className="h-3.5 w-3.5" />
@@ -1285,8 +1289,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             variant="outline"
             size="sm"
             className="h-7 px-2"
-            title="Calculate field values from an expression"
-            aria-label="Field calculator"
+            title={t("attributeTable.fieldCalculatorTitle")}
+            aria-label={t("attributeTable.fieldCalculator")}
             onClick={openCalculator}
           >
             <Calculator className="h-3.5 w-3.5" />
@@ -1300,8 +1304,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 variant="outline"
                 size="sm"
                 className="h-7 px-2"
-                title="Show or hide fields"
-                aria-label="Manage fields"
+                title={t("attributeTable.manageFieldsTitle")}
+                aria-label={t("attributeTable.manageFields")}
               >
                 <Columns3 className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Fields</span>
@@ -1343,10 +1347,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             className="h-7 px-2"
             title={
               hasAttributeSource
-                ? "Explore all fields at a glance"
-                : "Column explorer requires a vector or DuckDB query layer"
+                ? t("attributeTable.columnExplorerTitle")
+                : t("attributeTable.columnExplorerTitleDisabled")
             }
-            aria-label="Column explorer"
+            aria-label={t("attributeTable.columnExplorer")}
             disabled={!hasAttributeSource}
             onClick={() => setExplorerOpen(true)}
           >
@@ -1361,10 +1365,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             className="h-7 px-2"
             title={
               hasAttributeSource
-                ? "Field statistics summary"
-                : "Statistics require a vector or DuckDB query layer"
+                ? t("attributeTable.statisticsTitle")
+                : t("attributeTable.statisticsTitleDisabled")
             }
-            aria-label="Field statistics"
+            aria-label={t("attributeTable.statistics")}
             disabled={!hasAttributeSource}
             onClick={() => setStatsOpen(true)}
           >
@@ -1379,10 +1383,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             className="h-7 px-2"
             title={
               hasAttributeSource
-                ? "Chart numeric fields"
-                : "Charts require a vector or DuckDB query layer"
+                ? t("attributeTable.chartsTitle")
+                : t("attributeTable.chartsTitleDisabled")
             }
-            aria-label="Charts"
+            aria-label={t("attributeTable.charts")}
             disabled={!hasAttributeSource}
             onClick={() => setChartOpen(true)}
           >
@@ -1395,8 +1399,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             variant="outline"
             size="sm"
             className="h-7 px-2"
-            title="Open the dashboard to build chart widgets"
-            aria-label="Dashboard"
+            title={t("attributeTable.dashboardTitle")}
+            aria-label={t("attributeTable.dashboard")}
             onClick={() => setDashboardOpen(true)}
           >
             <LayoutDashboard className="h-3.5 w-3.5" />
@@ -1411,10 +1415,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               className="h-7 px-2"
               title={
                 layer?.geojson
-                  ? "Export selected layer"
-                  : "Export requires a GeoJSON-backed layer"
+                  ? t("attributeTable.exportSelectedLayer")
+                  : t("attributeTable.exportTitleDisabled")
               }
-              aria-label="Export selected layer"
+              aria-label={t("attributeTable.exportSelectedLayer")}
               disabled={!layer?.geojson}
             >
               <Download className="h-3.5 w-3.5" />
@@ -1444,8 +1448,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title="Cancel attribute edits"
-            aria-label="Cancel attribute edits"
+            title={t("attributeTable.cancelEdits")}
+            aria-label={t("attributeTable.cancelEdits")}
             onClick={cancelEditing}
           >
             <RotateCcw className="h-4 w-4" />
@@ -1453,8 +1457,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         ) : null}
         <Input
           className="h-7 min-w-36 flex-1 text-xs md:max-w-xs"
-          placeholder="Search attributes..."
-          aria-label="Search attributes"
+          placeholder={t("attributeTable.searchPlaceholder")}
+          aria-label={t("attributeTable.searchAria")}
           value={attributeFilter}
           onChange={(e) => setAttributeFilter(e.target.value)}
         />
@@ -1472,8 +1476,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           variant="outline"
           size="icon"
           className="h-7 w-7"
-          title="Clear selected feature"
-          aria-label="Clear selected feature"
+          title={t("attributeTable.clearSelectedFeature")}
+          aria-label={t("attributeTable.clearSelectedFeature")}
           disabled={!selectedFeatureId}
           onClick={() => selectFeature(null)}
         >
@@ -1483,9 +1487,15 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          title={collapsed ? "Expand attribute table" : "Collapse attribute table"}
+          title={
+            collapsed
+              ? t("attributeTable.expand")
+              : t("attributeTable.collapse")
+          }
           aria-label={
-            collapsed ? "Expand attribute table" : "Collapse attribute table"
+            collapsed
+              ? t("attributeTable.expand")
+              : t("attributeTable.collapse")
           }
           onClick={() => setCollapsed((value) => !value)}
         >
@@ -1499,8 +1509,8 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          title="Close attribute table"
-          aria-label="Close attribute table"
+          title={t("attributeTable.close")}
+          aria-label={t("attributeTable.close")}
           onClick={() => setAttributeTableOpen(false)}
         >
           <X className="h-4 w-4" />
@@ -1670,7 +1680,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 id="new-field-name"
                 autoFocus
                 value={newColumnName}
-                placeholder="e.g. category"
+                placeholder={t("attributeTable.newFieldPlaceholder")}
                 aria-invalid={newColumnCollides || undefined}
                 onChange={(event) => setNewColumnName(event.target.value)}
                 onKeyDown={(event) => {
@@ -1717,7 +1727,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                   id="new-field-default"
                   type={newColumnType === "number" ? "number" : "text"}
                   value={newColumnDefault}
-                  placeholder="Leave blank for empty"
+                  placeholder={t("attributeTable.defaultValuePlaceholder")}
                   onChange={(event) => setNewColumnDefault(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && canSubmitNewColumn) {
@@ -1783,7 +1793,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                     id="calc-target"
                     className="flex-1"
                     value={calcNewName}
-                    placeholder="New field name"
+                    placeholder={t("attributeTable.newFieldNamePlaceholder")}
                     aria-invalid={calcNameCollides || undefined}
                     onChange={(event) => setCalcNewName(event.target.value)}
                   />

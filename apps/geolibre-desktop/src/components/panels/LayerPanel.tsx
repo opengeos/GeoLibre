@@ -1837,15 +1837,15 @@ export function LayerPanel({
     if (hideOwnRail) return null;
     return (
       <aside
-        aria-label="Layers (collapsed)"
+        aria-label={t("layers.panelCollapsedLabel")}
         className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-r md:py-2"
       >
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          title="Expand layers"
-          aria-label="Expand layers"
+          title={t("layers.expand")}
+          aria-label={t("layers.expand")}
           onClick={() => setIsCollapsed(false)}
         >
           <PanelLeftOpen className="h-4 w-4" />
@@ -1862,13 +1862,13 @@ export function LayerPanel({
 
   return (
     <aside
-      aria-label="Layers"
+      aria-label={t("sharedRail.layers")}
       className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
     >
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize Layers panel"
+        aria-label={t("layers.resizePanel")}
         className="absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-r border-transparent hover:border-primary md:block"
         onPointerDown={onResizeStart}
       />
@@ -1944,8 +1944,8 @@ export function LayerPanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title="Collapse layers"
-            aria-label="Collapse layers"
+            title={t("layers.collapse")}
+            aria-label={t("layers.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelLeftClose className="h-4 w-4" />
@@ -2102,7 +2102,7 @@ export function LayerPanel({
                     role="button"
                     tabIndex={0}
                     draggable
-                    title="Drag to reorder"
+                    title={t("layers.dragToReorder")}
                     aria-label={`Drag ${layer.name} to reorder`}
                     className="cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
                     onClick={(e: ReactMouseEvent) => e.stopPropagation()}
@@ -2200,7 +2200,7 @@ export function LayerPanel({
                       variant="default"
                       size="sm"
                       className="h-6 px-2 text-[10px]"
-                      title="Save geometry edits"
+                      title={t("layers.saveGeometryEdits")}
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleGeometryEdit(layer.id);
@@ -2212,7 +2212,7 @@ export function LayerPanel({
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-[10px]"
-                      title="Discard geometry edits"
+                      title={t("layers.discardGeometryEdits")}
                       onClick={(e) => {
                         e.stopPropagation();
                         onCancelGeometryEdit();
@@ -2233,8 +2233,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Move up"
-                    aria-label="Move up"
+                    title={t("layers.moveUp")}
+                    aria-label={t("layers.moveUp")}
                     onClick={(e) => {
                       e.stopPropagation();
                       reorderLayer(layer.id, "up");
@@ -2246,8 +2246,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Move down"
-                    aria-label="Move down"
+                    title={t("layers.moveDown")}
+                    aria-label={t("layers.moveDown")}
                     onClick={(e) => {
                       e.stopPropagation();
                       reorderLayer(layer.id, "down");
@@ -2259,8 +2259,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Zoom to layer"
-                    aria-label="Zoom to layer"
+                    title={t("layers.zoomToLayer")}
+                    aria-label={t("layers.zoomToLayer")}
                     onClick={(e) => {
                       e.stopPropagation();
                       mapControllerRef.current?.fitLayer(layer);
@@ -2298,8 +2298,8 @@ export function LayerPanel({
                             ? "border border-primary text-primary"
                             : ""
                         }`}
-                        title="Layer actions"
-                        aria-label="Layer actions"
+                        title={t("layers.layerActions")}
+                        aria-label={t("layers.layerActions")}
                         onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                       >
                         <MoreHorizontal className="h-3.5 w-3.5" />
@@ -2610,8 +2610,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Metadata"
-                    aria-label="Metadata"
+                    title={t("layers.metadata")}
+                    aria-label={t("layers.metadata")}
                     onClick={(e) => {
                       e.stopPropagation();
                       setMetadataLayer(layer);
@@ -2623,8 +2623,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive"
-                    title="Remove layer"
-                    aria-label="Remove layer"
+                    title={t("layers.removeLayer")}
+                    aria-label={t("layers.removeLayer")}
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerPendingRemoval(layer);

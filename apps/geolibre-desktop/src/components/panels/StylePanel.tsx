@@ -1251,7 +1251,7 @@ export function StylePanel({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize Style panel"
+      aria-label={t("style.resizePanel")}
       className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-l border-transparent hover:border-primary md:block"
       onPointerDown={onResizeStart}
     />
@@ -1264,15 +1264,15 @@ export function StylePanel({
     if (hideOwnRail) return null;
     return (
       <aside
-        aria-label="Layer style (collapsed)"
+        aria-label={t("style.panelLabelCollapsed")}
         className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2"
       >
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          title="Expand style"
-          aria-label="Expand style"
+          title={t("style.expand")}
+          aria-label={t("style.expand")}
           onClick={() => setIsCollapsed(false)}
         >
           <PanelRightOpen className="h-4 w-4" />
@@ -1289,7 +1289,7 @@ export function StylePanel({
 
   if (!layer) {
     return (
-      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
           <span className="text-sm font-semibold">Style</span>
@@ -1297,8 +1297,8 @@ export function StylePanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title="Collapse style"
-            aria-label="Collapse style"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelRightClose className="h-4 w-4" />
@@ -1669,12 +1669,12 @@ export function StylePanel({
       >
         <option value="">Layer order (default)</option>
         {orphanedBeforeId && (
-          <optgroup label="Saved (unavailable)">
+          <optgroup label={t("style.beforeIdSavedUnavailable")}>
             <option value={orphanedBeforeId}>{orphanedBeforeId}</option>
           </optgroup>
         )}
         {otherLayers.length > 0 && (
-          <optgroup label="Layers">
+          <optgroup label={t("addData.shared.layersGroup")}>
             {[...otherLayers].reverse().map((otherLayer) => (
               <option key={otherLayer.id} value={otherLayer.id}>
                 {otherLayer.name}
@@ -1689,7 +1689,7 @@ export function StylePanel({
         {basemapStyleLayerIds.length > 0 &&
           basemapStyleLayersVisible &&
           !elevation3dActive && (
-          <optgroup label="Basemap layers">
+          <optgroup label={t("addData.shared.basemapLayersGroup")}>
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
                 {styleLayerId}
@@ -1953,8 +1953,8 @@ export function StylePanel({
               variant="outline"
               size="icon"
               className="h-7 w-7"
-              title="Add class"
-              aria-label="Add class"
+              title={t("style.addClass")}
+              aria-label={t("style.addClass")}
               onClick={addDraftVectorStyleStop}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -1994,8 +1994,8 @@ export function StylePanel({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  title="Remove class"
-                  aria-label="Remove class"
+                  title={t("style.removeClass")}
+                  aria-label={t("style.removeClass")}
                   onClick={() => removeDraftVectorStyleStop(index)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -3118,7 +3118,7 @@ export function StylePanel({
 
   if (hasRasterPaintControls) {
     return (
-      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -3128,8 +3128,8 @@ export function StylePanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            title="Collapse style"
-            aria-label="Collapse style"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelRightClose className="h-4 w-4" />
@@ -3270,7 +3270,7 @@ export function StylePanel({
 
   if (!hasVectorPaintControls) {
     return (
-      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
@@ -3280,8 +3280,8 @@ export function StylePanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            title="Collapse style"
-            aria-label="Collapse style"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelRightClose className="h-4 w-4" />
@@ -3300,7 +3300,7 @@ export function StylePanel({
   }
 
   return (
-    <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+    <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
       {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
@@ -3310,8 +3310,8 @@ export function StylePanel({
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0"
-          title="Collapse style"
-          aria-label="Collapse style"
+          title={t("style.collapse")}
+          aria-label={t("style.collapse")}
           onClick={() => setIsCollapsed(true)}
         >
           <PanelRightClose className="h-4 w-4" />

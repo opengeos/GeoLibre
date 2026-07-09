@@ -1120,7 +1120,7 @@ export function ProcessingDialog({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   className="pl-9"
-                  placeholder="Search tools"
+                  placeholder={t("processing.searchTools")}
                 />
               </div>
               <Button
@@ -1129,7 +1129,7 @@ export function ProcessingDialog({
                 size="icon"
                 onClick={loadWhitebox}
                 disabled={serverBusy}
-                title="Refresh catalog"
+                title={t("processing.refreshCatalog")}
               >
                 <RefreshCw
                   className={cn("h-4 w-4", loadingTools && "animate-spin")}
@@ -1553,6 +1553,7 @@ function NumberStepperInput({
   onChange,
   value,
 }: NumberStepperInputProps) {
+  const { t } = useTranslation();
   const step = integer ? 1 : 0.1;
   const updateByStep = (direction: 1 | -1) => {
     const parsed = Number.parseFloat(value);
@@ -1573,7 +1574,7 @@ function NumberStepperInput({
       <div className="grid h-9 border-l">
         <button
           type="button"
-          aria-label="Increase value"
+          aria-label={t("processing.increaseValue")}
           className="flex h-[18px] items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => updateByStep(1)}
         >
@@ -1581,7 +1582,7 @@ function NumberStepperInput({
         </button>
         <button
           type="button"
-          aria-label="Decrease value"
+          aria-label={t("processing.decreaseValue")}
           className="flex h-[18px] items-center justify-center border-t text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => updateByStep(-1)}
         >
