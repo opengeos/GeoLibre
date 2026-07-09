@@ -224,6 +224,7 @@ interface DraftPreferences {
 interface DraftDesktopSettings {
   layout: DesktopLayoutSettings;
   shareToken: string;
+  cesiumIonToken: string;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
 }
@@ -252,6 +253,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
   return {
     layout: { ...settings.layout },
     shareToken: settings.shareToken,
+    cesiumIonToken: settings.cesiumIonToken,
     uiProfile: {
       ...settings.uiProfile,
       hiddenDataSources: [...settings.uiProfile.hiddenDataSources],
@@ -877,6 +879,12 @@ export function SettingsDialog({
     setDraftDesktopSettings((current) => ({ ...current, shareToken: value }));
   };
 
+  const updateCesiumIonToken = (value: string) => {
+    // Draft-only until Save, like the share token above (a secret field should
+    // not persist on every keystroke).
+    setDraftDesktopSettings((current) => ({ ...current, cesiumIonToken: value }));
+  };
+
   const updateUiProfile = (patch: Partial<UiProfileSettings>) => {
     setDraftDesktopSettings((current) => ({
       ...current,
@@ -1029,6 +1037,7 @@ export function SettingsDialog({
       ...useDesktopSettingsStore.getState().desktopSettings,
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
+      cesiumIonToken: draftDesktopSettings.cesiumIonToken,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
     });
@@ -2344,6 +2353,39 @@ export function SettingsDialog({
                     />
                     <p className="text-xs text-muted-foreground">
                       {t("settings.env.tokenStorageNote")}
+                    </p>
+                  </div>
+                  <div className="space-y-2 border-t pt-5">
+                    <h3 className="text-sm font-semibold">
+                      {t("settings.env.cesiumTokenTitle")}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      <Trans
+                        i18nKey="settings.env.cesiumTokenDescription"
+                        components={{
+                          tokenLink: (
+                            <a
+                              className="underline"
+                              href="https://ion.cesium.com/tokens"
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            />
+                          ),
+                        }}
+                      />
+                    </p>
+                    <Input
+                      aria-label={t("settings.env.cesiumTokenTitle")}
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={t("settings.env.cesiumTokenPlaceholder")}
+                      value={draftDesktopSettings.cesiumIonToken}
+                      onChange={(event) =>
+                        updateCesiumIonToken(event.target.value)
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.env.cesiumTokenStorageNote")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t pt-5">

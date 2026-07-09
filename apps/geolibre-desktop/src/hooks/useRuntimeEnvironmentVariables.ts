@@ -1,11 +1,17 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef } from "react";
+import { useDesktopSettingsStore } from "./useDesktopSettings";
 
 export function useRuntimeEnvironmentVariables() {
   const environmentVariables = useAppStore(
     (s) => s.preferences.environmentVariables,
   );
   const geocoding = useAppStore((s) => s.preferences.geocoding);
+  // Device-local Cesium Ion token (Settings → Environment). Projected below so
+  // getCesiumIonToken() picks it up as a runtime override without a rebuild.
+  const cesiumIonToken = useDesktopSettingsStore(
+    (s) => s.desktopSettings.cesiumIonToken,
+  );
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
 
@@ -30,8 +36,16 @@ export function useRuntimeEnvironmentVariables() {
     if (geocoding.email?.trim())
       geocoderEnv.VITE_GEOCODER_EMAIL = geocoding.email.trim();
 
+    // Only inject the Cesium token when set: an empty value would override (and
+    // so blank out) a build-time VITE_CESIUM_TOKEN via getRuntimeEnvironment's
+    // spread. A free-form env-var row of the same name still wins over this.
+    const cesiumEnv: Record<string, string> = cesiumIonToken.trim()
+      ? { VITE_CESIUM_TOKEN: cesiumIonToken.trim() }
+      : {};
+
     const runtimeEnv = {
       ...geocoderEnv,
+      ...cesiumEnv,
       ...Object.fromEntries(
         environmentVariables
           .filter((variable) => variable.enabled && variable.key.trim())
@@ -63,5 +77,5 @@ export function useRuntimeEnvironmentVariables() {
     window.dispatchEvent(
       new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }),
     );
-  }, [environmentVariables, geocoding]);
+  }, [environmentVariables, geocoding, cesiumIonToken]);
 }
