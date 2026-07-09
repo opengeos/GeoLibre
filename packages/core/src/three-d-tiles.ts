@@ -32,7 +32,8 @@ function isMaskedKey(value: string): boolean {
   return /^\*+$/.test(value.trim());
 }
 
-function stripApiKeyHeader(
+/** Drop the `X-GOOG-API-KEY` header (case-insensitive), keeping the rest. */
+export function stripGoogleMapsApiKeyHeader(
   headers: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
   if (!headers) return undefined;
@@ -42,7 +43,11 @@ function stripApiKeyHeader(
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function apiKeyFromHeaders(
+/**
+ * The real `X-GOOG-API-KEY` value from `headers`, or `undefined` when absent,
+ * blank, or a masked placeholder.
+ */
+export function googleMapsApiKeyHeaderValue(
   headers: Record<string, string> | undefined,
 ): string | undefined {
   if (!headers) return undefined;
@@ -54,7 +59,8 @@ function apiKeyFromHeaders(
   return value;
 }
 
-function nonEmptyRecord(
+/** Collapse an empty record to `undefined`, otherwise pass it through. */
+export function nonEmptyRecord(
   value: Record<string, string> | undefined,
 ): Record<string, string> | undefined {
   return value && Object.keys(value).length > 0 ? value : undefined;
@@ -73,12 +79,29 @@ export function resolveThreeDTilesRequestHeaders(
   googleMapsApiKey?: string,
 ): Record<string, string> | undefined {
   if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
-  const nonGoogleHeaders = stripApiKeyHeader(headers);
+  const nonGoogleHeaders = stripGoogleMapsApiKeyHeader(headers);
   const apiKey =
-    apiKeyFromHeaders(headers) ?? googleMapsApiKey ?? getGoogleMapsApiKey();
+    googleMapsApiKeyHeaderValue(headers) ??
+    googleMapsApiKey ??
+    getGoogleMapsApiKey();
   if (!apiKey) return nonEmptyRecord(nonGoogleHeaders);
   return {
     ...(nonGoogleHeaders ?? {}),
     [GOOGLE_MAPS_API_KEY_HEADER]: apiKey,
   };
+}
+
+/**
+ * The request headers to persist on a 3D Tiles layer record. Non-Google
+ * tilesets keep their headers; Google Photorealistic tiles keep any non-key
+ * custom headers but never persist the `X-GOOG-API-KEY` value, so shared
+ * projects do not carry the key in plain text (it is re-injected at render
+ * time by `resolveThreeDTilesRequestHeaders`).
+ */
+export function persistedThreeDTilesRequestHeaders(
+  url: string,
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
+  return nonEmptyRecord(stripGoogleMapsApiKeyHeader(headers));
 }

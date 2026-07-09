@@ -1,6 +1,12 @@
 import {
   DEFAULT_LAYER_STYLE,
-  getGoogleMapsApiKey,
+  GOOGLE_MAPS_API_KEY_HEADER,
+  googleMapsApiKeyHeaderValue,
+  isGooglePhotorealisticTilesetUrl,
+  nonEmptyRecord,
+  persistedThreeDTilesRequestHeaders,
+  resolveThreeDTilesRequestHeaders,
+  stripGoogleMapsApiKeyHeader,
   type GeoLibreLayer,
   useAppStore,
 } from "@geolibre/core";
@@ -47,7 +53,6 @@ const GOOGLE_PHOTOREALISTIC_TILES_LABEL =
 const ARCGIS_I3S_SAMPLE_TILES_URL =
   "https://tiles.arcgis.com/tiles/z2tnIkrLQ2BRzr6P/arcgis/rest/services/SanFrancisco_Bldgs/SceneServer/layers/0";
 const ARCGIS_I3S_SAMPLE_TILES_LABEL = "San Francisco Buildings (ArcGIS I3S)";
-const GOOGLE_MAPS_API_KEY_HEADER = "X-GOOG-API-KEY";
 const GOOGLE_MAPS_API_KEY_MASK = "********";
 const GOOGLE_PHOTOREALISTIC_SOURCE_KIND =
   "google-photorealistic-3d-tiles";
@@ -1799,55 +1804,6 @@ function stringRecordValue(
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
-function resolveThreeDTilesRequestHeaders(
-  url: string,
-  headers: Record<string, string> | undefined,
-  googleMapsApiKey?: string,
-): Record<string, string> | undefined {
-  if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
-
-  const nonGoogleHeaders = stripGoogleMapsApiKeyHeader(headers);
-  const apiKey =
-    googleMapsApiKeyHeaderValue(headers) ??
-    googleMapsApiKey ??
-    getGoogleMapsApiKey();
-  if (!apiKey) return nonEmptyRecord(nonGoogleHeaders);
-  return {
-    ...(nonGoogleHeaders ?? {}),
-    [GOOGLE_MAPS_API_KEY_HEADER]: apiKey,
-  };
-}
-
-function persistedThreeDTilesRequestHeaders(
-  url: string,
-  headers: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!isGooglePhotorealisticTilesetUrl(url)) return headers;
-  return nonEmptyRecord(stripGoogleMapsApiKeyHeader(headers));
-}
-
-function stripGoogleMapsApiKeyHeader(
-  headers: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!headers) return undefined;
-  const entries = Object.entries(headers).filter(
-    ([name]) => name.toLowerCase() !== GOOGLE_MAPS_API_KEY_HEADER.toLowerCase(),
-  );
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
-}
-
-function googleMapsApiKeyHeaderValue(
-  headers: Record<string, string> | undefined,
-): string | undefined {
-  if (!headers) return undefined;
-  const entry = Object.entries(headers).find(
-    ([name]) => name.toLowerCase() === GOOGLE_MAPS_API_KEY_HEADER.toLowerCase(),
-  );
-  const value = entry?.[1].trim();
-  if (!value || googleMapsApiKeyIsMask(value)) return undefined;
-  return value;
-}
-
 function rememberGoogleMapsApiKeyFromHeaders(
   panel: HTMLElement,
   headers: Record<string, string> | undefined,
@@ -1858,22 +1814,6 @@ function rememberGoogleMapsApiKeyFromHeaders(
     return apiKey;
   }
   return googleTilesApiKeysByPanel.get(panel);
-}
-
-function googleMapsApiKeyIsMask(value: string): boolean {
-  return /^\*+$/.test(value.trim());
-}
-
-function isGooglePhotorealisticTilesetUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.hostname === "tile.googleapis.com" &&
-      parsed.pathname === "/v1/3dtiles/root.json"
-    );
-  } catch {
-    return false;
-  }
 }
 
 function isGooglePhotorealisticTilesetLayerUrl(layer: GeoLibreLayer): boolean {
@@ -1929,12 +1869,6 @@ function serializeGooglePhotorealisticPanelRequestHeaders(
       ]),
     ),
   );
-}
-
-function nonEmptyRecord(
-  value: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  return value && Object.keys(value).length > 0 ? value : undefined;
 }
 
 function recordsEqual(
