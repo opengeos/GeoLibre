@@ -90,6 +90,33 @@ describe("createWeatherLayer", () => {
     assert.equal(ownedLayers().length, 0); // deactivate removes the adopted layer
   });
 
+  it("does NOT mark the project dirty when adopting an already-current layer", async () => {
+    // A project saved on the current frame: tiles + metadata already match.
+    useAppStore.getState().addTileLayer("TestWeather", {
+      type: "xyz",
+      tiles: [frame.tileUrl],
+      metadata: { ...frame.metadata, [FLAG]: true },
+    });
+    useAppStore.setState({ isDirty: false }); // freshly-opened = clean
+
+    const c = createWeatherLayer(makeConfig()); // loadFrames → same frame
+    assert.equal(await c.activate(app), true);
+    assert.equal(useAppStore.getState().isDirty, false); // no-op adopt stays clean
+  });
+
+  it("refreshes (marking dirty) when the adopted layer's saved tile is stale", async () => {
+    useAppStore.getState().addTileLayer("TestWeather", {
+      type: "xyz",
+      tiles: ["https://example.test/STALE/{z}/{x}/{y}.png"],
+      metadata: { ...frame.metadata, [FLAG]: true },
+    });
+    useAppStore.setState({ isDirty: false });
+
+    const c = createWeatherLayer(makeConfig()); // fresh frame differs
+    assert.equal(await c.activate(app), true);
+    assert.equal(useAppStore.getState().isDirty, true);
+  });
+
   it("adopts (not duplicates) a restored layer when fresh frames are available", async () => {
     useAppStore.getState().addTileLayer("TestWeather", {
       type: "xyz",

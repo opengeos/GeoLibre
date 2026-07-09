@@ -120,11 +120,14 @@ export function createWeatherLayer(
   /**
    * Mirror the current frame into the store layer's `source.tiles` + metadata so
    * the project persists the shown frame and a later source rebuild recreates it
-   * correctly. `force` writes even when the tile is unchanged (used on adopt so a
-   * layer restored from an older project picks up the current frame + metadata).
-   * Clears {@link layerId} if the layer was deleted from the panel.
+   * correctly. Writes only when the tile OR the metadata actually differs — a
+   * no-op write would still flip the project's `isDirty` flag, so reopening a
+   * project with an already-current overlay must not mark it dirty. (Comparing
+   * metadata too, not just the tile, still lets an adopt from an older project
+   * enrich sparse metadata even when the tile matches.) Clears {@link layerId}
+   * if the layer was deleted from the panel.
    */
-  const syncStore = (force = false): void => {
+  const syncStore = (): void => {
     if (layerId === null || frames.length === 0) return;
     const store = useAppStore.getState();
     const layer = store.layers.find((l) => l.id === layerId);
@@ -133,13 +136,17 @@ export function createWeatherLayer(
       return;
     }
     const frame = frames[index];
+    const nextMetadata = { ...frame.metadata, [config.layerFlag]: true };
     const currentTile = Array.isArray(layer.source.tiles)
       ? layer.source.tiles[0]
       : undefined;
-    if (!force && currentTile === frame.tileUrl) return;
+    const unchanged =
+      currentTile === frame.tileUrl &&
+      JSON.stringify(layer.metadata) === JSON.stringify(nextMetadata);
+    if (unchanged) return;
     store.updateLayer(layerId, {
       source: { ...layer.source, tiles: [frame.tileUrl] },
-      metadata: { ...frame.metadata, [config.layerFlag]: true },
+      metadata: nextMetadata,
     });
   };
 
@@ -236,8 +243,9 @@ export function createWeatherLayer(
         layerId = existing.id;
         // Refresh to the latest frame only when a fresh fetch succeeded;
         // otherwise leave the restored layer's saved tiles/metadata in place.
+        // syncStore() is a no-op (no dirty flag) when already current.
         if (frames.length > 0) {
-          syncStore(true);
+          syncStore();
           applyFrameToMap();
         }
       } else {
