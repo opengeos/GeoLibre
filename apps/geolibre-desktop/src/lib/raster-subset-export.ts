@@ -133,7 +133,7 @@ function normalizeSubdomains(value: unknown): string | undefined {
 }
 
 /** WGS84 bounding box EPSG code; the panel always draws/edits in lng/lat. */
-const WGS84 = 4326;
+export const WGS84 = 4326;
 
 /**
  * Extract a bounding-box subset of a raster layer as Cloud Optimized GeoTIFF
@@ -166,8 +166,13 @@ export async function extractRasterSubset(
     return extractWmsSubset(String(source.url), {
       layers: String(source.layers ?? ""),
       styles: typeof source.styles === "string" ? source.styles : undefined,
-      version: typeof source.version === "string" ? source.version : undefined,
       ...common,
+      // Request the subset as WMS 1.1.1 regardless of the layer's display
+      // version: 1.1.1 uses SRS=EPSG:4326 with lon/lat BBOX order, matching the
+      // `[west, south, east, north]` box sent here. WMS 1.3.0 flips EPSG:4326 to
+      // lat/lon axis order, which the extractor does not compensate for, so a
+      // 1.3.0 request would return shifted/empty imagery.
+      version: "1.1.1",
       // The stored WMS format is for display (often PNG); the extractor needs a
       // GeoTIFF response, so always request one regardless of the display format
       // or any user-supplied `format` in `extra` (applied after the spread so it

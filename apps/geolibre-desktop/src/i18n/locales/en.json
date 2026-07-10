@@ -1090,6 +1090,7 @@
     "south": "South",
     "west": "West",
     "east": "East",
+    "bboxHint": "Enter a valid box: west/east within -180 to 180, south/north within -90 to 90, with west < east and south < north.",
     "zoom": "Zoom level",
     "zoomHint": "Enter a whole zoom level between 0 and 30.",
     "resolutionDegrees": "Resolution (degrees)",

@@ -27,15 +27,13 @@ import {
   rasterSubsetKind,
   type RasterSubsetKind,
   saveRasterSubset,
+  WGS84,
 } from "../../lib/raster-subset-export";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 320;
 const PANEL_MARGIN = 12;
-
-/** WGS84 EPSG code; the box is always drawn/edited in lng/lat. */
-const WGS84 = 4326;
 
 /** EPSG codes whose units are degrees (so a resolution is in degrees, not meters). */
 const GEOGRAPHIC_EPSG = new Set([4326, 4979, 4269, 4267]);
@@ -184,6 +182,22 @@ export function RasterSubsetPanel({
   const [success, setSuccess] = useState<string | null>(null);
 
   const bbox = useMemo(() => parseBbox(coords), [coords]);
+  // All four coordinate fields are filled but don't form a valid box (out of
+  // range, or west>=east / south>=north). "Use view" can produce this when the
+  // map is panned across the antimeridian, since getBounds() isn't normalized.
+  const bboxInvalid =
+    bbox === null &&
+    coords.west !== "" &&
+    coords.south !== "" &&
+    coords.east !== "" &&
+    coords.north !== "";
+
+  // Clear both status messages when the user edits any field, so a stale error
+  // or success from a prior extraction doesn't linger while they retry.
+  const clearStatus = useCallback(() => {
+    setSuccess(null);
+    setError(null);
+  }, []);
   // Whether the resolution is in meters (a projected output CRS) or degrees (a
   // geographic one, including the default WGS84 box CRS).
   const resolutionInMeters = useMemo(() => {
@@ -326,14 +340,16 @@ export function RasterSubsetPanel({
     setCoords(
       coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]),
     );
-    setSuccess(null);
-    setError(null);
-  }, [mapControllerRef]);
+    clearStatus();
+  }, [mapControllerRef, clearStatus]);
 
-  const setField = useCallback((field: keyof CoordFields, value: string) => {
-    setCoords((prev) => ({ ...prev, [field]: value }));
-    setSuccess(null);
-  }, []);
+  const setField = useCallback(
+    (field: keyof CoordFields, value: string) => {
+      setCoords((prev) => ({ ...prev, [field]: value }));
+      clearStatus();
+    },
+    [clearStatus],
+  );
 
   // Dragging the panel by its header. Mirrors the Pixel Time Series panel.
   const handleDragStart = useCallback(
@@ -566,6 +582,11 @@ export function RasterSubsetPanel({
               </div>
             ))}
           </div>
+          {bboxInvalid ? (
+            <p className="text-xs text-destructive">
+              {t("rasterSubset.bboxHint")}
+            </p>
+          ) : null}
 
           {kind === "xyz" ? (
             <div className="space-y-1">
@@ -581,7 +602,7 @@ export function RasterSubsetPanel({
                 value={zoom}
                 onChange={(e) => {
                   setZoom(e.target.value);
-                  setSuccess(null);
+                  clearStatus();
                 }}
               />
               {zoomInvalid ? (
@@ -607,7 +628,7 @@ export function RasterSubsetPanel({
                 value={resolution}
                 onChange={(e) => {
                   setResolution(e.target.value);
-                  setSuccess(null);
+                  clearStatus();
                 }}
               />
               <p className="text-xs text-muted-foreground">
@@ -646,7 +667,7 @@ export function RasterSubsetPanel({
                     value={outputCrs}
                     onChange={(e) => {
                       setOutputCrs(e.target.value);
-                      setSuccess(null);
+                      clearStatus();
                     }}
                   />
                 </div>
@@ -663,7 +684,7 @@ export function RasterSubsetPanel({
                     value={nodata}
                     onChange={(e) => {
                       setNodata(e.target.value);
-                      setSuccess(null);
+                      clearStatus();
                     }}
                   />
                 </div>
@@ -679,7 +700,7 @@ export function RasterSubsetPanel({
                     value={extraArgs}
                     onChange={(e) => {
                       setExtraArgs(e.target.value);
-                      setSuccess(null);
+                      clearStatus();
                     }}
                   />
                   <p className="text-xs text-muted-foreground">
