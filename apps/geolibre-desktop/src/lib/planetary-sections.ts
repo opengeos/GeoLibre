@@ -5,11 +5,19 @@ import type { EllipsoidId } from "@geolibre/core";
  * body it depicts. Shared by the New Project and Change Basemap panels, which
  * both render {@link PLANETARY_BASEMAP_GROUPS} as one section per body.
  *
- * Returns a literal key so the typed `t()` accepts it. Bodies without a
- * dedicated heading fall back to the Mars section (the only other grouped body).
+ * Returns a literal key so the typed `t()` accepts it. Throws for a body with
+ * no dedicated heading so a future basemap group (e.g. Mercury) added without a
+ * matching section fails loudly instead of being silently captioned "Mars".
  */
 export function planetaryBodySectionKey(ellipsoidId: EllipsoidId) {
-  return ellipsoidId === "moon"
-    ? ("basemapPicker.sectionMoon" as const)
-    : ("basemapPicker.sectionMars" as const);
+  switch (ellipsoidId) {
+    case "moon":
+      return "basemapPicker.sectionMoon" as const;
+    case "mars":
+      return "basemapPicker.sectionMars" as const;
+    default:
+      throw new Error(
+        `no planetary basemap section heading for "${ellipsoidId}"`,
+      );
+  }
 }

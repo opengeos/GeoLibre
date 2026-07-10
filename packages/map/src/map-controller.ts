@@ -3,6 +3,7 @@ import {
   DEFAULT_BASEMAP,
   DEFAULT_PROJECT_PREFERENCES,
   getPlanetaryBasemapByStyleUrl,
+  PLANETARY_BASEMAP_SENTINEL_PREFIX,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -220,6 +221,13 @@ function resolveMapStyle(
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
   const planetary = getPlanetaryBasemapByStyleUrl(styleUrl);
   if (planetary) return createPlanetaryMapStyle(planetary);
+  // A planetary sentinel that no longer resolves (e.g. a project saved with a
+  // basemap id that has since been renamed) must not be handed to MapLibre as a
+  // style URL — it would try to fetch the `geolibre://` sentinel and blank the
+  // map. Fall back to the default basemap instead.
+  if (styleUrl?.startsWith(PLANETARY_BASEMAP_SENTINEL_PREFIX)) {
+    return DEFAULT_BASEMAP;
+  }
   return styleUrl ?? DEFAULT_BASEMAP;
 }
 

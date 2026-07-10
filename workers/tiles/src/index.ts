@@ -122,7 +122,10 @@ export default {
       status: originResponse.status,
       headers,
     });
-    if (originResponse.ok) {
+    // Only GET responses are cacheable — the Cache API rejects a HEAD request
+    // as a cache key with a TypeError, so guard the put even though MapLibre
+    // only ever issues GET.
+    if (originResponse.ok && request.method === "GET") {
       ctx.waitUntil(cache.put(request, response.clone()));
     }
     return response;
