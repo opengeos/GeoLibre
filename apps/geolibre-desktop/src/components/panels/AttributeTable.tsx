@@ -92,6 +92,7 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import { computeRowSelection } from "../../lib/attribute-selection";
 import {
   AREA_UNITS,
   detectGeometryFamilies,
@@ -502,53 +503,22 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     return sort.direction === "asc" ? result : -result;
   });
 
-  // Row selection with keyboard modifiers, over the current sorted order:
-  //   • plain click       → select just this row (anchor = this row)
-  //   • Ctrl/Cmd + click   → toggle this row in/out of the selection
-  //   • Shift + click      → select the contiguous range from the anchor row to
-  //                          this row (falls back to a single select with no
-  //                          anchor). Ranged picks merge with any Ctrl-built
-  //                          selection rather than replacing it.
+  // Row selection with keyboard modifiers (plain / Ctrl-toggle / Shift-range /
+  // Shift+Ctrl merge). The branching lives in the pure `computeRowSelection`
+  // helper so it can be unit-tested; here we just feed it the current state.
   const handleRowClick = (
     featureId: string,
     event: ReactMouseEvent<HTMLTableRowElement>,
   ) => {
-    const additive = event.ctrlKey || event.metaKey;
-    if (event.shiftKey) {
-      const anchorIndex = selectedFeatureId
-        ? sorted.findIndex((row) => row.featureId === selectedFeatureId)
-        : -1;
-      const clickedIndex = sorted.findIndex(
-        (row) => row.featureId === featureId,
-      );
-      if (anchorIndex === -1 || clickedIndex === -1) {
-        selectFeature(featureId);
-        return;
-      }
-      const [from, to] =
-        anchorIndex <= clickedIndex
-          ? [anchorIndex, clickedIndex]
-          : [clickedIndex, anchorIndex];
-      const rangeIds = sorted.slice(from, to + 1).map((row) => row.featureId);
-      // Keep the anchor fixed so repeated Shift-clicks grow/shrink one range.
-      const merged = additive
-        ? [...selectedFeatureIds, ...rangeIds]
-        : rangeIds;
-      selectFeatures([...new Set(merged)], selectedFeatureId);
-      return;
-    }
-    if (additive) {
-      const next = selectedIdSet.has(featureId)
-        ? selectedFeatureIds.filter((id) => id !== featureId)
-        : [...selectedFeatureIds, featureId];
-      // Deselecting the anchor moves it to the last remaining id.
-      const anchor = next.includes(featureId)
-        ? featureId
-        : next[next.length - 1] ?? null;
-      selectFeatures(next, anchor);
-      return;
-    }
-    selectFeature(featureId);
+    const { ids, anchor } = computeRowSelection({
+      featureId,
+      sortedIds: sorted.map((row) => row.featureId),
+      selectedIds: selectedFeatureIds,
+      anchorId: selectedFeatureId,
+      additive: event.ctrlKey || event.metaKey,
+      range: event.shiftKey,
+    });
+    selectFeatures(ids, anchor);
   };
 
   // Row virtualization: only the rows in (and just around) the viewport are
@@ -1637,7 +1607,9 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           }
         >
           <option value="all">{t("attributeTable.showAllFeatures")}</option>
-          <option value="selected">
+          {/* Disabled when nothing is selected so the table can't be switched
+              to an empty "selected" view it wouldn't auto-recover from. */}
+          <option value="selected" disabled={selectedFeatureIds.length === 0}>
             {t("attributeTable.showSelectedFeatures", {
               count: selectedFeatureIds.length,
             })}

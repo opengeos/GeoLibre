@@ -883,12 +883,14 @@ export const useAppStore = create<AppState>()(
       selectFeatures: (ids, anchorId) =>
         set({
           selectedFeatureIds: ids,
+          // Enforce the documented invariant for every caller: the anchor is
+          // always a member of the set (or null when empty). A supplied anchor
+          // that isn't in `ids` falls back to the last id rather than pointing
+          // the map fit / calculator sample at an unselected feature.
           selectedFeatureId:
-            anchorId !== undefined
+            anchorId != null && ids.includes(anchorId)
               ? anchorId
-              : ids.length > 0
-                ? ids[ids.length - 1]
-                : null,
+              : (ids.at(-1) ?? null),
         }),
       setIdentifyLayer: (id) => set({ identifyLayerId: id }),
       setAttributeFilter: (filter) => set({ attributeFilter: filter }),

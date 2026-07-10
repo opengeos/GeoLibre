@@ -1370,8 +1370,17 @@ export class MapController {
       return;
     }
 
+    // Index by id once (O(n)) then look each id up in O(1); a Shift-range of
+    // thousands of rows on a large layer would otherwise be O(selected × total)
+    // per highlight update, on the main thread, on every selection change.
+    const featureById = new Map<string, Feature>(
+      layer.geojson.features.map((feature, index) => [
+        String(feature.id ?? index),
+        feature,
+      ]),
+    );
     const features = ids
-      .map((id) => this.findFeature(layer, id))
+      .map((id) => featureById.get(id))
       .filter(
         (feature): feature is Feature =>
           feature?.geometry != null,
@@ -1417,15 +1426,6 @@ export class MapController {
     } catch {
       this.map.once("idle", () => this.enforceProjection());
     }
-  }
-
-  private findFeature(
-    layer: GeoLibreLayer,
-    featureId: string,
-  ): Feature | undefined {
-    return layer.geojson?.features.find(
-      (feature, index) => String(feature.id ?? index) === featureId,
-    );
   }
 
   private fitFeature(featureCollection: FeatureCollection): void {
