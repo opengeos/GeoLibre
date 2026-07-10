@@ -125,10 +125,29 @@ function coordsFromBbox(bbox: [number, number, number, number]): CoordFields {
 }
 
 /**
+ * Extractor option keys whose values are numeric and so are coerced to a number.
+ * Other keys (e.g. a WMS `layers`/`styles`/`format`) keep their string value, so
+ * a numeric-looking id like `layers=001` isn't mangled into `1`.
+ */
+const NUMERIC_EXTRA_KEYS = new Set([
+  "level",
+  "resolution",
+  "outputCrs",
+  "nodata",
+  "width",
+  "height",
+  "tileSize",
+  "zoom",
+  "bboxCrs",
+  "initialHeaderBytes",
+  "maxHeaderBytes",
+]);
+
+/**
  * Parse the "Additional options" text (one `key=value` per line) into an options
- * object for the extractor, coercing numeric values. Blank lines are ignored;
- * `null` signals a malformed line so the caller can surface an error rather than
- * silently dropping it.
+ * object for the extractor, coercing only the known-numeric keys. Blank lines are
+ * ignored; `null` signals a malformed line so the caller can surface an error
+ * rather than silently dropping it.
  *
  * @param text - The raw textarea contents.
  * @returns The parsed options, or `null` if any non-blank line is malformed.
@@ -144,7 +163,10 @@ function parseExtraArgs(text: string): Record<string, unknown> | null {
     if (!key) return null;
     const value = line.slice(eq + 1).trim();
     const num = Number(value);
-    extra[key] = value !== "" && Number.isFinite(num) ? num : value;
+    extra[key] =
+      NUMERIC_EXTRA_KEYS.has(key) && value !== "" && Number.isFinite(num)
+        ? num
+        : value;
   }
   return extra;
 }
@@ -278,8 +300,13 @@ export function RasterSubsetPanel({
     };
   }, [bbox, layer, mapControllerRef]);
 
-  // Rubber-band draw mode: drag a rectangle on the map. dragPan/boxZoom are
-  // disabled for the duration so the drag draws instead of panning; Esc cancels.
+  // Rubber-band draw mode: drag a rectangle on the map. The draw starts on a
+  // canvas mousedown, then tracking is driven by *window* mousemove/mouseup so a
+  // drag that leaves the canvas (very common, since this panel sits over the map
+  // and the box often extends to the edge) still updates and commits. dragPan/
+  // boxZoom are suspended for the duration and only restored if they were on
+  // before (another tool may have disabled them); Esc and window blur cancel.
+  // Mirrors the box-draw handler in lib/print-extent.ts.
   useEffect(() => {
     if (!drawing) return;
     const map = mapControllerRef.current?.getMap();
@@ -290,8 +317,19 @@ export function RasterSubsetPanel({
     const canvas = map.getCanvas();
     const prevCursor = canvas.style.cursor;
     canvas.style.cursor = "crosshair";
+    const panWasEnabled = map.dragPan.isEnabled();
+    const boxZoomWasEnabled = map.boxZoom.isEnabled();
     map.dragPan.disable();
     map.boxZoom.disable();
+
+    // Convert a viewport (client) point to a lng/lat via the canvas rect, so a
+    // release outside the canvas still maps to a map coordinate.
+    const toLngLat = (clientX: number, clientY: number): [number, number] => {
+      const rect = canvas.getBoundingClientRect();
+      const ll = map.unproject([clientX - rect.left, clientY - rect.top]);
+      return [ll.lng, ll.lat];
+    };
+
     let start: [number, number] | null = null;
     const onDown = (e: {
       lngLat: { lng: number; lat: number };
@@ -302,14 +340,17 @@ export function RasterSubsetPanel({
       if (e.originalEvent && e.originalEvent.button !== 0) return;
       start = [e.lngLat.lng, e.lngLat.lat];
     };
-    const onMove = (e: { lngLat: { lng: number; lat: number } }) => {
+    const onWindowMove = (e: MouseEvent) => {
       if (!start) return;
-      setCoords(coordsFromBbox(orderBbox(start, [e.lngLat.lng, e.lngLat.lat])));
+      setCoords(
+        coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))),
+      );
     };
-    const onUp = (e: { lngLat: { lng: number; lat: number } }) => {
+    const onWindowUp = (e: MouseEvent) => {
+      if (e.button !== 0) return;
       if (start) {
         setCoords(
-          coordsFromBbox(orderBbox(start, [e.lngLat.lng, e.lngLat.lat])),
+          coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))),
         );
       }
       start = null;
@@ -318,18 +359,23 @@ export function RasterSubsetPanel({
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented) setDrawing(false);
     };
+    // Cancel if the window loses focus mid-drag (Alt+Tab, a system dialog): the
+    // mouseup would otherwise never arrive, leaving the draw armed.
+    const onBlur = () => setDrawing(false);
     map.on("mousedown", onDown);
-    map.on("mousemove", onMove);
-    map.on("mouseup", onUp);
+    window.addEventListener("mousemove", onWindowMove);
+    window.addEventListener("mouseup", onWindowUp);
     window.addEventListener("keydown", onKey);
+    window.addEventListener("blur", onBlur);
     return () => {
       map.off("mousedown", onDown);
-      map.off("mousemove", onMove);
-      map.off("mouseup", onUp);
+      window.removeEventListener("mousemove", onWindowMove);
+      window.removeEventListener("mouseup", onWindowUp);
       window.removeEventListener("keydown", onKey);
+      window.removeEventListener("blur", onBlur);
       canvas.style.cursor = prevCursor;
-      map.dragPan.enable();
-      map.boxZoom.enable();
+      if (panWasEnabled) map.dragPan.enable();
+      if (boxZoomWasEnabled) map.boxZoom.enable();
     };
   }, [drawing, mapControllerRef]);
 
