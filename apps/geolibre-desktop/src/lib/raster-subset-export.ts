@@ -171,16 +171,16 @@ export async function extractRasterSubset(
   // Forwarded to each extractor's internal fetches (COG byte-range reads, the
   // WMS GetMap request, XYZ tile requests) so the caller can cancel them.
   const fetchOptions = signal ? { signal } : undefined;
-  // Options every extractor accepts. `extra` is spread over the derived sizing
-  // fields so a power-user override (e.g. level/width/height) wins, but the
-  // geometry identity `bbox`/`bboxCrs` is applied after it: the box always comes
-  // from the panel's lng/lat fields, so letting `extra` clobber it (e.g. a
-  // stray `bbox=...` line) would reinterpret or corrupt the extent.
+  // Options every extractor accepts. `extra` is spread first so a power-user
+  // option without a dedicated field (e.g. level/width/height) is honored, but
+  // the validated fields are applied after it so `extra` can't bypass their
+  // range checks (resolution/outputCrs/nodata) or corrupt the extent (bbox is
+  // always the panel's lng/lat box; bboxCrs stays WGS84).
   const common = {
+    ...extra,
     resolution,
     outputCrs,
     nodata,
-    ...extra,
     bbox,
     bboxCrs: WGS84,
   };
@@ -211,7 +211,6 @@ export async function extractRasterSubset(
   if (kind === "xyz") {
     const tiles = source.tiles as string[];
     return extractXyzTileSubset(tiles[0], {
-      zoom: request.zoom ?? 0,
       tileSize:
         typeof source.tileSize === "number" ? source.tileSize : undefined,
       // The extractor rotates `{s}` by indexing into `subdomains` per tile, so a
@@ -220,6 +219,9 @@ export async function extractRasterSubset(
       // the same per-letter string form so subdomain rotation isn't dropped.
       subdomains: normalizeSubdomains(source.subdomains),
       ...common,
+      // Applied after `...common` so the panel's validated (0-30) zoom wins over
+      // any `zoom` in the additional options.
+      zoom: request.zoom ?? 0,
       fetchOptions,
     });
   }

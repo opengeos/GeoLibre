@@ -128,16 +128,17 @@ function coordsFromBbox(bbox: [number, number, number, number]): CoordFields {
  * Extractor option keys whose values are numeric and so are coerced to a number.
  * Other keys (e.g. a WMS `layers`/`styles`/`format`) keep their string value, so
  * a numeric-looking id like `layers=001` isn't mangled into `1`.
+ *
+ * Deliberately excludes `resolution`/`outputCrs`/`nodata`/`zoom`: those have
+ * dedicated, validated fields and the extractor is given the field value after
+ * the `extra` spread, so an Additional-options line for them can't bypass the
+ * field's range checks.
  */
 const NUMERIC_EXTRA_KEYS = new Set([
   "level",
-  "resolution",
-  "outputCrs",
-  "nodata",
   "width",
   "height",
   "tileSize",
-  "zoom",
   "initialHeaderBytes",
   "maxHeaderBytes",
 ]);
