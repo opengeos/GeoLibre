@@ -45,13 +45,18 @@ const TILE_PATH = /^\/opm\/([a-z0-9-]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/;
 
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-methods": "GET, HEAD, OPTIONS",
+  "access-control-allow-methods": "GET, OPTIONS",
   "access-control-max-age": "86400",
 };
 
 // Cache tiles for a day at the edge and let browsers hold them for an hour. The
 // mosaics are static, so a long TTL is safe and keeps the map responsive.
 const CACHE_CONTROL = "public, max-age=3600, s-maxage=86400";
+
+// Cache upstream misses (403/404 past a mosaic's native zoom) briefly, so a
+// repeated bad tile is answered from the edge instead of re-hitting the OPM
+// buckets every time.
+const NEGATIVE_CACHE_CONTROL = "public, max-age=300";
 
 interface Env {}
 
@@ -64,10 +69,13 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
-    if (request.method !== "GET" && request.method !== "HEAD") {
+    // Only GET is proxied. MapLibre issues GET for every tile; supporting HEAD
+    // would just complicate the Cache API keying (which requires GET) for no
+    // real consumer.
+    if (request.method !== "GET") {
       return new Response("Method Not Allowed", {
         status: 405,
-        headers: { ...CORS_HEADERS, allow: "GET, HEAD, OPTIONS" },
+        headers: { ...CORS_HEADERS, allow: "GET, OPTIONS" },
       });
     }
 
@@ -93,6 +101,14 @@ export default {
       });
     }
 
+    // Reject coordinates outside the tile pyramid for this zoom (x, y < 2**z)
+    // before touching upstream, so out-of-range /z/x/y can't be looped over to
+    // hammer the third-party OPM S3 buckets through this Worker.
+    const dim = 2 ** Number(z);
+    if (Number(x) >= dim || Number(y) >= dim) {
+      return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+    }
+
     // Serve from the edge cache when we can; the cache key is the incoming
     // request URL (method + path), which uniquely identifies the tile.
     const cache = caches.default;
@@ -116,16 +132,19 @@ export default {
       "content-type",
       originResponse.headers.get("content-type") ?? "image/png",
     );
-    headers.set("cache-control", CACHE_CONTROL);
+    headers.set(
+      "cache-control",
+      originResponse.ok ? CACHE_CONTROL : NEGATIVE_CACHE_CONTROL,
+    );
 
     const response = new Response(originResponse.body, {
       status: originResponse.status,
       headers,
     });
-    // Only GET responses are cacheable — the Cache API rejects a HEAD request
-    // as a cache key with a TypeError, so guard the put even though MapLibre
-    // only ever issues GET.
-    if (originResponse.ok && request.method === "GET") {
+    // Cache successes long and upstream misses briefly (see NEGATIVE_CACHE_
+    // CONTROL); skip 5xx so a transient upstream failure isn't pinned. Only GET
+    // reaches here, so the request is always a valid Cache API key.
+    if (originResponse.status < 500) {
       ctx.waitUntil(cache.put(request, response.clone()));
     }
     return response;

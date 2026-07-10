@@ -235,8 +235,8 @@ function resolveMapStyle(
  * A single-source raster style for a non-Earth body. The tiles are PNGs in that
  * body's Web-Mercator scheme (XYZ, or TMS when `basemap.scheme` says so), so
  * MapLibre renders them like any raster basemap. A dark background shows
- * through at zoom levels the source doesn't
- * cover, matching how the planetary tiles fade to black at the poles.
+ * through at zoom levels the source doesn't cover, matching how the planetary
+ * tiles fade to black at the poles.
  */
 function createPlanetaryMapStyle(
   basemap: PlanetaryBasemap,
