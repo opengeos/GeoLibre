@@ -114,10 +114,12 @@ export function getActiveSemiMajorAxisMeters(): number {
 // --- Planetary basemaps ----------------------------------------------------
 
 /**
- * A raster basemap for a non-Earth body. The tiles are XYZ PNGs in the standard
- * Web-Mercator scheme (of that body), so MapLibre renders them directly. The
- * `styleUrl` is a `geolibre://basemap/<id>` sentinel; the map controller expands
- * it into a raster style at apply time (it is not a fetchable URL).
+ * A raster basemap for a celestial body — the Moon and Mars mosaics, plus the
+ * Earth satellite imagery the planet switcher pairs with Earth. The tiles are
+ * XYZ (or TMS, see {@link scheme}) images in that body's Web-Mercator scheme, so
+ * MapLibre renders them directly. The `styleUrl` is a `geolibre://basemap/<id>`
+ * sentinel; the map controller expands it into a raster style at apply time (it
+ * is not a fetchable URL).
  */
 export interface PlanetaryBasemap {
   id: string;
@@ -254,6 +256,22 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     attribution: OPM_ATTRIBUTION,
     ellipsoidId: "moon",
   },
+  // --- Earth --------------------------------------------------------------
+  // Satellite imagery the planet switcher pairs with Earth. Not shown in the
+  // basemap picker's Moon/Mars sections (PLANETARY_BODY_ORDER excludes Earth) —
+  // Earth basemaps live in the OpenFreeMap/Protomaps picker. USGS's National Map
+  // ImageryOnly tiles are global Web-Mercator XYZ with open CORS.
+  {
+    id: "earth-usgs-imagery",
+    name: "USGS Imagery",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}earth-usgs-imagery`,
+    tileUrl:
+      "https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}",
+    maxZoom: 16,
+    attribution:
+      '<a href="https://www.usgs.gov/programs/national-geospatial-program/national-map">USGS The National Map</a>',
+    ellipsoidId: "earth",
+  },
 ] as const;
 
 /** The celestial bodies with basemaps, in the order the UI groups them. */
@@ -303,3 +321,26 @@ export function getPlanetaryBasemapByStyleUrl(
     : id;
   return PLANETARY_BASEMAPS.find((b) => b.id === resolvedId);
 }
+
+/** Look a planetary basemap up by its stable id. */
+export function getPlanetaryBasemapById(
+  id: string,
+): PlanetaryBasemap | undefined {
+  return PLANETARY_BASEMAPS.find((b) => b.id === id);
+}
+
+/**
+ * The celestial bodies offered by the Layers-panel planet switcher, in menu
+ * order (like Google Earth's planet dropdown). Each body is paired with the
+ * basemap the switcher applies for it — USGS satellite imagery for Earth, the
+ * OpenPlanetaryMap Hillshaded Albedo mosaic for the Moon, and the OpenPlanetaryMap
+ * Viking mosaic for Mars.
+ */
+export const PLANET_SWITCHER_OPTIONS = [
+  { ellipsoidId: "earth", basemapId: "earth-usgs-imagery" },
+  { ellipsoidId: "moon", basemapId: "moon-hillshaded-albedo" },
+  { ellipsoidId: "mars", basemapId: "mars-viking-mdim21" },
+] as const satisfies readonly {
+  ellipsoidId: EllipsoidId;
+  basemapId: string;
+}[];

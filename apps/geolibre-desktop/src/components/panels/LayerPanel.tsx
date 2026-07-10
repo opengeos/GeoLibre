@@ -12,8 +12,17 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { ParseKeys, TFunction } from "i18next";
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import {
+  getPlanetaryBasemapById,
+  isDuckDBQueryLayer,
+  PLANET_SWITCHER_OPTIONS,
+  useAppStore,
+} from "@geolibre/core";
+import type {
+  EllipsoidId,
+  GeoLibreLayer,
+  LayerGroup,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   buildTimeBinding,
@@ -57,6 +66,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -88,6 +100,7 @@ import {
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
+  Orbit,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
@@ -196,6 +209,13 @@ const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+
+/** Menu labels for the planet switcher, keyed by celestial body. */
+const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
+  earth: "planetSwitcher.earth",
+  moon: "planetSwitcher.moon",
+  mars: "planetSwitcher.mars",
+};
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -465,6 +485,11 @@ export function LayerPanel({
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
+  const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
+  const setPreferences = useAppStore((s) => s.setPreferences);
+  const activeEllipsoidId = useAppStore(
+    (s) => s.preferences.map.ellipsoidId ?? "earth",
+  );
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
@@ -673,6 +698,25 @@ export function LayerPanel({
       .getState()
       .layerGroups.find((g) => g.id === id);
     if (group) beginGroupRename(group);
+  };
+
+  // Switch the map's celestial body (like Google Earth's planet dropdown):
+  // apply the body's basemap and set the project ellipsoid so measurements and
+  // the globe control use that body's radius.
+  const switchPlanet = (ellipsoidId: string) => {
+    const option = PLANET_SWITCHER_OPTIONS.find(
+      (o) => o.ellipsoidId === ellipsoidId,
+    );
+    const basemap = option && getPlanetaryBasemapById(option.basemapId);
+    if (!basemap) return;
+    setBasemapStyleUrl(basemap.styleUrl);
+    const prefs = useAppStore.getState().preferences;
+    if (prefs.map.ellipsoidId !== basemap.ellipsoidId) {
+      setPreferences({
+        ...prefs,
+        map: { ...prefs.map, ellipsoidId: basemap.ellipsoidId },
+      });
+    }
   };
 
   const beginRename = (layer: GeoLibreLayer) => {
@@ -1884,6 +1928,40 @@ export function LayerPanel({
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">{t("sharedRail.layers")}</span>
         <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("planetSwitcher.label")}
+                aria-label={t("planetSwitcher.label")}
+              >
+                <Orbit
+                  className={cn(
+                    "h-4 w-4",
+                    activeEllipsoidId !== "earth" && "text-primary",
+                  )}
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>{t("planetSwitcher.label")}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={activeEllipsoidId}
+                onValueChange={switchPlanet}
+              >
+                {PLANET_SWITCHER_OPTIONS.map((option) => (
+                  <DropdownMenuRadioItem
+                    key={option.ellipsoidId}
+                    value={option.ellipsoidId}
+                  >
+                    {t(PLANET_SWITCHER_LABEL_KEYS[option.ellipsoidId])}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon"
