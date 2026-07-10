@@ -61,11 +61,13 @@ export const DEFAULT_WMS_ENDPOINT =
 export const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 export const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 export const DEFAULT_WFS_TYPE_NAME = "topp:states";
-// NASA GIBS "Blue Marble: Shaded Relief and Bathymetry" — a static, global,
-// public-domain RESTful WMTS layer (no API key, no time dimension). Chosen so the
-// WMTS sample doesn't hardcode an Esri/ArcGIS web service.
+// EOX "Sentinel-2 cloudless" — a global, keyless RESTful WMTS imagery layer
+// (CC BY 4.0, contains modified Copernicus Sentinel data). Chosen so the WMTS
+// sample doesn't hardcode an Esri/ArcGIS web service. Its GoogleMapsCompatible
+// matrix set serves through ~zoom 18 (building level), on par with the OSM and
+// OpenTopoMap samples, so it doesn't collapse to blank tiles at ordinary zooms.
 export const DEFAULT_WMTS_URL =
-  "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg";
+  "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg";
 // PDOK BGT (Dutch large-scale base map) served as OGC API - Tiles vector tiles.
 // The style document carries the source-layer names the TileJSON omits; both
 // are prefilled so the sample works out of the box (zoom into the Netherlands).

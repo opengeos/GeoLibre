@@ -280,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "WMTSレイヤー",
-      "sampleLabel": "世界衛星画像(Blue Marble)",
+      "sampleLabel": "世界衛星画像(Sentinel-2)",
       "errorUrl": "WMTSタイルURLテンプレートを入力してください。",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

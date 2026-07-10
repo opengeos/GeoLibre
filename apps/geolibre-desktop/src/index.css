@@ -188,7 +188,7 @@ body,
 }
 
 .dark .esri-wayback-status-error {
-  color: #f87171;
+  color: hsl(var(--destructive));
 }
 
 /* Primary/strong text throughout the panel. */

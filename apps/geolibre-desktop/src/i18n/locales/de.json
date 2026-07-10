@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS-Ebene",
-      "sampleLabel": "Weltweite Luftbilder (Blue Marble)",
+      "sampleLabel": "Weltweite Luftbilder (Sentinel-2)",
       "errorUrl": "Geben Sie eine WMTS-Kachel-URL-Vorlage ein.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

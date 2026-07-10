@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Camada WMTS",
-      "sampleLabel": "Imagens mundiais (Blue Marble)",
+      "sampleLabel": "Imagens mundiais (Sentinel-2)",
       "errorUrl": "Digite um modelo de URL de tile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
