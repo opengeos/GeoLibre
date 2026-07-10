@@ -14,6 +14,7 @@ import type {
 // mapillary-js is a heavy WebGL module, so it is loaded lazily the first time
 // the viewer mounts (see mountViewer) rather than statically at import time.
 type MapillaryViewer = import("mapillary-js").Viewer;
+type MapillaryImage = import("mapillary-js").Image;
 
 export const MAPILLARY_PLUGIN_ID = "maplibre-gl-mapillary";
 const PANEL_ID = "geolibre-mapillary-viewer";
@@ -146,6 +147,9 @@ let viewer: MapillaryViewer | null = null;
 // A mount in flight, so overlapping mountViewer() calls await it instead of
 // racing to construct a second Viewer (which would leak a WebGL context).
 let viewerMounting: Promise<void> | null = null;
+// Watches the viewer container so the WebGL viewer re-fits when the (resizable)
+// panel changes size — mapillary-js does not auto-detect container resizes.
+let viewerResizeObserver: ResizeObserver | null = null;
 // The live text nodes, so a language change refreshes copy in place instead of
 // tearing down and remounting the viewer.
 let hintEl: HTMLElement | null = null;
@@ -159,7 +163,7 @@ let enterHandler: (() => void) | null = null;
 let leaveHandler: (() => void) | null = null;
 
 // Where the floating viewer panel docks; drives the Plugins-menu position submenu.
-let panelPosition: GeoLibreMapControlPosition = "top-right";
+let panelPosition: GeoLibreMapControlPosition = "top-left";
 
 // ---------------------------------------------------------------------------
 // Coverage layers
@@ -271,15 +275,24 @@ function addCoverage(activeMap: MapLibreMap): void {
   }
 
   // Surface the coverage as a single first-class Layers-panel entry so the user
-  // can hide/show and reorder it. `controlOwnsPaint` keeps the plugin's own
-  // paint (the layer-sync leaves it alone and only manages visibility/order).
+  // can hide/show, reorder, and restyle it. Seed the store style with the
+  // Mapillary green (and let the layer-sync drive the paint, i.e. no
+  // controlOwnsPaint) so the Style panel's colour/opacity/stroke controls
+  // actually apply to the sequence lines and image points.
   appRef?.registerExternalNativeLayer?.({
     id: COVERAGE_STORE_LAYER_ID,
     name: labels.coverageLayer,
     type: "vector-tiles",
     nativeLayerIds: [SEQUENCE_LAYER_ID, OVERVIEW_LAYER_ID, IMAGE_LAYER_ID],
     sourceIds: [SOURCE_ID],
-    metadata: { controlOwnsPaint: true },
+    opacity: 0.9,
+    style: {
+      fillColor: COVERAGE_COLOR,
+      strokeColor: COVERAGE_COLOR,
+      strokeWidth: 2,
+      circleRadius: 4,
+      fillOpacity: 0.9,
+    },
   });
 }
 
@@ -371,6 +384,14 @@ function pointFromFeature(
     : null;
 }
 
+/** The sequence id a clicked coverage feature belongs to (vector-tile property). */
+function sequenceIdFromFeature(
+  feature: MapGeoJSONFeature | undefined,
+): string | null {
+  const raw = feature?.properties?.sequence_id ?? feature?.properties?.sequenceId;
+  return raw == null ? null : String(raw);
+}
+
 /** Select the coverage feature under the pointer: mark it and open the viewer. */
 function selectFeature(feature: MapGeoJSONFeature | undefined): void {
   const id = imageIdFromFeature(feature);
@@ -380,6 +401,10 @@ function selectFeature(feature: MapGeoJSONFeature | undefined): void {
   // visibly selects the point the user aimed at instead of a nearby one.
   const point = pointFromFeature(feature);
   if (point) setSelectedMarker(point);
+  // Highlight the clicked point's sequence straight from the vector data, so
+  // switching to a new track clears the old highlight and lights the new one
+  // even if the viewer's image event is slow or the navigation is superseded.
+  highlightSequence(sequenceIdFromFeature(feature));
   showImage(id);
 }
 
@@ -427,9 +452,17 @@ function detachInteractions(activeMap: MapLibreMap): void {
 function showImage(imageId: string): void {
   pendingImageId = imageId;
   if (viewer) {
-    void viewer.moveTo(imageId).catch(() => {
-      /* navigation to a removed/blocked image can reject; ignore */
-    });
+    // Drive the photo/marker/highlight off the resolved image so a cross-track
+    // jump updates even if the `image` event is missed; ignore the result when a
+    // newer click has superseded this navigation.
+    void viewer
+      .moveTo(imageId)
+      .then((image) => {
+        if (pendingImageId === imageId) applyCurrentImage(image);
+      })
+      .catch(() => {
+        /* navigation to a removed/blocked image can reject; ignore */
+      });
     return;
   }
   // The panel's render callback mounts the viewer and consumes pendingImageId.
@@ -598,22 +631,26 @@ async function doMountViewer(): Promise<void> {
       container: viewerContainer,
       imageId: pendingImageId ?? undefined,
     });
-    viewer.on("image", (event) => {
-      const image = event.image;
-      setSelectedMarker(image.lngLat);
-      // Highlight the whole sequence the current image belongs to (#9).
-      highlightSequence(image.sequenceId ?? null);
-      // Keep the map centred on the image as the user plays/steps through the
-      // sequence, so the orange marker does not walk off-screen (#7).
-      if (map && image.lngLat) {
-        map.easeTo({
-          center: [image.lngLat.lng, image.lngLat.lat],
-          duration: 500,
-        });
-      }
-    });
+    // In-viewer navigation (playback, arrow keys, clicking within the photo)
+    // reports the new image here; keep the map marker/highlight/centre in sync.
+    viewer.on("image", (event) => applyCurrentImage(event.image));
+    // Re-fit the WebGL viewer whenever its container resizes (the panel is
+    // resizable), since mapillary-js does not observe container size itself.
+    if (typeof ResizeObserver !== "undefined") {
+      viewerResizeObserver = new ResizeObserver(() => {
+        try {
+          viewer?.resize();
+        } catch {
+          /* viewer torn down between the resize and this callback */
+        }
+      });
+      viewerResizeObserver.observe(viewerContainer);
+    }
     if (pendingImageId) {
-      void viewer.moveTo(pendingImageId).catch(() => {});
+      void viewer
+        .moveTo(pendingImageId)
+        .then((image) => applyCurrentImage(image))
+        .catch(() => {});
     }
   } catch {
     if (viewerContainer) {
@@ -627,7 +664,26 @@ async function doMountViewer(): Promise<void> {
   }
 }
 
+/** Sync the map marker, sequence highlight, and centre to the shown image. */
+function applyCurrentImage(image: MapillaryImage): void {
+  setSelectedMarker(image.lngLat);
+  // Highlight the whole sequence the current image belongs to (#9).
+  highlightSequence(image.sequenceId ?? null);
+  // Keep the map centred on the image as the user plays/steps through the
+  // sequence, so the orange marker does not walk off-screen (#7).
+  if (map && image.lngLat) {
+    map.easeTo({
+      center: [image.lngLat.lng, image.lngLat.lat],
+      duration: 500,
+    });
+  }
+}
+
 function destroyViewer(): void {
+  if (viewerResizeObserver) {
+    viewerResizeObserver.disconnect();
+    viewerResizeObserver = null;
+  }
   if (viewer) {
     try {
       viewer.remove();
