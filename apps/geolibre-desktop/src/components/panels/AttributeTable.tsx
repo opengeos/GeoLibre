@@ -510,14 +510,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     featureId: string,
     event: ReactMouseEvent<HTMLTableRowElement>,
   ) => {
+    const additive = event.ctrlKey || event.metaKey;
+    const range = event.shiftKey;
     const { ids, anchor } = computeRowSelection({
       featureId,
       sortedIds: sorted.map((row) => row.featureId),
       selectedIds: selectedFeatureIds,
       anchorId: selectedFeatureId,
-      additive: event.ctrlKey || event.metaKey,
-      range: event.shiftKey,
+      additive,
+      range,
     });
+    // A plain click ("make this the sole selection") while reviewing the
+    // "Show Selected" subset would otherwise shrink the table to that one row.
+    // Drop back to "Show All" so the pick lands in the full table instead of
+    // stranding the user on a single-row view. Modifier clicks are deliberate
+    // refinements of the shown set, so they stay in the selected view.
+    if (!additive && !range && featureView === "selected") {
+      setFeatureView("all");
+    }
     selectFeatures(ids, anchor);
   };
 
