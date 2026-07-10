@@ -138,7 +138,6 @@ const NUMERIC_EXTRA_KEYS = new Set([
   "height",
   "tileSize",
   "zoom",
-  "bboxCrs",
   "initialHeaderBytes",
   "maxHeaderBytes",
 ]);
@@ -266,24 +265,39 @@ export function RasterSubsetPanel({
     setZoom(String(z));
   }, [layer, mapControllerRef]);
 
-  // Keep the SVG overlay's corner positions in sync with the box and the map's
-  // camera (pan/zoom/rotate/pitch/resize). Projecting all four corners keeps the
-  // outline correct under rotation. Rendered as an SVG (not a MapLibre layer) so
-  // it stays visible above the interleaved deck.gl COG/raster overlay.
+  // Latest box, read inside the projection callback so the map listeners don't
+  // need `bbox` as a dependency (which changes on every drag mousemove).
+  const bboxRef = useRef(bbox);
+  bboxRef.current = bbox;
+  // The current projection function, so the bbox-change effect can trigger a
+  // reproject without re-subscribing the map listeners.
+  const reprojectRef = useRef<() => void>(() => {});
+
+  // Keep the SVG overlay's corner positions in sync with the map's camera
+  // (pan/zoom/rotate/pitch/resize). Subscribed once per layer/map (not per box
+  // edit) to avoid tearing down and re-attaching listeners on every drag tick.
+  // Projecting all four corners keeps the outline correct under rotation.
+  // Rendered as an SVG (not a MapLibre layer) so it stays visible above the
+  // interleaved deck.gl COG/raster overlay.
   useEffect(() => {
     const map = mapControllerRef.current?.getMap();
-    if (!map || !bbox) {
+    if (!map || !layer) {
       setScreenPoints(null);
       return;
     }
-    const [w, s, e, n] = bbox;
-    const corners: [number, number][] = [
-      [w, n],
-      [e, n],
-      [e, s],
-      [w, s],
-    ];
-    const update = () => {
+    const reproject = () => {
+      const b = bboxRef.current;
+      if (!b) {
+        setScreenPoints(null);
+        return;
+      }
+      const [w, s, e, n] = b;
+      const corners: [number, number][] = [
+        [w, n],
+        [e, n],
+        [e, s],
+        [w, s],
+      ];
       setScreenPoints(
         corners.map((corner) => {
           const p = map.project(corner);
@@ -291,14 +305,21 @@ export function RasterSubsetPanel({
         }),
       );
     };
-    update();
-    map.on("move", update);
-    map.on("resize", update);
+    reprojectRef.current = reproject;
+    reproject();
+    map.on("move", reproject);
+    map.on("resize", reproject);
     return () => {
-      map.off("move", update);
-      map.off("resize", update);
+      map.off("move", reproject);
+      map.off("resize", reproject);
     };
-  }, [bbox, layer, mapControllerRef]);
+  }, [layer, mapControllerRef]);
+
+  // Reproject when the box itself changes, reusing the already-subscribed
+  // projection function rather than re-attaching map listeners.
+  useEffect(() => {
+    reprojectRef.current();
+  }, [bbox]);
 
   // Rubber-band draw mode: drag a rectangle on the map. The draw starts on a
   // canvas mousedown, then tracking is driven by *window* mousemove/mouseup so a
@@ -347,12 +368,13 @@ export function RasterSubsetPanel({
       );
     };
     const onWindowUp = (e: MouseEvent) => {
-      if (e.button !== 0) return;
-      if (start) {
-        setCoords(
-          coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))),
-        );
-      }
+      // Only end the draw for a release that actually started one (a canvas
+      // mousedown set `start`); a click elsewhere while armed (e.g. "Use view"
+      // or a field) must not silently exit draw mode.
+      if (e.button !== 0 || !start) return;
+      setCoords(
+        coordsFromBbox(orderBbox(start, toLngLat(e.clientX, e.clientY))),
+      );
       start = null;
       setDrawing(false);
     };
@@ -526,9 +548,9 @@ export function RasterSubsetPanel({
         >
           <polygon
             points={screenPoints.map((p) => `${p.x},${p.y}`).join(" ")}
-            fill="#2563eb"
+            // Track the app's accent color so the box matches the theme.
+            style={{ fill: "hsl(var(--primary))", stroke: "hsl(var(--primary))" }}
             fillOpacity={0.12}
-            stroke="#2563eb"
             strokeWidth={2}
             strokeDasharray="6 3"
           />

@@ -154,9 +154,12 @@ export async function extractRasterSubset(
   // Forwarded to each extractor's internal fetches (COG byte-range reads, the
   // WMS GetMap request, XYZ tile requests) so the caller can cancel them.
   const fetchOptions = signal ? { signal } : undefined;
-  // Options every extractor accepts. `extra` is spread last so a power-user
-  // override (e.g. level/width/height) wins over the derived values.
-  const common = { bbox, bboxCrs: WGS84, resolution, outputCrs, nodata, ...extra };
+  // Options every extractor accepts. `extra` is spread before the fixed
+  // `bboxCrs` so a power-user override (e.g. level/width/height) wins over the
+  // derived values, but `bboxCrs` stays WGS84: the box always comes from the
+  // panel's lng/lat fields, so letting `extra` change it would reinterpret those
+  // numbers and produce a wrong/empty extraction.
+  const common = { bbox, resolution, outputCrs, nodata, ...extra, bboxCrs: WGS84 };
 
   if (kind === "cog") {
     const cogSource = await resolveCogSource(layer, signal);
