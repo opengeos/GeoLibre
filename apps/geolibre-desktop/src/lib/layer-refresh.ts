@@ -29,6 +29,25 @@ export interface LayerRefreshConfig {
   intervalMs: number;
 }
 
+// Raised when a GetFeature response is XML rather than the requested GeoJSON.
+// Exported so the output-format fallback (fetchWfsGeoJson) can recognize this
+// specific failure and retry with a different outputFormat token.
+export const WFS_XML_RESPONSE_ERROR =
+  "The service returned XML instead of GeoJSON. Check the layer name and output format.";
+
+// Output-format tokens that commonly yield GeoJSON across WFS implementations.
+// GeoServer/MapServer honor "application/json"; ArcGIS Server advertises its
+// GeoJSON output as "GEOJSON" (uppercase) and answers "application/json" with a
+// GML ExceptionReport instead. Trying these in turn lets an ArcGIS WFS load
+// without the user having to know its exact format token.
+const WFS_GEOJSON_OUTPUT_FORMATS = [
+  "application/json",
+  "GEOJSON",
+  "json",
+  "geojson",
+  "application/geo+json",
+];
+
 export function createWfsGetFeatureUrl(options: {
   endpoint: string;
   typeName: string;
@@ -83,12 +102,73 @@ export async function fetchGeoJsonFeatureCollection(
     return parseGeoJsonFeatureCollection(JSON.parse(text));
   } catch (error) {
     if (/^\s*</.test(text)) {
-      throw new Error(
-        "The service returned XML instead of GeoJSON. Check the layer name and output format.",
-      );
+      throw new Error(WFS_XML_RESPONSE_ERROR);
     }
     throw error;
   }
+}
+
+/**
+ * Fetches a WFS GetFeature response as GeoJSON, retrying with alternate
+ * GeoJSON output-format tokens when the server answers the requested format
+ * with XML (a GML `ExceptionReport` or a GML feature dump). ArcGIS Server, for
+ * example, does not honor the usual `application/json` and instead advertises
+ * its GeoJSON output as `GEOJSON`; a plain fetch of `application/json` returns
+ * XML and the layer fails to load. Retrying the known GeoJSON aliases makes
+ * such services load transparently.
+ *
+ * Only an XML-instead-of-GeoJSON failure triggers a retry; a network error,
+ * timeout, or a malformed JSON body is re-thrown immediately, since a different
+ * outputFormat would not fix it. The resolved request URL and the output format
+ * that succeeded are returned so the caller can persist them (so a later layer
+ * refresh reuses the working format rather than the rejected one).
+ *
+ * @param params - The GetFeature parameters (the requested outputFormat is
+ *   tried first, then the remaining GeoJSON aliases).
+ * @param options - WFS proxy routing and an optional abort signal.
+ * @returns The parsed FeatureCollection plus the URL and outputFormat that worked.
+ */
+export async function fetchWfsGeoJson(
+  params: {
+    endpoint: string;
+    typeName: string;
+    version: string;
+    outputFormat: string;
+    srsName: string;
+    maxFeatures?: string;
+  },
+  options: { useWfsProxy?: boolean; signal?: AbortSignal } = {},
+): Promise<{ data: FeatureCollection; url: string; outputFormat: string }> {
+  const requested = params.outputFormat.trim();
+  // Try the user's requested format first, then the remaining GeoJSON aliases
+  // (case-insensitively deduped so we do not re-request the same token).
+  const candidates = [
+    requested,
+    ...WFS_GEOJSON_OUTPUT_FORMATS.filter(
+      (format) => format.toLowerCase() !== requested.toLowerCase(),
+    ),
+  ];
+
+  let lastError: unknown;
+  for (const outputFormat of candidates) {
+    const url = createWfsGetFeatureUrl({ ...params, outputFormat });
+    try {
+      const data = await fetchGeoJsonFeatureCollection(url, options);
+      return { data, url, outputFormat };
+    } catch (error) {
+      lastError = error;
+      // Keep trying other formats only when this one returned XML; any other
+      // failure (network, timeout, bad JSON) is not an output-format problem.
+      if (
+        !(error instanceof Error && error.message === WFS_XML_RESPONSE_ERROR)
+      ) {
+        throw error;
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(WFS_XML_RESPONSE_ERROR);
 }
 
 export async function refreshGeoJsonLayer(
