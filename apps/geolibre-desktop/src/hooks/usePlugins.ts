@@ -75,6 +75,7 @@ import {
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
+import { fetchUrlBytes } from "../lib/native-http";
 import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
 import {
   createWmsTileUrl,
@@ -969,9 +970,7 @@ async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
 
   if (isTauriRuntime()) {
     try {
-      const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-        url,
-      });
+      const bytes = await fetchUrlBytes(url, { context: "plugin resource" });
       return normalizeBytes(bytes);
     } catch {
       // Fall back to browser fetch for web builds and during local development.

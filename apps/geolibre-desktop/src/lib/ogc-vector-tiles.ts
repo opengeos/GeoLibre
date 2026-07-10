@@ -321,8 +321,8 @@ async function fetchOgcJson(url: string, signal?: AbortSignal): Promise<unknown>
   if (isTauri()) {
     // `fetch_url_bytes` cannot be cancelled mid-flight, so race it against the
     // abort/timeout to still return promptly on a slow or hung host.
-    const { invoke } = await import("@tauri-apps/api/core");
-    const bytesPromise = invoke<number[] | Uint8Array>("fetch_url_bytes", { url });
+    const { fetchUrlBytes } = await import("./native-http");
+    const bytesPromise = fetchUrlBytes(url, { context: "OGC vector tiles" });
     // If the abort/timeout wins the race, the invoke promise is left unobserved;
     // swallow a later rejection so it does not surface as an unhandled rejection.
     bytesPromise.catch(() => {});

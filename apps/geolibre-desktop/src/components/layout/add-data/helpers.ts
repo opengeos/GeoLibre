@@ -251,12 +251,12 @@ async function fetchCapabilitiesText(
     // but race it against the caller's abort + a 30s cap so this call still
     // returns promptly (matching the browser fetch branch below) rather than
     // hanging on a slow host or a superseded request.
-    const { invoke } = await import("@tauri-apps/api/core");
+    const { fetchUrlBytes } = await import("../../../lib/native-http");
     const timeout = AbortSignal.timeout(30_000);
     const abort = signal ? AbortSignal.any([signal, timeout]) : timeout;
     try {
       const bytes = await Promise.race([
-        invoke<number[] | Uint8Array>("fetch_url_bytes", { url: requestUrl }),
+        fetchUrlBytes(requestUrl, { context: "OGC GetCapabilities" }),
         rejectOnAbort(abort),
       ]);
       const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);

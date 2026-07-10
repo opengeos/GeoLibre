@@ -406,4 +406,20 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(record.level, "error");
     assert.equal(getDiagnosticsSnapshot().errorCount, 1);
   });
+
+  it("classifies a genuine fetch network failure with an actionable hint", async () => {
+    win.fetch = (() =>
+      Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "error");
+    // The opaque browser error is interpreted rather than left as a raw stack.
+    assert.match(record.message, /network\/TLS\/CORS/);
+    assert.ok(record.detail?.includes("CORS"));
+    // The raw error is still preserved after the hint.
+    assert.ok(record.detail?.includes("Failed to fetch"));
+  });
 });

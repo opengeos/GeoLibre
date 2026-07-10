@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { classifyFetchFailure } from "./fetch-error";
 import { isTauri } from "./is-tauri";
 
 export type DiagnosticCategory = "console" | "map" | "network" | "runtime";
@@ -431,6 +432,13 @@ export function installDiagnosticsCapture(): () => void {
       // It mirrors the unhandled-rejection downgrade below; genuine failures
       // outside the window are still flagged as errors.
       const benignStartup = !isAbort && !optional && isBenignStartupFetch(error);
+      // Classify a genuine failure (network/TLS/CORS vs. timeout) so the panel
+      // record interprets the otherwise-opaque browser error and carries an
+      // actionable hint (issue #1175). Aborts, optional-resource failures, and
+      // the benign startup warm-up keep their existing handling above.
+      const classified = !isAbort && !optional && !benignStartup;
+      const failure = classified ? classifyFetchFailure(error) : null;
+      const rawDetail = isAbort ? undefined : formatUnknown(error);
       appendDiagnostic({
         category: "network",
         level:
@@ -439,8 +447,13 @@ export function installDiagnosticsCapture(): () => void {
           ? `${method} aborted`
           : benignStartup
             ? `${method} request failed (benign Tauri custom-protocol warm-up)`
-            : `${method} request failed`,
-        detail: isAbort ? undefined : formatUnknown(error),
+            : failure
+              ? `${method} request failed (${failure.label})`
+              : `${method} request failed`,
+        detail:
+          failure?.hint && rawDetail
+            ? `${failure.hint}\n\n${rawDetail}`
+            : rawDetail,
         durationMs: Math.round(performance.now() - startedAt),
         method,
         url,

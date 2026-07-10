@@ -1,6 +1,6 @@
 import type { GeoLibreLayer, GeoLibreProject } from "@geolibre/core";
-import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
+import { fetchUrlBytes, resolveUrlRedirect } from "./native-http";
 import { isTauri } from "./tauri-io";
 
 const XYZ_TILE_PROTOCOL = "geolibre-xyz";
@@ -82,9 +82,7 @@ export function registerXyzTileProtocol(): void {
 
   addProtocol(XYZ_TILE_PROTOCOL, async (request) => {
     const url = parseXyzTileRequest(request);
-    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-      url,
-    });
+    const bytes = await fetchUrlBytes(url, { context: "XYZ tile" });
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
       data: array.buffer.slice(
@@ -213,7 +211,7 @@ async function resolveShortXyzUrl(
       console.warn("Falling back to desktop URL resolver", error);
     }
 
-    return invoke<string>("resolve_url_redirect", { url });
+    return resolveUrlRedirect(url, { context: "XYZ URL resolve" });
   }
 
   return resolveShortXyzUrlWithFetch(url, signal);
