@@ -660,6 +660,29 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
       }
     }
 
+    // Draw the zone's western boundary meridian as a grid line. Each zone's
+    // easting lines stop short of the 6° boundary (their eastings are multiples
+    // of the step, not the zone edge), so without this the two neighbouring
+    // grids leave an empty strip at the boundary. Meridians are straight in Web
+    // Mercator, so two points suffice. `zoneWest > west` restricts this to
+    // boundaries actually inside the view (the leftmost partial zone begins off
+    // screen), and interior boundaries are shared, so drawing each zone's west
+    // edge covers every visible boundary exactly once.
+    if (zoneWest > west && count < maxLines) {
+      lineFeatures.push({
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [zoneWest, south],
+            [zoneWest, north],
+          ],
+        },
+      });
+      count += 1;
+    }
+
     // One zone-designation label per visible zone, centred along the top edge.
     if (settings.showLabels) {
       const zoneCenterLon = (clipWest + clipEast) / 2;
