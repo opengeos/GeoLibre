@@ -485,8 +485,7 @@ export function LayerPanel({
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
-  const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
-  const setPreferences = useAppStore((s) => s.setPreferences);
+  const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   // The planet the switcher currently reflects: the body whose switcher basemap
   // is applied, or undefined when neither is (e.g. a default Earth project on an
@@ -706,22 +705,13 @@ export function LayerPanel({
   };
 
   // Switch the map's celestial body (like Google Earth's planet dropdown):
-  // apply the body's basemap and set the project ellipsoid so measurements and
-  // the globe control use that body's radius.
+  // apply the body's basemap, which also syncs the project ellipsoid.
   const switchPlanet = (ellipsoidId: string) => {
     const option = PLANET_SWITCHER_OPTIONS.find(
       (o) => o.ellipsoidId === ellipsoidId,
     );
     const basemap = option && getPlanetaryBasemapById(option.basemapId);
-    if (!basemap) return;
-    setBasemapStyleUrl(basemap.styleUrl);
-    const prefs = useAppStore.getState().preferences;
-    if (prefs.map.ellipsoidId !== basemap.ellipsoidId) {
-      setPreferences({
-        ...prefs,
-        map: { ...prefs.map, ellipsoidId: basemap.ellipsoidId },
-      });
-    }
+    if (basemap) applyPlanetaryBasemap(basemap);
   };
 
   const beginRename = (layer: GeoLibreLayer) => {

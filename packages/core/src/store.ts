@@ -54,6 +54,7 @@ import {
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
 import { setActiveEllipsoidId } from "./ellipsoids";
+import type { PlanetaryBasemap } from "./ellipsoids";
 
 export type ConversionToolKind =
   | "vector-to-vector"
@@ -269,6 +270,12 @@ export interface AppState {
   /** Remove one secondary pane and collapse the grid back toward 1x1. */
   removeSecondaryMapView: (id: string) => void;
   setBasemapStyleUrl: (url: string) => void;
+  /**
+   * Apply a planetary basemap and sync the project's ellipsoid to the body it
+   * depicts, so measurements and the globe control use that body's radius. Used
+   * by both the basemap picker and the Layers-panel planet switcher.
+   */
+  applyPlanetaryBasemap: (basemap: PlanetaryBasemap) => void;
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
@@ -801,6 +808,21 @@ export const useAppStore = create<AppState>()(
           };
         }),
       setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
+      applyPlanetaryBasemap: (basemap) =>
+        set((state) => ({
+          basemapStyleUrl: basemap.styleUrl,
+          preferences:
+            state.preferences.map.ellipsoidId === basemap.ellipsoidId
+              ? state.preferences
+              : {
+                  ...state.preferences,
+                  map: {
+                    ...state.preferences.map,
+                    ellipsoidId: basemap.ellipsoidId,
+                  },
+                },
+          isDirty: true,
+        })),
       setBasemapVisible: (visible) =>
         set({ basemapVisible: visible, isDirty: true }),
       setBasemapOpacity: (opacity) =>

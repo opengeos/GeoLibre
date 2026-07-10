@@ -80,7 +80,7 @@ export function BasemapPickerDialog({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setMapView = useAppStore((s) => s.setMapView);
-  const setPreferences = useAppStore((s) => s.setPreferences);
+  const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
 
   const openFreeMapPresets = useMemo(() => getOpenFreeMapPresets(), []);
   // Protomaps styles need an API key (VITE_PROTOMAPS_API_KEY). It can come from
@@ -155,14 +155,7 @@ export function BasemapPickerDialog({
   // measurements (distance/area/scale) use that body's radius, and the globe
   // control renders it as the correct sphere.
   const applyPlanetary = (basemap: PlanetaryBasemap) => {
-    setBasemapStyleUrl(basemap.styleUrl);
-    const prefs = useAppStore.getState().preferences;
-    if (prefs.map.ellipsoidId !== basemap.ellipsoidId) {
-      setPreferences({
-        ...prefs,
-        map: { ...prefs.map, ellipsoidId: basemap.ellipsoidId },
-      });
-    }
+    applyPlanetaryBasemap(basemap);
     onOpenChange(false);
   };
 
