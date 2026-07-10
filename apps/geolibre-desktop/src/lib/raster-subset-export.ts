@@ -166,11 +166,13 @@ export async function extractRasterSubset(
     return extractWmsSubset(String(source.url), {
       layers: String(source.layers ?? ""),
       styles: typeof source.styles === "string" ? source.styles : undefined,
-      // The stored WMS format is for display (often PNG); the extractor needs a
-      // GeoTIFF response, so always request one regardless of the display format.
-      format: "image/geotiff",
       version: typeof source.version === "string" ? source.version : undefined,
       ...common,
+      // The stored WMS format is for display (often PNG); the extractor needs a
+      // GeoTIFF response, so always request one regardless of the display format
+      // or any user-supplied `format` in `extra` (applied after the spread so it
+      // can't be overridden into a non-GeoTIFF request).
+      format: "image/geotiff",
       fetchOptions,
     });
   }

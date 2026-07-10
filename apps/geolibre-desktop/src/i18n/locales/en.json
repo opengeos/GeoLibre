@@ -1103,7 +1103,7 @@
     "nodataPlaceholder": "None",
     "additionalArgs": "Additional options",
     "additionalArgsPlaceholder": "level=2\nwidth=512",
-    "additionalArgsHint": "One key=value per line, e.g. level, width, height, format.",
+    "additionalArgsHint": "One key=value per line, e.g. level, width, height.",
     "errorResolution": "Resolution must be a positive number.",
     "errorOutputCrs": "Output CRS must be a positive EPSG code.",
     "errorNodata": "Nodata must be a number.",

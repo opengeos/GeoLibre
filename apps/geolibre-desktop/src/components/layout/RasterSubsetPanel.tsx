@@ -279,7 +279,13 @@ export function RasterSubsetPanel({
     map.dragPan.disable();
     map.boxZoom.disable();
     let start: [number, number] | null = null;
-    const onDown = (e: { lngLat: { lng: number; lat: number } }) => {
+    const onDown = (e: {
+      lngLat: { lng: number; lat: number };
+      originalEvent?: { button?: number };
+    }) => {
+      // Only the primary (left) button draws, so a right/middle-button drag
+      // doesn't rubber-band a box while draw mode is active.
+      if (e.originalEvent && e.originalEvent.button !== 0) return;
       start = [e.lngLat.lng, e.lngLat.lat];
     };
     const onMove = (e: { lngLat: { lng: number; lat: number } }) => {
