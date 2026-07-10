@@ -93,7 +93,12 @@ export default {
       return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
     }
     const [, dataset, z, x, y] = match;
-    const base = DATASETS[dataset];
+    // Look up own properties only — a bare object literal inherits keys like
+    // "constructor" from Object.prototype (and `[a-z0-9-]+` matches it), which
+    // would otherwise resolve to a truthy function and slip past the 404 below.
+    const base = Object.prototype.hasOwnProperty.call(DATASETS, dataset)
+      ? DATASETS[dataset]
+      : undefined;
     if (!base) {
       return new Response(`Unknown dataset: ${dataset}`, {
         status: 404,

@@ -276,10 +276,30 @@ export const PLANETARY_BASEMAP_GROUPS: readonly PlanetaryBasemapGroup[] =
     basemaps: PLANETARY_BASEMAPS.filter((b) => b.ellipsoidId === ellipsoidId),
   })).filter((group) => group.basemaps.length > 0);
 
+// Basemap ids the OpenPlanetaryMap migration renamed or dropped, mapped to the
+// nearest current basemap. Lets a project saved before the migration keep a
+// planetary basemap (instead of falling back to Earth) the next time it opens:
+// the two OPM composites kept their exact tiles under new ids, Viking maps to
+// the equivalent OPM mosaic, and the retired LRO imagery maps to the flagship
+// Moon basemap.
+const LEGACY_PLANETARY_BASEMAP_IDS: Record<string, string> = {
+  "mars-opm": "mars-basemap-v0-2",
+  "moon-opm": "moon-basemap-v0-1",
+  "mars-viking": "mars-viking-mdim21",
+  "moon-lroc": "moon-basemap-v0-1",
+};
+
 /** Resolve a `geolibre://basemap/<id>` sentinel to its planetary basemap. */
 export function getPlanetaryBasemapByStyleUrl(
   styleUrl: string | undefined,
 ): PlanetaryBasemap | undefined {
   if (!styleUrl?.startsWith(PLANETARY_BASEMAP_SENTINEL_PREFIX)) return undefined;
-  return PLANETARY_BASEMAPS.find((b) => b.styleUrl === styleUrl);
+  const id = styleUrl.slice(PLANETARY_BASEMAP_SENTINEL_PREFIX.length);
+  const resolvedId = Object.prototype.hasOwnProperty.call(
+    LEGACY_PLANETARY_BASEMAP_IDS,
+    id,
+  )
+    ? LEGACY_PLANETARY_BASEMAP_IDS[id]
+    : id;
+  return PLANETARY_BASEMAPS.find((b) => b.id === resolvedId);
 }
