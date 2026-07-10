@@ -5,7 +5,7 @@ import type { FeatureCollection, Geometry } from "geojson";
 import { calculateField } from "../apps/geolibre-desktop/src/lib/attribute-columns";
 import { compileExpression } from "../apps/geolibre-desktop/src/lib/attribute-expression";
 import {
-  detectGeometryFamily,
+  detectGeometryFamilies,
   measureArea,
   measureLength,
   measurePerimeter,
@@ -169,15 +169,20 @@ describe("geometry-measure", () => {
     // measure* recurse into the collection.
     assert.equal(measureArea(collection), measureArea(SMALL_BOX));
     assert.equal(measureLength(collection), measureLength(EQUATOR_SEGMENT));
-    // A mixed collection is classified "mixed"; a uniform one takes its family.
+    // A collection reports every base family it contains.
     const feature = (geometry: Geometry) =>
       ({ type: "Feature", geometry, properties: {} }) as const;
-    assert.equal(detectGeometryFamily([feature(collection)]), "mixed");
-    assert.equal(
-      detectGeometryFamily([
-        feature({ type: "GeometryCollection", geometries: [SMALL_BOX] }),
-      ]),
-      "polygon",
+    assert.deepEqual(
+      [...detectGeometryFamilies([feature(collection)])].sort(),
+      ["line", "polygon"],
+    );
+    assert.deepEqual(
+      [
+        ...detectGeometryFamilies([
+          feature({ type: "GeometryCollection", geometries: [SMALL_BOX] }),
+        ]),
+      ],
+      ["polygon"],
     );
   });
 
@@ -189,25 +194,28 @@ describe("geometry-measure", () => {
     assert.ok(moon < earth * 0.3, `moon ${moon} vs earth ${earth}`);
   });
 
-  it("detects the dominant geometry family", () => {
+  it("detects the set of present geometry families", () => {
     const feature = (geometry: Geometry) =>
       ({ type: "Feature", geometry, properties: {} }) as const;
-    assert.equal(
-      detectGeometryFamily([feature(SMALL_BOX)]),
+    assert.deepEqual([...detectGeometryFamilies([feature(SMALL_BOX)])], [
       "polygon",
-    );
-    assert.equal(
-      detectGeometryFamily([feature(EQUATOR_SEGMENT)]),
+    ]);
+    assert.deepEqual([...detectGeometryFamilies([feature(EQUATOR_SEGMENT)])], [
       "line",
+    ]);
+    assert.deepEqual(
+      [
+        ...detectGeometryFamilies([
+          feature(SMALL_BOX),
+          feature(EQUATOR_SEGMENT),
+        ]),
+      ].sort(),
+      ["line", "polygon"],
     );
-    assert.equal(
-      detectGeometryFamily([feature(SMALL_BOX), feature(EQUATOR_SEGMENT)]),
-      "mixed",
-    );
-    assert.equal(detectGeometryFamily([]), "none");
-    assert.equal(
-      detectGeometryFamily([feature({ type: "Point", coordinates: [0, 0] })]),
-      "point",
+    assert.equal(detectGeometryFamilies([]).size, 0);
+    assert.deepEqual(
+      [...detectGeometryFamilies([feature({ type: "Point", coordinates: [0, 0] })])],
+      ["point"],
     );
   });
 });

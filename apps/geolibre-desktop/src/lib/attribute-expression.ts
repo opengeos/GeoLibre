@@ -124,18 +124,22 @@ const EXPRESSION_CONSTANTS: Record<string, number> = {
  */
 export const GEOMETRY_HELPER_NAMES = ["$length", "$perimeter", "$area"] as const;
 
+/** A mutable slot the geometry helpers read, updated once per evaluated row. */
+interface GeometryHolder {
+  geometry: Geometry | null | undefined;
+}
+
 /**
- * Build the per-feature geometry helpers for one evaluation. They close over the
- * feature's geometry, so unlike the static `EXPRESSION_HELPERS` they are created
- * fresh for each row.
+ * Build the geometry helpers for a compiled expression. They close over a
+ * mutable holder (updated once per row) rather than over the geometry itself, so
+ * the three closures are allocated once per compile instead of once per feature
+ * during a bulk `calculateField` run.
  */
-function createGeometryHelpers(
-  geometry: Geometry | null | undefined,
-): Helper[] {
+function createGeometryHelpers(holder: GeometryHolder): Helper[] {
   return [
-    (unit) => measureLength(geometry, unit as DistanceUnit | undefined),
-    (unit) => measurePerimeter(geometry, unit as DistanceUnit | undefined),
-    (unit) => measureArea(geometry, unit as AreaUnit | undefined),
+    (unit) => measureLength(holder.geometry, unit as DistanceUnit | undefined),
+    (unit) => measurePerimeter(holder.geometry, unit as DistanceUnit | undefined),
+    (unit) => measureArea(holder.geometry, unit as AreaUnit | undefined),
   ];
 }
 
@@ -248,15 +252,20 @@ export function compileExpression(
 
   const helperValues = helperNames.map((name) => EXPRESSION_HELPERS[name]);
   const constantValues = constantNames.map((name) => EXPRESSION_CONSTANTS[name]);
+  // Allocate the geometry helpers once and feed each row's geometry through a
+  // shared holder, so a bulk calculation doesn't rebuild them per feature.
+  const geometryHolder: GeometryHolder = { geometry: null };
+  const geometryHelperValues = createGeometryHelpers(geometryHolder);
 
   return {
     evaluate(props, index, geometry) {
+      geometryHolder.geometry = geometry ?? null;
       const fieldValues = bareFields.map((name) => props[name]);
       return fn(
         ...fieldValues,
         ...helperValues,
         ...constantValues,
-        ...createGeometryHelpers(geometry),
+        ...geometryHelperValues,
         props,
         index,
       );

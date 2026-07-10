@@ -94,7 +94,7 @@ import {
 } from "../../lib/attribute-expression";
 import {
   AREA_UNITS,
-  detectGeometryFamily,
+  detectGeometryFamilies,
   DISTANCE_UNITS,
   UNIT_SYMBOLS,
   type GeometryMetric,
@@ -920,9 +920,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcError(null);
     // Seed the geometry measurement to a metric that suits the layer; the
     // effective-metric fallback still corrects any mismatch on render.
-    const family = detectGeometryFamily(features);
-    setCalcGeomMetric(family === "line" ? "length" : "area");
-    setCalcGeomUnit(family === "line" ? "meters" : "square-meters");
+    const families = detectGeometryFamilies(features);
+    const lineOnly = families.has("line") && !families.has("polygon");
+    setCalcGeomMetric(lineOnly ? "length" : "area");
+    setCalcGeomUnit(lineOnly ? "meters" : "square-meters");
     setCalcOpen(true);
   };
 
@@ -952,28 +953,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // Geometry family drives which measurements the calculator offers: a polygon
   // layer gets Area/Perimeter, a line layer gets Length, a mixed layer gets all
   // three, and point/geometry-less layers get none (the row is hidden).
-  const calcGeometryFamily = useMemo(
-    () => detectGeometryFamily(features),
+  const calcGeometryFamilies = useMemo(
+    () => detectGeometryFamilies(features),
     // Recompute when the layer or its feature count changes, and each time the
     // dialog opens, so a geometry-type edit made while it was closed is picked
-    // up. The family is otherwise stable across renders (and the calc dialog is
-    // modal, so geometry cannot be edited while it is open). eslint can't see
+    // up. The families are otherwise stable across renders (and the calc dialog
+    // is modal, so geometry cannot be edited while it is open). eslint can't see
     // that the array identity of `features` alone is not a meaningful dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [layer?.id, features.length, calcOpen],
   );
   const calcAvailableMetrics = useMemo<GeometryMetric[]>(() => {
-    switch (calcGeometryFamily) {
-      case "polygon":
-        return ["area", "perimeter"];
-      case "line":
-        return ["length"];
-      case "mixed":
-        return ["length", "perimeter", "area"];
-      default:
-        return [];
-    }
-  }, [calcGeometryFamily]);
+    // Offer only metrics the layer's geometry actually supports, so a mixed
+    // point+line layer gets Length but not a no-op Area.
+    const metrics: GeometryMetric[] = [];
+    if (calcGeometryFamilies.has("polygon")) metrics.push("area", "perimeter");
+    if (calcGeometryFamilies.has("line")) metrics.push("length");
+    return metrics;
+  }, [calcGeometryFamilies]);
   // Fall back to the first available metric/unit when the current selection is
   // not valid for this layer (e.g. an "area" choice carried over to a line layer).
   const calcEffectiveMetric = calcAvailableMetrics.includes(calcGeomMetric)

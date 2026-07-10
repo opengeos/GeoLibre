@@ -90,52 +90,55 @@ export const UNIT_SYMBOLS: Record<DistanceUnit | AreaUnit, string> = {
 /** A geometry measurement the Field Calculator can insert. */
 export type GeometryMetric = "length" | "perimeter" | "area";
 
-/** The coarse geometry family of a layer, used to offer relevant metrics. */
-export type GeometryFamily = "point" | "line" | "polygon" | "mixed" | "none";
+/** A base geometry family a feature can contribute to a layer. */
+export type GeometryFamily = "point" | "line" | "polygon";
 
-function familyOf(geometry: Geometry | null | undefined): GeometryFamily | null {
+/** Add every base family reachable from `geometry` (flattening collections). */
+function collectBaseFamilies(
+  geometry: Geometry | null | undefined,
+  into: Set<GeometryFamily>,
+): void {
   switch (geometry?.type) {
     case "Point":
     case "MultiPoint":
-      return "point";
+      into.add("point");
+      break;
     case "LineString":
     case "MultiLineString":
-      return "line";
+      into.add("line");
+      break;
     case "Polygon":
     case "MultiPolygon":
-      return "polygon";
-    case "GeometryCollection": {
-      // Collections are measurable (measure* recurse into them), so classify by
-      // their members: a single family when they agree, "mixed" when they differ.
-      let family: GeometryFamily | null = null;
+      into.add("polygon");
+      break;
+    case "GeometryCollection":
+      // Collections are measurable (measure* recurse into them), so report the
+      // families they actually contain.
       for (const member of geometry.geometries) {
-        const current = familyOf(member);
-        if (!current) continue;
-        if (current === "mixed") return "mixed";
-        if (family === null) family = current;
-        else if (family !== current) return "mixed";
+        collectBaseFamilies(member, into);
       }
-      return family;
-    }
+      break;
     default:
-      return null;
+      break;
   }
 }
 
 /**
- * The dominant geometry family across a layer's features: the single family when
- * they agree, `"mixed"` when they differ, `"none"` when none carry measurable
- * geometry (e.g. a DuckDB query layer whose rows have no geometry).
+ * The set of geometry families actually present across a layer's features,
+ * flattening GeometryCollections. An empty set means no measurable geometry
+ * (e.g. a DuckDB query layer whose rows have no geometry); a set larger than one
+ * is a mixed layer. Reporting the concrete families (rather than collapsing to a
+ * single "mixed") lets the Field Calculator offer only the metrics that apply —
+ * a point+line layer gets Length, not a no-op Area.
  */
-export function detectGeometryFamily(features: Feature[]): GeometryFamily {
-  let family: GeometryFamily | null = null;
+export function detectGeometryFamilies(
+  features: Feature[],
+): Set<GeometryFamily> {
+  const families = new Set<GeometryFamily>();
   for (const feature of features) {
-    const current = familyOf(feature.geometry);
-    if (!current) continue;
-    if (family === null) family = current;
-    else if (family !== current) return "mixed";
+    collectBaseFamilies(feature.geometry, families);
   }
-  return family ?? "none";
+  return families;
 }
 
 /**
