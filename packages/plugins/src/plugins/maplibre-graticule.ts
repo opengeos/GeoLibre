@@ -11,6 +11,7 @@ import type {
   LngLatBounds,
   Map as MapLibreMap,
 } from "maplibre-gl";
+import proj4 from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 /**
@@ -46,10 +47,14 @@ const PANEL_ID = "geolibre-graticule-panel";
 export interface GraticuleLabels {
   title: string;
   controlTitle: string;
+  gridSystem: string;
+  systemGeographic: string;
+  systemUtm: string;
   spacing: string;
   spacingAuto: string;
   spacingFixed: string;
   interval: string;
+  intervalMeters: string;
   lineColor: string;
   lineWidth: string;
   lineOpacity: string;
@@ -68,10 +73,14 @@ export interface GraticuleLabels {
 export const DEFAULT_GRATICULE_LABELS: GraticuleLabels = {
   title: "Gridlines",
   controlTitle: "Gridlines settings",
+  gridSystem: "Grid system",
+  systemGeographic: "Geographic (lat/long)",
+  systemUtm: "UTM",
   spacing: "Spacing",
   spacingAuto: "Auto (by zoom)",
   spacingFixed: "Fixed interval",
   interval: "Interval (°)",
+  intervalMeters: "Interval (m)",
   lineColor: "Line color",
   lineWidth: "Line width",
   lineOpacity: "Line opacity",
@@ -111,11 +120,21 @@ export type GraticuleLabelFormat = "dd" | "dms";
 /** Which map edges carry coordinate labels. */
 export type GraticuleLabelEdges = "left-bottom" | "all";
 
+/**
+ * Coordinate system the grid is drawn in. "geographic" is the lat/long
+ * graticule; "utm" draws a metric UTM easting/northing grid with zone labels.
+ */
+export type GraticuleGridSystem = "geographic" | "utm";
+
 export interface GraticuleSettings {
+  /** Draw a geographic (lat/long) or a UTM (easting/northing) grid. */
+  gridSystem: GraticuleGridSystem;
   /** Auto spacing adapts to the zoom level; fixed uses {@link spacingDegrees}. */
   spacingMode: "auto" | "fixed";
-  /** Grid interval in degrees when {@link spacingMode} is "fixed". */
+  /** Grid interval in degrees when {@link spacingMode} is "fixed" (geographic). */
   spacingDegrees: number;
+  /** Grid interval in metres when {@link spacingMode} is "fixed" (UTM). */
+  spacingMeters: number;
   lineColor: string;
   lineWidth: number;
   lineOpacity: number;
@@ -129,8 +148,10 @@ export interface GraticuleSettings {
 }
 
 export const DEFAULT_GRATICULE_SETTINGS: GraticuleSettings = {
+  gridSystem: "geographic",
   spacingMode: "auto",
   spacingDegrees: 10,
+  spacingMeters: 10000,
   lineColor: "#6b7280",
   lineWidth: 1,
   lineOpacity: 0.75,
@@ -288,6 +309,7 @@ interface GraticuleGeometry {
 
 /** Build the grid lines and edge labels for the current viewport. */
 function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
+  if (settings.gridSystem === "utm") return buildUtmGeometry(activeMap);
   const bounds = activeMap.getBounds();
   const { west, east } = unwrappedLongitudeRange(bounds);
   // Mercator cannot show the poles; clamp parallels to the renderable range.
@@ -343,6 +365,229 @@ function buildGeometry(activeMap: MapLibreMap): GraticuleGeometry {
       }
     }
     count += 1;
+  }
+
+  return {
+    lines: { type: "FeatureCollection", features: lineFeatures },
+    labels: { type: "FeatureCollection", features: labelFeatures },
+    step,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// UTM grid generation
+// ---------------------------------------------------------------------------
+
+/** WGS84 lon/lat, the source CRS for every UTM projection below. */
+const WGS84 = "+proj=longlat +datum=WGS84 +no_defs";
+
+/** proj4 definition for a given UTM zone/hemisphere (metres, easting/northing). */
+function utmProjDef(zone: number, south: boolean): string {
+  return `+proj=utm +zone=${zone} +datum=WGS84 +units=m +no_defs${south ? " +south" : ""}`;
+}
+
+/**
+ * UTM zone (1-60) for a longitude. The longitude is wrapped into [-180, 180)
+ * first so an unwrapped antimeridian-crossing value still maps to a real zone.
+ * The Norway/Svalbard zone-width exceptions are intentionally not modelled — a
+ * grid overlay does not need them and they would only shift two zone edges.
+ */
+export function utmZoneFromLon(lon: number): number {
+  const wrapped = (((lon + 180) % 360) + 360) % 360; // [0, 360)
+  return Math.min(60, Math.max(1, Math.floor(wrapped / 6) + 1));
+}
+
+// MGRS latitude bands from 80°S to 84°N (I and O are skipped by convention).
+// Each spans 8° except the final "X" which spans 12° (72°N-84°N).
+const UTM_LAT_BANDS = "CDEFGHJKLMNPQRSTUVWX";
+
+/**
+ * MGRS latitude-band letter for a latitude, used to form the zone designation
+ * (e.g. "37T"). Returns "" outside the UTM-defined range (below 80°S / above
+ * 84°N), where no band exists.
+ */
+export function utmLatBand(lat: number): string {
+  if (lat < -80 || lat > 84) return "";
+  const idx = Math.min(UTM_LAT_BANDS.length - 1, Math.floor((lat + 80) / 8));
+  return UTM_LAT_BANDS[idx];
+}
+
+// "Nice" metric grid intervals in metres, largest first. Auto mode picks the
+// largest step that still draws a useful number of lines across the viewport.
+const NICE_METRIC_STEPS = [
+  1_000_000, 500_000, 250_000, 100_000, 50_000, 25_000, 10_000, 5_000, 2_500,
+  1_000, 500, 250, 100, 50, 25, 10,
+];
+
+/** Pick an auto metric interval that draws roughly 4+ grid lines across `span`. */
+function autoMetricStep(span: number): number {
+  const s = Math.abs(span) || 1;
+  for (const step of NICE_METRIC_STEPS) {
+    if (s / step >= 4) return step;
+  }
+  return NICE_METRIC_STEPS[NICE_METRIC_STEPS.length - 1];
+}
+
+/** Format a UTM easting for an edge label, e.g. `500000mE`. */
+export function formatUtmEasting(easting: number): string {
+  return `${Math.round(easting)}mE`;
+}
+
+/** Format a UTM northing for an edge label, e.g. `4649000mN`. */
+export function formatUtmNorthing(northing: number): string {
+  return `${Math.round(northing)}mN`;
+}
+
+// Global cap on grid lines per rebuild so a tiny fixed step (or a wide view)
+// cannot freeze the UI. Shared across every zone column of a UTM build.
+const MAX_UTM_LINES = 2000;
+// A view spanning more than this many 6°-wide zones is too wide for a metric
+// grid to be meaningful; draw only the westernmost columns up to this cap.
+const MAX_UTM_ZONES = 8;
+// Points sampled per axis when projecting the viewport rectangle into UTM to
+// find its easting/northing envelope; also the densification of each grid line
+// so it follows the (slightly curved) UTM grid in Web Mercator.
+const UTM_SAMPLES = 6;
+const UTM_LINE_SEGMENTS = 24;
+
+/**
+ * Build a UTM easting/northing grid for the current viewport. Handles each
+ * 6°-wide zone the view intersects independently (grid lines only make sense
+ * within a single zone's projection), clipped and capped for wide views.
+ */
+function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
+  const bounds = activeMap.getBounds();
+  const { west, east } = unwrappedLongitudeRange(bounds);
+  // UTM is defined for 80°S-84°N; clamp parallels to that renderable range.
+  const south = Math.max(bounds.getSouth(), -80);
+  const north = Math.min(bounds.getNorth(), 84);
+
+  const lineFeatures: Feature<LineString>[] = [];
+  const labelFeatures: Feature<Point>[] = [];
+  const showAllEdges = settings.labelEdges === "all";
+  let step = 0;
+
+  if (north <= south) {
+    return {
+      lines: { type: "FeatureCollection", features: lineFeatures },
+      labels: { type: "FeatureCollection", features: labelFeatures },
+      step,
+    };
+  }
+
+  // Walk the 6°-wide zone columns intersecting the view, west to east. The
+  // western edge of a zone lies on a multiple of 6° from -180°.
+  const firstZoneWestEdge = Math.floor((west + 180) / 6) * 6 - 180;
+  let zonesDrawn = 0;
+  for (
+    let zoneWestEdge = firstZoneWestEdge;
+    zoneWestEdge < east && zonesDrawn < MAX_UTM_ZONES;
+    zoneWestEdge += 6
+  ) {
+    const clipWest = Math.max(west, zoneWestEdge);
+    const clipEast = Math.min(east, zoneWestEdge + 6);
+    if (clipEast <= clipWest) continue;
+    zonesDrawn += 1;
+
+    const centerLon = (clipWest + clipEast) / 2;
+    const zone = utmZoneFromLon(centerLon);
+    // Northing convention differs by hemisphere; pick it from the column's
+    // centre latitude. A view straddling the equator uses one convention for
+    // the whole column (a documented v1 limitation).
+    const centerLat = (south + north) / 2;
+    const useSouth = centerLat < 0;
+    const convert = proj4(WGS84, utmProjDef(zone, useSouth));
+
+    // Project a grid of points across the clipped rectangle to find its
+    // easting/northing envelope (the UTM box is not axis-aligned to lon/lat,
+    // so the corners alone can miss the extremes at high latitude).
+    let eMin = Number.POSITIVE_INFINITY;
+    let eMax = Number.NEGATIVE_INFINITY;
+    let nMin = Number.POSITIVE_INFINITY;
+    let nMax = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i <= UTM_SAMPLES; i += 1) {
+      for (let j = 0; j <= UTM_SAMPLES; j += 1) {
+        const lon = clipWest + ((clipEast - clipWest) * i) / UTM_SAMPLES;
+        const lat = south + ((north - south) * j) / UTM_SAMPLES;
+        const [e, n] = convert.forward([lon, lat]) as [number, number];
+        if (!Number.isFinite(e) || !Number.isFinite(n)) continue;
+        if (e < eMin) eMin = e;
+        if (e > eMax) eMax = e;
+        if (n < nMin) nMin = n;
+        if (n > nMax) nMax = n;
+      }
+    }
+    if (!Number.isFinite(eMin) || !Number.isFinite(nMin)) continue;
+
+    const metricStep =
+      settings.spacingMode === "fixed"
+        ? Math.max(1, settings.spacingMeters)
+        : autoMetricStep(Math.max(eMax - eMin, nMax - nMin));
+    step = metricStep;
+
+    const inverse = (e: number, n: number): [number, number] =>
+      convert.inverse([e, n]) as [number, number];
+
+    // Constant-easting lines (near-vertical). Densify in northing and
+    // inverse-project so each line follows the true UTM grid curvature.
+    for (
+      let e = Math.ceil(eMin / metricStep) * metricStep;
+      e <= eMax && lineFeatures.length < MAX_UTM_LINES;
+      e += metricStep
+    ) {
+      const coords: [number, number][] = [];
+      for (let k = 0; k <= UTM_LINE_SEGMENTS; k += 1) {
+        const n = nMin + ((nMax - nMin) * k) / UTM_LINE_SEGMENTS;
+        coords.push(inverse(e, n));
+      }
+      lineFeatures.push({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: coords },
+      });
+      if (settings.showLabels) {
+        const [blon, blat] = inverse(e, nMin);
+        labelFeatures.push(labelFeature(blon, blat, formatUtmEasting(e), "bottom"));
+        if (showAllEdges) {
+          const [tlon, tlat] = inverse(e, nMax);
+          labelFeatures.push(labelFeature(tlon, tlat, formatUtmEasting(e), "top"));
+        }
+      }
+    }
+
+    // Constant-northing lines (near-horizontal).
+    for (
+      let n = Math.ceil(nMin / metricStep) * metricStep;
+      n <= nMax && lineFeatures.length < MAX_UTM_LINES;
+      n += metricStep
+    ) {
+      const coords: [number, number][] = [];
+      for (let k = 0; k <= UTM_LINE_SEGMENTS; k += 1) {
+        const e = eMin + ((eMax - eMin) * k) / UTM_LINE_SEGMENTS;
+        coords.push(inverse(e, n));
+      }
+      lineFeatures.push({
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: coords },
+      });
+      if (settings.showLabels) {
+        const [llon, llat] = inverse(eMin, n);
+        labelFeatures.push(labelFeature(llon, llat, formatUtmNorthing(n), "left"));
+        if (showAllEdges) {
+          const [rlon, rlat] = inverse(eMax, n);
+          labelFeatures.push(labelFeature(rlon, rlat, formatUtmNorthing(n), "right"));
+        }
+      }
+    }
+
+    // Zone designation (e.g. "37T") once per column, at the top-centre.
+    if (settings.showLabels) {
+      const band = utmLatBand(centerLat);
+      labelFeatures.push(
+        labelFeature(centerLon, north, `${zone}${band}`, "top"),
+      );
+    }
   }
 
   return {
@@ -729,6 +974,21 @@ function buildPanelBody(container: HTMLElement): void {
   };
 
   select(
+    labels.gridSystem,
+    [
+      { value: "geographic", label: labels.systemGeographic },
+      { value: "utm", label: labels.systemUtm },
+    ],
+    () => settings.gridSystem,
+    (v) => {
+      setGraticuleSettings({ gridSystem: v as GraticuleGridSystem });
+      // The interval unit (degrees vs metres) and the label-format row depend on
+      // the grid system, so rebuild the panel structure; setGraticuleSettings on
+      // its own only re-syncs existing inputs' values.
+      if (panelContainer) buildPanelBody(panelContainer);
+    },
+  );
+  select(
     labels.spacing,
     [
       { value: "auto", label: labels.spacingAuto },
@@ -737,16 +997,27 @@ function buildPanelBody(container: HTMLElement): void {
     () => settings.spacingMode,
     (v) => setGraticuleSettings({ spacingMode: v as GraticuleSettings["spacingMode"] }),
   );
-  number(
-    labels.interval,
-    // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
-    // native number input rather than reading as step mismatches.
-    { min: 0.001, max: 45, step: 0.001 },
-    () => settings.spacingDegrees,
-    (v) => setGraticuleSettings({ spacingDegrees: v }),
-    // Auto spacing is purely zoom-driven, so the interval has no effect there.
-    () => settings.spacingMode === "auto",
-  );
+  if (settings.gridSystem === "utm") {
+    number(
+      labels.intervalMeters,
+      { min: 1, max: 1_000_000, step: 1 },
+      () => settings.spacingMeters,
+      (v) => setGraticuleSettings({ spacingMeters: v }),
+      // Auto spacing is purely zoom-driven, so the interval has no effect there.
+      () => settings.spacingMode === "auto",
+    );
+  } else {
+    number(
+      labels.interval,
+      // A fine step keeps clamped/default values (e.g. 10, 0.25) valid for the
+      // native number input rather than reading as step mismatches.
+      { min: 0.001, max: 45, step: 0.001 },
+      () => settings.spacingDegrees,
+      (v) => setGraticuleSettings({ spacingDegrees: v }),
+      // Auto spacing is purely zoom-driven, so the interval has no effect there.
+      () => settings.spacingMode === "auto",
+    );
+  }
   color(labels.lineColor, () => settings.lineColor, (v) => setGraticuleSettings({ lineColor: v }));
   number(
     labels.lineWidth,
@@ -762,15 +1033,19 @@ function buildPanelBody(container: HTMLElement): void {
   );
   checkbox(labels.dashedLines, () => settings.lineDashed, (v) => setGraticuleSettings({ lineDashed: v }));
   checkbox(labels.showLabels, () => settings.showLabels, (v) => setGraticuleSettings({ showLabels: v }));
-  select(
-    labels.labelFormat,
-    [
-      { value: "dd", label: labels.formatDecimal },
-      { value: "dms", label: labels.formatDms },
-    ],
-    () => settings.labelFormat,
-    (v) => setGraticuleSettings({ labelFormat: v as GraticuleLabelFormat }),
-  );
+  // Label format (decimal vs DMS) only applies to the geographic grid; the UTM
+  // grid always labels in metres, so the row is omitted there.
+  if (settings.gridSystem !== "utm") {
+    select(
+      labels.labelFormat,
+      [
+        { value: "dd", label: labels.formatDecimal },
+        { value: "dms", label: labels.formatDms },
+      ],
+      () => settings.labelFormat,
+      (v) => setGraticuleSettings({ labelFormat: v as GraticuleLabelFormat }),
+    );
+  }
   select(
     labels.labelEdges,
     [
@@ -820,8 +1095,10 @@ export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
   const v = (value ?? {}) as Partial<GraticuleSettings>;
   const d = DEFAULT_GRATICULE_SETTINGS;
   return {
+    gridSystem: v.gridSystem === "utm" ? "utm" : "geographic",
     spacingMode: v.spacingMode === "fixed" ? "fixed" : "auto",
     spacingDegrees: clampNumber(v.spacingDegrees, 0.001, 45, d.spacingDegrees),
+    spacingMeters: clampNumber(v.spacingMeters, 1, 1_000_000, d.spacingMeters),
     lineColor: normalizeHexColor(v.lineColor) ?? d.lineColor,
     lineWidth: clampNumber(v.lineWidth, 0.1, 6, d.lineWidth),
     lineOpacity: clampNumber(v.lineOpacity, 0, 1, d.lineOpacity),
@@ -841,8 +1118,10 @@ export function normalizeGraticuleSettings(value: unknown): GraticuleSettings {
  */
 function settingsEqual(a: GraticuleSettings, b: GraticuleSettings): boolean {
   return (
+    a.gridSystem === b.gridSystem &&
     a.spacingMode === b.spacingMode &&
     a.spacingDegrees === b.spacingDegrees &&
+    a.spacingMeters === b.spacingMeters &&
     a.lineColor === b.lineColor &&
     a.lineWidth === b.lineWidth &&
     a.lineOpacity === b.lineOpacity &&

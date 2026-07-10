@@ -4,7 +4,11 @@ import {
   DEFAULT_GRATICULE_SETTINGS,
   formatLat,
   formatLon,
+  formatUtmEasting,
+  formatUtmNorthing,
   normalizeGraticuleSettings,
+  utmLatBand,
+  utmZoneFromLon,
 } from "../packages/plugins/src/plugins/maplibre-graticule";
 
 describe("normalizeGraticuleSettings", () => {
@@ -31,6 +35,28 @@ describe("normalizeGraticuleSettings", () => {
     assert.equal(fixed.spacingMode, "fixed");
     assert.equal(fixed.labelFormat, "dms");
     assert.equal(fixed.labelEdges, "all");
+  });
+
+  it("defaults and coerces the UTM grid-system fields", () => {
+    assert.equal(
+      normalizeGraticuleSettings(undefined).gridSystem,
+      "geographic",
+    );
+    assert.equal(normalizeGraticuleSettings({ gridSystem: "utm" }).gridSystem, "utm");
+    assert.equal(
+      normalizeGraticuleSettings({ gridSystem: "nonsense" }).gridSystem,
+      "geographic",
+    );
+    // spacingMeters clamps into [1, 1_000_000] and falls back to the default.
+    assert.equal(normalizeGraticuleSettings({ spacingMeters: 0 }).spacingMeters, 1);
+    assert.equal(
+      normalizeGraticuleSettings({ spacingMeters: 9_999_999 }).spacingMeters,
+      1_000_000,
+    );
+    assert.equal(
+      normalizeGraticuleSettings({ spacingMeters: Number.NaN }).spacingMeters,
+      DEFAULT_GRATICULE_SETTINGS.spacingMeters,
+    );
   });
 
   it("clamps numeric fields into their allowed range", () => {
@@ -114,5 +140,41 @@ describe("coordinate label formatting", () => {
     assert.equal(formatLon(-122.5, 0.5, "dms"), `122°30'00"W`);
     assert.equal(formatLat(45.50833, 0.1, "dms"), `45°30'30"N`);
     assert.equal(formatLat(0, 5, "dms"), `0°00'00"`);
+  });
+});
+
+describe("UTM helpers", () => {
+  it("maps longitudes to their UTM zone (1-60)", () => {
+    assert.equal(utmZoneFromLon(-180), 1);
+    assert.equal(utmZoneFromLon(-123), 10); // San Francisco
+    assert.equal(utmZoneFromLon(0), 31);
+    assert.equal(utmZoneFromLon(6), 32);
+    assert.equal(utmZoneFromLon(44.8), 38); // Tbilisi
+    assert.equal(utmZoneFromLon(179.9), 60);
+  });
+
+  it("wraps out-of-range longitudes into a valid zone", () => {
+    assert.equal(utmZoneFromLon(200), utmZoneFromLon(-160));
+    assert.equal(utmZoneFromLon(-181), 60);
+    assert.equal(utmZoneFromLon(360), 31);
+  });
+
+  it("returns the MGRS latitude band letter, skipping I and O", () => {
+    assert.equal(utmLatBand(0), "N");
+    assert.equal(utmLatBand(41.7), "T"); // Georgia -> 38T
+    assert.equal(utmLatBand(-80), "C");
+    assert.equal(utmLatBand(83), "X"); // final band spans 72-84
+    assert.equal(utmLatBand(-8), "M");
+    // No band exists outside the UTM latitude range.
+    assert.equal(utmLatBand(-80.1), "");
+    assert.equal(utmLatBand(84.1), "");
+  });
+
+  it("formats easting/northing edge labels in metres", () => {
+    assert.equal(formatUtmEasting(500000), "500000mE");
+    assert.equal(formatUtmNorthing(4649000), "4649000mN");
+    // Sub-metre precision is rounded away.
+    assert.equal(formatUtmEasting(500000.4), "500000mE");
+    assert.equal(formatUtmNorthing(4648999.6), "4649000mN");
   });
 });

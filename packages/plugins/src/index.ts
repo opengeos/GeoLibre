@@ -352,6 +352,7 @@ export {
   type GraticuleLabels,
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
+  type GraticuleGridSystem,
 } from "./plugins/maplibre-graticule";
 export type {
   WeatherAnimationState,

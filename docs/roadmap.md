@@ -261,7 +261,7 @@
 - [x] Story Map plugin can now compose its chapters directly on the live map instead of a separate editor, and generates a printable PDF handout of the finished story
 - [x] Export a project to a single standalone interactive HTML file that runs offline with no server, plus a project gallery for browsing and opening shared projects with one click
 - [x] Map annotation layer for drawing text, arrows, and highlights directly on the map, persisted with the project
-- [x] Gridlines overlay (renamed from Graticule) draws a coordinate grid with edge labels across the map
+- [x] Gridlines overlay (renamed from Graticule) draws a coordinate grid with edge labels across the map, in either a geographic (lat/long) or a UTM easting/northing system with zone labels
 - [x] Import geotagged photos as a point layer from their EXIF GPS, with manual placement and drag-to-position for photos that have no embedded coordinates
 - [x] GeoRSS feed support in Add Data, loaded from a URL or a local file
 - [x] EOX Sentinel-2 cloudless satellite imagery and Openbasiskaart added to the basemap library (Openbasiskaart via basemap-control 0.7.0)
