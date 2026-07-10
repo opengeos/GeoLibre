@@ -15,6 +15,7 @@ import type { ParseKeys, TFunction } from "i18next";
 import {
   DEFAULT_BASEMAP,
   getPlanetaryBasemapById,
+  getPlanetaryBasemapByStyleUrl,
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
   useAppStore,
@@ -488,21 +489,14 @@ export function LayerPanel({
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
   const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
-  const ellipsoidId = useAppStore(
-    (s) => s.preferences.map.ellipsoidId ?? "earth",
-  );
-  // The body the switcher reflects. For the Moon/Mars it follows the project's
-  // ellipsoid, so any Moon/Mars basemap (from this switcher or the full picker)
-  // shows a selection. Earth is only "selected" when its own imagery basemap is
-  // active — a default Earth project (e.g. Liberty) shows nothing selected.
-  const onEarthImageryBasemap =
-    basemapStyleUrl === getPlanetaryBasemapById("earth-usgs-imagery")?.styleUrl;
+  // The body the switcher reflects, derived from the active *basemap* — not the
+  // ellipsoid, which Settings lets diverge from the basemap (e.g. Mars scale
+  // under an Earth style). Any planetary basemap resolves to its body: the
+  // Moon/Mars mosaics (from this switcher or the full picker) and Earth's own
+  // imagery. A normal Earth basemap (e.g. Liberty) resolves to nothing, so
+  // nothing is selected until a planetary basemap is applied.
   const selectedPlanet =
-    ellipsoidId !== "earth"
-      ? ellipsoidId
-      : onEarthImageryBasemap
-        ? "earth"
-        : undefined;
+    getPlanetaryBasemapByStyleUrl(basemapStyleUrl)?.ellipsoidId;
   // The Earth basemap to fall back to when a planet is deselected — the last one
   // active while no planet was selected (e.g. Liberty). Tracked in a ref so it
   // survives the planet round-trip. Starts undefined (not seeded from the mount
@@ -727,14 +721,12 @@ export function LayerPanel({
   // dropdown). Selecting a body applies its basemap and syncs the ellipsoid;
   // deselecting the active body returns to Earth and restores the basemap that
   // was showing before (e.g. Liberty).
-  const togglePlanet = (ellipsoidId: EllipsoidId, selected: boolean) => {
+  const togglePlanet = (body: EllipsoidId, selected: boolean) => {
     if (!selected) {
       restoreEarthBasemap(previousEarthBasemap.current ?? DEFAULT_BASEMAP);
       return;
     }
-    const option = PLANET_SWITCHER_OPTIONS.find(
-      (o) => o.ellipsoidId === ellipsoidId,
-    );
+    const option = PLANET_SWITCHER_OPTIONS.find((o) => o.ellipsoidId === body);
     const basemap = option && getPlanetaryBasemapById(option.basemapId);
     if (basemap) applyPlanetaryBasemap(basemap);
   };
