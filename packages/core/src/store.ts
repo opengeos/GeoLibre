@@ -1548,20 +1548,23 @@ useAppStore.subscribe((state) => {
  * drop a `selectedLayerId` that no longer points at an existing layer (selection
  * is intentionally not tracked in history, so it can dangle after a restore).
  */
-function finishHistoryStep(): void {
+function finishHistoryStep(previousBasemapStyleUrl: string): void {
   const s = useAppStore.getState();
   const selectionDangling =
     s.selectedLayerId !== null &&
     !s.layers.some((layer) => layer.id === s.selectedLayerId);
   // The basemap is in the undo history but the ellipsoid preference is not, so a
-  // step that restores a different basemap can leave the two out of sync (e.g.
+  // step that restores a *different* basemap can leave the two out of sync (e.g.
   // undoing a switch to Mars would keep the Mars radius under an Earth basemap).
   // Re-derive the ellipsoid from the restored basemap's body — Earth for a
-  // non-planetary basemap — so measurements always match what's shown.
+  // non-planetary basemap — but only when this step actually changed the
+  // basemap. Steps that leave the basemap untouched must not touch the ellipsoid,
+  // which the user can set independently of the basemap in Settings.
   const restoredEllipsoidId =
     getPlanetaryBasemapByStyleUrl(s.basemapStyleUrl)?.ellipsoidId ??
     DEFAULT_ELLIPSOID_ID;
   const ellipsoidPatch =
+    s.basemapStyleUrl !== previousBasemapStyleUrl &&
     s.preferences.map.ellipsoidId !== restoredEllipsoidId
       ? {
           preferences: {
@@ -1594,8 +1597,9 @@ export function undo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
+  const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
   temporal.undo();
-  finishHistoryStep();
+  finishHistoryStep(previousBasemapStyleUrl);
 }
 
 /** Step the history forward one entry and mark the project dirty. */
@@ -1603,8 +1607,9 @@ export function redo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
+  const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
   temporal.redo();
-  finishHistoryStep();
+  finishHistoryStep(previousBasemapStyleUrl);
 }
 
 /** Empty both the undo and redo stacks (e.g. on new/loaded project). */

@@ -71,4 +71,21 @@ describe("undo keeps the ellipsoid in sync with the restored basemap", () => {
     // measurements would use the Mars radius under an Earth basemap.
     assert.equal(state.preferences.map.ellipsoidId, "earth");
   });
+
+  it("leaves a manually-set ellipsoid alone on an undo that keeps the basemap", () => {
+    // The ellipsoid can be set independently of the basemap (Settings), e.g. to
+    // measure imported Mars data while staying on an Earth basemap.
+    const prefs = useAppStore.getState().preferences;
+    useAppStore.getState().setPreferences({
+      ...prefs,
+      map: { ...prefs.map, ellipsoidId: "mars" },
+    });
+    // An unrelated undoable action that doesn't touch the basemap, then undo.
+    useAppStore
+      .getState()
+      .addGeoJsonLayer("A", { type: "FeatureCollection", features: [] });
+    undo();
+    // The basemap never changed, so the manual ellipsoid must survive.
+    assert.equal(useAppStore.getState().preferences.map.ellipsoidId, "mars");
+  });
 });
