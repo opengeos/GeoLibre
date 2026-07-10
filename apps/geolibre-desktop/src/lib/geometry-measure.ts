@@ -52,7 +52,7 @@ const AREA_FACTORS: Record<AreaUnit, number> = {
 };
 
 /** Distance units in menu order (meters first, as the sensible default). */
-export const DISTANCE_UNITS: DistanceUnit[] = [
+export const DISTANCE_UNITS: readonly DistanceUnit[] = [
   "meters",
   "kilometers",
   "feet",
@@ -62,7 +62,7 @@ export const DISTANCE_UNITS: DistanceUnit[] = [
 ];
 
 /** Area units in menu order (square meters first, as the sensible default). */
-export const AREA_UNITS: AreaUnit[] = [
+export const AREA_UNITS: readonly AreaUnit[] = [
   "square-meters",
   "square-kilometers",
   "hectares",
@@ -186,7 +186,7 @@ function lineLengthMeters(coords: Position[], radius: number): number {
 /**
  * Spherical area in square meters of a single ring (its coordinates as a closed
  * or open loop). Signed by winding order; callers take the absolute value and
- * subtract holes as needed. The longitude delta is normalized to (-180, 180] so
+ * subtract holes as needed. The longitude delta is normalized to [-180, 180) so
  * a ring edge that crosses the antimeridian (e.g. 179° → -179°) counts as the
  * short 2° step, not a 358° one, keeping areas correct near ±180°.
  */
@@ -225,9 +225,9 @@ function polygonPerimeterMeters(rings: Position[][], radius: number): number {
     // by coordinate value, not array identity — GeoJSON rings never reuse the
     // same Position instance for their first and last point.
     const first = ring[0];
-    const last = ring[ring.length - 1];
+    const last = ring.at(-1);
     const isClosed =
-      ring.length > 0 && first[0] === last[0] && first[1] === last[1];
+      !!last && first[0] === last[0] && first[1] === last[1];
     const closed = ring.length > 0 && !isClosed ? [...ring, first] : ring;
     total += lineLengthMeters(closed, radius);
   }
