@@ -19,12 +19,23 @@ export type RasterSubsetKind = "cog" | "wms" | "xyz";
 export interface RasterSubsetRequest {
   bbox: [number, number, number, number];
   /**
-   * Optional output pixel size in degrees (COG/WMS). Omitted keeps the COG's
-   * native resolution, and lets WMS default to a ~1024 px request.
+   * Optional output pixel size, in the output CRS's units (degrees for a
+   * geographic `outputCrs`, meters/units for a projected one). Omitted keeps the
+   * COG's native resolution and lets WMS/XYZ default their sizing.
    */
   resolution?: number;
   /** XYZ tile zoom level. Required for the `xyz` kind. */
   zoom?: number;
+  /** Optional output EPSG code. Omitted keeps the box's CRS (WGS84). */
+  outputCrs?: number;
+  /** Optional output nodata value. */
+  nodata?: number;
+  /**
+   * Extra extractor options merged over the derived ones (e.g. `level`, `width`,
+   * `height`, `tileSize`, `format`, `version`, `styles`), for power users. Later
+   * keys win, so this can override a derived value.
+   */
+  extra?: Record<string, unknown>;
   /**
    * Optional signal to cancel the extraction (its network requests). The panel
    * aborts this when it is closed so a stalled COG/WMS/XYZ request never leaves
@@ -68,23 +79,27 @@ export function canExtractRasterSubset(layer: GeoLibreLayer): boolean {
 }
 
 /**
- * Resolve a COG layer to a source the WASM extractor can read. An HTTP(S) URL is
- * passed through so the extractor can byte-range only the tiles it needs; a
- * local (blob) source is fetched in full first, because range requests aren't
- * reliably served for blob URLs.
+ * Resolve a COG layer to a source the WASM extractor can read. The retained
+ * local-bytes blob (File-loaded rasters and Whitebox outputs) takes priority so
+ * an edited layer extracts from its current bytes, matching `rasterExportUrl`'s
+ * precedence; it is fetched in full because range requests aren't reliably
+ * served for blob URLs. Otherwise a plain HTTP(S) source is passed through so
+ * the extractor can byte-range only the tiles it needs.
  */
 async function resolveCogSource(
   layer: GeoLibreLayer,
   signal?: AbortSignal,
 ): Promise<string | Uint8Array> {
   const source = layer.source as Record<string, unknown>;
+  const localUrl = fetchableUrl(layer.metadata.localBytesUrl);
   const httpUrl = fetchableUrl(source.url);
-  if (httpUrl && /^https?:/i.test(httpUrl)) return httpUrl;
-  const localUrl = fetchableUrl(layer.metadata.localBytesUrl) ?? httpUrl;
-  if (!localUrl) {
+  // Only the plain HTTP(S) path (no retained local bytes) uses byte-range reads.
+  if (!localUrl && httpUrl && /^https?:/i.test(httpUrl)) return httpUrl;
+  const url = localUrl ?? httpUrl;
+  if (!url) {
     throw new Error("This raster has no readable source file.");
   }
-  const response = await fetch(localUrl, { signal });
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error("Could not read the raster's data for extraction.");
   }
@@ -135,31 +150,27 @@ export async function extractRasterSubset(
 ): Promise<Uint8Array> {
   const kind = rasterSubsetKind(layer);
   const source = layer.source as Record<string, unknown>;
-  const { bbox, resolution, signal } = request;
+  const { bbox, resolution, outputCrs, nodata, extra, signal } = request;
   // Forwarded to each extractor's internal fetches (COG byte-range reads, the
   // WMS GetMap request, XYZ tile requests) so the caller can cancel them.
   const fetchOptions = signal ? { signal } : undefined;
+  // Options every extractor accepts. `extra` is spread last so a power-user
+  // override (e.g. level/width/height) wins over the derived values.
+  const common = { bbox, bboxCrs: WGS84, resolution, outputCrs, nodata, ...extra };
 
   if (kind === "cog") {
     const cogSource = await resolveCogSource(layer, signal);
-    return extractCogSubset(cogSource, {
-      bbox,
-      bboxCrs: WGS84,
-      resolution,
-      fetchOptions,
-    });
+    return extractCogSubset(cogSource, { ...common, fetchOptions });
   }
   if (kind === "wms") {
     return extractWmsSubset(String(source.url), {
       layers: String(source.layers ?? ""),
       styles: typeof source.styles === "string" ? source.styles : undefined,
-      bbox,
-      bboxCrs: WGS84,
-      resolution,
       // The stored WMS format is for display (often PNG); the extractor needs a
       // GeoTIFF response, so always request one regardless of the display format.
       format: "image/geotiff",
       version: typeof source.version === "string" ? source.version : undefined,
+      ...common,
       fetchOptions,
     });
   }
@@ -167,16 +178,15 @@ export async function extractRasterSubset(
     const tiles = source.tiles as string[];
     return extractXyzTileSubset(tiles[0], {
       zoom: request.zoom ?? 0,
-      bbox,
-      bboxCrs: WGS84,
       tileSize:
         typeof source.tileSize === "number" ? source.tileSize : undefined,
-      fetchOptions,
       // The extractor rotates `{s}` by indexing into `subdomains` per tile, so a
       // string of letters ("abc") works directly. Some sources instead store the
       // MapLibre/Leaflet-style `string[]` (see offline-tiles.ts); join it into
       // the same per-letter string form so subdomain rotation isn't dropped.
       subdomains: normalizeSubdomains(source.subdomains),
+      ...common,
+      fetchOptions,
     });
   }
   throw new Error("This layer type does not support subset extraction.");

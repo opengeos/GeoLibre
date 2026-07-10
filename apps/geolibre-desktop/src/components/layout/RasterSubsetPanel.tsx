@@ -1,9 +1,16 @@
-import type { GeoLibreLayer } from "@geolibre/core";
+import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { Button, Input, Label } from "@geolibre/ui";
-import type { FeatureCollection } from "geojson";
-import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
-import { Crop, Download, GripVertical, Loader2, Scan, X } from "lucide-react";
+import { Button, Input, Label, Textarea } from "@geolibre/ui";
+import {
+  ChevronDown,
+  ChevronRight,
+  Crop,
+  Download,
+  GripVertical,
+  Loader2,
+  Scan,
+  X,
+} from "lucide-react";
 import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -23,18 +30,22 @@ import {
 } from "../../lib/raster-subset-export";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 
-/** Map source/layer ids for the drawn bounding-box preview. */
-const BBOX_SOURCE = "geolibre-raster-subset-bbox";
-const BBOX_FILL = "geolibre-raster-subset-bbox-fill";
-const BBOX_LINE = "geolibre-raster-subset-bbox-line";
-
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 320;
 const PANEL_MARGIN = 12;
 
-const EMPTY_FC: FeatureCollection = { type: "FeatureCollection", features: [] };
+/** WGS84 EPSG code; the box is always drawn/edited in lng/lat. */
+const WGS84 = 4326;
+
+/** EPSG codes whose units are degrees (so a resolution is in degrees, not meters). */
+const GEOGRAPHIC_EPSG = new Set([4326, 4979, 4269, 4267]);
 
 interface PanelPos {
+  x: number;
+  y: number;
+}
+
+interface ScreenPoint {
   x: number;
   y: number;
 }
@@ -62,34 +73,6 @@ function fmtCoord(value: number): string {
   return Number(value.toFixed(6)).toString();
 }
 
-/** Build a rectangle polygon FeatureCollection for the preview overlay. */
-function bboxToFeatureCollection(
-  bbox: [number, number, number, number],
-): FeatureCollection {
-  const [w, s, e, n] = bbox;
-  return {
-    type: "FeatureCollection",
-    features: [
-      {
-        type: "Feature",
-        properties: {},
-        geometry: {
-          type: "Polygon",
-          coordinates: [
-            [
-              [w, s],
-              [e, s],
-              [e, n],
-              [w, n],
-              [w, s],
-            ],
-          ],
-        },
-      },
-    ],
-  };
-}
-
 /** Order two corners into a `[west, south, east, north]` box. */
 function orderBbox(
   a: [number, number],
@@ -104,7 +87,7 @@ function orderBbox(
 }
 
 /** Parse the four coordinate fields into an ordered box, or `null` if any are
- * missing/invalid or the box is degenerate. */
+ * missing, out of the valid lng/lat range, or the box is degenerate. */
 function parseBbox(
   coords: CoordFields,
 ): [number, number, number, number] | null {
@@ -121,6 +104,10 @@ function parseBbox(
     !Number.isFinite(south) ||
     !Number.isFinite(east) ||
     !Number.isFinite(north) ||
+    west < -180 ||
+    east > 180 ||
+    south < -90 ||
+    north > 90 ||
     west >= east ||
     south >= north
   ) {
@@ -140,11 +127,37 @@ function coordsFromBbox(bbox: [number, number, number, number]): CoordFields {
 }
 
 /**
+ * Parse the "Additional options" text (one `key=value` per line) into an options
+ * object for the extractor, coercing numeric values. Blank lines are ignored;
+ * `null` signals a malformed line so the caller can surface an error rather than
+ * silently dropping it.
+ *
+ * @param text - The raw textarea contents.
+ * @returns The parsed options, or `null` if any non-blank line is malformed.
+ */
+function parseExtraArgs(text: string): Record<string, unknown> | null {
+  const extra: Record<string, unknown> = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) return null;
+    const key = line.slice(0, eq).trim();
+    if (!key) return null;
+    const value = line.slice(eq + 1).trim();
+    const num = Number(value);
+    extra[key] = value !== "" && Number.isFinite(num) ? num : value;
+  }
+  return extra;
+}
+
+/**
  * A floating, draggable panel that extracts a bounding-box subset from a COG,
  * WMS, or XYZ layer entirely in the browser (via geolibre-wasm's Rust
- * extractors). The user activates a draw mode to rubber-band a box on the map,
- * fine-tunes the confirmed coordinates, sets the output resolution (COG/WMS) or
- * zoom (XYZ), then saves the clipped GeoTIFF to disk. The map stays interactive,
+ * extractors). The user activates a draw mode to rubber-band a box on the map
+ * (drawn as an SVG overlay so it stays visible above the deck.gl COG overlay),
+ * fine-tunes the confirmed coordinates, sets the output resolution/CRS/nodata
+ * (or zoom for XYZ), then saves the clipped GeoTIFF. The map stays interactive,
  * matching the Pixel Time Series panel's non-blocking pattern.
  */
 export function RasterSubsetPanel({
@@ -162,14 +175,26 @@ export function RasterSubsetPanel({
   const [drawing, setDrawing] = useState(false);
   const [resolution, setResolution] = useState("");
   const [zoom, setZoom] = useState("");
+  const [outputCrs, setOutputCrs] = useState("");
+  const [nodata, setNodata] = useState("");
+  const [extraArgs, setExtraArgs] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const bbox = useMemo(() => parseBbox(coords), [coords]);
+  // Whether the resolution is in meters (a projected output CRS) or degrees (a
+  // geographic one, including the default WGS84 box CRS).
+  const resolutionInMeters = useMemo(() => {
+    const code = outputCrs.trim() === "" ? WGS84 : Number(outputCrs);
+    return Number.isFinite(code) && !GEOGRAPHIC_EPSG.has(code);
+  }, [outputCrs]);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<PanelPos | null>(null);
+  // Projected screen positions of the box's four corners, for the SVG overlay.
+  const [screenPoints, setScreenPoints] = useState<ScreenPoint[] | null>(null);
 
   // Cancels the in-flight extraction's network requests when the panel is closed
   // or a new extraction starts, so a stalled request never leaves the UI stuck
@@ -191,6 +216,10 @@ export function RasterSubsetPanel({
     setCoords(EMPTY_COORDS);
     setDrawing(false);
     setResolution("");
+    setOutputCrs("");
+    setNodata("");
+    setExtraArgs("");
+    setShowAdvanced(false);
     setError(null);
     setSuccess(null);
     setRunning(false);
@@ -201,52 +230,38 @@ export function RasterSubsetPanel({
     setZoom(String(z));
   }, [layer, mapControllerRef]);
 
-  // Add the bounding-box preview source/layers while the panel is open, and tear
-  // them down on close. A separate effect keeps their data in sync with `bbox`.
+  // Keep the SVG overlay's corner positions in sync with the box and the map's
+  // camera (pan/zoom/rotate/pitch/resize). Projecting all four corners keeps the
+  // outline correct under rotation. Rendered as an SVG (not a MapLibre layer) so
+  // it stays visible above the interleaved deck.gl COG/raster overlay.
   useEffect(() => {
     const map = mapControllerRef.current?.getMap();
-    if (!layer || !map) return;
-    const add = (m: MapLibreMap) => {
-      if (!m.getSource(BBOX_SOURCE)) {
-        m.addSource(BBOX_SOURCE, { type: "geojson", data: EMPTY_FC });
-      }
-      if (!m.getLayer(BBOX_FILL)) {
-        m.addLayer({
-          id: BBOX_FILL,
-          type: "fill",
-          source: BBOX_SOURCE,
-          paint: { "fill-color": "#2563eb", "fill-opacity": 0.12 },
-        });
-      }
-      if (!m.getLayer(BBOX_LINE)) {
-        m.addLayer({
-          id: BBOX_LINE,
-          type: "line",
-          source: BBOX_SOURCE,
-          paint: {
-            "line-color": "#2563eb",
-            "line-width": 2,
-            "line-dasharray": [2, 1],
-          },
-        });
-      }
+    if (!map || !bbox) {
+      setScreenPoints(null);
+      return;
+    }
+    const [w, s, e, n] = bbox;
+    const corners: [number, number][] = [
+      [w, n],
+      [e, n],
+      [e, s],
+      [w, s],
+    ];
+    const update = () => {
+      setScreenPoints(
+        corners.map((corner) => {
+          const p = map.project(corner);
+          return { x: p.x, y: p.y };
+        }),
+      );
     };
-    add(map);
+    update();
+    map.on("move", update);
+    map.on("resize", update);
     return () => {
-      const m = mapControllerRef.current?.getMap();
-      if (!m) return;
-      if (m.getLayer(BBOX_LINE)) m.removeLayer(BBOX_LINE);
-      if (m.getLayer(BBOX_FILL)) m.removeLayer(BBOX_FILL);
-      if (m.getSource(BBOX_SOURCE)) m.removeSource(BBOX_SOURCE);
+      map.off("move", update);
+      map.off("resize", update);
     };
-  }, [layer, mapControllerRef]);
-
-  // Reflect the current box into the preview overlay.
-  useEffect(() => {
-    const map = mapControllerRef.current?.getMap();
-    const source = map?.getSource(BBOX_SOURCE) as GeoJSONSource | undefined;
-    if (!source) return;
-    source.setData(bbox ? bboxToFeatureCollection(bbox) : EMPTY_FC);
   }, [bbox, layer, mapControllerRef]);
 
   // Rubber-band draw mode: drag a rectangle on the map. dragPan/boxZoom are
@@ -269,9 +284,7 @@ export function RasterSubsetPanel({
     };
     const onMove = (e: { lngLat: { lng: number; lat: number } }) => {
       if (!start) return;
-      setCoords(
-        coordsFromBbox(orderBbox(start, [e.lngLat.lng, e.lngLat.lat])),
-      );
+      setCoords(coordsFromBbox(orderBbox(start, [e.lngLat.lng, e.lngLat.lat])));
     };
     const onUp = (e: { lngLat: { lng: number; lat: number } }) => {
       if (start) {
@@ -305,12 +318,7 @@ export function RasterSubsetPanel({
     if (!map) return;
     const b = map.getBounds();
     setCoords(
-      coordsFromBbox([
-        b.getWest(),
-        b.getSouth(),
-        b.getEast(),
-        b.getNorth(),
-      ]),
+      coordsFromBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]),
     );
     setSuccess(null);
     setError(null);
@@ -381,6 +389,10 @@ export function RasterSubsetPanel({
 
   const handleExtract = useCallback(async () => {
     if (!layer || !bbox) return;
+    // Read the freshest copy of the layer from the store so a rename or source
+    // edit made after the panel opened is reflected (the panel holds a snapshot).
+    const liveLayer =
+      useAppStore.getState().layers.find((l) => l.id === layer.id) ?? layer;
     // Abort a prior run (if any) and start a fresh cancellable one.
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -393,16 +405,31 @@ export function RasterSubsetPanel({
       if (res !== undefined && (!Number.isFinite(res) || res <= 0)) {
         throw new Error(t("rasterSubset.errorResolution"));
       }
-      const bytes = await extractRasterSubset(layer, {
+      const crs = outputCrs.trim() === "" ? undefined : Number(outputCrs);
+      if (crs !== undefined && (!Number.isInteger(crs) || crs <= 0)) {
+        throw new Error(t("rasterSubset.errorOutputCrs"));
+      }
+      const nd = nodata.trim() === "" ? undefined : Number(nodata);
+      if (nd !== undefined && !Number.isFinite(nd)) {
+        throw new Error(t("rasterSubset.errorNodata"));
+      }
+      const extra = parseExtraArgs(extraArgs);
+      if (extra === null) {
+        throw new Error(t("rasterSubset.errorAdditionalArgs"));
+      }
+      const bytes = await extractRasterSubset(liveLayer, {
         bbox,
         resolution: res,
         zoom: kind === "xyz" ? Number(zoom) : undefined,
+        outputCrs: crs,
+        nodata: nd,
+        extra,
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
       const savedPath = await saveRasterSubset(
         bytes,
-        sanitizeExportFileName(layer.name),
+        sanitizeExportFileName(liveLayer.name),
       );
       // A null path means the user cancelled the save dialog.
       if (savedPath !== null) setSuccess(t("rasterSubset.success"));
@@ -418,174 +445,271 @@ export function RasterSubsetPanel({
         setRunning(false);
       }
     }
-  }, [layer, bbox, resolution, zoom, kind, t]);
+  }, [layer, bbox, resolution, zoom, outputCrs, nodata, extraArgs, kind, t]);
 
   if (!layer || !kind) return null;
 
   return (
-    <div
-      ref={panelRef}
-      className={
-        pos
-          ? "pointer-events-auto absolute z-20 flex w-80 flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-          : "pointer-events-auto absolute right-3 top-16 z-20 flex w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-      }
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
-      role="region"
-      aria-label={t("rasterSubset.title")}
-      data-testid="raster-subset-panel"
-    >
-      <div
-        className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b px-3 py-2"
-        onPointerDown={handleDragStart}
-      >
-        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-          <GripVertical
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Crop className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="truncate">{t("rasterSubset.title")}</span>
-        </div>
-        <button
-          type="button"
-          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
-          onClick={onClose}
-          aria-label={t("common.close")}
+    <>
+      {screenPoints ? (
+        <svg
+          className="pointer-events-none absolute inset-0 z-10 h-full w-full"
+          aria-hidden="true"
         >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+          <polygon
+            points={screenPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+            fill="#2563eb"
+            fillOpacity={0.12}
+            stroke="#2563eb"
+            strokeWidth={2}
+            strokeDasharray="6 3"
+          />
+        </svg>
+      ) : null}
 
-      <div className="flex flex-col gap-3 p-3 text-sm">
-        <p className="truncate text-xs text-muted-foreground" title={layer.name}>
-          {layer.name}
-        </p>
-
-        <div className="flex gap-2">
-          <Button
+      <div
+        ref={panelRef}
+        className={
+          pos
+            ? "pointer-events-auto absolute z-20 flex w-80 flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+            : "pointer-events-auto absolute left-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+        }
+        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        role="region"
+        aria-label={t("rasterSubset.title")}
+        data-testid="raster-subset-panel"
+      >
+        <div
+          className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b px-3 py-2"
+          onPointerDown={handleDragStart}
+        >
+          <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+            <GripVertical
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Crop className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="truncate">{t("rasterSubset.title")}</span>
+          </div>
+          <button
             type="button"
-            size="sm"
-            variant={drawing ? "secondary" : "default"}
-            className="flex-1"
-            onClick={() => setDrawing((d) => !d)}
-            aria-pressed={drawing}
+            className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+            onClick={onClose}
+            aria-label={t("common.close")}
           >
-            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
-            {drawing ? t("rasterSubset.drawing") : t("rasterSubset.drawBbox")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={handleUseView}
-          >
-            {t("rasterSubset.useView")}
-          </Button>
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        {drawing ? (
-          <p className="text-xs text-muted-foreground">
-            {t("rasterSubset.drawHint")}
-          </p>
-        ) : null}
 
-        <div className="grid grid-cols-2 gap-2">
-          {(
-            [
-              ["north", t("rasterSubset.north")],
-              ["south", t("rasterSubset.south")],
-              ["west", t("rasterSubset.west")],
-              ["east", t("rasterSubset.east")],
-            ] as const
-          ).map(([field, label]) => (
-            <div key={field} className="space-y-1">
-              <Label htmlFor={`subset-${field}`} className="text-xs">
-                {label}
+        <div className="flex flex-col gap-3 overflow-auto p-3 text-sm">
+          <p
+            className="truncate text-xs text-muted-foreground"
+            title={layer.name}
+          >
+            {layer.name}
+          </p>
+
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={drawing ? "secondary" : "default"}
+              className="flex-1"
+              onClick={() => setDrawing((d) => !d)}
+              aria-pressed={drawing}
+            >
+              <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+              {drawing ? t("rasterSubset.drawing") : t("rasterSubset.drawBbox")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleUseView}
+            >
+              {t("rasterSubset.useView")}
+            </Button>
+          </div>
+          {drawing ? (
+            <p className="text-xs text-muted-foreground">
+              {t("rasterSubset.drawHint")}
+            </p>
+          ) : null}
+
+          <div className="grid grid-cols-2 gap-2">
+            {(
+              [
+                ["north", t("rasterSubset.north")],
+                ["south", t("rasterSubset.south")],
+                ["west", t("rasterSubset.west")],
+                ["east", t("rasterSubset.east")],
+              ] as const
+            ).map(([field, label]) => (
+              <div key={field} className="space-y-1">
+                <Label htmlFor={`subset-${field}`} className="text-xs">
+                  {label}
+                </Label>
+                <Input
+                  id={`subset-${field}`}
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={coords[field]}
+                  onChange={(e) => setField(field, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+
+          {kind === "xyz" ? (
+            <div className="space-y-1">
+              <Label htmlFor="subset-zoom" className="text-xs">
+                {t("rasterSubset.zoom")}
               </Label>
               <Input
-                id={`subset-${field}`}
+                id="subset-zoom"
                 type="number"
+                min={0}
+                max={30}
+                step={1}
+                value={zoom}
+                onChange={(e) => {
+                  setZoom(e.target.value);
+                  setSuccess(null);
+                }}
+              />
+              {zoomInvalid ? (
+                <p className="text-xs text-destructive">
+                  {t("rasterSubset.zoomHint")}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Label htmlFor="subset-resolution" className="text-xs">
+                {resolutionInMeters
+                  ? t("rasterSubset.resolutionMeters")
+                  : t("rasterSubset.resolutionDegrees")}
+              </Label>
+              <Input
+                id="subset-resolution"
+                type="number"
+                min={0}
                 step="any"
                 inputMode="decimal"
-                value={coords[field]}
-                onChange={(e) => setField(field, e.target.value)}
+                placeholder={t("rasterSubset.resolutionPlaceholder")}
+                value={resolution}
+                onChange={(e) => {
+                  setResolution(e.target.value);
+                  setSuccess(null);
+                }}
               />
-            </div>
-          ))}
-        </div>
-
-        {kind === "xyz" ? (
-          <div className="space-y-1">
-            <Label htmlFor="subset-zoom" className="text-xs">
-              {t("rasterSubset.zoom")}
-            </Label>
-            <Input
-              id="subset-zoom"
-              type="number"
-              min={0}
-              max={30}
-              step={1}
-              value={zoom}
-              onChange={(e) => {
-                setZoom(e.target.value);
-                setSuccess(null);
-              }}
-            />
-            {zoomInvalid ? (
-              <p className="text-xs text-destructive">
-                {t("rasterSubset.zoomHint")}
+              <p className="text-xs text-muted-foreground">
+                {t("rasterSubset.resolutionHint")}
               </p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              aria-expanded={showAdvanced}
+              onClick={() => setShowAdvanced((v) => !v)}
+            >
+              {showAdvanced ? (
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {t("rasterSubset.advanced")}
+            </button>
+
+            {showAdvanced ? (
+              <div className="space-y-3 rounded-md border border-border p-3">
+                <div className="space-y-1">
+                  <Label htmlFor="subset-output-crs" className="text-xs">
+                    {t("rasterSubset.outputCrs")}
+                  </Label>
+                  <Input
+                    id="subset-output-crs"
+                    type="number"
+                    min={0}
+                    step={1}
+                    placeholder={t("rasterSubset.outputCrsPlaceholder")}
+                    value={outputCrs}
+                    onChange={(e) => {
+                      setOutputCrs(e.target.value);
+                      setSuccess(null);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="subset-nodata" className="text-xs">
+                    {t("rasterSubset.nodata")}
+                  </Label>
+                  <Input
+                    id="subset-nodata"
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    placeholder={t("rasterSubset.nodataPlaceholder")}
+                    value={nodata}
+                    onChange={(e) => {
+                      setNodata(e.target.value);
+                      setSuccess(null);
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="subset-extra" className="text-xs">
+                    {t("rasterSubset.additionalArgs")}
+                  </Label>
+                  <Textarea
+                    id="subset-extra"
+                    rows={3}
+                    className="font-mono text-xs"
+                    placeholder={t("rasterSubset.additionalArgsPlaceholder")}
+                    value={extraArgs}
+                    onChange={(e) => {
+                      setExtraArgs(e.target.value);
+                      setSuccess(null);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t("rasterSubset.additionalArgsHint")}
+                  </p>
+                </div>
+              </div>
             ) : null}
           </div>
-        ) : (
-          <div className="space-y-1">
-            <Label htmlFor="subset-resolution" className="text-xs">
-              {t("rasterSubset.resolution")}
-            </Label>
-            <Input
-              id="subset-resolution"
-              type="number"
-              min={0}
-              step="any"
-              inputMode="decimal"
-              placeholder={t("rasterSubset.resolutionPlaceholder")}
-              value={resolution}
-              onChange={(e) => {
-                setResolution(e.target.value);
-                setSuccess(null);
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t("rasterSubset.resolutionHint")}
+
+          {error ? (
+            <p className="text-xs text-destructive" role="alert">
+              {error}
             </p>
-          </div>
-        )}
+          ) : null}
+          {success ? (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">
+              {success}
+            </p>
+          ) : null}
 
-        {error ? (
-          <p className="text-xs text-destructive" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {success ? (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400">
-            {success}
-          </p>
-        ) : null}
-
-        <Button
-          type="button"
-          size="sm"
-          disabled={!canExtract}
-          onClick={() => void handleExtract()}
-        >
-          {running ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-          ) : (
-            <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
-          {running ? t("rasterSubset.extracting") : t("rasterSubset.extract")}
-        </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canExtract}
+            onClick={() => void handleExtract()}
+          >
+            {running ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {running ? t("rasterSubset.extracting") : t("rasterSubset.extract")}
+          </Button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
