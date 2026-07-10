@@ -103,7 +103,7 @@
   "planetSwitcher": {
     "label": "Celestial body",
     "earth": "Earth",
-    "moon": "The Moon",
+    "moon": "Moon",
     "mars": "Mars"
   },
   "common": {

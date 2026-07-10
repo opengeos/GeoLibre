@@ -88,6 +88,7 @@ import {
   ChevronRight,
   ChevronUp,
   Download,
+  Earth,
   Eye,
   EyeOff,
   Folder,
@@ -100,7 +101,6 @@ import {
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
-  Orbit,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
@@ -487,9 +487,14 @@ export function LayerPanel({
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setPreferences = useAppStore((s) => s.setPreferences);
-  const activeEllipsoidId = useAppStore(
-    (s) => s.preferences.map.ellipsoidId ?? "earth",
-  );
+  const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  // The planet the switcher currently reflects: the body whose switcher basemap
+  // is applied, or undefined when neither is (e.g. a default Earth project on an
+  // OpenFreeMap basemap) — so nothing is pre-selected until the user picks one.
+  const selectedPlanet = PLANET_SWITCHER_OPTIONS.find(
+    (option) =>
+      getPlanetaryBasemapById(option.basemapId)?.styleUrl === basemapStyleUrl,
+  )?.ellipsoidId;
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
@@ -1937,10 +1942,12 @@ export function LayerPanel({
                 title={t("planetSwitcher.label")}
                 aria-label={t("planetSwitcher.label")}
               >
-                <Orbit
+                <Earth
                   className={cn(
                     "h-4 w-4",
-                    activeEllipsoidId !== "earth" && "text-primary",
+                    selectedPlanet &&
+                      selectedPlanet !== "earth" &&
+                      "text-primary",
                   )}
                 />
               </Button>
@@ -1948,7 +1955,7 @@ export function LayerPanel({
             <DropdownMenuContent align="start">
               <DropdownMenuLabel>{t("planetSwitcher.label")}</DropdownMenuLabel>
               <DropdownMenuRadioGroup
-                value={activeEllipsoidId}
+                value={selectedPlanet ?? ""}
                 onValueChange={switchPlanet}
               >
                 {PLANET_SWITCHER_OPTIONS.map((option) => (
