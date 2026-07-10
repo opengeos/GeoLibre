@@ -84,6 +84,25 @@ async function resolveCogSource(
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/**
+ * Coerce a tile source's `subdomains` into the string of letters the WASM XYZ
+ * extractor expects (it rotates `{s}` by indexing into the string per tile). A
+ * plain string is passed through; a MapLibre/Leaflet-style `string[]` of single
+ * letters (as offline-tiles.ts models it) is joined so the rotation is
+ * preserved. Anything else yields `undefined` (no `{s}` rotation).
+ *
+ * @param value - The source's `subdomains` field, of unknown shape.
+ * @returns The subdomain letters as a string, or `undefined`.
+ */
+function normalizeSubdomains(value: unknown): string | undefined {
+  if (typeof value === "string") return value || undefined;
+  if (Array.isArray(value)) {
+    const joined = value.filter((v) => typeof v === "string").join("");
+    return joined || undefined;
+  }
+  return undefined;
+}
+
 /** WGS84 bounding box EPSG code; the panel always draws/edits in lng/lat. */
 const WGS84 = 4326;
 
@@ -129,8 +148,11 @@ export async function extractRasterSubset(
       bboxCrs: WGS84,
       tileSize:
         typeof source.tileSize === "number" ? source.tileSize : undefined,
-      subdomains:
-        typeof source.subdomains === "string" ? source.subdomains : undefined,
+      // The extractor rotates `{s}` by indexing into `subdomains` per tile, so a
+      // string of letters ("abc") works directly. Some sources instead store the
+      // MapLibre/Leaflet-style `string[]` (see offline-tiles.ts); join it into
+      // the same per-letter string form so subdomain rotation isn't dropped.
+      subdomains: normalizeSubdomains(source.subdomains),
     });
   }
   throw new Error("This layer type does not support subset extraction.");

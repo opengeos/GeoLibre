@@ -171,17 +171,20 @@ export function RasterSubsetPanel({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<PanelPos | null>(null);
 
-  // Reset every field whenever the panel opens for a (different) layer, and seed
-  // the XYZ zoom from the current map zoom so the default extract matches what
-  // the user is looking at.
+  // Reset every field whenever the panel opens for a (different) layer or is
+  // closed, and seed the XYZ zoom from the current map zoom so the default
+  // extract matches what the user is looking at. The resets run even when
+  // `layer` is null (panel closed): clearing `drawing` there lets the rubber-band
+  // effect's cleanup re-enable dragPan/boxZoom and restore the cursor if the
+  // panel is closed mid-drag, instead of leaving the map stuck.
   useEffect(() => {
-    if (!layer) return;
     setCoords(EMPTY_COORDS);
     setDrawing(false);
     setResolution("");
     setError(null);
     setSuccess(null);
     setPos(null);
+    if (!layer) return;
     const map = mapControllerRef.current?.getMap();
     const z = map ? clamp(Math.round(map.getZoom()), 0, 30) : 10;
     setZoom(String(z));
