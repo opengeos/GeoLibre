@@ -100,6 +100,7 @@ import {
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
+  Orbit,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
@@ -215,32 +216,6 @@ const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
   moon: "planetSwitcher.moon",
   mars: "planetSwitcher.mars",
 };
-
-/**
- * A globe encircled by a tilted orbit with a small satellite — the planet
- * switcher's trigger icon, in the spirit of Google Earth's planet control. Drawn
- * inline (lucide has no planet-with-orbit glyph) in the lucide stroke style so it
- * sits cleanly beside the other header icons.
- */
-function PlanetOrbitIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="4.25" />
-      <ellipse cx="12" cy="12" rx="10.5" ry="4" transform="rotate(-30 12 12)" />
-      <circle cx="20.1" cy="7.3" r="1.35" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -513,13 +488,21 @@ export function LayerPanel({
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
   const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
-  // The planet the switcher currently reflects: the body whose switcher basemap
-  // is applied, or undefined when neither is (e.g. a default Earth project on an
-  // OpenFreeMap basemap) — so nothing is pre-selected until the user picks one.
-  const selectedPlanet = PLANET_SWITCHER_OPTIONS.find(
-    (option) =>
-      getPlanetaryBasemapById(option.basemapId)?.styleUrl === basemapStyleUrl,
-  )?.ellipsoidId;
+  const ellipsoidId = useAppStore(
+    (s) => s.preferences.map.ellipsoidId ?? "earth",
+  );
+  // The body the switcher reflects. For the Moon/Mars it follows the project's
+  // ellipsoid, so any Moon/Mars basemap (from this switcher or the full picker)
+  // shows a selection. Earth is only "selected" when its own imagery basemap is
+  // active — a default Earth project (e.g. Liberty) shows nothing selected.
+  const onEarthImageryBasemap =
+    basemapStyleUrl === getPlanetaryBasemapById("earth-usgs-imagery")?.styleUrl;
+  const selectedPlanet =
+    ellipsoidId !== "earth"
+      ? ellipsoidId
+      : onEarthImageryBasemap
+        ? "earth"
+        : undefined;
   // The Earth basemap to fall back to when a planet is deselected — the last one
   // active while no planet was selected (e.g. Liberty). Tracked in a ref so it
   // survives the planet round-trip.
@@ -1971,7 +1954,7 @@ export function LayerPanel({
                 title={t("planetSwitcher.label")}
                 aria-label={t("planetSwitcher.label")}
               >
-                <PlanetOrbitIcon
+                <Orbit
                   className={cn(
                     "h-4 w-4",
                     selectedPlanet &&

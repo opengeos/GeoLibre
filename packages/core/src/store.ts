@@ -53,7 +53,11 @@ import {
   type StoryMap,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
-import { DEFAULT_ELLIPSOID_ID, setActiveEllipsoidId } from "./ellipsoids";
+import {
+  DEFAULT_ELLIPSOID_ID,
+  getPlanetaryBasemapByStyleUrl,
+  setActiveEllipsoidId,
+} from "./ellipsoids";
 import type { PlanetaryBasemap } from "./ellipsoids";
 
 export type ConversionToolKind =
@@ -1549,10 +1553,32 @@ function finishHistoryStep(): void {
   const selectionDangling =
     s.selectedLayerId !== null &&
     !s.layers.some((layer) => layer.id === s.selectedLayerId);
+  // The basemap is in the undo history but the ellipsoid preference is not, so a
+  // step that restores a different basemap can leave the two out of sync (e.g.
+  // undoing a switch to Mars would keep the Mars radius under an Earth basemap).
+  // Re-derive the ellipsoid from the restored basemap's body — Earth for a
+  // non-planetary basemap — so measurements always match what's shown.
+  const restoredEllipsoidId =
+    getPlanetaryBasemapByStyleUrl(s.basemapStyleUrl)?.ellipsoidId ??
+    DEFAULT_ELLIPSOID_ID;
+  const ellipsoidPatch =
+    s.preferences.map.ellipsoidId !== restoredEllipsoidId
+      ? {
+          preferences: {
+            ...s.preferences,
+            map: { ...s.preferences.map, ellipsoidId: restoredEllipsoidId },
+          },
+        }
+      : {};
   useAppStore.setState(
     selectionDangling
-      ? { isDirty: true, selectedLayerId: null, selectedFeatureId: null }
-      : { isDirty: true },
+      ? {
+          isDirty: true,
+          selectedLayerId: null,
+          selectedFeatureId: null,
+          ...ellipsoidPatch,
+        }
+      : { isDirty: true, ...ellipsoidPatch },
   );
   // The setState above must not leave a coalesce window open for the next edit.
   cancelHistoryCoalesce();
