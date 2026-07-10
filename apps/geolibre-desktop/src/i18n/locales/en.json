@@ -97,7 +97,8 @@
     "title": "Change basemap",
     "applyCustom": "Apply",
     "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
-    "sectionPlanetary": "Planetary"
+    "sectionMoon": "The Moon",
+    "sectionMars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Pick a color from the screen",

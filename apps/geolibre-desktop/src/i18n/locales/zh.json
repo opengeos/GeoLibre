@@ -96,7 +96,8 @@
     "title": "更改底图",
     "applyCustom": "应用",
     "invalidUrl": "请输入有效的 HTTP 或 HTTPS 样式 URL。",
-    "sectionPlanetary": "星球"
+    "sectionMoon": "月球",
+    "sectionMars": "火星"
   },
   "common": {
     "pickColorFromScreen": "从屏幕上拾取颜色",

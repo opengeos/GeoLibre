@@ -1,5 +1,6 @@
 import {
   BLANK_BASEMAP,
+  PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
   useAppStore,
   type PlanetaryBasemap,
@@ -24,6 +25,7 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
+import { planetaryBodySectionKey } from "../../lib/planetary-sections";
 
 // Picking the "Liberty 3D" preset applies the Liberty style and tilts the
 // current camera into a 3D perspective in place (matching the New Project
@@ -223,21 +225,23 @@ export function BasemapPickerDialog({
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">
-              {t("basemapPicker.sectionPlanetary")}
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {PLANETARY_BASEMAPS.map((basemap) => (
-                <PresetButton
-                  key={basemap.id}
-                  name={basemap.name}
-                  selected={activeChoice === basemap.id}
-                  onSelect={() => applyPlanetary(basemap)}
-                />
-              ))}
+          {PLANETARY_BASEMAP_GROUPS.map((group) => (
+            <div key={group.ellipsoidId} className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t(planetaryBodySectionKey(group.ellipsoidId))}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {group.basemaps.map((basemap) => (
+                  <PresetButton
+                    key={basemap.id}
+                    name={basemap.name}
+                    selected={activeChoice === basemap.id}
+                    onSelect={() => applyPlanetary(basemap)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">

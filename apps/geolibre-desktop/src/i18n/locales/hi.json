@@ -97,7 +97,8 @@
     "title": "बेसमैप बदलें",
     "applyCustom": "लागू करें",
     "invalidUrl": "एक मान्य HTTP या HTTPS स्टाइल URL दर्ज करें।",
-    "sectionPlanetary": "प्लैनेटरी"
+    "sectionMoon": "चंद्रमा",
+    "sectionMars": "मंगल"
   },
   "common": {
     "pickColorFromScreen": "स्क्रीन से रंग चुनें",

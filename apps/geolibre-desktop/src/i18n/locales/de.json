@@ -97,7 +97,8 @@
     "title": "Basiskarte ändern",
     "applyCustom": "Anwenden",
     "invalidUrl": "Geben Sie eine gültige HTTP- oder HTTPS-Style-URL ein.",
-    "sectionPlanetary": "Planetenkarten"
+    "sectionMoon": "Der Mond",
+    "sectionMars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Farbe vom Bildschirm auswählen",

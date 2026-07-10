@@ -97,7 +97,8 @@
     "title": "Basiskaart wijzigen",
     "applyCustom": "Toepassen",
     "invalidUrl": "Voer een geldige HTTP- of HTTPS-stijl-URL in.",
-    "sectionPlanetary": "Planetair"
+    "sectionMoon": "De Maan",
+    "sectionMars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Kies een kleur van het scherm",

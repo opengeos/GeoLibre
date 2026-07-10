@@ -124,8 +124,15 @@ export interface PlanetaryBasemap {
   name: string;
   /** Sentinel stored as the basemap style URL. */
   styleUrl: string;
-  /** XYZ tile template. */
+  /** XYZ (or TMS, see {@link scheme}) tile template. */
   tileUrl: string;
+  /**
+   * Tile row ordering. OpenPlanetaryMap's single-layer raster mosaics (the S3
+   * datasets) are published as **TMS** (tile origin bottom-left, Y flipped),
+   * whereas the CARTO `opmbuilder` named maps are standard **XYZ**. Omit for
+   * XYZ; MapLibre defaults to `"xyz"` when `scheme` is absent.
+   */
+  scheme?: "tms";
   /** Max native zoom of the source (MapLibre overzooms beyond this). */
   maxZoom: number;
   /** Attribution shown on the map. */
@@ -136,32 +143,70 @@ export interface PlanetaryBasemap {
 
 export const PLANETARY_BASEMAP_SENTINEL_PREFIX = "geolibre://basemap/";
 
-const USGS_ATTRIBUTION =
-  '<a href="https://astrogeology.usgs.gov">USGS Astrogeology</a> / NASA';
-
 const OPM_ATTRIBUTION =
-  '<a href="https://www.openplanetary.org/opm">OpenPlanetaryMap</a> / USGS / NASA';
+  '<a href="https://www.openplanetary.org/opm">OpenPlanetaryMap</a>';
 
-// USGS Astrogeology MapServer serves these global mosaics as Web-Mercator XYZ
-// tiles (`tilemode=gmap`) with open CORS, so MapLibre renders them directly.
-// These are the photographic mosaics Google Earth/Moon use — the Viking
-// colorized mosaic for Mars and the LRO WAC mosaic for the Moon — rather than a
-// stylized cartographic basemap.
+/** Data-source credit joined with the OpenPlanetaryMap attribution. */
+const opmCredit = (source: string) => `${source} · ${OPM_ATTRIBUTION}`;
+
+// The GeoLibre tiles Worker (workers/tiles), which adds CORS to the OPM S3
+// mosaics that lack it. Its dataset keys mirror the DATASETS map in that Worker.
+// Tile path: `${TILE_PROXY_BASE}/<dataset>/{z}/{x}/{y}.png`.
+const TILE_PROXY_BASE = "https://tiles.geolibre.app/opm";
+
+// The OpenPlanetaryMap Mars and Moon basemaps
+// (https://openplanetarymap.org/basemaps/). Every one is a pre-rendered raster
+// served from a CDN — fast and reliable, unlike the USGS Astrogeology MapServer
+// these replace, which rendered every tile per request from a cgi-bin.
 //
-// MapServer's gmap `tile=` parameter wants the tile coordinates space-separated
-// (`x y z`). We encode the separators as `%20`, NOT `+`: the Linux Tauri webview
-// (WebKitGTK) re-encodes a literal `+` in the request URL to `%2B`, which
-// MapServer then reads as a literal plus rather than a space, so every tile
-// comes back as an HTML error and the map goes black. `%20` is the canonical
-// space encoding and survives both Chromium and WebKit unchanged.
+// Two tiling schemes are in play (see PlanetaryBasemap.scheme):
+//   - The single-layer OPM mosaics (MOLA/Viking/hillshade/Moon albedo) are TMS.
+//   - The multi-layer CARTO `opmbuilder` named maps are standard XYZ.
+// maxZoom is each source's probed max native zoom, so MapLibre overzooms (blurs)
+// rather than 404s.
+//
+// CORS: MapLibre GL fetches raster tiles with `fetch()`, which enforces CORS.
+// The CARTO `opmbuilder` named maps send `Access-Control-Allow-Origin: *`, so
+// they are referenced directly. The single-layer OPM mosaics are served from S3
+// buckets that send NO CORS header, so the browser blocks them — those go
+// through the GeoLibre tiles Worker (workers/tiles, tiles.geolibre.app), which
+// re-emits each tile with CORS and edge-caches it. See TILE_PROXY_BASE.
 export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
-  // Cartographic OpenPlanetaryMap basemaps (colorized shaded relief + labels).
-  // These are pre-rendered on a Fastly CDN, so they load fast and reliably —
-  // the "just works" choice when the USGS imagery below is slow.
+  // --- Mars ---------------------------------------------------------------
   {
-    id: "mars-opm",
-    name: "Mars (OpenPlanetaryMap)",
-    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-opm`,
+    id: "mars-colour-mola-elevation",
+    name: "Mars Colour MOLA Elevation",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-colour-mola-elevation`,
+    tileUrl: `${TILE_PROXY_BASE}/mars-mola-color-noshade/{z}/{x}/{y}.png`,
+    scheme: "tms",
+    maxZoom: 6,
+    attribution: opmCredit("NASA / MOLA"),
+    ellipsoidId: "mars",
+  },
+  {
+    id: "mars-viking-mdim21",
+    name: "Mars Viking MDIM2.1",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-viking-mdim21`,
+    tileUrl: `${TILE_PROXY_BASE}/mars-viking-mdim21/{z}/{x}/{y}.png`,
+    scheme: "tms",
+    maxZoom: 7,
+    attribution: opmCredit("NASA / Viking / USGS"),
+    ellipsoidId: "mars",
+  },
+  {
+    id: "mars-hillshade",
+    name: "Mars Hillshade",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-hillshade`,
+    tileUrl: `${TILE_PROXY_BASE}/mars-hillshade/{z}/{x}/{y}.png`,
+    scheme: "tms",
+    maxZoom: 6,
+    attribution: opmCredit("NASA / MOLA"),
+    ellipsoidId: "mars",
+  },
+  {
+    id: "mars-basemap-v0-2",
+    name: "OPM Mars Basemap v0.2",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-basemap-v0-2`,
     tileUrl:
       "https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-2/all/{z}/{x}/{y}.png",
     maxZoom: 6,
@@ -169,39 +214,67 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     ellipsoidId: "mars",
   },
   {
-    id: "moon-opm",
-    name: "Moon (OpenPlanetaryMap)",
-    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}moon-opm`,
+    id: "mars-shaded-colour-mola-elevation",
+    name: "Mars Shaded Colour MOLA Elevation",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-shaded-colour-mola-elevation`,
+    tileUrl: `${TILE_PROXY_BASE}/mars-mola-color/{z}/{x}/{y}.png`,
+    scheme: "tms",
+    maxZoom: 6,
+    attribution: opmCredit("NASA / MOLA"),
+    ellipsoidId: "mars",
+  },
+  {
+    id: "mars-shaded-grayscale-mola-elevation",
+    name: "Mars Shaded Grayscale MOLA Elevation",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-shaded-grayscale-mola-elevation`,
+    tileUrl: `${TILE_PROXY_BASE}/mars-mola-gray/{z}/{x}/{y}.png`,
+    scheme: "tms",
+    maxZoom: 9,
+    attribution: opmCredit("NASA / MOLA"),
+    ellipsoidId: "mars",
+  },
+  // --- The Moon -----------------------------------------------------------
+  {
+    id: "moon-hillshaded-albedo",
+    name: "Moon Hillshaded Albedo",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}moon-hillshaded-albedo`,
+    tileUrl: `${TILE_PROXY_BASE}/moon-hillshaded-albedo/{z}/{x}/{y}.png`,
+    scheme: "tms",
+    maxZoom: 6,
+    attribution: opmCredit("NASA / LOLA / USGS"),
+    ellipsoidId: "moon",
+  },
+  {
+    id: "moon-basemap-v0-1",
+    name: "OPM Moon Basemap v0.1",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}moon-basemap-v0-1`,
     tileUrl:
       "https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png",
     maxZoom: 6,
     attribution: OPM_ATTRIBUTION,
     ellipsoidId: "moon",
   },
-  // Photographic mosaics (the Google Earth/Moon look), served on demand by the
-  // USGS Astrogeology MapServer. Higher fidelity but slower — the cgi-bin
-  // renders each tile per request rather than serving from a CDN.
-  {
-    id: "mars-viking",
-    name: "Mars (Viking imagery)",
-    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-viking`,
-    tileUrl:
-      "https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/mars/mars_simp_cyl.map&layers=MDIM21_color&mode=tile&tilemode=gmap&tile={x}%20{y}%20{z}",
-    maxZoom: 7,
-    attribution: `Mars Viking MDIM 2.1 — ${USGS_ATTRIBUTION}`,
-    ellipsoidId: "mars",
-  },
-  {
-    id: "moon-lroc",
-    name: "Moon (LRO imagery)",
-    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}moon-lroc`,
-    tileUrl:
-      "https://planetarymaps.usgs.gov/cgi-bin/mapserv?map=/maps/earth/moon_simp_cyl.map&layers=LROC_WAC&mode=tile&tilemode=gmap&tile={x}%20{y}%20{z}",
-    maxZoom: 7,
-    attribution: `LRO LROC WAC — ${USGS_ATTRIBUTION}`,
-    ellipsoidId: "moon",
-  },
 ] as const;
+
+/** The celestial bodies with basemaps, in the order the UI groups them. */
+const PLANETARY_BODY_ORDER: readonly EllipsoidId[] = ["moon", "mars"];
+
+/** A celestial body paired with the planetary basemaps that depict it. */
+export interface PlanetaryBasemapGroup {
+  ellipsoidId: EllipsoidId;
+  basemaps: readonly PlanetaryBasemap[];
+}
+
+/**
+ * {@link PLANETARY_BASEMAPS} grouped by celestial body, so the New Project and
+ * Change Basemap panels can render one section per body (The Moon, Mars)
+ * instead of a single flat "Planetary" list.
+ */
+export const PLANETARY_BASEMAP_GROUPS: readonly PlanetaryBasemapGroup[] =
+  PLANETARY_BODY_ORDER.map((ellipsoidId) => ({
+    ellipsoidId,
+    basemaps: PLANETARY_BASEMAPS.filter((b) => b.ellipsoidId === ellipsoidId),
+  })).filter((group) => group.basemaps.length > 0);
 
 /** Resolve a `geolibre://basemap/<id>` sentinel to its planetary basemap. */
 export function getPlanetaryBasemapByStyleUrl(

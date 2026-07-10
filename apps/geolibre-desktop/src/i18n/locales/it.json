@@ -97,7 +97,8 @@
     "title": "Cambia mappa di base",
     "applyCustom": "Applica",
     "invalidUrl": "Inserisci un URL di stile valido, in formato HTTP o HTTPS.",
-    "sectionPlanetary": "Planetario"
+    "sectionMoon": "La Luna",
+    "sectionMars": "Marte"
   },
   "common": {
     "pickColorFromScreen": "Preleva un colore dallo schermo",

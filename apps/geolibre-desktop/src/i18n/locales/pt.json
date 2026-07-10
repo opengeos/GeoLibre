@@ -97,7 +97,8 @@
     "title": "Alterar mapa base",
     "applyCustom": "Aplicar",
     "invalidUrl": "Digite uma URL de estilo HTTP ou HTTPS válida.",
-    "sectionPlanetary": "Planetário"
+    "sectionMoon": "A Lua",
+    "sectionMars": "Marte"
   },
   "common": {
     "pickColorFromScreen": "Escolher uma cor da tela",

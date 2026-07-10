@@ -99,7 +99,8 @@
     "title": "Изменить базовую карту",
     "applyCustom": "Применить",
     "invalidUrl": "Введите корректный URL стиля (HTTP или HTTPS).",
-    "sectionPlanetary": "Планетарные"
+    "sectionMoon": "Луна",
+    "sectionMars": "Марс"
   },
   "common": {
     "pickColorFromScreen": "Выбрать цвет с экрана",

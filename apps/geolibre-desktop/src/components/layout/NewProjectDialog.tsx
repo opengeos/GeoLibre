@@ -2,6 +2,7 @@ import {
   BLANK_BASEMAP,
   createDefaultMapView,
   OPENFREEMAP_BASEMAPS,
+  PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
   PROTOMAPS_BASEMAPS,
   useAppStore,
@@ -12,6 +13,7 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
+import { planetaryBodySectionKey } from "../../lib/planetary-sections";
 import {
   Button,
   cn,
@@ -321,22 +323,24 @@ export function NewProjectDialog({
                   </div>
                 ) : null}
 
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {t("basemapPicker.sectionPlanetary")}
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {PLANETARY_BASEMAPS.map((basemap) => (
-                      <BasemapButton
-                        key={basemap.id}
-                        id={basemap.id}
-                        name={basemap.name}
-                        selected={selectedBasemapId === basemap.id}
-                        onSelect={setSelectedBasemapId}
-                      />
-                    ))}
+                {PLANETARY_BASEMAP_GROUPS.map((group) => (
+                  <div key={group.ellipsoidId} className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {t(planetaryBodySectionKey(group.ellipsoidId))}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {group.basemaps.map((basemap) => (
+                        <BasemapButton
+                          key={basemap.id}
+                          id={basemap.id}
+                          name={basemap.name}
+                          selected={selectedBasemapId === basemap.id}
+                          onSelect={setSelectedBasemapId}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ))}
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">

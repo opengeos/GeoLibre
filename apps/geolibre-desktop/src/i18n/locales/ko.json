@@ -96,7 +96,8 @@
     "title": "베이스맵 변경",
     "applyCustom": "적용",
     "invalidUrl": "유효한 HTTP 또는 HTTPS 스타일 URL을 입력하세요.",
-    "sectionPlanetary": "행성"
+    "sectionMoon": "달",
+    "sectionMars": "화성"
   },
   "common": {
     "pickColorFromScreen": "화면에서 색상 선택",

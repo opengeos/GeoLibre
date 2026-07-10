@@ -97,7 +97,8 @@
     "title": "Temel haritayı değiştir",
     "applyCustom": "Uygula",
     "invalidUrl": "Geçerli bir HTTP veya HTTPS stil URL'si girin.",
-    "sectionPlanetary": "Gezegensel"
+    "sectionMoon": "Ay",
+    "sectionMars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Ekrandan bir renk seç",

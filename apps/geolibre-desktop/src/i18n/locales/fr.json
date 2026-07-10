@@ -97,7 +97,8 @@
     "title": "Changer de fond de carte",
     "applyCustom": "Appliquer",
     "invalidUrl": "Entrez une URL de style HTTP ou HTTPS valide.",
-    "sectionPlanetary": "Planétaire"
+    "sectionMoon": "La Lune",
+    "sectionMars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Choisir une couleur à l'écran",
