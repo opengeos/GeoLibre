@@ -4,7 +4,12 @@ import type {
   MapLayerMouseEvent,
   Map as MapLibreMap,
 } from "maplibre-gl";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreFloatingPanelRegistration,
+  GeoLibreMapControlPosition,
+  GeoLibrePlugin,
+} from "../types";
 
 // mapillary-js is a heavy WebGL module, so it is loaded lazily the first time
 // the viewer mounts (see mountViewer) rather than statically at import time.
@@ -16,16 +21,22 @@ const PANEL_ID = "geolibre-mapillary-viewer";
 const SOURCE_ID = "geolibre-mapillary-coverage";
 const SELECTED_SOURCE_ID = "geolibre-mapillary-selected";
 const SEQUENCE_LAYER_ID = "geolibre-mapillary-sequence";
+const SEQUENCE_HIGHLIGHT_LAYER_ID = "geolibre-mapillary-sequence-highlight";
 const OVERVIEW_LAYER_ID = "geolibre-mapillary-overview";
 const IMAGE_LAYER_ID = "geolibre-mapillary-image";
 const SELECTED_LAYER_ID = "geolibre-mapillary-selected-marker";
+// The Layers-panel entry that stands in for the (imperatively added) coverage
+// layers so the user can toggle/reorder them like any other layer (#5).
+const COVERAGE_STORE_LAYER_ID = "geolibre-mapillary-coverage-layer";
 // The point layers that carry a clickable image `id` property.
 const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID, OVERVIEW_LAYER_ID];
 
-// Mapillary green for coverage, orange for the currently viewed image, matching
-// the colours used at mapillary.com/app.
+// Mapillary green for coverage, orange for the currently viewed image, and a
+// magenta highlight for the selected image's whole sequence, matching the
+// colours used at mapillary.com/app.
 const COVERAGE_COLOR = "#05cb63";
 const SELECTED_COLOR = "#f5811f";
+const SEQUENCE_HIGHLIGHT_COLOR = "#e91e63";
 
 const TOKEN_STORAGE_KEY = "geolibre:mapillary-access-token";
 const ATTRIBUTION =
@@ -49,6 +60,7 @@ export interface MapillaryLabels {
   tokenLabel: string;
   loading: string;
   loadError: string;
+  coverageLayer: string;
 }
 
 let labels: MapillaryLabels = {
@@ -62,6 +74,7 @@ let labels: MapillaryLabels = {
   tokenLabel: "Mapillary access token",
   loading: "Loading imagery…",
   loadError: "Could not load this image.",
+  coverageLayer: "Mapillary Coverage",
 };
 
 export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
@@ -141,8 +154,12 @@ let settingsButtonEl: HTMLButtonElement | null = null;
 let pendingImageId: string | null = null;
 
 let clickHandler: ((event: MapLayerMouseEvent) => void) | null = null;
+let dblclickHandler: ((event: MapLayerMouseEvent) => void) | null = null;
 let enterHandler: (() => void) | null = null;
 let leaveHandler: (() => void) | null = null;
+
+// Where the floating viewer panel docks; drives the Plugins-menu position submenu.
+let panelPosition: GeoLibreMapControlPosition = "top-right";
 
 // ---------------------------------------------------------------------------
 // Coverage layers
@@ -160,7 +177,9 @@ function addCoverage(activeMap: MapLibreMap): void {
     activeMap.addSource(SOURCE_ID, {
       type: "vector",
       tiles: [`${COVERAGE_TILE_BASE}?access_token=${encodeURIComponent(token)}`],
-      minzoom: 6,
+      // No `minzoom` floor: the coverage renders at every zoom level (the tile
+      // server serves the sequence overview at low zooms), instead of vanishing
+      // below z6.
       maxzoom: 14,
       attribution: ATTRIBUTION,
     });
@@ -177,6 +196,25 @@ function addCoverage(activeMap: MapLibreMap): void {
         "line-color": COVERAGE_COLOR,
         "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 14, 2.5],
         "line-opacity": 0.85,
+      },
+    });
+  }
+
+  // A wider magenta line drawn over the base sequence, filtered to the selected
+  // image's sequence so the whole track lights up when a point is viewed,
+  // mirroring mapillary.com/app. Starts filtered to nothing.
+  if (!activeMap.getLayer(SEQUENCE_HIGHLIGHT_LAYER_ID)) {
+    activeMap.addLayer({
+      id: SEQUENCE_HIGHLIGHT_LAYER_ID,
+      type: "line",
+      source: SOURCE_ID,
+      "source-layer": "sequence",
+      filter: ["==", ["get", "id"], "__none__"],
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: {
+        "line-color": SEQUENCE_HIGHLIGHT_COLOR,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2, 14, 4],
+        "line-opacity": 0.95,
       },
     });
   }
@@ -231,11 +269,25 @@ function addCoverage(activeMap: MapLibreMap): void {
       },
     });
   }
+
+  // Surface the coverage as a single first-class Layers-panel entry so the user
+  // can hide/show and reorder it. `controlOwnsPaint` keeps the plugin's own
+  // paint (the layer-sync leaves it alone and only manages visibility/order).
+  appRef?.registerExternalNativeLayer?.({
+    id: COVERAGE_STORE_LAYER_ID,
+    name: labels.coverageLayer,
+    type: "vector-tiles",
+    nativeLayerIds: [SEQUENCE_LAYER_ID, OVERVIEW_LAYER_ID, IMAGE_LAYER_ID],
+    sourceIds: [SOURCE_ID],
+    metadata: { controlOwnsPaint: true },
+  });
 }
 
 function removeCoverage(activeMap: MapLibreMap): void {
+  appRef?.unregisterExternalNativeLayer?.(COVERAGE_STORE_LAYER_ID);
   for (const id of [
     SELECTED_LAYER_ID,
+    SEQUENCE_HIGHLIGHT_LAYER_ID,
     IMAGE_LAYER_ID,
     OVERVIEW_LAYER_ID,
     SEQUENCE_LAYER_ID,
@@ -273,6 +325,30 @@ function setSelectedMarker(lngLat: { lng: number; lat: number } | null): void {
         }
       : emptyCollection(),
   );
+  raiseSelectionLayers();
+}
+
+/** Light up the selected image's whole sequence (or clear it with null). */
+function highlightSequence(sequenceId: string | null): void {
+  if (!map || !map.getLayer(SEQUENCE_HIGHLIGHT_LAYER_ID)) return;
+  map.setFilter(SEQUENCE_HIGHLIGHT_LAYER_ID, [
+    "==",
+    ["get", "id"],
+    sequenceId ?? "__none__",
+  ]);
+  raiseSelectionLayers();
+}
+
+/**
+ * Keep the highlight and orange marker above the coverage layers. Reordering the
+ * coverage entry from the Layers panel can otherwise slip a coverage layer above
+ * them and bury the selection.
+ */
+function raiseSelectionLayers(): void {
+  if (!map) return;
+  if (map.getLayer(SEQUENCE_HIGHLIGHT_LAYER_ID))
+    map.moveLayer(SEQUENCE_HIGHLIGHT_LAYER_ID);
+  if (map.getLayer(SELECTED_LAYER_ID)) map.moveLayer(SELECTED_LAYER_ID);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,10 +360,40 @@ function imageIdFromFeature(feature: MapGeoJSONFeature | undefined): string | nu
   return raw == null ? null : String(raw);
 }
 
+/** The point geometry of a clicked coverage feature, so the marker lands on it. */
+function pointFromFeature(
+  feature: MapGeoJSONFeature | undefined,
+): { lng: number; lat: number } | null {
+  if (feature?.geometry?.type !== "Point") return null;
+  const [lng, lat] = feature.geometry.coordinates;
+  return typeof lng === "number" && typeof lat === "number"
+    ? { lng, lat }
+    : null;
+}
+
+/** Select the coverage feature under the pointer: mark it and open the viewer. */
+function selectFeature(feature: MapGeoJSONFeature | undefined): void {
+  const id = imageIdFromFeature(feature);
+  if (!id) return;
+  // Drop the orange marker on the exact clicked point immediately (the viewer's
+  // `image` event later refines it to the image's computed location), so a click
+  // visibly selects the point the user aimed at instead of a nearby one.
+  const point = pointFromFeature(feature);
+  if (point) setSelectedMarker(point);
+  showImage(id);
+}
+
 function attachInteractions(activeMap: MapLibreMap): void {
   clickHandler = (event: MapLayerMouseEvent) => {
-    const id = imageIdFromFeature(event.features?.[0]);
-    if (id) showImage(id);
+    selectFeature(event.features?.[0]);
+  };
+  // Double-clicking a coverage point should select it, not zoom the map. Without
+  // this, the default double-click zoom recenters the map between the two clicks
+  // so the second one lands on a neighbouring point — the "orange point appears
+  // nearby" bug. preventDefault() suppresses the zoom and we select explicitly.
+  dblclickHandler = (event: MapLayerMouseEvent) => {
+    event.preventDefault();
+    selectFeature(event.features?.[0]);
   };
   enterHandler = () => {
     activeMap.getCanvas().style.cursor = "pointer";
@@ -297,6 +403,7 @@ function attachInteractions(activeMap: MapLibreMap): void {
   };
   for (const layerId of CLICKABLE_LAYER_IDS) {
     activeMap.on("click", layerId, clickHandler);
+    activeMap.on("dblclick", layerId, dblclickHandler);
     activeMap.on("mouseenter", layerId, enterHandler);
     activeMap.on("mouseleave", layerId, leaveHandler);
   }
@@ -305,11 +412,13 @@ function attachInteractions(activeMap: MapLibreMap): void {
 function detachInteractions(activeMap: MapLibreMap): void {
   for (const layerId of CLICKABLE_LAYER_IDS) {
     if (clickHandler) activeMap.off("click", layerId, clickHandler);
+    if (dblclickHandler) activeMap.off("dblclick", layerId, dblclickHandler);
     if (enterHandler) activeMap.off("mouseenter", layerId, enterHandler);
     if (leaveHandler) activeMap.off("mouseleave", layerId, leaveHandler);
   }
   activeMap.getCanvas().style.cursor = "";
   clickHandler = null;
+  dblclickHandler = null;
   enterHandler = null;
   leaveHandler = null;
 }
@@ -332,10 +441,13 @@ function showImage(imageId: string): void {
 // ---------------------------------------------------------------------------
 
 function styleButton(button: HTMLButtonElement): void {
+  // The theme tokens are HSL channel triplets (shadcn convention), so they must
+  // be wrapped in hsl(); using them bare (var(--primary)) yields an invalid value
+  // that drops the border/background entirely.
   button.style.cssText =
-    "padding:6px 10px;border-radius:6px;border:1px solid var(--border,#d1d5db);" +
-    "background:var(--primary,#05cb63);color:var(--primary-foreground,#ffffff);" +
-    "font-size:12px;cursor:pointer;";
+    "padding:6px 10px;border-radius:6px;border:1px solid hsl(var(--primary));" +
+    "background:hsl(var(--primary));color:hsl(var(--primary-foreground));" +
+    "font-size:12px;cursor:pointer;white-space:nowrap;";
 }
 
 function buildPanel(container: HTMLElement): void {
@@ -343,21 +455,24 @@ function buildPanel(container: HTMLElement): void {
   // (e.g. a language change) does not strand a live Viewer on a detached node.
   destroyViewer();
   container.innerHTML = "";
+  // Fill the (resizable) card height so the viewer grows/shrinks with the panel.
   container.style.cssText =
     "display:flex;flex-direction:column;gap:8px;padding:8px;font-size:12px;" +
-    "color:var(--popover-foreground,inherit);background:var(--popover,transparent);";
+    "height:100%;box-sizing:border-box;background:transparent;" +
+    "color:hsl(var(--popover-foreground));";
 
   const hint = document.createElement("div");
   hint.textContent = labels.hint;
-  hint.style.cssText = "opacity:0.8;line-height:1.4;";
+  hint.style.cssText = "opacity:0.8;line-height:1.4;flex:0 0 auto;";
   hintEl = hint;
   container.appendChild(hint);
 
-  // The mapillary-js viewer mounts into this element.
+  // The mapillary-js viewer mounts into this element. It flexes to fill the
+  // space between the hint and footer so a taller panel yields a taller viewer.
   const view = document.createElement("div");
   view.style.cssText =
-    "position:relative;width:100%;height:320px;border-radius:8px;overflow:hidden;" +
-    "background:#000;";
+    "position:relative;width:100%;flex:1 1 auto;min-height:160px;" +
+    "border-radius:8px;overflow:hidden;background:#000;";
   viewerContainer = view;
   container.appendChild(view);
 
@@ -371,11 +486,11 @@ function buildPanel(container: HTMLElement): void {
 }
 
 function renderTokenPrompt(host: HTMLElement): void {
-  host.style.background = "var(--muted,#f3f4f6)";
+  host.style.background = "hsl(var(--muted))";
   const wrap = document.createElement("div");
   wrap.style.cssText =
     "display:flex;flex-direction:column;gap:8px;padding:16px;height:100%;" +
-    "box-sizing:border-box;justify-content:center;color:var(--popover-foreground,inherit);";
+    "box-sizing:border-box;justify-content:center;color:hsl(var(--popover-foreground));";
 
   const msg = document.createElement("div");
   msg.textContent = labels.noToken;
@@ -385,13 +500,17 @@ function renderTokenPrompt(host: HTMLElement): void {
   const row = document.createElement("div");
   row.style.cssText = "display:flex;gap:6px;";
   const input = document.createElement("input");
-  input.type = "text";
+  // A token is a secret: mask it (so a previously saved token opened from the
+  // settings link shows as dots, and typing a new one is masked too).
+  input.type = "password";
+  input.autocomplete = "off";
+  input.spellcheck = false;
   input.placeholder = labels.tokenPlaceholder;
   input.value = readUserToken() ?? "";
   input.style.cssText =
     "flex:1;min-width:0;padding:6px 8px;border-radius:6px;font-size:12px;" +
-    "border:1px solid var(--border,#d1d5db);background:var(--background,#fff);" +
-    "color:var(--foreground,inherit);";
+    "border:1px solid hsl(var(--border));background:hsl(var(--background));" +
+    "color:hsl(var(--foreground));";
   const save = document.createElement("button");
   save.type = "button";
   save.textContent = labels.tokenSave;
@@ -416,7 +535,7 @@ function renderTokenPrompt(host: HTMLElement): void {
   help.target = "_blank";
   help.rel = "noopener noreferrer";
   help.textContent = labels.tokenHelp;
-  help.style.cssText = "font-size:11px;color:var(--primary,#05cb63);";
+  help.style.cssText = "font-size:11px;color:hsl(var(--primary));";
   wrap.appendChild(help);
 
   host.appendChild(wrap);
@@ -425,8 +544,8 @@ function renderTokenPrompt(host: HTMLElement): void {
 function buildFooter(): HTMLElement {
   const footer = document.createElement("div");
   footer.style.cssText =
-    "display:flex;align-items:center;justify-content:space-between;" +
-    "font-size:11px;opacity:0.75;";
+    "display:flex;align-items:center;justify-content:space-between;gap:8px;" +
+    "flex:0 0 auto;font-size:11px;opacity:0.75;";
 
   const attribution = document.createElement("div");
   // Required by the Mapillary developer terms: visible logo/name linking back.
@@ -439,8 +558,9 @@ function buildFooter(): HTMLElement {
   settings.textContent = labels.tokenLabel;
   settingsButtonEl = settings;
   settings.style.cssText =
-    "background:none;border:none;color:var(--primary,#05cb63);cursor:pointer;" +
-    "font-size:11px;padding:0;text-decoration:underline;";
+    "background:transparent;border:1px solid hsl(var(--border));border-radius:6px;" +
+    "color:hsl(var(--primary));cursor:pointer;font-size:11px;padding:3px 8px;" +
+    "white-space:nowrap;";
   settings.addEventListener("click", () => {
     if (viewerContainer) {
       destroyViewer();
@@ -481,6 +601,16 @@ async function doMountViewer(): Promise<void> {
     viewer.on("image", (event) => {
       const image = event.image;
       setSelectedMarker(image.lngLat);
+      // Highlight the whole sequence the current image belongs to (#9).
+      highlightSequence(image.sequenceId ?? null);
+      // Keep the map centred on the image as the user plays/steps through the
+      // sequence, so the orange marker does not walk off-screen (#7).
+      if (map && image.lngLat) {
+        map.easeTo({
+          center: [image.lngLat.lng, image.lngLat.lat],
+          duration: 500,
+        });
+      }
     });
     if (pendingImageId) {
       void viewer.moveTo(pendingImageId).catch(() => {});
@@ -519,6 +649,28 @@ function ensureCoverageWhenReady(activeMap: MapLibreMap): void {
   else activeMap.once("idle", () => addCoverage(activeMap));
 }
 
+// A single registration object reused across re-registrations, so changing the
+// dock position (which re-registers to move the card) keeps the object identity
+// and does not tear down the live viewer. See setMapControlPosition.
+const floatingPanelRegistration: GeoLibreFloatingPanelRegistration = {
+  id: PANEL_ID,
+  title: labels.title,
+  defaultWidth: 460,
+  defaultHeight: 460,
+  position: panelPosition,
+  render: (container: HTMLElement) => {
+    panelContainer = container;
+    buildPanel(container);
+    return () => {
+      destroyViewer();
+      viewerContainer = null;
+      hintEl = null;
+      settingsButtonEl = null;
+      if (panelContainer === container) panelContainer = null;
+    };
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Plugin definition
 // ---------------------------------------------------------------------------
@@ -546,25 +698,26 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
       });
     });
 
+    floatingPanelRegistration.title = labels.title;
+    floatingPanelRegistration.position = panelPosition;
     unregisterPanel =
-      app.registerFloatingPanel?.({
-        id: PANEL_ID,
-        title: labels.title,
-        defaultWidth: 460,
-        render: (container) => {
-          panelContainer = container;
-          buildPanel(container);
-          return () => {
-            destroyViewer();
-            viewerContainer = null;
-            hintEl = null;
-            settingsButtonEl = null;
-            if (panelContainer === container) panelContainer = null;
-          };
-        },
-      }) ?? null;
+      app.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
 
     app.openFloatingPanel?.(PANEL_ID);
+  },
+  getMapControlPosition: () => panelPosition,
+  setMapControlPosition: (
+    app: GeoLibreAppAPI,
+    position: GeoLibreMapControlPosition,
+  ) => {
+    panelPosition = position;
+    floatingPanelRegistration.position = position;
+    // Re-register the same object so the host re-reads its position and moves the
+    // card. Identity is preserved, so the open panel's viewer is not rebuilt.
+    if (unregisterPanel) {
+      unregisterPanel = app.registerFloatingPanel?.(floatingPanelRegistration) ??
+        null;
+    }
   },
   deactivate: (app: GeoLibreAppAPI) => {
     unsubscribeBasemap?.();

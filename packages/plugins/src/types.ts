@@ -527,6 +527,20 @@ export interface GeoLibreFloatingPanelRegistration {
   /** Preferred card width in px (the host clamps it to a sensible range). */
   defaultWidth?: number;
   /**
+   * Preferred card height in px. When set, the card opens at this height and its
+   * body fills it (so a `height:100%` plugin element grows with the card);
+   * omitted, the card sizes to its content. The host clamps it and lets the user
+   * resize from the corner handle.
+   */
+  defaultHeight?: number;
+  /**
+   * Which corner of the map the card first opens at (default `top-left`). The
+   * card stays freely draggable/resizable afterwards; a plugin can move it
+   * between corners by re-registering with a new position (used to back the
+   * Plugins-menu position submenu).
+   */
+  position?: GeoLibreMapControlPosition;
+  /**
    * Populate the card body. Called once with an empty container the plugin
    * fills with its own DOM. The container stays mounted while the card is open,
    * so plugin state persists. May return a cleanup function the host runs when
