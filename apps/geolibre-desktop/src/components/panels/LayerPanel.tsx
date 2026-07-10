@@ -505,8 +505,11 @@ export function LayerPanel({
         : undefined;
   // The Earth basemap to fall back to when a planet is deselected — the last one
   // active while no planet was selected (e.g. Liberty). Tracked in a ref so it
-  // survives the planet round-trip.
-  const previousEarthBasemap = useRef(basemapStyleUrl);
+  // survives the planet round-trip. Starts undefined (not seeded from the mount
+  // value, which could be a planetary basemap if the panel mounted while off
+  // Earth) and is only ever set to a genuine Earth basemap by the guard below,
+  // so a deselect never restores a planetary sentinel.
+  const previousEarthBasemap = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!selectedPlanet) previousEarthBasemap.current = basemapStyleUrl;
   }, [selectedPlanet, basemapStyleUrl]);
@@ -724,7 +727,7 @@ export function LayerPanel({
   // dropdown). Selecting a body applies its basemap and syncs the ellipsoid;
   // deselecting the active body returns to Earth and restores the basemap that
   // was showing before (e.g. Liberty).
-  const togglePlanet = (ellipsoidId: string, selected: boolean) => {
+  const togglePlanet = (ellipsoidId: EllipsoidId, selected: boolean) => {
     if (!selected) {
       restoreEarthBasemap(previousEarthBasemap.current ?? DEFAULT_BASEMAP);
       return;
