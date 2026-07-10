@@ -27,16 +27,12 @@ import {
   rasterSubsetKind,
   type RasterSubsetKind,
   saveRasterSubset,
-  WGS84,
 } from "../../lib/raster-subset-export";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 320;
 const PANEL_MARGIN = 12;
-
-/** EPSG codes whose units are degrees (so a resolution is in degrees, not meters). */
-const GEOGRAPHIC_EPSG = new Set([4326, 4979, 4269, 4267]);
 
 interface PanelPos {
   x: number;
@@ -218,6 +214,29 @@ export function RasterSubsetPanel({
     coords.south !== "" &&
     coords.east !== "" &&
     coords.north !== "";
+  // The specific (and common, for Pacific XYZ layers) invalid case where the box
+  // wraps the 180° meridian: everything is in range and south<north, but
+  // west>=east. The extractors can't request a wrapping box, so we tell the user
+  // to split it rather than showing the generic range hint.
+  const bboxCrossesAntimeridian = useMemo(() => {
+    if (!bboxInvalid) return false;
+    const w = Number(coords.west);
+    const e = Number(coords.east);
+    const s = Number(coords.south);
+    const n = Number(coords.north);
+    return (
+      Number.isFinite(w) &&
+      Number.isFinite(e) &&
+      Number.isFinite(s) &&
+      Number.isFinite(n) &&
+      w >= -180 &&
+      e <= 180 &&
+      s >= -90 &&
+      n <= 90 &&
+      s < n &&
+      w >= e
+    );
+  }, [bboxInvalid, coords]);
 
   // Clear both status messages when the user edits any field, so a stale error
   // or success from a prior extraction doesn't linger while they retry.
@@ -225,12 +244,6 @@ export function RasterSubsetPanel({
     setSuccess(null);
     setError(null);
   }, []);
-  // Whether the resolution is in meters (a projected output CRS) or degrees (a
-  // geographic one, including the default WGS84 box CRS).
-  const resolutionInMeters = useMemo(() => {
-    const code = outputCrs.trim() === "" ? WGS84 : Number(outputCrs);
-    return Number.isFinite(code) && !GEOGRAPHIC_EPSG.has(code);
-  }, [outputCrs]);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<PanelPos | null>(null);
@@ -658,7 +671,9 @@ export function RasterSubsetPanel({
           </div>
           {bboxInvalid ? (
             <p className="text-xs text-destructive">
-              {t("rasterSubset.bboxHint")}
+              {bboxCrossesAntimeridian
+                ? t("rasterSubset.bboxAntimeridianHint")
+                : t("rasterSubset.bboxHint")}
             </p>
           ) : null}
 
@@ -688,9 +703,7 @@ export function RasterSubsetPanel({
           ) : (
             <div className="space-y-1">
               <Label htmlFor="subset-resolution" className="text-xs">
-                {resolutionInMeters
-                  ? t("rasterSubset.resolutionMeters")
-                  : t("rasterSubset.resolutionDegrees")}
+                {t("rasterSubset.resolution")}
               </Label>
               <Input
                 id="subset-resolution"

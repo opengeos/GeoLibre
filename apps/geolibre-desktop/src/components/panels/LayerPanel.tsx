@@ -2609,6 +2609,7 @@ export function LayerPanel({
                             {canExtractSubset && (
                               <DropdownMenuItem
                                 onSelect={() => {
+                                  selectLayer(layer.id);
                                   onOpenRasterSubset(layer);
                                 }}
                               >

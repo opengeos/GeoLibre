@@ -112,15 +112,41 @@ async function resolveCogSource(
   }
   // The local/blob path reads the whole file into memory (no range requests), so
   // guard against loading a multi-GB raster that would spike memory or crash the
-  // tab: fail fast with a clear message instead. The byte-range HTTP path above
-  // never reaches here, so remote COGs of any size are unaffected.
+  // tab. The byte-range HTTP path above never reaches here, so remote COGs of any
+  // size are unaffected.
+  const tooLarge = (bytes: number) =>
+    new Error(
+      `This raster is too large (${Math.round(bytes / 1e6)} MB) to extract a subset from in the browser. Load it as an HTTP/COG URL so only the requested area is read.`,
+    );
+  // Fail fast on a declared size, when present, so the message carries the size.
   const declaredBytes = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredBytes) && declaredBytes > MAX_LOCAL_COG_BYTES) {
-    throw new Error(
-      `This raster is too large (${Math.round(declaredBytes / 1e6)} MB) to extract a subset from in the browser. Load it as an HTTP/COG URL so only the requested area is read.`,
-    );
+    throw tooLarge(declaredBytes);
   }
-  return new Uint8Array(await response.arrayBuffer());
+  // Otherwise stream and count, so the cap still holds when Content-Length is
+  // absent (e.g. a chunked response); abort as soon as the cap is exceeded
+  // instead of buffering the whole file first.
+  const reader = response.body?.getReader();
+  if (!reader) return new Uint8Array(await response.arrayBuffer());
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let result = await reader.read();
+  while (!result.done) {
+    total += result.value.byteLength;
+    if (total > MAX_LOCAL_COG_BYTES) {
+      await reader.cancel();
+      throw tooLarge(total);
+    }
+    chunks.push(result.value);
+    result = await reader.read();
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 /**
