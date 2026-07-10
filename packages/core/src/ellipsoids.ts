@@ -175,7 +175,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   // --- Mars ---------------------------------------------------------------
   {
     id: "mars-colour-mola-elevation",
-    name: "Mars Colour MOLA Elevation",
+    name: "Colour MOLA Elevation",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-colour-mola-elevation`,
     tileUrl: `${TILE_PROXY_BASE}/mars-mola-color-noshade/{z}/{x}/{y}.png`,
     scheme: "tms",
@@ -185,7 +185,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
   {
     id: "mars-viking-mdim21",
-    name: "Mars Viking MDIM2.1",
+    name: "Viking MDIM2.1",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-viking-mdim21`,
     tileUrl: `${TILE_PROXY_BASE}/mars-viking-mdim21/{z}/{x}/{y}.png`,
     scheme: "tms",
@@ -195,7 +195,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
   {
     id: "mars-hillshade",
-    name: "Mars Hillshade",
+    name: "Hillshade",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-hillshade`,
     tileUrl: `${TILE_PROXY_BASE}/mars-hillshade/{z}/{x}/{y}.png`,
     scheme: "tms",
@@ -205,7 +205,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
   {
     id: "mars-basemap-v0-2",
-    name: "OPM Mars Basemap v0.2",
+    name: "OPM Basemap v0.2",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-basemap-v0-2`,
     tileUrl:
       "https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-mars-basemap-v0-2/all/{z}/{x}/{y}.png",
@@ -215,7 +215,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
   {
     id: "mars-shaded-colour-mola-elevation",
-    name: "Mars Shaded Colour MOLA Elevation",
+    name: "Shaded Colour MOLA Elevation",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-shaded-colour-mola-elevation`,
     tileUrl: `${TILE_PROXY_BASE}/mars-mola-color/{z}/{x}/{y}.png`,
     scheme: "tms",
@@ -225,7 +225,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
   {
     id: "mars-shaded-grayscale-mola-elevation",
-    name: "Mars Shaded Grayscale MOLA Elevation",
+    name: "Shaded Grayscale MOLA Elevation",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mars-shaded-grayscale-mola-elevation`,
     tileUrl: `${TILE_PROXY_BASE}/mars-mola-gray/{z}/{x}/{y}.png`,
     scheme: "tms",
@@ -236,7 +236,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   // --- The Moon -----------------------------------------------------------
   {
     id: "moon-hillshaded-albedo",
-    name: "Moon Hillshaded Albedo",
+    name: "Hillshaded Albedo",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}moon-hillshaded-albedo`,
     tileUrl: `${TILE_PROXY_BASE}/moon-hillshaded-albedo/{z}/{x}/{y}.png`,
     scheme: "tms",
@@ -246,7 +246,7 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
   {
     id: "moon-basemap-v0-1",
-    name: "OPM Moon Basemap v0.1",
+    name: "OPM Basemap v0.1",
     styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}moon-basemap-v0-1`,
     tileUrl:
       "https://cartocdn-gusc.global.ssl.fastly.net/opmbuilder/api/v1/map/named/opm-moon-basemap-v0-1/all/{z}/{x}/{y}.png",
