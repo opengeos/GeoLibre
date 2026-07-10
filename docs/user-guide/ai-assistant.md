@@ -114,7 +114,7 @@ color the counties by population using a graduated red ramp
 buffer the roads by 100 m, then clip them to the county boundary
 load the latest Sentinel-2 scene over this view
 zoom to Africa, then switch to a dark basemap
-add an Esri World Imagery basemap
+add an OpenTopoMap basemap
 ```
 
 ## What it can do
@@ -128,7 +128,7 @@ operations, so its actions stay within GeoLibre's validated surface.
 | **NL → Spatial SQL** | Generates and runs a **read-only** DuckDB Spatial SQL query through the [SQL Workspace](sql-workspace.md), and can add the result as a layer. |
 | **Geoprocessing** | Runs the registered [processing](processing.md) algorithms (buffer, clip, dissolve, intersection, difference, union, spatial join, simplify, H3 grids, …) and chains them into multi-step pipelines, adding each result as a layer. |
 | **Symbology** | Applies a **graduated** (numeric) or **categorized** (text) color ramp to a layer. |
-| **Add data** | Adds a layer from a public GeoJSON URL, or an XYZ tile basemap by name (`esri-imagery`, `esri-topo`, `osm`, `opentopomap`, `carto-dark`) or a custom `{z}/{x}/{y}` URL. |
+| **Add data** | Adds a layer from a public GeoJSON URL, or an XYZ tile basemap by name (`osm`, `opentopomap`, `carto-dark`) or a custom `{z}/{x}/{y}` URL. |
 | **Earth observation** | Searches the Microsoft [Planetary Computer](https://planetarycomputer.microsoft.com) STAC catalog (Sentinel-2, Landsat, NAIP, DEMs, …) and adds an item over the current view as a raster layer — tiles are signed server-side, so no credentials are needed. |
 | **Map control** | Moves the camera (fit a layer or a bounding box), switches the basemap, toggles layer visibility/opacity, and removes layers. |
 | **Web search** | Looks up current information online (best with `TAVILY_API_KEY`). |
@@ -176,7 +176,7 @@ shade the tracts by median income using a viridis ramp with 7 classes
 load the latest Sentinel-2 scene over this view
 add the most recent cloud-free Landsat image for this area
 search the Planetary Computer for NAIP imagery here
-add an Esri World Imagery basemap
+add an OpenTopoMap basemap
 add this GeoJSON: https://example.com/data.geojson
 ```
 

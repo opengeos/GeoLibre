@@ -433,7 +433,9 @@ export function createAssistantTools(
       basemap: z
         .string()
         .optional()
-        .describe("Known basemap name, e.g. 'esri imagery', 'opentopomap', 'osm'."),
+        .describe(
+          `Known basemap name, one of: ${NAMED_TILE_BASEMAPS.map((basemap) => basemap.id).join(", ")}.`,
+        ),
       url: z
         .string()
         .optional()
