@@ -2519,7 +2519,7 @@
     "geomInsert": "Insert",
     "sampleRowErrored": "Sample row errored (other rows may still compute): {{message}}",
     "preview": "Preview:",
-    "onlySelectedFeature": "Only update selected features ({{count}})",
+    "onlySelectedFeature": "Only update the selected features",
     "evaluationFailed": "Evaluation failed.",
     "invalidExpression": "Invalid expression.",
     "calcCouldNotApply": "Could not apply the calculation to this layer.",

@@ -942,9 +942,19 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
+    // Highlight the full multi-selection (attribute table Ctrl/Shift picks).
+    const highlightIds =
+      selectedFeatureIds.length > 0
+        ? selectedFeatureIds
+        : selectedFeatureId
+          ? [selectedFeatureId]
+          : [];
+    // Key on the whole selection set, not just the anchor: a Shift-range pick
+    // keeps the anchor fixed while adding features, so an anchor-only key would
+    // never re-fit. Any change to the set re-triggers the fit to frame them all.
     const nextKey =
-      selectedLayerId && selectedFeatureId
-        ? `${selectedLayerId}:${selectedFeatureId}`
+      selectedLayerId && highlightIds.length > 0
+        ? `${selectedLayerId}:${highlightIds.join(",")}`
         : null;
     const shouldFit = Boolean(
       zoomToSelectedFeature &&
@@ -952,12 +962,6 @@ export const MapCanvas = memo(function MapCanvas({
       nextKey !== previousSelectedFeatureKey.current,
     );
     previousSelectedFeatureKey.current = nextKey;
-    // Highlight the full multi-selection (attribute table Ctrl/Shift picks);
-    // fit is keyed on the anchor changing but frames every selected feature.
-    const highlightIds =
-      selectedFeatureIds.length > 0
-        ? selectedFeatureIds
-        : selectedFeatureId;
     controller.current?.highlightFeature(layer, highlightIds, {
       fit: shouldFit,
     });

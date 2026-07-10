@@ -1625,8 +1625,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           />
           {t("attributeTable.zoomToSelection")}
         </label>
-        <Select
-          className="h-7 w-40 text-xs"
+        {/* A native <select> (not the @geolibre/ui Select, which hardcodes h-9
+            and w-full) so it matches the h-7 toolbar and self-sizes to its
+            content instead of clipping the longest label. */}
+        <select
+          className="h-7 shrink-0 rounded-md border border-input bg-background px-2 text-xs shadow-xs transition-colors focus-visible:border-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={t("attributeTable.featureViewAria")}
           value={featureView}
           onChange={(event) =>
@@ -1639,7 +1642,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               count: selectedFeatureIds.length,
             })}
           </option>
-        </Select>
+        </select>
         <Button
           variant="outline"
           size="icon"
@@ -2161,9 +2164,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                 disabled={!calcHasSelection}
                 onChange={(event) => setCalcSelectedOnly(event.target.checked)}
               />
-              {t("attributeTable.onlySelectedFeature", {
-                count: selectedFeatureIds.length,
-              })}
+              {t("attributeTable.onlySelectedFeature")}
             </label>
             {calcError ? (
               <span className="text-xs text-destructive">{calcError}</span>
