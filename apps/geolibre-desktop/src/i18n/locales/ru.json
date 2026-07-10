@@ -102,6 +102,12 @@
     "sectionMoon": "Луна",
     "sectionMars": "Марс"
   },
+  "planetSwitcher": {
+    "label": "Небесное тело",
+    "earth": "Земля",
+    "moon": "Луна",
+    "mars": "Марс"
+  },
   "common": {
     "pickColorFromScreen": "Выбрать цвет с экрана",
     "save": "Сохранить",

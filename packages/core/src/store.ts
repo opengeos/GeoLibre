@@ -53,7 +53,7 @@ import {
   type StoryMap,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
-import { setActiveEllipsoidId } from "./ellipsoids";
+import { DEFAULT_ELLIPSOID_ID, setActiveEllipsoidId } from "./ellipsoids";
 import type { PlanetaryBasemap } from "./ellipsoids";
 
 export type ConversionToolKind =
@@ -276,6 +276,12 @@ export interface AppState {
    * by both the basemap picker and the Layers-panel planet switcher.
    */
   applyPlanetaryBasemap: (basemap: PlanetaryBasemap) => void;
+  /**
+   * Return to Earth: apply `styleUrl` (typically the Earth basemap that was
+   * active before a planet was selected, e.g. Liberty) and reset the ellipsoid
+   * to Earth. Used when a planet is deselected in the switcher.
+   */
+  restoreEarthBasemap: (styleUrl: string) => void;
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
@@ -819,6 +825,21 @@ export const useAppStore = create<AppState>()(
                   map: {
                     ...state.preferences.map,
                     ellipsoidId: basemap.ellipsoidId,
+                  },
+                },
+          isDirty: true,
+        })),
+      restoreEarthBasemap: (styleUrl) =>
+        set((state) => ({
+          basemapStyleUrl: styleUrl,
+          preferences:
+            state.preferences.map.ellipsoidId === DEFAULT_ELLIPSOID_ID
+              ? state.preferences
+              : {
+                  ...state.preferences,
+                  map: {
+                    ...state.preferences.map,
+                    ellipsoidId: DEFAULT_ELLIPSOID_ID,
                   },
                 },
           isDirty: true,

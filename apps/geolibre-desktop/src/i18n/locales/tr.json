@@ -100,6 +100,12 @@
     "sectionMoon": "Ay",
     "sectionMars": "Mars"
   },
+  "planetSwitcher": {
+    "label": "Gök cismi",
+    "earth": "Dünya",
+    "moon": "Ay",
+    "mars": "Mars"
+  },
   "common": {
     "pickColorFromScreen": "Ekrandan bir renk seç",
     "save": "Kaydet",

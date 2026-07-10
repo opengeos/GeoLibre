@@ -100,6 +100,12 @@
     "sectionMoon": "La Lune",
     "sectionMars": "Mars"
   },
+  "planetSwitcher": {
+    "label": "Corps céleste",
+    "earth": "Terre",
+    "moon": "Lune",
+    "mars": "Mars"
+  },
   "common": {
     "pickColorFromScreen": "Choisir une couleur à l'écran",
     "save": "Enregistrer",

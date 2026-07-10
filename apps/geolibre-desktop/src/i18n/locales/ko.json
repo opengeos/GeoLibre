@@ -99,6 +99,12 @@
     "sectionMoon": "달",
     "sectionMars": "화성"
   },
+  "planetSwitcher": {
+    "label": "천체",
+    "earth": "지구",
+    "moon": "달",
+    "mars": "화성"
+  },
   "common": {
     "pickColorFromScreen": "화면에서 색상 선택",
     "save": "저장",

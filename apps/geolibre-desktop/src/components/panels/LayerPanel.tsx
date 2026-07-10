@@ -13,6 +13,7 @@ import {
 import { useTranslation } from "react-i18next";
 import type { ParseKeys, TFunction } from "i18next";
 import {
+  DEFAULT_BASEMAP,
   getPlanetaryBasemapById,
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
@@ -64,11 +65,10 @@ import {
   DialogTitle,
   DialogDescription,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -88,7 +88,6 @@ import {
   ChevronRight,
   ChevronUp,
   Download,
-  Earth,
   Eye,
   EyeOff,
   Folder,
@@ -216,6 +215,32 @@ const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
   moon: "planetSwitcher.moon",
   mars: "planetSwitcher.mars",
 };
+
+/**
+ * A globe encircled by a tilted orbit with a small satellite — the planet
+ * switcher's trigger icon, in the spirit of Google Earth's planet control. Drawn
+ * inline (lucide has no planet-with-orbit glyph) in the lucide stroke style so it
+ * sits cleanly beside the other header icons.
+ */
+function PlanetOrbitIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="4.25" />
+      <ellipse cx="12" cy="12" rx="10.5" ry="4" transform="rotate(-30 12 12)" />
+      <circle cx="20.1" cy="7.3" r="1.35" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -486,6 +511,7 @@ export function LayerPanel({
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
   const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
+  const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   // The planet the switcher currently reflects: the body whose switcher basemap
   // is applied, or undefined when neither is (e.g. a default Earth project on an
@@ -494,6 +520,13 @@ export function LayerPanel({
     (option) =>
       getPlanetaryBasemapById(option.basemapId)?.styleUrl === basemapStyleUrl,
   )?.ellipsoidId;
+  // The Earth basemap to fall back to when a planet is deselected — the last one
+  // active while no planet was selected (e.g. Liberty). Tracked in a ref so it
+  // survives the planet round-trip.
+  const previousEarthBasemap = useRef(basemapStyleUrl);
+  useEffect(() => {
+    if (!selectedPlanet) previousEarthBasemap.current = basemapStyleUrl;
+  }, [selectedPlanet, basemapStyleUrl]);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
@@ -704,9 +737,15 @@ export function LayerPanel({
     if (group) beginGroupRename(group);
   };
 
-  // Switch the map's celestial body (like Google Earth's planet dropdown):
-  // apply the body's basemap, which also syncs the project ellipsoid.
-  const switchPlanet = (ellipsoidId: string) => {
+  // Toggle a celestial body in the switcher (like Google Earth's planet
+  // dropdown). Selecting a body applies its basemap and syncs the ellipsoid;
+  // deselecting the active body returns to Earth and restores the basemap that
+  // was showing before (e.g. Liberty).
+  const togglePlanet = (ellipsoidId: string, selected: boolean) => {
+    if (!selected) {
+      restoreEarthBasemap(previousEarthBasemap.current ?? DEFAULT_BASEMAP);
+      return;
+    }
     const option = PLANET_SWITCHER_OPTIONS.find(
       (o) => o.ellipsoidId === ellipsoidId,
     );
@@ -1932,7 +1971,7 @@ export function LayerPanel({
                 title={t("planetSwitcher.label")}
                 aria-label={t("planetSwitcher.label")}
               >
-                <Earth
+                <PlanetOrbitIcon
                   className={cn(
                     "h-4 w-4",
                     selectedPlanet &&
@@ -1944,19 +1983,17 @@ export function LayerPanel({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuLabel>{t("planetSwitcher.label")}</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={selectedPlanet ?? ""}
-                onValueChange={switchPlanet}
-              >
-                {PLANET_SWITCHER_OPTIONS.map((option) => (
-                  <DropdownMenuRadioItem
-                    key={option.ellipsoidId}
-                    value={option.ellipsoidId}
-                  >
-                    {t(PLANET_SWITCHER_LABEL_KEYS[option.ellipsoidId])}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
+              {PLANET_SWITCHER_OPTIONS.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.ellipsoidId}
+                  checked={selectedPlanet === option.ellipsoidId}
+                  onCheckedChange={(checked) =>
+                    togglePlanet(option.ellipsoidId, checked)
+                  }
+                >
+                  {t(PLANET_SWITCHER_LABEL_KEYS[option.ellipsoidId])}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
           <Button

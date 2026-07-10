@@ -100,6 +100,12 @@
     "sectionMoon": "चंद्रमा",
     "sectionMars": "मंगल"
   },
+  "planetSwitcher": {
+    "label": "खगोलीय पिंड",
+    "earth": "पृथ्वी",
+    "moon": "चंद्रमा",
+    "mars": "मंगल"
+  },
   "common": {
     "pickColorFromScreen": "स्क्रीन से रंग चुनें",
     "save": "सहेजें",

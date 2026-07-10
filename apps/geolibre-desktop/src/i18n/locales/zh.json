@@ -99,6 +99,12 @@
     "sectionMoon": "月球",
     "sectionMars": "火星"
   },
+  "planetSwitcher": {
+    "label": "天体",
+    "earth": "地球",
+    "moon": "月球",
+    "mars": "火星"
+  },
   "common": {
     "pickColorFromScreen": "从屏幕上拾取颜色",
     "save": "保存",
