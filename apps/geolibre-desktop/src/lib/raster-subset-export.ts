@@ -104,8 +104,15 @@ async function resolveCogSource(
 function normalizeSubdomains(value: unknown): string | undefined {
   if (typeof value === "string") return value || undefined;
   if (Array.isArray(value)) {
-    const joined = value.filter((v) => typeof v === "string").join("");
-    return joined || undefined;
+    // Only single-letter entries map onto the extractor's per-letter string
+    // form. Concatenating multi-character subdomains (e.g. ["mt0","mt1"]) would
+    // produce a garbage rotation string, so in that case drop rotation instead.
+    const letters = value.filter(
+      (v): v is string => typeof v === "string" && v.length === 1,
+    );
+    return letters.length > 0 && letters.length === value.length
+      ? letters.join("")
+      : undefined;
   }
   return undefined;
 }
