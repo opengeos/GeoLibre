@@ -173,6 +173,14 @@ export interface AppState {
   primaryMapLabel: string;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
+  /**
+   * Full set of selected feature ids. The attribute table extends the single
+   * selection to many rows via Ctrl/Cmd (toggle) and Shift (range). The anchor
+   * — `selectedFeatureId` — is the primary/last-clicked feature used for map
+   * fit, DuckDB highlight, and scripting, and is always one of these ids (or
+   * `null` when the set is empty). A single click leaves exactly one id here.
+   */
+  selectedFeatureIds: string[];
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
   metadata: Record<string, unknown>;
@@ -296,6 +304,12 @@ export interface AppState {
   ) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
+  /**
+   * Replace the multi-selection with `ids`. The anchor (`selectedFeatureId`)
+   * becomes `anchorId` when provided, otherwise the last id in the list (or
+   * `null` when the list is empty).
+   */
+  selectFeatures: (ids: string[], anchorId?: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
@@ -629,6 +643,7 @@ export const useAppStore = create<AppState>()(
       primaryMapLabel: "",
       selectedLayerId: null,
       selectedFeatureId: null,
+      selectedFeatureIds: [],
       identifyLayerId: null,
       pointerCoords: null,
       metadata: {},
@@ -862,8 +877,19 @@ export const useAppStore = create<AppState>()(
           isDirty: shouldMarkDirty || s.isDirty,
         })),
       selectLayer: (id) =>
-        set({ selectedLayerId: id, selectedFeatureId: null }),
-      selectFeature: (id) => set({ selectedFeatureId: id }),
+        set({ selectedLayerId: id, selectedFeatureId: null, selectedFeatureIds: [] }),
+      selectFeature: (id) =>
+        set({ selectedFeatureId: id, selectedFeatureIds: id ? [id] : [] }),
+      selectFeatures: (ids, anchorId) =>
+        set({
+          selectedFeatureIds: ids,
+          selectedFeatureId:
+            anchorId !== undefined
+              ? anchorId
+              : ids.length > 0
+                ? ids[ids.length - 1]
+                : null,
+        }),
       setIdentifyLayer: (id) => set({ identifyLayerId: id }),
       setAttributeFilter: (filter) => set({ attributeFilter: filter }),
       setProcessingOpen: (open) =>
@@ -1115,6 +1141,8 @@ export const useAppStore = create<AppState>()(
               : s.selectedLayerId,
           selectedFeatureId:
             s.selectedLayerId === id ? null : s.selectedFeatureId,
+          selectedFeatureIds:
+            s.selectedLayerId === id ? [] : s.selectedFeatureIds,
           identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
           isDirty: true,
         })),
@@ -1315,6 +1343,7 @@ export const useAppStore = create<AppState>()(
               ? layers[layers.length - 1]?.id ?? null
               : s.selectedLayerId,
             selectedFeatureId: selectionRemoved ? null : s.selectedFeatureId,
+            selectedFeatureIds: selectionRemoved ? [] : s.selectedFeatureIds,
             identifyLayerId:
               s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
                 ? null
@@ -1424,6 +1453,7 @@ export const useAppStore = create<AppState>()(
           isDirty: false,
           selectedLayerId: null,
           selectedFeatureId: null,
+          selectedFeatureIds: [],
           identifyLayerId: null,
           pointerCoords: null,
           attributeFilter: "",
@@ -1454,6 +1484,7 @@ export const useAppStore = create<AppState>()(
           isDirty: false,
           selectedLayerId: applied.layers[0]?.id ?? null,
           selectedFeatureId: null,
+          selectedFeatureIds: [],
           identifyLayerId: null,
           // Present a bundled story on load; otherwise drop any presentation
           // carried over from the previous project.
@@ -1579,6 +1610,7 @@ function finishHistoryStep(previousBasemapStyleUrl: string): void {
           isDirty: true,
           selectedLayerId: null,
           selectedFeatureId: null,
+          selectedFeatureIds: [],
           ...ellipsoidPatch,
         }
       : { isDirty: true, ...ellipsoidPatch },

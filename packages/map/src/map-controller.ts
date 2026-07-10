@@ -1356,25 +1356,34 @@ export class MapController {
 
   highlightFeature(
     layer: GeoLibreLayer | undefined,
-    featureId: string | null,
+    featureId: string | string[] | null,
     options: { fit?: boolean } = {},
   ): void {
     if (!this.isStyleReady()) return;
 
-    if (!layer?.geojson || !featureId) {
+    const ids = (
+      Array.isArray(featureId) ? featureId : featureId ? [featureId] : []
+    ).filter((id) => id != null);
+
+    if (!layer?.geojson || ids.length === 0) {
       this.syncHighlight(EMPTY_HIGHLIGHT);
       return;
     }
 
-    const feature = this.findFeature(layer, featureId);
-    if (!feature?.geometry) {
+    const features = ids
+      .map((id) => this.findFeature(layer, id))
+      .filter(
+        (feature): feature is Feature =>
+          feature?.geometry != null,
+      );
+    if (features.length === 0) {
       this.syncHighlight(EMPTY_HIGHLIGHT);
       return;
     }
 
     const featureCollection: FeatureCollection = {
       type: "FeatureCollection",
-      features: [feature as Feature<Geometry>],
+      features: features as Feature<Geometry>[],
     };
     this.syncHighlight(featureCollection);
 

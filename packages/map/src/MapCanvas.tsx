@@ -749,6 +749,7 @@ export const MapCanvas = memo(function MapCanvas({
   const layerGroups = useAppStore((s) => s.layerGroups);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
+  const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const selectFeature = useAppStore((s) => s.selectFeature);
@@ -951,7 +952,13 @@ export const MapCanvas = memo(function MapCanvas({
       nextKey !== previousSelectedFeatureKey.current,
     );
     previousSelectedFeatureKey.current = nextKey;
-    controller.current?.highlightFeature(layer, selectedFeatureId, {
+    // Highlight the full multi-selection (attribute table Ctrl/Shift picks);
+    // fit is keyed on the anchor changing but frames every selected feature.
+    const highlightIds =
+      selectedFeatureIds.length > 0
+        ? selectedFeatureIds
+        : selectedFeatureId;
+    controller.current?.highlightFeature(layer, highlightIds, {
       fit: shouldFit,
     });
     if (layer && isDuckDBQueryLayer(layer)) {
@@ -971,7 +978,13 @@ export const MapCanvas = memo(function MapCanvas({
       );
       previousDuckDBSelectionLayerId.current = null;
     }
-  }, [layers, selectedLayerId, selectedFeatureId, zoomToSelectedFeature]);
+  }, [
+    layers,
+    selectedLayerId,
+    selectedFeatureId,
+    selectedFeatureIds,
+    zoomToSelectedFeature,
+  ]);
 
   useEffect(() => {
     const map = controller.current?.getMap();
