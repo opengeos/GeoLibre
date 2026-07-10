@@ -171,6 +171,13 @@ export function RasterSubsetPanel({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<PanelPos | null>(null);
 
+  // Cancels the in-flight extraction's network requests when the panel is closed
+  // or a new extraction starts, so a stalled request never leaves the UI stuck
+  // on "Extracting...".
+  const abortRef = useRef<AbortController | null>(null);
+  // Abort any in-flight extraction when the panel unmounts.
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   // Reset every field whenever the panel opens for a (different) layer or is
   // closed, and seed the XYZ zoom from the current map zoom so the default
   // extract matches what the user is looking at. The resets run even when
@@ -178,11 +185,15 @@ export function RasterSubsetPanel({
   // effect's cleanup re-enable dragPan/boxZoom and restore the cursor if the
   // panel is closed mid-drag, instead of leaving the map stuck.
   useEffect(() => {
+    // Cancel any extraction still running for the previous layer / closed panel.
+    abortRef.current?.abort();
+    abortRef.current = null;
     setCoords(EMPTY_COORDS);
     setDrawing(false);
     setResolution("");
     setError(null);
     setSuccess(null);
+    setRunning(false);
     setPos(null);
     if (!layer) return;
     const map = mapControllerRef.current?.getMap();
@@ -370,6 +381,10 @@ export function RasterSubsetPanel({
 
   const handleExtract = useCallback(async () => {
     if (!layer || !bbox) return;
+    // Abort a prior run (if any) and start a fresh cancellable one.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setRunning(true);
     setError(null);
     setSuccess(null);
@@ -382,7 +397,9 @@ export function RasterSubsetPanel({
         bbox,
         resolution: res,
         zoom: kind === "xyz" ? Number(zoom) : undefined,
+        signal: controller.signal,
       });
+      if (controller.signal.aborted) return;
       const savedPath = await saveRasterSubset(
         bytes,
         sanitizeExportFileName(layer.name),
@@ -390,9 +407,16 @@ export function RasterSubsetPanel({
       // A null path means the user cancelled the save dialog.
       if (savedPath !== null) setSuccess(t("rasterSubset.success"));
     } catch (err) {
+      // A cancelled run (panel closed / superseded) is not an error to surface.
+      if (controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setRunning(false);
+      // Only clear the running state if this run is still the current one; a
+      // newer run (or a close that aborted this one) owns the flag otherwise.
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+        setRunning(false);
+      }
     }
   }, [layer, bbox, resolution, zoom, kind, t]);
 

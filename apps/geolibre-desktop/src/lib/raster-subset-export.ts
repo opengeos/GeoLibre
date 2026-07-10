@@ -25,6 +25,12 @@ export interface RasterSubsetRequest {
   resolution?: number;
   /** XYZ tile zoom level. Required for the `xyz` kind. */
   zoom?: number;
+  /**
+   * Optional signal to cancel the extraction (its network requests). The panel
+   * aborts this when it is closed so a stalled COG/WMS/XYZ request never leaves
+   * the UI stuck on "Extracting...".
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -69,6 +75,7 @@ export function canExtractRasterSubset(layer: GeoLibreLayer): boolean {
  */
 async function resolveCogSource(
   layer: GeoLibreLayer,
+  signal?: AbortSignal,
 ): Promise<string | Uint8Array> {
   const source = layer.source as Record<string, unknown>;
   const httpUrl = fetchableUrl(source.url);
@@ -77,7 +84,7 @@ async function resolveCogSource(
   if (!localUrl) {
     throw new Error("This raster has no readable source file.");
   }
-  const response = await fetch(localUrl);
+  const response = await fetch(localUrl, { signal });
   if (!response.ok) {
     throw new Error("Could not read the raster's data for extraction.");
   }
@@ -121,11 +128,19 @@ export async function extractRasterSubset(
 ): Promise<Uint8Array> {
   const kind = rasterSubsetKind(layer);
   const source = layer.source as Record<string, unknown>;
-  const { bbox, resolution } = request;
+  const { bbox, resolution, signal } = request;
+  // Forwarded to each extractor's internal fetches (COG byte-range reads, the
+  // WMS GetMap request, XYZ tile requests) so the caller can cancel them.
+  const fetchOptions = signal ? { signal } : undefined;
 
   if (kind === "cog") {
-    const cogSource = await resolveCogSource(layer);
-    return extractCogSubset(cogSource, { bbox, bboxCrs: WGS84, resolution });
+    const cogSource = await resolveCogSource(layer, signal);
+    return extractCogSubset(cogSource, {
+      bbox,
+      bboxCrs: WGS84,
+      resolution,
+      fetchOptions,
+    });
   }
   if (kind === "wms") {
     return extractWmsSubset(String(source.url), {
@@ -138,6 +153,7 @@ export async function extractRasterSubset(
       // GeoTIFF response, so always request one regardless of the display format.
       format: "image/geotiff",
       version: typeof source.version === "string" ? source.version : undefined,
+      fetchOptions,
     });
   }
   if (kind === "xyz") {
@@ -148,6 +164,7 @@ export async function extractRasterSubset(
       bboxCrs: WGS84,
       tileSize:
         typeof source.tileSize === "number" ? source.tileSize : undefined,
+      fetchOptions,
       // The extractor rotates `{s}` by indexing into `subdomains` per tile, so a
       // string of letters ("abc") works directly. Some sources instead store the
       // MapLibre/Leaflet-style `string[]` (see offline-tiles.ts); join it into
