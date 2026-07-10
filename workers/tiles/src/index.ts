@@ -147,9 +147,11 @@ export default {
       headers,
     });
     // Cache successes long and upstream misses briefly (see NEGATIVE_CACHE_
-    // CONTROL); skip 5xx so a transient upstream failure isn't pinned. Only GET
-    // reaches here, so the request is always a valid Cache API key.
-    if (originResponse.status < 500) {
+    // CONTROL). Skip 5xx and 429 so a transient upstream failure or throttle
+    // isn't pinned as a blank tile for the negative TTL — only genuine 403/404
+    // past-native-zoom misses are worth caching. Only GET reaches here, so the
+    // request is always a valid Cache API key.
+    if (originResponse.status < 500 && originResponse.status !== 429) {
       ctx.waitUntil(cache.put(request, response.clone()));
     }
     return response;

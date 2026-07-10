@@ -226,6 +226,9 @@ function resolveMapStyle(
   // style URL — it would try to fetch the `geolibre://` sentinel and blank the
   // map. Fall back to the default basemap instead.
   if (styleUrl?.startsWith(PLANETARY_BASEMAP_SENTINEL_PREFIX)) {
+    console.warn(
+      `Unknown planetary basemap "${styleUrl}"; falling back to the default basemap.`,
+    );
     return DEFAULT_BASEMAP;
   }
   return styleUrl ?? DEFAULT_BASEMAP;
