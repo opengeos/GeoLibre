@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS लेयर",
-      "sampleLabel": "विश्व इमेजरी (Wayback)",
+      "sampleLabel": "विश्व इमेजरी (Blue Marble)",
       "errorUrl": "एक WMTS टाइल URL टेम्पलेट दर्ज करें।",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

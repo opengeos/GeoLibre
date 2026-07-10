@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS-laag",
-      "sampleLabel": "Wereldbeelden (Wayback)",
+      "sampleLabel": "Wereldbeelden (Blue Marble)",
       "errorUrl": "Voer een WMTS-tegel-URL-sjabloon in.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -24,7 +24,7 @@ let esriWaybackPosition: GeoLibreMapControlPosition = "top-left";
 
 const ESRI_WAYBACK_OPTIONS = {
   collapsed: false,
-  title: "Esri Wayback",
+  title: "Historical Imagery",
   panelWidth: 340,
   className: "geolibre-esri-wayback-control",
   metadataOnClick: true,
@@ -36,7 +36,7 @@ let stateChangeHandler: EsriWaybackControlEventHandler | null = null;
 
 export const maplibreEsriWaybackPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-esri-wayback",
-  name: "Esri Wayback",
+  name: "Historical Imagery",
   version: "0.2.0",
   activate: (app: GeoLibreAppAPI) => {
     if (!esriWaybackControl) {
@@ -192,7 +192,7 @@ function createCurrentWaybackStoreLayer(
 ): GeoLibreLayer {
   return createWaybackStoreLayer({
     id: DEFAULT_LAYER_ID,
-    name: `Esri Wayback ${release.releaseDateLabel}`,
+    name: `Historical Imagery ${release.releaseDateLabel}`,
     nativeLayerId: DEFAULT_LAYER_ID,
     release,
     sourceId: DEFAULT_SOURCE_ID,
@@ -207,7 +207,7 @@ function createPersistentWaybackStoreLayer(
   return createWaybackStoreLayer({
     id: styleLayer.id,
     name: release
-      ? `Esri Wayback ${release.releaseDateLabel}`
+      ? `Historical Imagery ${release.releaseDateLabel}`
       : layerNameFromPersistentWaybackId(styleLayer.id),
     nativeLayerId: styleLayer.id,
     release,
@@ -263,5 +263,5 @@ function layerNameFromPersistentWaybackId(layerId: string): string {
   const label = layerId
     .replace(`${PERSISTENT_LAYER_PREFIX}-`, "")
     .replaceAll("-", " ");
-  return label ? `Esri Wayback ${label}` : "Esri Wayback";
+  return label ? `Historical Imagery ${label}` : "Historical Imagery";
 }

@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Capa WMTS",
-      "sampleLabel": "Imágenes mundiales (Wayback)",
+      "sampleLabel": "Imágenes mundiales (Blue Marble)",
       "errorUrl": "Introduzca una plantilla de URL de teselas WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -337,7 +337,7 @@ export const BUILTIN_SERVICES: readonly ServiceLibraryEntry[] = [
   },
   {
     id: "builtin-wmts-world-imagery",
-    name: "Esri World Imagery (Wayback)",
+    name: "NASA Blue Marble (GIBS)",
     category: "Imagery",
     kind: "wmts",
     builtin: true,

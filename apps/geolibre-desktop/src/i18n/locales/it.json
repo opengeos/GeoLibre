@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Livello WMTS",
-      "sampleLabel": "Immagini mondiali (Wayback)",
+      "sampleLabel": "Immagini mondiali (Blue Marble)",
       "errorUrl": "Inserisci un modello di URL di tile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

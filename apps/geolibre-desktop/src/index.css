@@ -109,9 +109,22 @@ body,
   font-size: 18px;
 }
 
+/*
+ * Historical Imagery (Esri Wayback) control. The upstream package ships a
+ * light-only stylesheet of hardcoded literal colors with no `.dark` /
+ * prefers-color-scheme rules, so pin its `color-scheme` per theme and remap the
+ * toggle icon and expanded panel onto the app's design tokens under `.dark` so
+ * it tracks GeoLibre's in-app light/dark toggle in both directions. index.css is
+ * imported after the component stylesheet, so these rules win the cascade.
+ */
 .geolibre-esri-wayback-control,
 .esri-wayback-control-panel {
   color-scheme: light;
+}
+
+.dark .geolibre-esri-wayback-control,
+.dark .esri-wayback-control-panel {
+  color-scheme: dark;
 }
 
 .esri-wayback-control-panel .esri-wayback-range {
@@ -125,6 +138,130 @@ body,
 
 .esri-wayback-control-panel .esri-wayback-input::placeholder {
   color: #6b7280 !important;
+}
+
+/* Collapsed toggle button and its icon (the icon glyph inherits currentColor). */
+.dark .esri-wayback-control,
+.dark .esri-wayback-control-toggle {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .esri-wayback-control-toggle:hover {
+  background-color: hsl(var(--accent));
+}
+
+.dark .esri-wayback-control-icon svg {
+  stroke: hsl(var(--popover-foreground));
+}
+
+/* Expanded panel surface and chrome. */
+.dark .esri-wayback-control-panel {
+  background: hsl(var(--popover));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .esri-wayback-control-header {
+  border-bottom-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .esri-wayback-control-close {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .esri-wayback-control-close:hover {
+  color: hsl(var(--foreground));
+}
+
+/* Secondary/muted text throughout the panel. */
+.dark .esri-wayback-status,
+.dark .esri-wayback-summary-label,
+.dark .esri-wayback-summary-detail,
+.dark .esri-wayback-release-count,
+.dark .esri-wayback-local-changes-status,
+.dark .esri-wayback-slider-endpoints,
+.dark .esri-wayback-persistent-status,
+.dark .esri-wayback-metadata dt {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .esri-wayback-status-error {
+  color: #f87171;
+}
+
+/* Primary/strong text throughout the panel. */
+.dark .esri-wayback-summary-value,
+.dark .esri-wayback-label,
+.dark .esri-wayback-local-changes-label,
+.dark .esri-wayback-metadata h3,
+.dark .esri-wayback-metadata dd {
+  color: hsl(var(--foreground));
+}
+
+/* Grouped sub-panels (summary card, slider, persistent-layer box, metadata). */
+.dark .esri-wayback-summary {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+.dark .esri-wayback-slider,
+.dark .esri-wayback-persistent {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+}
+
+.dark .esri-wayback-metadata {
+  border-top-color: hsl(var(--border));
+}
+
+/* Slider step buttons. */
+.dark .esri-wayback-slider-button {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .esri-wayback-slider-button:hover:not(:disabled) {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--ring));
+}
+
+.dark .esri-wayback-slider-button:disabled {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Persistent-layer name input (higher specificity + !important beats the
+   forced-light rule above). */
+.dark .esri-wayback-control-panel .esri-wayback-input {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .esri-wayback-control-panel .esri-wayback-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.dark .esri-wayback-input:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+}
+
+/* "Add layer" primary button. */
+.dark .esri-wayback-add-layer-button {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.dark .esri-wayback-add-layer-button:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.9);
+}
+
+.dark .esri-wayback-add-layer-button:disabled {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
 }
 
 .geolibre-components-control .maplibregl-ctrl-group,

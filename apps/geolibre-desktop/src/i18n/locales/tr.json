@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS Katmanı",
-      "sampleLabel": "Dünya uydu görüntüsü (Wayback)",
+      "sampleLabel": "Dünya uydu görüntüsü (Blue Marble)",
       "errorUrl": "Bir WMTS döşeme URL şablonu girin.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

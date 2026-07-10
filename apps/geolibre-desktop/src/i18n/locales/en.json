@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS Layer",
-      "sampleLabel": "World imagery (Wayback)",
+      "sampleLabel": "World imagery (Blue Marble)",
       "errorUrl": "Enter a WMTS tile URL template.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

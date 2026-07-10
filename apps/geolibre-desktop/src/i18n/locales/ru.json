@@ -295,7 +295,7 @@
     },
     "wmts": {
       "defaultName": "Слой WMTS",
-      "sampleLabel": "Мировые снимки (Wayback)",
+      "sampleLabel": "Мировые снимки (Blue Marble)",
       "errorUrl": "Введите шаблон URL тайлов WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -280,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "Layer WMTS",
-      "sampleLabel": "Citra dunia (Wayback)",
+      "sampleLabel": "Citra dunia (Blue Marble)",
       "errorUrl": "Masukkan templat URL ubin WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -61,8 +61,11 @@ export const DEFAULT_WMS_ENDPOINT =
 export const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 export const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 export const DEFAULT_WFS_TYPE_NAME = "topp:states";
+// NASA GIBS "Blue Marble: Shaded Relief and Bathymetry" — a static, global,
+// public-domain RESTful WMTS layer (no API key, no time dimension). Chosen so the
+// WMTS sample doesn't hardcode an Esri/ArcGIS web service.
 export const DEFAULT_WMTS_URL =
-  "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
+  "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_ShadedRelief_Bathymetry/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg";
 // PDOK BGT (Dutch large-scale base map) served as OGC API - Tiles vector tiles.
 // The style document carries the source-layer names the TileJSON omits; both
 // are prefilled so the sample works out of the box (zoom into the Netherlands).

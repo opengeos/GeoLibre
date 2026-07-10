@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Couche WMTS",
-      "sampleLabel": "Imagerie mondiale (Wayback)",
+      "sampleLabel": "Imagerie mondiale (Blue Marble)",
       "errorUrl": "Entrez un modèle d'URL de tuile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

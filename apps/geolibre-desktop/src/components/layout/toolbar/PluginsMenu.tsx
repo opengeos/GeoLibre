@@ -119,7 +119,7 @@ export function PluginsMenu({
     (p) => WEB_SERVICE_PLUGIN_ID_SET.has(p.id) && !hiddenPluginIds.has(p.id),
   );
   // The web service plugins render as one grouped submenu, placed where the
-  // first of them appears in registration order (just above Esri Wayback).
+  // first of them appears in registration order (just above Historical Imagery).
   let webServicesRendered = false;
 
   return (
