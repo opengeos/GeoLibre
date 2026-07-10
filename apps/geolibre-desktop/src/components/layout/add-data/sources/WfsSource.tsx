@@ -194,6 +194,20 @@ export function WfsSource() {
       },
       { useWfsProxy: true },
     );
+    // The fallback may have loaded the layer under a different output format
+    // than the user entered (e.g. "GEOJSON" instead of "application/json"). The
+    // resolved value is what gets persisted to source.outputFormat, so note the
+    // substitution in case a user later inspects the saved project and finds a
+    // format they did not type.
+    const requestedOutputFormat = wfsOutputFormat.trim();
+    if (
+      requestedOutputFormat &&
+      resolvedOutputFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()
+    ) {
+      console.info(
+        `WFS: "${requestedOutputFormat}" returned XML; loaded the layer with "${resolvedOutputFormat}" instead.`,
+      );
+    }
     source.addAndClose(
       {
         ...createBaseLayer(

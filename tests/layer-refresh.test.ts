@@ -259,4 +259,39 @@ describe("fetchWfsGeoJson output-format fallback", () => {
     await assert.rejects(fetchWfsGeoJson(baseParams));
     assert.equal(calls, 1, "a non-XML parse error must not trigger a retry");
   });
+
+  it("does not retry when the body is an HTML error page (proxy/WAF)", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      // A corporate proxy / WAF / auth page starts with "<" but is not a WFS
+      // format rejection, so trying other output formats is pointless.
+      return new Response("<!DOCTYPE html><html><body>Blocked</body></html>", {
+        status: 200,
+      });
+    }) as typeof fetch;
+
+    await assert.rejects(fetchWfsGeoJson(baseParams), (error: Error) => {
+      assert.equal(error.message, WFS_XML_RESPONSE_ERROR);
+      return true;
+    });
+    assert.equal(calls, 1, "an HTML error page must not trigger format retries");
+  });
+
+  it("skips an empty requested format instead of requesting outputFormat=", async () => {
+    const requestedFormats: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      requestedFormats.push(
+        new URL(url).searchParams.get("outputFormat") ?? "",
+      );
+      return new Response(JSON.stringify(FEATURE_COLLECTION), { status: 200 });
+    }) as typeof fetch;
+
+    const result = await fetchWfsGeoJson({ ...baseParams, outputFormat: "" });
+    // The first (and only) request uses the first GeoJSON alias, never "".
+    assert.equal(requestedFormats[0], "application/json");
+    assert.ok(!requestedFormats.includes(""), "no empty outputFormat request");
+    assert.equal(result.data.features.length, 1);
+  });
 });
