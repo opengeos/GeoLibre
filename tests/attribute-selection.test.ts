@@ -41,6 +41,18 @@ describe("computeRowSelection", () => {
     assert.deepEqual(result, { ids: ["a", "c"], anchor: "c" });
   });
 
+  it("Ctrl-click removing a non-anchor row keeps the existing anchor", () => {
+    const result = computeRowSelection({
+      featureId: "a",
+      sortedIds: SORTED,
+      selectedIds: ["a", "b", "c"],
+      anchorId: "b",
+      additive: true,
+      range: false,
+    });
+    assert.deepEqual(result, { ids: ["b", "c"], anchor: "b" });
+  });
+
   it("Ctrl-click deselecting the last remaining row yields an empty set and null anchor", () => {
     const result = computeRowSelection({
       featureId: "a",

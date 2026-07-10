@@ -1599,7 +1599,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             and w-full) so it matches the h-7 toolbar and self-sizes to its
             content instead of clipping the longest label. */}
         <select
-          className="h-7 shrink-0 rounded-md border border-input bg-background px-2 text-xs shadow-xs transition-colors focus-visible:border-ring focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          className="h-7 shrink-0 rounded-md border border-input bg-background px-2 text-xs shadow-xs transition-colors focus-visible:border-ring focus-visible:outline-none"
           aria-label={t("attributeTable.featureViewAria")}
           value={featureView}
           onChange={(event) =>

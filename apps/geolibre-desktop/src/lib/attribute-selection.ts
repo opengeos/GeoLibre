@@ -63,7 +63,14 @@ export function computeRowSelection(input: RowSelectionInput): RowSelectionResul
     const next = selectedIds.includes(featureId)
       ? selectedIds.filter((id) => id !== featureId)
       : [...selectedIds, featureId];
-    const anchor = next.includes(featureId) ? featureId : (next.at(-1) ?? null);
+    // Adding a row anchors it; removing one keeps the existing anchor when it
+    // survives (so a following Shift-range still starts from the right row) and
+    // only falls back to the last id when the anchor itself was removed.
+    const anchor = next.includes(featureId)
+      ? featureId
+      : anchorId != null && next.includes(anchorId)
+        ? anchorId
+        : (next.at(-1) ?? null);
     return { ids: next, anchor };
   }
 

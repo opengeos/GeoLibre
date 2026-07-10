@@ -964,9 +964,11 @@ export const MapCanvas = memo(function MapCanvas({
     // Key on the whole selection set, not just the anchor: a Shift-range pick
     // keeps the anchor fixed while adding features, so an anchor-only key would
     // never re-fit. Any change to the set re-triggers the fit to frame them all.
+    // Join on NUL — a byte that can't appear in a feature id — so ids containing
+    // commas (e.g. ["a,b"] vs ["a","b"]) don't collide into the same key.
     const nextKey =
       selectedLayerId && highlightIds.length > 0
-        ? `${selectedLayerId}:${highlightIds.join(",")}`
+        ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
         : null;
     const shouldFit = Boolean(
       zoomToSelectedFeature &&
