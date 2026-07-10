@@ -25,6 +25,7 @@ import {
   setAnnotationLabels,
   setBasemapControlLabels,
   setGraticuleLabels,
+  setMapillaryLabels,
   setReverseGeocodeLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -204,6 +205,17 @@ export function TopToolbar({
       deleteLast: t("annotations.deleteLast"),
       clearAll: t("annotations.clearAll"),
       textPlaceholder: t("annotations.textPlaceholder"),
+    });
+    setMapillaryLabels({
+      title: t("mapillary.title"),
+      hint: t("mapillary.hint"),
+      noToken: t("mapillary.noToken"),
+      tokenPlaceholder: t("mapillary.tokenPlaceholder"),
+      tokenSave: t("mapillary.tokenSave"),
+      tokenHelp: t("mapillary.tokenHelp"),
+      tokenLabel: t("mapillary.tokenLabel"),
+      loading: t("mapillary.loading"),
+      loadError: t("mapillary.loadError"),
     });
     setGraticuleLabels({
       title: t("graticule.title"),

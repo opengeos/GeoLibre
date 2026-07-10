@@ -2016,6 +2016,17 @@
     "labelColor": "Label color",
     "labelSize": "Label size"
   },
+  "mapillary": {
+    "title": "Mapillary",
+    "hint": "Click a coverage point on the map to view street-level imagery.",
+    "noToken": "A Mapillary access token is required to load coverage and imagery. Paste one below to get started.",
+    "tokenPlaceholder": "MLY|…",
+    "tokenSave": "Save token",
+    "tokenHelp": "Get a token",
+    "tokenLabel": "Mapillary access token",
+    "loading": "Loading imagery…",
+    "loadError": "Could not load this image."
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
     "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"

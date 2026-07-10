@@ -334,6 +334,12 @@ export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
 export {
+  maplibreMapillaryPlugin,
+  MAPILLARY_PLUGIN_ID,
+  setMapillaryLabels,
+  type MapillaryLabels,
+} from "./plugins/maplibre-mapillary";
+export {
   maplibreElevationProfilePlugin,
   ELEVATION_PROFILE_PLUGIN_ID,
 } from "./plugins/elevation-profile";
