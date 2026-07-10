@@ -9,25 +9,15 @@ export interface NamedTileBasemap {
 }
 
 /**
- * Curated registry of common imagery/tile basemaps with documented usage terms
- * so the assistant can add, e.g., "Esri World Imagery" without looking up a URL.
- * These are raster XYZ layers (added on the map), distinct from the MapLibre
- * vector styles that `set_basemap` switches between. (Undocumented endpoints
- * such as Google's `mt*.google.com` tiles are intentionally excluded.)
+ * Curated registry of common tile basemaps with documented, permissively
+ * licensed usage terms so the assistant can add, e.g., "OpenTopoMap" without
+ * looking up a URL. These are raster XYZ layers (added on the map), distinct
+ * from the MapLibre vector styles that `set_basemap` switches between.
+ * (Endpoints with restrictive or ambiguous terms — Google's `mt*.google.com`
+ * tiles, Esri's `server.arcgisonline.com` services — are intentionally
+ * excluded. For satellite/aerial imagery the assistant uses STAC instead.)
  */
 export const NAMED_TILE_BASEMAPS: readonly NamedTileBasemap[] = [
-  {
-    id: "esri-imagery",
-    label: "Esri World Imagery",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "© Esri, Maxar, Earthstar Geographics",
-  },
-  {
-    id: "esri-topo",
-    label: "Esri World Topo",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-    attribution: "© Esri",
-  },
   {
     id: "osm",
     label: "OpenStreetMap",
@@ -57,9 +47,9 @@ function tokens(value: string): string[] {
 }
 
 /**
- * Resolve a basemap by id or (fuzzy) label, e.g. "esri imagery", "opentopomap",
- * or "imagery". Tries exact id, exact label, substring, then a token-subset
- * match (every word of the query appears in the id+label).
+ * Resolve a basemap by id or (fuzzy) label, e.g. "opentopomap", "dark matter",
+ * or "openstreetmap". Tries exact id, exact label, substring, then a
+ * token-subset match (every word of the query appears in the id+label).
  */
 export function findNamedTileBasemap(reference: string): NamedTileBasemap | null {
   const target = reference.trim().toLowerCase();
