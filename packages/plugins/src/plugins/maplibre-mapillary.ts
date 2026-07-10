@@ -18,7 +18,7 @@ const SELECTED_SOURCE_ID = "geolibre-mapillary-selected";
 const SEQUENCE_LAYER_ID = "geolibre-mapillary-sequence";
 const OVERVIEW_LAYER_ID = "geolibre-mapillary-overview";
 const IMAGE_LAYER_ID = "geolibre-mapillary-image";
-const SELECTED_LAYER_ID = "geolibre-mapillary-selected";
+const SELECTED_LAYER_ID = "geolibre-mapillary-selected-marker";
 // The point layers that carry a clickable image `id` property.
 const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID, OVERVIEW_LAYER_ID];
 
@@ -66,8 +66,18 @@ let labels: MapillaryLabels = {
 
 export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
   labels = { ...labels, ...next };
-  // Rebuild the panel body so a language switch takes effect immediately.
-  if (panelContainer) buildPanel(panelContainer);
+  if (!panelContainer) return;
+  // With a live viewer, only refresh the static text nodes — rebuilding would
+  // tear down the mapillary-js WebGL viewer and lose the user's current photo
+  // just to update hint/button copy. Otherwise (token prompt showing) a full
+  // rebuild is cheap and picks up every translated string.
+  if (viewer) updatePanelText();
+  else buildPanel(panelContainer);
+}
+
+function updatePanelText(): void {
+  if (hintEl) hintEl.textContent = labels.hint;
+  if (settingsButtonEl) settingsButtonEl.textContent = labels.tokenLabel;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +130,13 @@ let unsubscribeBasemap: (() => void) | null = null;
 let panelContainer: HTMLElement | null = null;
 let viewerContainer: HTMLElement | null = null;
 let viewer: MapillaryViewer | null = null;
+// A mount in flight, so overlapping mountViewer() calls await it instead of
+// racing to construct a second Viewer (which would leak a WebGL context).
+let viewerMounting: Promise<void> | null = null;
+// The live text nodes, so a language change refreshes copy in place instead of
+// tearing down and remounting the viewer.
+let hintEl: HTMLElement | null = null;
+let settingsButtonEl: HTMLButtonElement | null = null;
 // An image the user clicked before the viewer finished mounting.
 let pendingImageId: string | null = null;
 
@@ -333,6 +350,7 @@ function buildPanel(container: HTMLElement): void {
   const hint = document.createElement("div");
   hint.textContent = labels.hint;
   hint.style.cssText = "opacity:0.8;line-height:1.4;";
+  hintEl = hint;
   container.appendChild(hint);
 
   // The mapillary-js viewer mounts into this element.
@@ -419,6 +437,7 @@ function buildFooter(): HTMLElement {
   const settings = document.createElement("button");
   settings.type = "button";
   settings.textContent = labels.tokenLabel;
+  settingsButtonEl = settings;
   settings.style.cssText =
     "background:none;border:none;color:var(--primary,#05cb63);cursor:pointer;" +
     "font-size:11px;padding:0;text-decoration:underline;";
@@ -434,14 +453,26 @@ function buildFooter(): HTMLElement {
   return footer;
 }
 
-async function mountViewer(): Promise<void> {
+function mountViewer(): Promise<void> {
+  if (viewer) return Promise.resolve();
+  // Coalesce overlapping calls: a rapid rebuild (e.g. two buildPanel runs)
+  // could otherwise both pass the `viewer` guard before the dynamic import
+  // resolves and construct two Viewers, leaking the first.
+  if (viewerMounting) return viewerMounting;
+  viewerMounting = doMountViewer().finally(() => {
+    viewerMounting = null;
+  });
+  return viewerMounting;
+}
+
+async function doMountViewer(): Promise<void> {
   const token = activeToken();
   if (!token || !viewerContainer) return;
-  if (viewer) return;
   try {
     const { Viewer } = await import("mapillary-js");
-    // The panel may have been torn down while the dynamic import was in flight.
-    if (!viewerContainer || !activeToken()) return;
+    // The panel may have been torn down (or a viewer already mounted) while the
+    // dynamic import was in flight.
+    if (!viewerContainer || !activeToken() || viewer) return;
     viewer = new Viewer({
       accessToken: token,
       container: viewerContainer,
@@ -477,6 +508,17 @@ function destroyViewer(): void {
   }
 }
 
+/**
+ * Add the coverage layers, deferring to the next idle if the style is still
+ * loading. Calling addSource/addLayer before the style is ready throws
+ * ("Style is not done loading"), which can happen when the plugin is
+ * (re)activated right after a basemap swap during project restore.
+ */
+function ensureCoverageWhenReady(activeMap: MapLibreMap): void {
+  if (activeMap.isStyleLoaded()) addCoverage(activeMap);
+  else activeMap.once("idle", () => addCoverage(activeMap));
+}
+
 // ---------------------------------------------------------------------------
 // Plugin definition
 // ---------------------------------------------------------------------------
@@ -491,7 +533,7 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     map = activeMap;
     appRef = app;
 
-    addCoverage(activeMap);
+    ensureCoverageWhenReady(activeMap);
     attachInteractions(activeMap);
 
     // A basemap switch calls setStyle, which drops our sources/layers; re-add
@@ -515,6 +557,8 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
           return () => {
             destroyViewer();
             viewerContainer = null;
+            hintEl = null;
+            settingsButtonEl = null;
             if (panelContainer === container) panelContainer = null;
           };
         },
@@ -530,6 +574,8 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
     unregisterPanel = null;
     panelContainer = null;
     viewerContainer = null;
+    hintEl = null;
+    settingsButtonEl = null;
     pendingImageId = null;
     const activeMap = map ?? app.getMap?.() ?? null;
     if (activeMap) {
