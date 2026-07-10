@@ -92,6 +92,13 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import {
+  AREA_UNITS,
+  detectGeometryFamilies,
+  DISTANCE_UNITS,
+  UNIT_SYMBOLS,
+  type GeometryMetric,
+} from "../../lib/geometry-measure";
 import { AttributeChartDialog } from "./AttributeChartDialog";
 import { AttributeStatsDialog } from "./AttributeStatsDialog";
 import { ColumnExplorerDialog } from "./ColumnExplorerDialog";
@@ -327,6 +334,11 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const [calcExpression, setCalcExpression] = useState("");
   const [calcSelectedOnly, setCalcSelectedOnly] = useState(false);
   const [calcError, setCalcError] = useState<string | null>(null);
+  // Geometry-measurement helper inside the calculator: which metric and unit the
+  // "Insert" button builds a `$length/$perimeter/$area(...)` snippet from.
+  const [calcGeomMetric, setCalcGeomMetric] =
+    useState<GeometryMetric>("length");
+  const [calcGeomUnit, setCalcGeomUnit] = useState<string>("meters");
   const calcExpressionRef = useRef<HTMLTextAreaElement>(null);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
@@ -906,6 +918,12 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setCalcExpression("");
     setCalcSelectedOnly(false);
     setCalcError(null);
+    // Seed the geometry measurement to a metric that suits the layer; the
+    // effective-metric fallback still corrects any mismatch on render.
+    const families = detectGeometryFamilies(features);
+    const lineOnly = families.has("line") && !families.has("polygon");
+    setCalcGeomMetric(lineOnly ? "length" : "area");
+    setCalcGeomUnit(lineOnly ? "meters" : "square-meters");
     setCalcOpen(true);
   };
 
@@ -930,6 +948,45 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     el.focus();
     el.setSelectionRange(caret, caret);
     setCalcExpression(next);
+  };
+
+  // Geometry family drives which measurements the calculator offers: a polygon
+  // layer gets Area/Perimeter, a line layer gets Length, a mixed layer gets all
+  // three, and point/geometry-less layers get none (the row is hidden).
+  const calcGeometryFamilies = useMemo(
+    () => detectGeometryFamilies(features),
+    // Recompute when the layer or its feature count changes, and each time the
+    // dialog opens, so a geometry-type edit made while it was closed is picked
+    // up. The families are otherwise stable across renders (and the calc dialog
+    // is modal, so geometry cannot be edited while it is open). eslint can't see
+    // that the array identity of `features` alone is not a meaningful dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [layer?.id, features.length, calcOpen],
+  );
+  const calcAvailableMetrics = useMemo<GeometryMetric[]>(() => {
+    // Offer only metrics the layer's geometry actually supports, so a mixed
+    // point+line layer gets Length but not a no-op Area.
+    const metrics: GeometryMetric[] = [];
+    if (calcGeometryFamilies.has("polygon")) metrics.push("area", "perimeter");
+    if (calcGeometryFamilies.has("line")) metrics.push("length");
+    return metrics;
+  }, [calcGeometryFamilies]);
+  // Fall back to the first available metric/unit when the current selection is
+  // not valid for this layer (e.g. an "area" choice carried over to a line layer).
+  const calcEffectiveMetric = calcAvailableMetrics.includes(calcGeomMetric)
+    ? calcGeomMetric
+    : (calcAvailableMetrics[0] ?? "length");
+  const calcGeomUnitOptions =
+    calcEffectiveMetric === "area" ? AREA_UNITS : DISTANCE_UNITS;
+  const calcEffectiveUnit = (
+    calcGeomUnitOptions as readonly string[]
+  ).includes(calcGeomUnit)
+    ? calcGeomUnit
+    : calcGeomUnitOptions[0];
+
+  const insertGeometrySnippet = () => {
+    const snippet = `$${calcEffectiveMetric}(${JSON.stringify(calcEffectiveUnit)})`;
+    insertExpressionSnippet(snippet);
   };
 
   const calcNewNameTrimmed = calcNewName.trim();
@@ -962,6 +1019,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const calcColumnsKey = calcOpen ? JSON.stringify(discoveredColumns) : "";
   const calcSampleKey =
     calcOpen && calcSampleRow ? JSON.stringify(calcSampleRow.properties) : "";
+  // The preview feeds the sample feature's geometry to $length/$perimeter/$area,
+  // so key on the geometry too — a geometry change (not just a property change)
+  // must recompute the preview. Only one feature is serialized, and only while
+  // the dialog is open.
+  const calcSampleGeomKey =
+    calcOpen && calcSampleRow
+      ? JSON.stringify(features[calcSampleIndex]?.geometry ?? null)
+      : "";
   const calcPreview = useMemo<
     | { kind: "empty" }
     | { kind: "ok"; value: unknown }
@@ -973,7 +1038,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       const compiled = compileExpression(calcExpression, discoveredColumns);
       if (!calcSampleRow) return { kind: "ok", value: null };
       try {
-        const raw = compiled.evaluate(calcSampleRow.properties, calcSampleIndex);
+        // attributeRows map 1:1 to geojson features by index, so the sample
+        // row's geometry drives the $length/$perimeter/$area helpers in the
+        // preview (undefined for DuckDB layers, which the helpers treat as 0).
+        const raw = compiled.evaluate(
+          calcSampleRow.properties,
+          calcSampleIndex,
+          features[calcSampleIndex]?.geometry,
+        );
         return { kind: "ok", value: coerceComputedValue(raw, calcOutputType) };
       } catch (error) {
         return {
@@ -1001,6 +1073,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     calcOutputType,
     calcColumnsKey,
     calcSampleKey,
+    calcSampleGeomKey,
     calcSampleIndex,
   ]);
   const calcCanSubmit =
@@ -1931,6 +2004,47 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                   </button>
                 ))}
               </div>
+              {calcAvailableMetrics.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">
+                    {t("attributeTable.geomMeasureLabel")}
+                  </span>
+                  <Select
+                    id="calc-geom-metric"
+                    className="h-7 w-28 py-0 text-xs"
+                    value={calcEffectiveMetric}
+                    onChange={(event) =>
+                      setCalcGeomMetric(event.target.value as GeometryMetric)
+                    }
+                  >
+                    {calcAvailableMetrics.map((metric) => (
+                      <option key={metric} value={metric}>
+                        {t(`attributeTable.geomMetric.${metric}`)}
+                      </option>
+                    ))}
+                  </Select>
+                  <Select
+                    id="calc-geom-unit"
+                    className="h-7 w-20 py-0 text-xs"
+                    value={calcEffectiveUnit}
+                    onChange={(event) => setCalcGeomUnit(event.target.value)}
+                  >
+                    {calcGeomUnitOptions.map((unit) => (
+                      <option key={unit} value={unit}>
+                        {UNIT_SYMBOLS[unit]}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-7 px-2 text-xs"
+                    onClick={insertGeometrySnippet}
+                  >
+                    {t("attributeTable.geomInsert")}
+                  </Button>
+                </div>
+              ) : null}
             </div>
             {calcPreview.kind === "syntax" ? (
               <span className="text-xs text-destructive">

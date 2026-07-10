@@ -97,7 +97,14 @@
     "title": "बेसमैप बदलें",
     "applyCustom": "लागू करें",
     "invalidUrl": "एक मान्य HTTP या HTTPS स्टाइल URL दर्ज करें।",
-    "sectionPlanetary": "प्लैनेटरी"
+    "sectionMoon": "चंद्रमा",
+    "sectionMars": "मंगल"
+  },
+  "planetSwitcher": {
+    "label": "खगोलीय पिंड",
+    "earth": "पृथ्वी",
+    "moon": "चंद्रमा",
+    "mars": "मंगल"
   },
   "common": {
     "pickColorFromScreen": "स्क्रीन से रंग चुनें",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS लेयर",
-      "sampleLabel": "विश्व इमेजरी (Wayback)",
+      "sampleLabel": "EOX विश्व इमेजरी (Sentinel-2)",
       "errorUrl": "एक WMTS टाइल URL टेम्पलेट दर्ज करें।",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

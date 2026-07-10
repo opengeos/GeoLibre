@@ -61,8 +61,18 @@ export const DEFAULT_WMS_ENDPOINT =
 export const DEFAULT_WMS_LAYERS = "USGSNAIPImagery:FalseColorComposite";
 export const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 export const DEFAULT_WFS_TYPE_NAME = "topp:states";
+// EOX "Sentinel-2 cloudless" — a global, keyless RESTful WMTS imagery layer
+// (CC BY 4.0, contains modified Copernicus Sentinel data). Chosen so the WMTS
+// sample doesn't hardcode an Esri/ArcGIS web service. Its GoogleMapsCompatible
+// matrix set serves through ~zoom 18 (building level), on par with the OSM and
+// OpenTopoMap samples, so it doesn't collapse to blank tiles at ordinary zooms.
 export const DEFAULT_WMTS_URL =
-  "https://wayback.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/MapServer/tile/119/{z}/{y}/{x}";
+  "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg";
+// EOX Sentinel-2 cloudless is CC BY 4.0, so its imagery must credit the source
+// in the map's attribution control. `attributionForTileUrl` (helpers) attaches
+// this to any EOX tile layer, however it was added.
+export const EOX_S2CLOUDLESS_ATTRIBUTION =
+  'Sentinel-2 cloudless 2025 by <a href="https://s2maps.eu" target="_blank" rel="noreferrer">EOX IT Services GmbH</a> (contains modified Copernicus Sentinel data 2025)';
 // PDOK BGT (Dutch large-scale base map) served as OGC API - Tiles vector tiles.
 // The style document carries the source-layer names the TileJSON omits; both
 // are prefilled so the sample works out of the box (zoom into the Netherlands).

@@ -96,7 +96,14 @@
     "title": "更改底图",
     "applyCustom": "应用",
     "invalidUrl": "请输入有效的 HTTP 或 HTTPS 样式 URL。",
-    "sectionPlanetary": "星球"
+    "sectionMoon": "月球",
+    "sectionMars": "火星"
+  },
+  "planetSwitcher": {
+    "label": "天体",
+    "earth": "地球",
+    "moon": "月球",
+    "mars": "火星"
   },
   "common": {
     "pickColorFromScreen": "从屏幕上拾取颜色",
@@ -273,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "WMTS 图层",
-      "sampleLabel": "世界影像（Wayback）",
+      "sampleLabel": "EOX 世界影像（Sentinel-2）",
       "errorUrl": "请输入 WMTS 瓦片 URL 模板。",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

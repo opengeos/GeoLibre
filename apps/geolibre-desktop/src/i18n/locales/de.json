@@ -97,7 +97,14 @@
     "title": "Basiskarte ändern",
     "applyCustom": "Anwenden",
     "invalidUrl": "Geben Sie eine gültige HTTP- oder HTTPS-Style-URL ein.",
-    "sectionPlanetary": "Planetenkarten"
+    "sectionMoon": "Der Mond",
+    "sectionMars": "Mars"
+  },
+  "planetSwitcher": {
+    "label": "Himmelskörper",
+    "earth": "Erde",
+    "moon": "Mond",
+    "mars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Farbe vom Bildschirm auswählen",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS-Ebene",
-      "sampleLabel": "Weltweite Luftbilder (Wayback)",
+      "sampleLabel": "EOX Weltweite Luftbilder (Sentinel-2)",
       "errorUrl": "Geben Sie eine WMTS-Kachel-URL-Vorlage ein.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -97,7 +97,14 @@
     "title": "Change basemap",
     "applyCustom": "Apply",
     "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
-    "sectionPlanetary": "Planetary"
+    "sectionMoon": "The Moon",
+    "sectionMars": "Mars"
+  },
+  "planetSwitcher": {
+    "label": "Celestial body",
+    "earth": "Earth",
+    "moon": "Moon",
+    "mars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Pick a color from the screen",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS Layer",
-      "sampleLabel": "World imagery (Wayback)",
+      "sampleLabel": "EOX World Imagery (Sentinel-2)",
       "errorUrl": "Enter a WMTS tile URL template.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
@@ -1093,6 +1100,39 @@
     "chartAria": "Line chart of pixel value over time",
     "exportCsv": "Export CSV",
     "exportGeoParquet": "Export GeoParquet"
+  },
+  "rasterSubset": {
+    "title": "Extract subset",
+    "drawBbox": "Draw bounding box",
+    "drawing": "Drawing…",
+    "drawHint": "Click and drag on the map to draw the extract area. Press Esc to cancel.",
+    "useView": "Use view",
+    "north": "North",
+    "south": "South",
+    "west": "West",
+    "east": "East",
+    "bboxHint": "Enter a valid box: west/east within -180 to 180, south/north within -90 to 90, with west < east and south < north.",
+    "bboxAntimeridianHint": "West must be less than East. Boxes that cross the 180° meridian aren't supported; split them into two extracts.",
+    "zoom": "Zoom level",
+    "zoomHint": "Enter a whole zoom level between 0 and 30.",
+    "resolution": "Resolution",
+    "resolutionPlaceholder": "Native",
+    "resolutionHint": "Output pixel size in the output CRS units. Leave blank to keep the source resolution.",
+    "advanced": "Advanced options",
+    "outputCrs": "Output CRS (EPSG)",
+    "outputCrsPlaceholder": "Same as input",
+    "nodata": "Nodata value",
+    "nodataPlaceholder": "None",
+    "additionalArgs": "Additional options",
+    "additionalArgsPlaceholder": "level=2\nwidth=512",
+    "additionalArgsHint": "One key=value per line, e.g. level, width, height.",
+    "errorResolution": "Resolution must be a positive number.",
+    "errorOutputCrs": "Output CRS must be a positive EPSG code.",
+    "errorNodata": "Nodata must be a number.",
+    "errorAdditionalArgs": "Additional options must be one key=value per line.",
+    "extract": "Extract & save",
+    "extracting": "Extracting…",
+    "success": "Subset saved."
   },
   "mapGrid": {
     "layers": "Layers",
@@ -2481,6 +2521,13 @@
     "insertField": "Insert {{name}}",
     "functionsLabel": "Functions:",
     "insertFunction": "Insert {{name}}()",
+    "geomMeasureLabel": "Geometry:",
+    "geomMetric": {
+      "length": "Length",
+      "perimeter": "Perimeter",
+      "area": "Area"
+    },
+    "geomInsert": "Insert",
     "sampleRowErrored": "Sample row errored (other rows may still compute): {{message}}",
     "preview": "Preview:",
     "onlySelectedFeature": "Only update the selected feature",
@@ -2730,6 +2777,7 @@
     "identifyStopInspectPixels": "Stop inspecting pixel values",
     "identifyUnavailable": "Identify is only available for vector, WMS, and COG layers",
     "exportGeoTiff": "GeoTIFF (COG)",
+    "extractSubset": "Extract subset…",
     "stylesMenu": "Styles",
     "exportMapboxStyle": "Export as Mapbox GL style",
     "exportSldStyle": "Export as OGC SLD",

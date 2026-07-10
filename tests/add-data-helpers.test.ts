@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
+import { EOX_S2CLOUDLESS_ATTRIBUTION } from "../apps/geolibre-desktop/src/components/layout/add-data/constants";
 import {
   appendQuery,
+  attributionForTileUrl,
   createWfsGetCapabilitiesUrl,
   createWmsGetCapabilitiesUrl,
   createWmsTileUrl,
@@ -403,5 +405,40 @@ describe("geoJsonToPointRows", () => {
     assert.deepEqual(geoJsonToPointRows(fc), [
       { name: "Z", lng: -122, lat: 37 },
     ]);
+  });
+});
+
+describe("attributionForTileUrl", () => {
+  it("credits EOX Sentinel-2 cloudless tiles, including subdomain variants", () => {
+    assert.equal(
+      attributionForTileUrl(
+        "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg",
+      ),
+      EOX_S2CLOUDLESS_ATTRIBUTION,
+    );
+    assert.equal(
+      attributionForTileUrl(
+        "https://s2maps-tiles.eox.at/wmts/1.0.0/s2cloudless-2025_3857/default/g/{z}/{y}/{x}.jpg",
+      ),
+      EOX_S2CLOUDLESS_ATTRIBUTION,
+    );
+  });
+
+  it("returns undefined for other hosts, lookalikes, and malformed URLs", () => {
+    assert.equal(
+      attributionForTileUrl("https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
+      undefined,
+    );
+    // A non-s2cloudless EOX layer has no known CC BY credit to attach.
+    assert.equal(
+      attributionForTileUrl("https://tiles.maps.eox.at/wmts/1.0.0/terrain/{z}/{y}/{x}.jpg"),
+      undefined,
+    );
+    // Lookalike host must not match the `.eox.at` suffix check.
+    assert.equal(
+      attributionForTileUrl("https://evil-eox.at/s2cloudless/{z}/{y}/{x}.jpg"),
+      undefined,
+    );
+    assert.equal(attributionForTileUrl("not a url"), undefined);
   });
 });

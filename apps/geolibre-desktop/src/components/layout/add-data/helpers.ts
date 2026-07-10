@@ -8,6 +8,7 @@ import type { FeatureCollection } from "geojson";
 import { isTauri } from "../../../lib/is-tauri";
 import {
   DELIMITED_TEXT_DELIMITERS,
+  EOX_S2CLOUDLESS_ATTRIBUTION,
   GPX_PROXY_PATH,
   WFS_PROXY_PATH,
   WMS_PROXY_PATH,
@@ -44,6 +45,30 @@ export function createBaseLayer(
     style: { ...DEFAULT_LAYER_STYLE },
     metadata,
   };
+}
+
+/**
+ * Attribution required for known keyless tile hosts whose license mandates a
+ * credit (currently EOX Sentinel-2 cloudless, CC BY 4.0). Returns the
+ * attribution string for a recognized host so the tile layer credits its source
+ * in MapLibre's attribution control, or `undefined` for unrecognized/invalid
+ * URLs.
+ */
+export function attributionForTileUrl(url: string): string | undefined {
+  try {
+    const { hostname, href } = new URL(url);
+    // Key off the EOX host + Sentinel-2 cloudless layer id rather than one exact
+    // hostname, so a pasted URL on another eox.at subdomain still carries the
+    // required CC BY 4.0 credit. The `.eox.at` suffix (with the bare-domain
+    // case) avoids matching lookalike hosts like `evil-eox.at`.
+    const isEoxHost = hostname === "eox.at" || hostname.endsWith(".eox.at");
+    if (isEoxHost && href.includes("s2cloudless")) {
+      return EOX_S2CLOUDLESS_ATTRIBUTION;
+    }
+  } catch {
+    // Relative or malformed URL — no known attribution to attach.
+  }
+  return undefined;
 }
 
 export function appendQuery(

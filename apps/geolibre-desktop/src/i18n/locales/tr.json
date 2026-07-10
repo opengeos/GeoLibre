@@ -97,7 +97,14 @@
     "title": "Temel haritayı değiştir",
     "applyCustom": "Uygula",
     "invalidUrl": "Geçerli bir HTTP veya HTTPS stil URL'si girin.",
-    "sectionPlanetary": "Gezegensel"
+    "sectionMoon": "Ay",
+    "sectionMars": "Mars"
+  },
+  "planetSwitcher": {
+    "label": "Gök cismi",
+    "earth": "Dünya",
+    "moon": "Ay",
+    "mars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Ekrandan bir renk seç",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS Katmanı",
-      "sampleLabel": "Dünya uydu görüntüsü (Wayback)",
+      "sampleLabel": "EOX Dünya uydu görüntüsü (Sentinel-2)",
       "errorUrl": "Bir WMTS döşeme URL şablonu girin.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

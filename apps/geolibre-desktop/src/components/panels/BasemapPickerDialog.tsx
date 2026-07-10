@@ -1,5 +1,6 @@
 import {
   BLANK_BASEMAP,
+  PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
   useAppStore,
   type PlanetaryBasemap,
@@ -24,6 +25,7 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
+import { planetaryBodySectionKey } from "../../lib/planetary-sections";
 
 // Picking the "Liberty 3D" preset applies the Liberty style and tilts the
 // current camera into a 3D perspective in place (matching the New Project
@@ -78,7 +80,7 @@ export function BasemapPickerDialog({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setMapView = useAppStore((s) => s.setMapView);
-  const setPreferences = useAppStore((s) => s.setPreferences);
+  const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
 
   const openFreeMapPresets = useMemo(() => getOpenFreeMapPresets(), []);
   // Protomaps styles need an API key (VITE_PROTOMAPS_API_KEY). It can come from
@@ -153,14 +155,7 @@ export function BasemapPickerDialog({
   // measurements (distance/area/scale) use that body's radius, and the globe
   // control renders it as the correct sphere.
   const applyPlanetary = (basemap: PlanetaryBasemap) => {
-    setBasemapStyleUrl(basemap.styleUrl);
-    const prefs = useAppStore.getState().preferences;
-    if (prefs.map.ellipsoidId !== basemap.ellipsoidId) {
-      setPreferences({
-        ...prefs,
-        map: { ...prefs.map, ellipsoidId: basemap.ellipsoidId },
-      });
-    }
+    applyPlanetaryBasemap(basemap);
     onOpenChange(false);
   };
 
@@ -223,21 +218,23 @@ export function BasemapPickerDialog({
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">
-              {t("basemapPicker.sectionPlanetary")}
-            </p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {PLANETARY_BASEMAPS.map((basemap) => (
-                <PresetButton
-                  key={basemap.id}
-                  name={basemap.name}
-                  selected={activeChoice === basemap.id}
-                  onSelect={() => applyPlanetary(basemap)}
-                />
-              ))}
+          {PLANETARY_BASEMAP_GROUPS.map((group) => (
+            <div key={group.ellipsoidId} className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">
+                {t(planetaryBodySectionKey(group.ellipsoidId))}
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {group.basemaps.map((basemap) => (
+                  <PresetButton
+                    key={basemap.id}
+                    name={basemap.name}
+                    selected={activeChoice === basemap.id}
+                    onSelect={() => applyPlanetary(basemap)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">

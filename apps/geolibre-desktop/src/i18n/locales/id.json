@@ -96,7 +96,14 @@
     "title": "Ganti peta dasar",
     "applyCustom": "Terapkan",
     "invalidUrl": "Masukkan URL gaya HTTP atau HTTPS yang valid.",
-    "sectionPlanetary": "Planet"
+    "sectionMoon": "Bulan",
+    "sectionMars": "Mars"
+  },
+  "planetSwitcher": {
+    "label": "Benda langit",
+    "earth": "Bumi",
+    "moon": "Bulan",
+    "mars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Pilih warna dari layar",
@@ -273,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "Layer WMTS",
-      "sampleLabel": "Citra dunia (Wayback)",
+      "sampleLabel": "EOX Citra dunia (Sentinel-2)",
       "errorUrl": "Masukkan templat URL ubin WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

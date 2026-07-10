@@ -31,7 +31,7 @@ The **Web Services** submenu of the [Plugins menu](plugins.md) bundles four Unit
 
 | Integration | Where | What it does |
 | --- | --- | --- |
-| **Esri Wayback** | Plugins menu | Browse historical Esri World Imagery snapshots. |
+| **Historical Imagery** | Plugins menu | Browse historical Esri World Imagery snapshots. |
 | **Street View** | Plugins menu | View Google Street View and Mapillary street-level imagery. Needs provider credentials (see [Getting Started](../getting-started.md#optional-imagery-credentials)). |
 
 ## Time series and comparison

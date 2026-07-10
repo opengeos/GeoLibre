@@ -2,10 +2,7 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  createWfsGetFeatureUrl,
-  fetchGeoJsonFeatureCollection,
-} from "../../../../lib/layer-refresh";
+import { fetchWfsGeoJson } from "../../../../lib/layer-refresh";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
 import {
   createBaseLayer,
@@ -178,17 +175,43 @@ export function WfsSource() {
     // Strip any leftover operation params (a pasted GetCapabilities URL) so the
     // GetFeature request is not built with a conflicting duplicate REQUEST,
     // which would make the server return capabilities XML instead of features.
-    const featureUrl = createWfsGetFeatureUrl({
-      endpoint: stripOgcOperationParams(wfsEndpoint.trim(), "WFS"),
-      typeName: wfsTypeName.trim(),
-      version: wfsVersion,
-      outputFormat: wfsOutputFormat.trim(),
-      srsName: wfsSrsName.trim(),
-      maxFeatures: wfsMaxFeatures.trim() || undefined,
-    });
-    const data = await fetchGeoJsonFeatureCollection(featureUrl, {
-      useWfsProxy: true,
-    });
+    // fetchWfsGeoJson retries alternate GeoJSON output formats when the server
+    // answers the requested one with XML (e.g. an ArcGIS WFS that advertises
+    // GeoJSON as "GEOJSON" rather than "application/json"), so it returns the
+    // URL and output format that actually worked.
+    const {
+      data,
+      url: featureUrl,
+      outputFormat: resolvedOutputFormat,
+    } = await fetchWfsGeoJson(
+      {
+        endpoint: stripOgcOperationParams(wfsEndpoint.trim(), "WFS"),
+        typeName: wfsTypeName.trim(),
+        version: wfsVersion,
+        outputFormat: wfsOutputFormat.trim(),
+        srsName: wfsSrsName.trim(),
+        maxFeatures: wfsMaxFeatures.trim() || undefined,
+      },
+      { useWfsProxy: true },
+    );
+    // The fallback may have loaded the layer under a different output format
+    // than the user entered (e.g. "GEOJSON" instead of "application/json"). The
+    // resolved value is what gets persisted to source.outputFormat, so note the
+    // substitution (in case a user later inspects the saved project and finds a
+    // format they did not type) and adopt it as the form's output format. That
+    // updates wfsFormCache too, so adding another feature type from the same
+    // service this session skips straight to the working token instead of
+    // re-paying the retry cost.
+    const requestedOutputFormat = wfsOutputFormat.trim();
+    if (
+      requestedOutputFormat &&
+      resolvedOutputFormat.toLowerCase() !== requestedOutputFormat.toLowerCase()
+    ) {
+      console.info(
+        `WFS: "${requestedOutputFormat}" returned XML; loaded the layer with "${resolvedOutputFormat}" instead.`,
+      );
+      setWfsOutputFormat(resolvedOutputFormat);
+    }
     source.addAndClose(
       {
         ...createBaseLayer(
@@ -200,7 +223,7 @@ export function WfsSource() {
             service: "wfs",
             typeName: wfsTypeName.trim(),
             version: wfsVersion,
-            outputFormat: wfsOutputFormat.trim(),
+            outputFormat: resolvedOutputFormat,
             srsName: wfsSrsName.trim() || undefined,
           },
           {

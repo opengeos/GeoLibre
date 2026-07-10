@@ -97,7 +97,14 @@
     "title": "Cambia mappa di base",
     "applyCustom": "Applica",
     "invalidUrl": "Inserisci un URL di stile valido, in formato HTTP o HTTPS.",
-    "sectionPlanetary": "Planetario"
+    "sectionMoon": "La Luna",
+    "sectionMars": "Marte"
+  },
+  "planetSwitcher": {
+    "label": "Corpo celeste",
+    "earth": "Terra",
+    "moon": "Luna",
+    "mars": "Marte"
   },
   "common": {
     "pickColorFromScreen": "Preleva un colore dallo schermo",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Livello WMTS",
-      "sampleLabel": "Immagini mondiali (Wayback)",
+      "sampleLabel": "EOX Immagini mondiali (Sentinel-2)",
       "errorUrl": "Inserisci un modello di URL di tile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

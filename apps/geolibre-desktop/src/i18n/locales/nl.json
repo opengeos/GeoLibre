@@ -97,7 +97,14 @@
     "title": "Basiskaart wijzigen",
     "applyCustom": "Toepassen",
     "invalidUrl": "Voer een geldige HTTP- of HTTPS-stijl-URL in.",
-    "sectionPlanetary": "Planetair"
+    "sectionMoon": "De Maan",
+    "sectionMars": "Mars"
+  },
+  "planetSwitcher": {
+    "label": "Hemellichaam",
+    "earth": "Aarde",
+    "moon": "Maan",
+    "mars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Kies een kleur van het scherm",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "WMTS-laag",
-      "sampleLabel": "Wereldbeelden (Wayback)",
+      "sampleLabel": "EOX Wereldbeelden (Sentinel-2)",
       "errorUrl": "Voer een WMTS-tegel-URL-sjabloon in.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

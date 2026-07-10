@@ -53,7 +53,12 @@ import {
   type StoryMap,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
-import { setActiveEllipsoidId } from "./ellipsoids";
+import {
+  DEFAULT_ELLIPSOID_ID,
+  getPlanetaryBasemapByStyleUrl,
+  setActiveEllipsoidId,
+} from "./ellipsoids";
+import type { PlanetaryBasemap } from "./ellipsoids";
 
 export type ConversionToolKind =
   | "vector-to-vector"
@@ -269,6 +274,18 @@ export interface AppState {
   /** Remove one secondary pane and collapse the grid back toward 1x1. */
   removeSecondaryMapView: (id: string) => void;
   setBasemapStyleUrl: (url: string) => void;
+  /**
+   * Apply a planetary basemap and sync the project's ellipsoid to the body it
+   * depicts, so measurements and the globe control use that body's radius. Used
+   * by both the basemap picker and the Layers-panel planet switcher.
+   */
+  applyPlanetaryBasemap: (basemap: PlanetaryBasemap) => void;
+  /**
+   * Return to Earth: apply `styleUrl` (typically the Earth basemap that was
+   * active before a planet was selected, e.g. Liberty) and reset the ellipsoid
+   * to Earth. Used when a planet is deselected in the switcher.
+   */
+  restoreEarthBasemap: (styleUrl: string) => void;
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
@@ -801,6 +818,36 @@ export const useAppStore = create<AppState>()(
           };
         }),
       setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
+      applyPlanetaryBasemap: (basemap) =>
+        set((state) => ({
+          basemapStyleUrl: basemap.styleUrl,
+          preferences:
+            state.preferences.map.ellipsoidId === basemap.ellipsoidId
+              ? state.preferences
+              : {
+                  ...state.preferences,
+                  map: {
+                    ...state.preferences.map,
+                    ellipsoidId: basemap.ellipsoidId,
+                  },
+                },
+          isDirty: true,
+        })),
+      restoreEarthBasemap: (styleUrl) =>
+        set((state) => ({
+          basemapStyleUrl: styleUrl,
+          preferences:
+            state.preferences.map.ellipsoidId === DEFAULT_ELLIPSOID_ID
+              ? state.preferences
+              : {
+                  ...state.preferences,
+                  map: {
+                    ...state.preferences.map,
+                    ellipsoidId: DEFAULT_ELLIPSOID_ID,
+                  },
+                },
+          isDirty: true,
+        })),
       setBasemapVisible: (visible) =>
         set({ basemapVisible: visible, isDirty: true }),
       setBasemapOpacity: (opacity) =>
@@ -1501,15 +1548,40 @@ useAppStore.subscribe((state) => {
  * drop a `selectedLayerId` that no longer points at an existing layer (selection
  * is intentionally not tracked in history, so it can dangle after a restore).
  */
-function finishHistoryStep(): void {
+function finishHistoryStep(previousBasemapStyleUrl: string): void {
   const s = useAppStore.getState();
   const selectionDangling =
     s.selectedLayerId !== null &&
     !s.layers.some((layer) => layer.id === s.selectedLayerId);
+  // The basemap is in the undo history but the ellipsoid preference is not, so a
+  // step that restores a *different* basemap can leave the two out of sync (e.g.
+  // undoing a switch to Mars would keep the Mars radius under an Earth basemap).
+  // Re-derive the ellipsoid from the restored basemap's body — Earth for a
+  // non-planetary basemap — but only when this step actually changed the
+  // basemap. Steps that leave the basemap untouched must not touch the ellipsoid,
+  // which the user can set independently of the basemap in Settings.
+  const restoredEllipsoidId =
+    getPlanetaryBasemapByStyleUrl(s.basemapStyleUrl)?.ellipsoidId ??
+    DEFAULT_ELLIPSOID_ID;
+  const ellipsoidPatch =
+    s.basemapStyleUrl !== previousBasemapStyleUrl &&
+    s.preferences.map.ellipsoidId !== restoredEllipsoidId
+      ? {
+          preferences: {
+            ...s.preferences,
+            map: { ...s.preferences.map, ellipsoidId: restoredEllipsoidId },
+          },
+        }
+      : {};
   useAppStore.setState(
     selectionDangling
-      ? { isDirty: true, selectedLayerId: null, selectedFeatureId: null }
-      : { isDirty: true },
+      ? {
+          isDirty: true,
+          selectedLayerId: null,
+          selectedFeatureId: null,
+          ...ellipsoidPatch,
+        }
+      : { isDirty: true, ...ellipsoidPatch },
   );
   // The setState above must not leave a coalesce window open for the next edit.
   cancelHistoryCoalesce();
@@ -1525,8 +1597,9 @@ export function undo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
+  const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
   temporal.undo();
-  finishHistoryStep();
+  finishHistoryStep(previousBasemapStyleUrl);
 }
 
 /** Step the history forward one entry and mark the project dirty. */
@@ -1534,8 +1607,9 @@ export function redo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
+  const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
   temporal.redo();
-  finishHistoryStep();
+  finishHistoryStep(previousBasemapStyleUrl);
 }
 
 /** Empty both the undo and redo stacks (e.g. on new/loaded project). */

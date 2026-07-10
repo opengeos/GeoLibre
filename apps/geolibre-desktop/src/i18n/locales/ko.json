@@ -96,7 +96,14 @@
     "title": "베이스맵 변경",
     "applyCustom": "적용",
     "invalidUrl": "유효한 HTTP 또는 HTTPS 스타일 URL을 입력하세요.",
-    "sectionPlanetary": "행성"
+    "sectionMoon": "달",
+    "sectionMars": "화성"
+  },
+  "planetSwitcher": {
+    "label": "천체",
+    "earth": "지구",
+    "moon": "달",
+    "mars": "화성"
   },
   "common": {
     "pickColorFromScreen": "화면에서 색상 선택",
@@ -273,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "WMTS 레이어",
-      "sampleLabel": "세계 영상(Wayback)",
+      "sampleLabel": "EOX 세계 영상(Sentinel-2)",
       "errorUrl": "WMTS 타일 URL 템플릿을 입력하세요.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

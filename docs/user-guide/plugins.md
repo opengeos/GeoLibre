@@ -4,7 +4,7 @@ Much of GeoLibre's functionality ships as plugins. The **Plugins** menu activate
 
 ## The Plugins menu
 
-The **Plugins** menu lists every available plugin under **Activate plugin**. Click a plugin to toggle it on or off; a check mark shows which are active. Built-in plugins include the Layer Control, Basemaps, Components (Measure, Bookmark, Legend, Colorbar, Minimap, View State, Search, Print, HTML), GeoEditor, Time Slider, Layer Swipe, Street View, LiDAR Viewer, Overture Maps, GeoAgent, Esri Wayback, and the federal **Web Services** group. See [Data Integrations](data-integrations.md).
+The **Plugins** menu lists every available plugin under **Activate plugin**. Click a plugin to toggle it on or off; a check mark shows which are active. Built-in plugins include the Layer Control, Basemaps, Components (Measure, Bookmark, Legend, Colorbar, Minimap, View State, Search, Print, HTML), GeoEditor, Time Slider, Layer Swipe, Street View, LiDAR Viewer, Overture Maps, GeoAgent, Historical Imagery, and the federal **Web Services** group. See [Data Integrations](data-integrations.md).
 
 For plugins that add an on-map control, a submenu lets you **position** the control in any corner: top left, top right, bottom left, or bottom right.
 

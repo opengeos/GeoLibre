@@ -99,7 +99,14 @@
     "title": "Изменить базовую карту",
     "applyCustom": "Применить",
     "invalidUrl": "Введите корректный URL стиля (HTTP или HTTPS).",
-    "sectionPlanetary": "Планетарные"
+    "sectionMoon": "Луна",
+    "sectionMars": "Марс"
+  },
+  "planetSwitcher": {
+    "label": "Небесное тело",
+    "earth": "Земля",
+    "moon": "Луна",
+    "mars": "Марс"
   },
   "common": {
     "pickColorFromScreen": "Выбрать цвет с экрана",
@@ -288,7 +295,7 @@
     },
     "wmts": {
       "defaultName": "Слой WMTS",
-      "sampleLabel": "Мировые снимки (Wayback)",
+      "sampleLabel": "EOX Мировые снимки (Sentinel-2)",
       "errorUrl": "Введите шаблон URL тайлов WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -12,8 +12,19 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type { ParseKeys, TFunction } from "i18next";
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import {
+  DEFAULT_BASEMAP,
+  getPlanetaryBasemapById,
+  getPlanetaryBasemapByStyleUrl,
+  isDuckDBQueryLayer,
+  PLANET_SWITCHER_OPTIONS,
+  useAppStore,
+} from "@geolibre/core";
+import type {
+  EllipsoidId,
+  GeoLibreLayer,
+  LayerGroup,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   buildTimeBinding,
@@ -55,8 +66,10 @@ import {
   DialogTitle,
   DialogDescription,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -88,6 +101,7 @@ import {
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
+  Orbit,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
@@ -117,6 +131,7 @@ import {
   canExportRasterLayer,
   exportRasterLayer,
 } from "../../lib/raster-export";
+import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
   geojsonVectorSourceId,
@@ -158,6 +173,11 @@ interface LayerPanelProps {
   /** Open the floating Add Raster Layer panel for advanced raster styling. */
   onOpenRasterStylePanel: () => void;
   /**
+   * Open the floating Extract Subset panel for a COG/WMS/XYZ layer, letting the
+   * user draw a bounding box and export a clipped GeoTIFF.
+   */
+  onOpenRasterSubset: (layer: GeoLibreLayer) => void;
+  /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
    * unmounted). Used to clear room for a story map presentation; the user can
    * still expand it again, and the prior state is restored when it flips off.
@@ -196,6 +216,13 @@ const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+
+/** Menu labels for the planet switcher, keyed by celestial body. */
+const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
+  earth: "planetSwitcher.earth",
+  moon: "planetSwitcher.moon",
+  mars: "planetSwitcher.mars",
+};
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -436,6 +463,7 @@ export function LayerPanel({
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
+  onOpenRasterSubset,
   autoCollapse = false,
   collapsed: controlledCollapsed,
   onCollapsedChange,
@@ -465,6 +493,27 @@ export function LayerPanel({
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
+  const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
+  const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
+  const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  // The body the switcher reflects, derived from the active *basemap* — not the
+  // ellipsoid, which Settings lets diverge from the basemap (e.g. Mars scale
+  // under an Earth style). Any planetary basemap resolves to its body: the
+  // Moon/Mars mosaics (from this switcher or the full picker) and Earth's own
+  // imagery. A normal Earth basemap (e.g. Liberty) resolves to nothing, so
+  // nothing is selected until a planetary basemap is applied.
+  const selectedPlanet =
+    getPlanetaryBasemapByStyleUrl(basemapStyleUrl)?.ellipsoidId;
+  // The Earth basemap to fall back to when a planet is deselected — the last one
+  // active while no planet was selected (e.g. Liberty). Tracked in a ref so it
+  // survives the planet round-trip. Starts undefined (not seeded from the mount
+  // value, which could be a planetary basemap if the panel mounted while off
+  // Earth) and is only ever set to a genuine Earth basemap by the guard below,
+  // so a deselect never restores a planetary sentinel.
+  const previousEarthBasemap = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!selectedPlanet) previousEarthBasemap.current = basemapStyleUrl;
+  }, [selectedPlanet, basemapStyleUrl]);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
@@ -673,6 +722,20 @@ export function LayerPanel({
       .getState()
       .layerGroups.find((g) => g.id === id);
     if (group) beginGroupRename(group);
+  };
+
+  // Toggle a celestial body in the switcher (like Google Earth's planet
+  // dropdown). Selecting a body applies its basemap and syncs the ellipsoid;
+  // deselecting the active body returns to Earth and restores the basemap that
+  // was showing before (e.g. Liberty).
+  const togglePlanet = (body: EllipsoidId, selected: boolean) => {
+    if (!selected) {
+      restoreEarthBasemap(previousEarthBasemap.current ?? DEFAULT_BASEMAP);
+      return;
+    }
+    const option = PLANET_SWITCHER_OPTIONS.find((o) => o.ellipsoidId === body);
+    const basemap = option && getPlanetaryBasemapById(option.basemapId);
+    if (basemap) applyPlanetaryBasemap(basemap);
   };
 
   const beginRename = (layer: GeoLibreLayer) => {
@@ -1884,6 +1947,40 @@ export function LayerPanel({
       <div className="flex items-center justify-between border-b px-3 py-1.5">
         <span className="text-sm font-semibold">{t("sharedRail.layers")}</span>
         <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("planetSwitcher.label")}
+                aria-label={t("planetSwitcher.label")}
+              >
+                <Orbit
+                  className={cn(
+                    "h-4 w-4",
+                    selectedPlanet &&
+                      selectedPlanet !== "earth" &&
+                      "text-primary",
+                  )}
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>{t("planetSwitcher.label")}</DropdownMenuLabel>
+              {PLANET_SWITCHER_OPTIONS.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.ellipsoidId}
+                  checked={selectedPlanet === option.ellipsoidId}
+                  onCheckedChange={(checked) =>
+                    togglePlanet(option.ellipsoidId, checked)
+                  }
+                >
+                  {t(PLANET_SWITCHER_LABEL_KEYS[option.ellipsoidId])}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="ghost"
             size="icon"
@@ -2069,6 +2166,9 @@ export function LayerPanel({
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
             const canExportRaster = canExportRasterLayer(layer);
+            // COG/WMS/XYZ layers can also export a bounding-box subset (a clip)
+            // via the in-browser geolibre-wasm extractors, drawn on the map.
+            const canExtractSubset = canExtractRasterSubset(layer);
             // Rasters added through the floating Add Raster Layer panel are
             // styled there; offer a shortcut to reopen that panel since it is
             // dismissed (and its on-map icon removed) when closed.
@@ -2580,20 +2680,32 @@ export function LayerPanel({
                           {t("layers.openRasterStylePanel")}
                         </DropdownMenuItem>
                       )}
-                      {canExportRaster && (
+                      {(canExportRaster || canExtractSubset) && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Download className="h-3.5 w-3.5" />
                             {t("layers.export")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                void handleExportRasterLayer(layer);
-                              }}
-                            >
-                              {t("layers.exportGeoTiff")}
-                            </DropdownMenuItem>
+                            {canExportRaster && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleExportRasterLayer(layer);
+                                }}
+                              >
+                                {t("layers.exportGeoTiff")}
+                              </DropdownMenuItem>
+                            )}
+                            {canExtractSubset && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  selectLayer(layer.id);
+                                  onOpenRasterSubset(layer);
+                                }}
+                              >
+                                {t("layers.extractSubset")}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}

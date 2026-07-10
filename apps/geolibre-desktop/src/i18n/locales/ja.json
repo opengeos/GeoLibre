@@ -96,7 +96,14 @@
     "title": "ベースマップを変更",
     "applyCustom": "適用",
     "invalidUrl": "有効なHTTPまたはHTTPSのスタイルURLを入力してください。",
-    "sectionPlanetary": "Planetary"
+    "sectionMoon": "月",
+    "sectionMars": "火星"
+  },
+  "planetSwitcher": {
+    "label": "天体",
+    "earth": "地球",
+    "moon": "月",
+    "mars": "火星"
   },
   "common": {
     "pickColorFromScreen": "画面から色を選択",
@@ -273,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "WMTSレイヤー",
-      "sampleLabel": "世界衛星画像(Wayback)",
+      "sampleLabel": "EOX 世界衛星画像(Sentinel-2)",
       "errorUrl": "WMTSタイルURLテンプレートを入力してください。",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

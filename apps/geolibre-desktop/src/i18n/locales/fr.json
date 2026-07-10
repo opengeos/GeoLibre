@@ -97,7 +97,14 @@
     "title": "Changer de fond de carte",
     "applyCustom": "Appliquer",
     "invalidUrl": "Entrez une URL de style HTTP ou HTTPS valide.",
-    "sectionPlanetary": "Planétaire"
+    "sectionMoon": "La Lune",
+    "sectionMars": "Mars"
+  },
+  "planetSwitcher": {
+    "label": "Corps céleste",
+    "earth": "Terre",
+    "moon": "Lune",
+    "mars": "Mars"
   },
   "common": {
     "pickColorFromScreen": "Choisir une couleur à l'écran",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Couche WMTS",
-      "sampleLabel": "Imagerie mondiale (Wayback)",
+      "sampleLabel": "EOX Imagerie mondiale (Sentinel-2)",
       "errorUrl": "Entrez un modèle d'URL de tuile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

@@ -97,7 +97,14 @@
     "title": "Alterar mapa base",
     "applyCustom": "Aplicar",
     "invalidUrl": "Digite uma URL de estilo HTTP ou HTTPS válida.",
-    "sectionPlanetary": "Planetário"
+    "sectionMoon": "A Lua",
+    "sectionMars": "Marte"
+  },
+  "planetSwitcher": {
+    "label": "Corpo celeste",
+    "earth": "Terra",
+    "moon": "Lua",
+    "mars": "Marte"
   },
   "common": {
     "pickColorFromScreen": "Escolher uma cor da tela",
@@ -278,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Camada WMTS",
-      "sampleLabel": "Imagens mundiais (Wayback)",
+      "sampleLabel": "EOX Imagens mundiais (Sentinel-2)",
       "errorUrl": "Digite um modelo de URL de tile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },
