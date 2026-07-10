@@ -79,6 +79,13 @@ export function canExtractRasterSubset(layer: GeoLibreLayer): boolean {
 }
 
 /**
+ * Cap for reading a local (blob) COG fully into memory before extraction. Beyond
+ * this we fail fast rather than risk an out-of-memory tab crash; a remote COG
+ * URL (byte-range read) has no such limit.
+ */
+const MAX_LOCAL_COG_BYTES = 2 * 1024 * 1024 * 1024;
+
+/**
  * Resolve a COG layer to a source the WASM extractor can read. The retained
  * local-bytes blob (File-loaded rasters and Whitebox outputs) takes priority so
  * an edited layer extracts from its current bytes, matching `rasterExportUrl`'s
@@ -102,6 +109,16 @@ async function resolveCogSource(
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error("Could not read the raster's data for extraction.");
+  }
+  // The local/blob path reads the whole file into memory (no range requests), so
+  // guard against loading a multi-GB raster that would spike memory or crash the
+  // tab: fail fast with a clear message instead. The byte-range HTTP path above
+  // never reaches here, so remote COGs of any size are unaffected.
+  const declaredBytes = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declaredBytes) && declaredBytes > MAX_LOCAL_COG_BYTES) {
+    throw new Error(
+      `This raster is too large (${Math.round(declaredBytes / 1e6)} MB) to extract a subset from in the browser. Load it as an HTTP/COG URL so only the requested area is read.`,
+    );
   }
   return new Uint8Array(await response.arrayBuffer());
 }
@@ -154,12 +171,19 @@ export async function extractRasterSubset(
   // Forwarded to each extractor's internal fetches (COG byte-range reads, the
   // WMS GetMap request, XYZ tile requests) so the caller can cancel them.
   const fetchOptions = signal ? { signal } : undefined;
-  // Options every extractor accepts. `extra` is spread before the fixed
-  // `bboxCrs` so a power-user override (e.g. level/width/height) wins over the
-  // derived values, but `bboxCrs` stays WGS84: the box always comes from the
-  // panel's lng/lat fields, so letting `extra` change it would reinterpret those
-  // numbers and produce a wrong/empty extraction.
-  const common = { bbox, resolution, outputCrs, nodata, ...extra, bboxCrs: WGS84 };
+  // Options every extractor accepts. `extra` is spread over the derived sizing
+  // fields so a power-user override (e.g. level/width/height) wins, but the
+  // geometry identity `bbox`/`bboxCrs` is applied after it: the box always comes
+  // from the panel's lng/lat fields, so letting `extra` clobber it (e.g. a
+  // stray `bbox=...` line) would reinterpret or corrupt the extent.
+  const common = {
+    resolution,
+    outputCrs,
+    nodata,
+    ...extra,
+    bbox,
+    bboxCrs: WGS84,
+  };
 
   if (kind === "cog") {
     const cogSource = await resolveCogSource(layer, signal);

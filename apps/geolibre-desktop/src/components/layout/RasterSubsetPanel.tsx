@@ -161,11 +161,16 @@ function parseExtraArgs(text: string): Record<string, unknown> | null {
     const key = line.slice(0, eq).trim();
     if (!key) return null;
     const value = line.slice(eq + 1).trim();
-    const num = Number(value);
-    extra[key] =
-      NUMERIC_EXTRA_KEYS.has(key) && value !== "" && Number.isFinite(num)
-        ? num
-        : value;
+    if (NUMERIC_EXTRA_KEYS.has(key)) {
+      // A numeric key needs a finite number; a blank or non-numeric value (e.g.
+      // `resolution=`) is malformed, not a silent empty-string override of the
+      // form field.
+      const num = Number(value);
+      if (value === "" || !Number.isFinite(num)) return null;
+      extra[key] = num;
+    } else {
+      extra[key] = value;
+    }
   }
   return extra;
 }
