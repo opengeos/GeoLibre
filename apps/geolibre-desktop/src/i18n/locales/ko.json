@@ -280,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "WMTS 레이어",
-      "sampleLabel": "세계 영상(Sentinel-2)",
+      "sampleLabel": "EOX 세계 영상(Sentinel-2)",
       "errorUrl": "WMTS 타일 URL 템플릿을 입력하세요.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

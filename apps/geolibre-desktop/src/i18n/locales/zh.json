@@ -280,7 +280,7 @@
     },
     "wmts": {
       "defaultName": "WMTS 图层",
-      "sampleLabel": "世界影像（Sentinel-2）",
+      "sampleLabel": "EOX 世界影像（Sentinel-2）",
       "errorUrl": "请输入 WMTS 瓦片 URL 模板。",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

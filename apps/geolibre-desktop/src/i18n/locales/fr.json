@@ -285,7 +285,7 @@
     },
     "wmts": {
       "defaultName": "Couche WMTS",
-      "sampleLabel": "Imagerie mondiale (Sentinel-2)",
+      "sampleLabel": "EOX Imagerie mondiale (Sentinel-2)",
       "errorUrl": "Entrez un modèle d'URL de tuile WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

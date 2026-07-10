@@ -295,7 +295,7 @@
     },
     "wmts": {
       "defaultName": "Слой WMTS",
-      "sampleLabel": "Мировые снимки (Sentinel-2)",
+      "sampleLabel": "EOX Мировые снимки (Sentinel-2)",
       "errorUrl": "Введите шаблон URL тайлов WMTS.",
       "urlPlaceholder": "https://example.com/wmts/{z}/{y}/{x}.png"
     },

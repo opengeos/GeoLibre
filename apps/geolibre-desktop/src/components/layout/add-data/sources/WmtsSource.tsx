@@ -2,7 +2,7 @@ import { Input, Label } from "@geolibre/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_WMTS_URL } from "../constants";
-import { createBaseLayer } from "../helpers";
+import { attributionForTileUrl, createBaseLayer } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldString,
@@ -28,18 +28,21 @@ export function WmtsSource() {
 
   const handleSubmit = source.runSubmit(() => {
     const name = source.layerName.trim() || t("addData.wmts.defaultName");
-    if (!wmtsUrl.trim()) {
+    const url = wmtsUrl.trim();
+    if (!url) {
       throw new Error(t("addData.wmts.errorUrl"));
     }
+    const attribution = attributionForTileUrl(url);
     source.addAndClose(
       createBaseLayer(
         name,
         "wmts",
         {
           type: "raster",
-          tiles: [wmtsUrl.trim()],
+          tiles: [url],
           tileSize: Number(wmtsTileSize) || 256,
-          url: wmtsUrl.trim(),
+          url,
+          ...(attribution ? { attribution } : {}),
         },
         { service: "wmts" },
       ),
