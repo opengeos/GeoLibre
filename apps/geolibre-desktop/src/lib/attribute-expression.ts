@@ -11,9 +11,18 @@
  *  - as bare identifiers when the field name is a valid JS identifier (`pop`),
  *  - always through the `props` object so fields with spaces/punctuation are
  *    reachable as `props["my field"]`.
- * A curated set of helper functions and the `$index` (row position) variable
- * are also in scope.
+ * A curated set of helper functions, the `$index` (row position) variable, and
+ * the geometry helpers `$length`/`$perimeter`/`$area` (which measure the
+ * feature's own geometry) are also in scope.
  */
+import type { Geometry } from "geojson";
+import {
+  measureArea,
+  measureLength,
+  measurePerimeter,
+  type AreaUnit,
+  type DistanceUnit,
+} from "./geometry-measure";
 
 /** A helper exposed to expressions by name. */
 type Helper = (...args: unknown[]) => unknown;
@@ -106,10 +115,35 @@ const EXPRESSION_CONSTANTS: Record<string, number> = {
   E: Math.E,
 };
 
+/**
+ * Geometry helper names, in scope as functions bound to each feature's own
+ * geometry: `$length(unit)` / `$perimeter(unit)` measure a line or a polygon's
+ * boundary (default meters); `$area(unit)` measures a polygon (default square
+ * meters). Units mirror the Measure tool — e.g. `$area("hectares")`,
+ * `$length("kilometers")`. Non-matching geometries return 0.
+ */
+export const GEOMETRY_HELPER_NAMES = ["$length", "$perimeter", "$area"] as const;
+
+/**
+ * Build the per-feature geometry helpers for one evaluation. They close over the
+ * feature's geometry, so unlike the static `EXPRESSION_HELPERS` they are created
+ * fresh for each row.
+ */
+function createGeometryHelpers(
+  geometry: Geometry | null | undefined,
+): Helper[] {
+  return [
+    (unit) => measureLength(geometry, unit as DistanceUnit | undefined),
+    (unit) => measurePerimeter(geometry, unit as DistanceUnit | undefined),
+    (unit) => measureArea(geometry, unit as AreaUnit | undefined),
+  ];
+}
+
 /** Names that are always in scope and therefore cannot be used as field idents. */
 const RESERVED_NAMES = new Set<string>([
   ...Object.keys(EXPRESSION_HELPERS),
   ...Object.keys(EXPRESSION_CONSTANTS),
+  ...GEOMETRY_HELPER_NAMES,
   "props",
   "$index",
 ]);
@@ -161,7 +195,11 @@ export function fieldReference(name: string): string {
 
 /** A compiled expression ready to run against each feature's properties. */
 export interface CompiledExpression {
-  evaluate: (props: Record<string, unknown>, index: number) => unknown;
+  evaluate: (
+    props: Record<string, unknown>,
+    index: number,
+    geometry?: Geometry | null,
+  ) => unknown;
 }
 
 /**
@@ -185,6 +223,7 @@ export function compileExpression(
     ...bareFields,
     ...helperNames,
     ...constantNames,
+    ...GEOMETRY_HELPER_NAMES,
     "props",
     "$index",
   ];
@@ -211,12 +250,13 @@ export function compileExpression(
   const constantValues = constantNames.map((name) => EXPRESSION_CONSTANTS[name]);
 
   return {
-    evaluate(props, index) {
+    evaluate(props, index, geometry) {
       const fieldValues = bareFields.map((name) => props[name]);
       return fn(
         ...fieldValues,
         ...helperValues,
         ...constantValues,
+        ...createGeometryHelpers(geometry),
         props,
         index,
       );

@@ -2507,6 +2507,13 @@
     "insertField": "Insert {{name}}",
     "functionsLabel": "Functions:",
     "insertFunction": "Insert {{name}}()",
+    "geomMeasureLabel": "Geometry:",
+    "geomMetric": {
+      "length": "Length",
+      "perimeter": "Perimeter",
+      "area": "Area"
+    },
+    "geomInsert": "Insert",
     "sampleRowErrored": "Sample row errored (other rows may still compute): {{message}}",
     "preview": "Preview:",
     "onlySelectedFeature": "Only update the selected feature",
