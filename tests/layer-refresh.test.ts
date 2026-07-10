@@ -278,6 +278,56 @@ describe("fetchWfsGeoJson output-format fallback", () => {
     assert.equal(calls, 1, "an HTML error page must not trigger format retries");
   });
 
+  it("detects HTML that starts with a prolog/comment before <html> (no retry)", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      // Leading XML prolog + comment before the real HTML — the narrow
+      // start-anchored check would miss this; the head sniff catches it.
+      return new Response(
+        '<?xml version="1.0"?><!-- WAF --><html><head><title>Blocked</title></head></html>',
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    await assert.rejects(fetchWfsGeoJson(baseParams));
+    assert.equal(calls, 1, "prolog-prefixed HTML must not trigger retries");
+  });
+
+  it("detects HTML via a text/html content type even without HTML tags", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("<blocked>proxy denied</blocked>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }) as typeof fetch;
+
+    await assert.rejects(fetchWfsGeoJson(baseParams));
+    assert.equal(calls, 1, "a text/html response must not trigger retries");
+  });
+
+  it("still retries a real OWS ExceptionReport (not misread as HTML)", async () => {
+    const formats: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const format = new URL(url).searchParams.get("outputFormat") ?? "";
+      formats.push(format);
+      if (format === "GEOJSON") {
+        return new Response(JSON.stringify(FEATURE_COLLECTION), { status: 200 });
+      }
+      return new Response(
+        '<?xml version="1.0"?><ows:ExceptionReport><ows:Exception/></ows:ExceptionReport>',
+        { status: 200, headers: { "content-type": "application/xml" } },
+      );
+    }) as typeof fetch;
+
+    const result = await fetchWfsGeoJson(baseParams);
+    assert.equal(result.outputFormat, "GEOJSON");
+    assert.deepEqual(formats, ["application/json", "GEOJSON"]);
+  });
+
   it("skips an empty requested format instead of requesting outputFormat=", async () => {
     const requestedFormats: string[] = [];
     globalThis.fetch = (async (input: RequestInfo | URL) => {

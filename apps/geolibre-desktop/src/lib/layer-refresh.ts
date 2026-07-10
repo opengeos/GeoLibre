@@ -54,9 +54,20 @@ export class WfsXmlResponseError extends Error {
   }
 }
 
-/** True when an XML-ish body looks like an HTML page rather than WFS/OWS XML. */
-function xmlBodyLooksLikeHtml(text: string): boolean {
-  return /^\s*<(?:!doctype\s+html|html[\s>])/i.test(text);
+/**
+ * True when an XML-ish response looks like an HTML page (a proxy/WAF/auth/error
+ * page) rather than a genuine WFS/OWS/GML document. A `text/html` content type
+ * is decisive; otherwise the head of the body is sniffed for HTML structure
+ * tags, tolerating a leading XML prolog, doctype, comment, or `<head>`-only
+ * fragment before the real markup. WFS/OWS/GML responses never contain
+ * `<html>`/`<head>`/`<body>`/`<title>`, so this does not misclassify them.
+ */
+function looksLikeHtmlResponse(text: string, contentType: string | null): boolean {
+  if (contentType && /text\/html/i.test(contentType)) return true;
+  const head = text.slice(0, 512);
+  return /<\s*(?:!doctype\s+html|html[\s>]|head[\s>]|body[\s>]|title[\s>])/i.test(
+    head,
+  );
 }
 
 // Output-format tokens that commonly yield GeoJSON across WFS implementations.
@@ -126,7 +137,9 @@ export async function fetchGeoJsonFeatureCollection(
     return parseGeoJsonFeatureCollection(JSON.parse(text));
   } catch (error) {
     if (/^\s*</.test(text)) {
-      throw new WfsXmlResponseError(xmlBodyLooksLikeHtml(text));
+      throw new WfsXmlResponseError(
+        looksLikeHtmlResponse(text, response.headers.get("content-type")),
+      );
     }
     throw error;
   }
@@ -148,6 +161,12 @@ export async function fetchGeoJsonFeatureCollection(
  * hammered with the full alias list. The resolved request URL and the output
  * format that succeeded are returned so the caller can persist them (so a later
  * layer refresh reuses the working format rather than the rejected one).
+ *
+ * All attempts share a single {@link FETCH_TIMEOUT_MS} budget rather than each
+ * getting a fresh timeout, so a server that is slow to reject each format cannot
+ * stack up N × 30s of hang before the error surfaces. The budget is the same
+ * ceiling a single non-fallback fetch already has, so a legitimately large
+ * GeoJSON download is not penalized relative to today.
  *
  * @param params - The GetFeature parameters. The requested outputFormat is
  *   tried first, then the remaining GeoJSON aliases; an empty requested format
@@ -178,11 +197,23 @@ export async function fetchWfsGeoJson(
     ),
   ];
 
+  // One deadline shared across every attempt, so N slow rejections cannot stack
+  // N separate timeouts. Combined with the caller's signal (if any) and passed
+  // down; fetchGeoJsonFeatureCollection ANDs its own per-call timeout on top,
+  // but this budget is what bounds the total wall time.
+  const budget = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, budget])
+    : budget;
+
   let lastError: unknown;
   for (const outputFormat of candidates) {
     const url = createWfsGetFeatureUrl({ ...params, outputFormat });
     try {
-      const data = await fetchGeoJsonFeatureCollection(url, options);
+      const data = await fetchGeoJsonFeatureCollection(url, {
+        ...options,
+        signal,
+      });
       return { data, url, outputFormat };
     } catch (error) {
       lastError = error;

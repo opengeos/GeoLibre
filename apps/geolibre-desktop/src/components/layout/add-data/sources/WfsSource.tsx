@@ -197,8 +197,11 @@ export function WfsSource() {
     // The fallback may have loaded the layer under a different output format
     // than the user entered (e.g. "GEOJSON" instead of "application/json"). The
     // resolved value is what gets persisted to source.outputFormat, so note the
-    // substitution in case a user later inspects the saved project and finds a
-    // format they did not type.
+    // substitution (in case a user later inspects the saved project and finds a
+    // format they did not type) and adopt it as the form's output format. That
+    // updates wfsFormCache too, so adding another feature type from the same
+    // service this session skips straight to the working token instead of
+    // re-paying the retry cost.
     const requestedOutputFormat = wfsOutputFormat.trim();
     if (
       requestedOutputFormat &&
@@ -207,6 +210,7 @@ export function WfsSource() {
       console.info(
         `WFS: "${requestedOutputFormat}" returned XML; loaded the layer with "${resolvedOutputFormat}" instead.`,
       );
+      setWfsOutputFormat(resolvedOutputFormat);
     }
     source.addAndClose(
       {
