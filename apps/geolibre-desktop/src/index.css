@@ -232,6 +232,13 @@ body,
   color: hsl(var(--muted-foreground));
 }
 
+/* Retarget the native range/checkbox accent (a fixed light-blue above) onto the
+   theme so the slider control itself tracks dark mode, not just its container. */
+.dark .esri-wayback-range,
+.dark .esri-wayback-local-changes-checkbox {
+  accent-color: hsl(var(--primary));
+}
+
 /* Persistent-layer name input (higher specificity + !important beats the
    forced-light rule above). */
 .dark .esri-wayback-control-panel .esri-wayback-input {

@@ -56,7 +56,13 @@ export function createBaseLayer(
  */
 export function attributionForTileUrl(url: string): string | undefined {
   try {
-    if (new URL(url).hostname === "tiles.maps.eox.at") {
+    const { hostname, href } = new URL(url);
+    // Key off the EOX host + Sentinel-2 cloudless layer id rather than one exact
+    // hostname, so a pasted URL on another eox.at subdomain still carries the
+    // required CC BY 4.0 credit. The `.eox.at` suffix (with the bare-domain
+    // case) avoids matching lookalike hosts like `evil-eox.at`.
+    const isEoxHost = hostname === "eox.at" || hostname.endsWith(".eox.at");
+    if (isEoxHost && href.includes("s2cloudless")) {
       return EOX_S2CLOUDLESS_ATTRIBUTION;
     }
   } catch {
