@@ -101,6 +101,7 @@ import { CollaborateDialog } from "./CollaborateDialog";
 import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
+import { RasterSubsetPanel } from "./RasterSubsetPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { MapContextMenu } from "./MapContextMenu";
 import { MapGrid } from "./MapGrid";
@@ -473,6 +474,10 @@ export function DesktopShell({
   const activeResizeCleanupRef = useRef<(() => void) | null>(null);
   useEffect(() => () => activeResizeCleanupRef.current?.(), []);
   const mapControllerRef = useRef<MapController | null>(null);
+  // The COG/WMS/XYZ layer whose bounding-box subset is being extracted in the
+  // floating Extract Subset panel, or null when that panel is closed.
+  const [rasterSubsetLayer, setRasterSubsetLayer] =
+    useState<GeoLibreLayer | null>(null);
   const dragDepthRef = useRef(0);
   const dropMessageTimeoutRef = useRef<number | null>(null);
   const materializingRef = useRef(false);
@@ -1759,6 +1764,7 @@ export function DesktopShell({
                   onOpenRasterStylePanel={() =>
                     openRasterLayerPanel(createAppAPI(mapControllerRef))
                   }
+                  onOpenRasterSubset={setRasterSubsetLayer}
                   collapsed={collapsed}
                   onCollapsedChange={onCollapsedChange}
                   hideOwnRail
@@ -1788,6 +1794,7 @@ export function DesktopShell({
                   onOpenRasterStylePanel={() =>
                     openRasterLayerPanel(createAppAPI(mapControllerRef))
                   }
+                  onOpenRasterSubset={setRasterSubsetLayer}
                   autoCollapse={
                     storymapPresenting || autoCollapsedPanel === "layers"
                   }
@@ -1840,6 +1847,11 @@ export function DesktopShell({
               </SilentErrorBoundary>
               <MapModeBanner mapControllerRef={mapControllerRef} />
               <PixelTimeSeriesControl mapControllerRef={mapControllerRef} />
+              <RasterSubsetPanel
+                layer={rasterSubsetLayer}
+                onClose={() => setRasterSubsetLayer(null)}
+                mapControllerRef={mapControllerRef}
+              />
               <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>

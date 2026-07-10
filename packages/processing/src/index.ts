@@ -171,3 +171,11 @@ export {
   convertGeoTiffToCog,
   type GeoTiffInfo,
 } from "./cog-convert";
+export {
+  extractCogSubset,
+  extractWmsSubset,
+  extractXyzTileSubset,
+  type ExtractCogSubsetOptions,
+  type ExtractWmsSubsetOptions,
+  type ExtractXyzTileSubsetOptions,
+} from "./raster-subset";

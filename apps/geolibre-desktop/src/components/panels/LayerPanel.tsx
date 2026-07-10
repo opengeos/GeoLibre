@@ -117,6 +117,7 @@ import {
   canExportRasterLayer,
   exportRasterLayer,
 } from "../../lib/raster-export";
+import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
   geojsonVectorSourceId,
@@ -157,6 +158,11 @@ interface LayerPanelProps {
   onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
   /** Open the floating Add Raster Layer panel for advanced raster styling. */
   onOpenRasterStylePanel: () => void;
+  /**
+   * Open the floating Extract Subset panel for a COG/WMS/XYZ layer, letting the
+   * user draw a bounding box and export a clipped GeoTIFF.
+   */
+  onOpenRasterSubset: (layer: GeoLibreLayer) => void;
   /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
    * unmounted). Used to clear room for a story map presentation; the user can
@@ -436,6 +442,7 @@ export function LayerPanel({
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
+  onOpenRasterSubset,
   autoCollapse = false,
   collapsed: controlledCollapsed,
   onCollapsedChange,
@@ -2069,6 +2076,9 @@ export function LayerPanel({
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
             const canExportRaster = canExportRasterLayer(layer);
+            // COG/WMS/XYZ layers can also export a bounding-box subset (a clip)
+            // via the in-browser geolibre-wasm extractors, drawn on the map.
+            const canExtractSubset = canExtractRasterSubset(layer);
             // Rasters added through the floating Add Raster Layer panel are
             // styled there; offer a shortcut to reopen that panel since it is
             // dismissed (and its on-map icon removed) when closed.
@@ -2580,20 +2590,31 @@ export function LayerPanel({
                           {t("layers.openRasterStylePanel")}
                         </DropdownMenuItem>
                       )}
-                      {canExportRaster && (
+                      {(canExportRaster || canExtractSubset) && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Download className="h-3.5 w-3.5" />
                             {t("layers.export")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                void handleExportRasterLayer(layer);
-                              }}
-                            >
-                              {t("layers.exportGeoTiff")}
-                            </DropdownMenuItem>
+                            {canExportRaster && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleExportRasterLayer(layer);
+                                }}
+                              >
+                                {t("layers.exportGeoTiff")}
+                              </DropdownMenuItem>
+                            )}
+                            {canExtractSubset && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  onOpenRasterSubset(layer);
+                                }}
+                              >
+                                {t("layers.extractSubset")}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
