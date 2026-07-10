@@ -108,12 +108,37 @@ function detachStoreSync(control: EsriWaybackControl): void {
   }
 }
 
+// Esri's usage terms require crediting the World Imagery (Wayback) tiles. The
+// upstream control adds its raster source without an `attribution`, so set one
+// so MapLibre's attribution control shows it (see applyWaybackAttribution).
+const ESRI_WAYBACK_ATTRIBUTION =
+  'Powered by <a href="https://www.esri.com/" target="_blank" rel="noreferrer">Esri</a> — Esri, Maxar, Earthstar Geographics, and the GIS User Community';
+
+type WaybackMap = NonNullable<ReturnType<EsriWaybackControl["getMap"]>>;
+
+/**
+ * Attach Esri's attribution to a Wayback raster source and refresh the map's
+ * attribution control. The upstream control owns the source and adds it without
+ * an `attribution`, so we set it on the live source (which the attribution
+ * control reads) and fire a `sourcedata` metadata event — the control only
+ * re-reads attributions on source-metadata/style changes, never on tile loads.
+ */
+function applyWaybackAttribution(map: WaybackMap, sourceId: string): void {
+  const source = map.getSource(sourceId) as unknown as
+    | { attribution?: string }
+    | undefined;
+  if (!source || source.attribution === ESRI_WAYBACK_ATTRIBUTION) return;
+  source.attribution = ESRI_WAYBACK_ATTRIBUTION;
+  map.fire("sourcedata", { sourceDataType: "metadata", sourceId });
+}
+
 function syncCurrentWaybackLayer(
   control: EsriWaybackControl | null,
 ): void {
   const map = control?.getMap();
   const release = control?.getState().selectedRelease;
   if (!map?.getLayer(DEFAULT_LAYER_ID) || !release) return;
+  applyWaybackAttribution(map, DEFAULT_SOURCE_ID);
   addOrUpdateWaybackStoreLayer(createCurrentWaybackStoreLayer(release));
 }
 
@@ -128,6 +153,8 @@ function syncPersistentWaybackLayers(
   for (const styleLayer of map.getStyle().layers ?? []) {
     if (!styleLayer.id.startsWith(`${PERSISTENT_LAYER_PREFIX}-`)) continue;
     activePersistentIds.add(styleLayer.id);
+    const persistentSourceId = getStyleLayerSourceId(styleLayer);
+    if (persistentSourceId) applyWaybackAttribution(map, persistentSourceId);
     const release = state.releases.find(
       (item) => getPersistentWaybackLayerId(item) === styleLayer.id,
     );
