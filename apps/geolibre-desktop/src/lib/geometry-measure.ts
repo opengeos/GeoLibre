@@ -104,6 +104,19 @@ function familyOf(geometry: Geometry | null | undefined): GeometryFamily | null 
     case "Polygon":
     case "MultiPolygon":
       return "polygon";
+    case "GeometryCollection": {
+      // Collections are measurable (measure* recurse into them), so classify by
+      // their members: a single family when they agree, "mixed" when they differ.
+      let family: GeometryFamily | null = null;
+      for (const member of geometry.geometries) {
+        const current = familyOf(member);
+        if (!current) continue;
+        if (current === "mixed") return "mixed";
+        if (family === null) family = current;
+        else if (family !== current) return "mixed";
+      }
+      return family;
+    }
     default:
       return null;
   }
@@ -123,6 +136,25 @@ export function detectGeometryFamily(features: Feature[]): GeometryFamily {
     else if (family !== current) return "mixed";
   }
   return family ?? "none";
+}
+
+/**
+ * Look up a unit's conversion factor, throwing on an unrecognized unit. The
+ * geometry helpers are called from free-text expressions, so a typo like
+ * `$area("hectare")` or `$length("km")` must surface as a per-feature error
+ * (null cell, counted in `errors`) rather than silently returning the base unit
+ * — a mistake that can be off by orders of magnitude.
+ */
+function distanceFactor(unit: DistanceUnit): number {
+  const factor = DISTANCE_FACTORS[unit];
+  if (factor === undefined) throw new Error(`Unknown distance unit: "${unit}"`);
+  return factor;
+}
+
+function areaFactor(unit: AreaUnit): number {
+  const factor = AREA_FACTORS[unit];
+  if (factor === undefined) throw new Error(`Unknown area unit: "${unit}"`);
+  return factor;
 }
 
 const DEG_TO_RAD = Math.PI / 180;
@@ -151,7 +183,9 @@ function lineLengthMeters(coords: Position[], radius: number): number {
 /**
  * Spherical area in square meters of a single ring (its coordinates as a closed
  * or open loop). Signed by winding order; callers take the absolute value and
- * subtract holes as needed.
+ * subtract holes as needed. The longitude delta is normalized to (-180, 180] so
+ * a ring edge that crosses the antimeridian (e.g. 179° → -179°) counts as the
+ * short 2° step, not a 358° one, keeping areas correct near ±180°.
  */
 function ringAreaMeters(ring: Position[], radius: number): number {
   const n = ring.length;
@@ -160,8 +194,9 @@ function ringAreaMeters(ring: Position[], radius: number): number {
   for (let i = 0; i < n; i += 1) {
     const p1 = ring[i];
     const p2 = ring[(i + 1) % n];
+    const dLon = ((p2[0] - p1[0] + 540) % 360) - 180;
     total +=
-      (p2[0] - p1[0]) *
+      dLon *
       DEG_TO_RAD *
       (2 + Math.sin(p1[1] * DEG_TO_RAD) + Math.sin(p2[1] * DEG_TO_RAD));
   }
@@ -183,11 +218,14 @@ function polygonPerimeterMeters(rings: Position[][], radius: number): number {
   let total = 0;
   for (const ring of rings) {
     // Close the ring so the final vertex→first vertex segment is counted even
-    // when the source coordinates are not explicitly closed.
-    const closed =
-      ring.length > 0 && ring[0] !== ring[ring.length - 1]
-        ? [...ring, ring[0]]
-        : ring;
+    // when the source coordinates are not explicitly closed. Compare endpoints
+    // by coordinate value, not array identity — GeoJSON rings never reuse the
+    // same Position instance for their first and last point.
+    const first = ring[0];
+    const last = ring[ring.length - 1];
+    const isClosed =
+      ring.length > 0 && first[0] === last[0] && first[1] === last[1];
+    const closed = ring.length > 0 && !isClosed ? [...ring, first] : ring;
     total += lineLengthMeters(closed, radius);
   }
   return total;
@@ -202,10 +240,9 @@ export function measureLength(
   geometry: Geometry | null | undefined,
   unit: DistanceUnit = "meters",
 ): number {
+  const factor = distanceFactor(unit);
   if (!geometry) return 0;
-  const radius = getActiveMeanRadiusMeters();
-  const factor = DISTANCE_FACTORS[unit] ?? 1;
-  return lengthMeters(geometry, radius) * factor;
+  return lengthMeters(geometry, getActiveMeanRadiusMeters()) * factor;
 }
 
 function lengthMeters(geometry: Geometry, radius: number): number {
@@ -235,10 +272,9 @@ export function measurePerimeter(
   geometry: Geometry | null | undefined,
   unit: DistanceUnit = "meters",
 ): number {
+  const factor = distanceFactor(unit);
   if (!geometry) return 0;
-  const radius = getActiveMeanRadiusMeters();
-  const factor = DISTANCE_FACTORS[unit] ?? 1;
-  return perimeterMeters(geometry, radius) * factor;
+  return perimeterMeters(geometry, getActiveMeanRadiusMeters()) * factor;
 }
 
 function perimeterMeters(geometry: Geometry, radius: number): number {
@@ -268,10 +304,9 @@ export function measureArea(
   geometry: Geometry | null | undefined,
   unit: AreaUnit = "square-meters",
 ): number {
+  const factor = areaFactor(unit);
   if (!geometry) return 0;
-  const radius = getActiveMeanRadiusMeters();
-  const factor = AREA_FACTORS[unit] ?? 1;
-  return areaMeters(geometry, radius) * factor;
+  return areaMeters(geometry, getActiveMeanRadiusMeters()) * factor;
 }
 
 function areaMeters(geometry: Geometry, radius: number): number {

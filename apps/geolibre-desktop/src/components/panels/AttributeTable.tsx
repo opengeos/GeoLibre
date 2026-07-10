@@ -954,10 +954,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   // three, and point/geometry-less layers get none (the row is hidden).
   const calcGeometryFamily = useMemo(
     () => detectGeometryFamily(features),
-    // Recompute only when the layer or its feature count changes — the family is
-    // stable across attribute edits and re-renders. eslint can't see that.
+    // Recompute when the layer or its feature count changes, and each time the
+    // dialog opens, so a geometry-type edit made while it was closed is picked
+    // up. The family is otherwise stable across renders (and the calc dialog is
+    // modal, so geometry cannot be edited while it is open). eslint can't see
+    // that the array identity of `features` alone is not a meaningful dep.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layer?.id, features.length],
+    [layer?.id, features.length, calcOpen],
   );
   const calcAvailableMetrics = useMemo<GeometryMetric[]>(() => {
     switch (calcGeometryFamily) {
@@ -1019,6 +1022,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const calcColumnsKey = calcOpen ? JSON.stringify(discoveredColumns) : "";
   const calcSampleKey =
     calcOpen && calcSampleRow ? JSON.stringify(calcSampleRow.properties) : "";
+  // The preview feeds the sample feature's geometry to $length/$perimeter/$area,
+  // so key on the geometry too — a geometry change (not just a property change)
+  // must recompute the preview. Only one feature is serialized, and only while
+  // the dialog is open.
+  const calcSampleGeomKey =
+    calcOpen && calcSampleRow
+      ? JSON.stringify(features[calcSampleIndex]?.geometry ?? null)
+      : "";
   const calcPreview = useMemo<
     | { kind: "empty" }
     | { kind: "ok"; value: unknown }
@@ -1065,6 +1076,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     calcOutputType,
     calcColumnsKey,
     calcSampleKey,
+    calcSampleGeomKey,
     calcSampleIndex,
   ]);
   const calcCanSubmit =

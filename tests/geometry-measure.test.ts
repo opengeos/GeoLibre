@@ -114,6 +114,73 @@ describe("geometry-measure", () => {
     assert.equal(measureArea(null), 0);
   });
 
+  it("handles polygons that cross the antimeridian", () => {
+    // A 2°×1° box spanning 179° → -179°. Its longitude delta must be treated as
+    // the short 2° step, not a 358° one, so its area matches an equivalent box
+    // that does not cross ±180°.
+    const crossing: Geometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [179, 0],
+          [-179, 0],
+          [-179, 1],
+          [179, 1],
+          [179, 0],
+        ],
+      ],
+    };
+    const equivalent: Geometry = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [2, 1],
+          [0, 1],
+          [0, 0],
+        ],
+      ],
+    };
+    const crossingArea = measureArea(crossing, "square-kilometers");
+    const equivArea = measureArea(equivalent, "square-kilometers");
+    assert.ok(
+      Math.abs(crossingArea - equivArea) / equivArea < 1e-6,
+      `crossing ${crossingArea} vs equivalent ${equivArea}`,
+    );
+    // Sanity: this is a small (~25k km²) box, not a near-global one.
+    assert.ok(crossingArea < 30000, `unexpectedly large area ${crossingArea}`);
+  });
+
+  it("throws on an unrecognized unit so a typo surfaces as an error", () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.throws(() => measureArea(SMALL_BOX, "hectare" as any));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.throws(() => measureLength(EQUATOR_SEGMENT, "km" as any));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.throws(() => measurePerimeter(SMALL_BOX, "kilometre" as any));
+  });
+
+  it("measures and classifies GeometryCollections by their members", () => {
+    const collection: Geometry = {
+      type: "GeometryCollection",
+      geometries: [SMALL_BOX, EQUATOR_SEGMENT],
+    };
+    // measure* recurse into the collection.
+    assert.equal(measureArea(collection), measureArea(SMALL_BOX));
+    assert.equal(measureLength(collection), measureLength(EQUATOR_SEGMENT));
+    // A mixed collection is classified "mixed"; a uniform one takes its family.
+    const feature = (geometry: Geometry) =>
+      ({ type: "Feature", geometry, properties: {} }) as const;
+    assert.equal(detectGeometryFamily([feature(collection)]), "mixed");
+    assert.equal(
+      detectGeometryFamily([
+        feature({ type: "GeometryCollection", geometries: [SMALL_BOX] }),
+      ]),
+      "polygon",
+    );
+  });
+
   it("honors the active ellipsoid's radius", () => {
     const earth = measureLength(EQUATOR_SEGMENT, "meters");
     setActiveEllipsoidId("moon");
