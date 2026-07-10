@@ -527,7 +527,15 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
   }
 
   const centerLat = (south + north) / 2;
-  const useSouth = centerLat < 0;
+
+  // UTM northing restarts at the equator (northern zones measure up from 0,
+  // southern zones down from a 10,000,000 m false northing), so a viewport that
+  // straddles the equator must be split into per-hemisphere bands and projected
+  // with the matching hemisphere convention in each.
+  const bands: { south: number; north: number; useSouth: boolean }[] = [];
+  if (south < 0) bands.push({ south, north: Math.min(north, 0), useSouth: true });
+  if (north > 0) bands.push({ south: Math.max(south, 0), north, useSouth: false });
+  if (bands.length === 0) bands.push({ south, north, useSouth: centerLat < 0 });
 
   // Walk the viewport longitude range zone by zone. Zone boundaries sit every
   // 6° from -180°; align to the zone edge at or before `west` (works for the
@@ -543,95 +551,113 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
     const clipEast = Math.min(zoneEast, east);
     if (clipEast <= clipWest) continue;
     const zone = utmZoneForLon(zoneWest + 3);
-    const def = utmProjDef(zone, useSouth);
-    let toUtm: proj4.Converter;
-    let toLngLat: proj4.Converter;
-    try {
-      toUtm = proj4("EPSG:4326", def);
-      toLngLat = proj4(def, "EPSG:4326");
-    } catch {
-      continue;
-    }
 
-    const extent = utmExtent(toUtm, clipWest, clipEast, south, north);
-    if (!extent) continue;
-    const { eMin, eMax, nMin, nMax } = extent;
-    const zoneStep =
-      settings.spacingMode === "fixed"
-        ? step
-        : autoMetricStep(eMax - eMin, nMax - nMin);
-    reportedStep = zoneStep;
-
-    // Inverse-project a projected point and clip its longitude to the zone so a
-    // zone's grid does not bleed into its neighbour. Returns null when outside.
-    const project = (e: number, n: number): [number, number] | null => {
+    for (const band of bands) {
+      if (band.north <= band.south || count >= maxLines) continue;
+      let toUtm: proj4.Converter;
+      let toLngLat: proj4.Converter;
       try {
-        const [lon, lat] = toLngLat.forward([e, n]);
-        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
-        if (lon < clipWest - 1e-6 || lon > clipEast + 1e-6) return null;
-        return [lon, lat];
+        const def = utmProjDef(zone, band.useSouth);
+        toUtm = proj4("EPSG:4326", def);
+        toLngLat = proj4(def, "EPSG:4326");
       } catch {
-        return null;
+        continue;
       }
-    };
 
-    // Constant-easting lines (run north-south), densified along northing.
-    const firstE = Math.ceil(eMin / zoneStep) * zoneStep;
-    for (let e = firstE; e <= eMax && count < maxLines; e += zoneStep) {
-      const coords: [number, number][] = [];
-      for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
-        const n = nMin + ((nMax - nMin) * i) / UTM_LINE_SEGMENTS;
-        const point = project(e, n);
-        if (point) coords.push(point);
-      }
-      if (coords.length < 2) continue;
-      lineFeatures.push({
-        type: "Feature",
-        properties: {},
-        geometry: { type: "LineString", coordinates: coords },
-      });
-      if (settings.showLabels) {
-        // Snap the label onto the viewport edge (matching the geographic grid)
-        // so the line's endpoint sits under the label text rather than poking
-        // out beside it, where a short line stub would read as a stray "-".
-        labelFeatures.push(
-          labelFeature(coords[0][0], south, formatEasting(e), "bottom"),
-        );
-        if (showAllEdges) {
-          const top = coords[coords.length - 1];
-          labelFeatures.push(labelFeature(top[0], north, formatEasting(e), "top"));
-        }
-      }
-      count += 1;
-    }
+      const extent = utmExtent(toUtm, clipWest, clipEast, band.south, band.north);
+      if (!extent) continue;
+      const { eMin, eMax, nMin, nMax } = extent;
+      const zoneStep =
+        settings.spacingMode === "fixed"
+          ? step
+          : autoMetricStep(eMax - eMin, nMax - nMin);
+      reportedStep = zoneStep;
 
-    // Constant-northing lines (run east-west), densified along easting.
-    const firstN = Math.ceil(nMin / zoneStep) * zoneStep;
-    for (let n = firstN; n <= nMax && count < maxLines; n += zoneStep) {
-      const coords: [number, number][] = [];
-      for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
-        const e = eMin + ((eMax - eMin) * i) / UTM_LINE_SEGMENTS;
-        const point = project(e, n);
-        if (point) coords.push(point);
-      }
-      if (coords.length < 2) continue;
-      lineFeatures.push({
-        type: "Feature",
-        properties: {},
-        geometry: { type: "LineString", coordinates: coords },
-      });
-      if (settings.showLabels) {
-        // Snap onto the zone's west/east boundary so the line endpoint tucks
-        // under the label text instead of showing a stub beside it.
-        labelFeatures.push(
-          labelFeature(clipWest, coords[0][1], formatNorthing(n), "left"),
-        );
-        if (showAllEdges) {
-          const right = coords[coords.length - 1];
-          labelFeatures.push(labelFeature(clipEast, right[1], formatNorthing(n), "right"));
+      // Inverse-project a projected point, wrapping its longitude into the
+      // zone's (possibly unwrapped, antimeridian-crossing) range before clipping
+      // so a zone's grid does not bleed into its neighbour and an antimeridian
+      // view does not drop points that proj4 reports in [-180, 180]. Returns
+      // null when the point falls outside the zone.
+      const project = (e: number, n: number): [number, number] | null => {
+        try {
+          const projected = toLngLat.forward([e, n]);
+          let lon = projected[0];
+          const lat = projected[1];
+          if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+          while (lon < clipWest - 180) lon += 360;
+          while (lon > clipEast + 180) lon -= 360;
+          if (lon < clipWest - 1e-6 || lon > clipEast + 1e-6) return null;
+          return [lon, lat];
+        } catch {
+          return null;
         }
+      };
+
+      // The equator split hands each viewport edge to a single band, so a band
+      // only carries the bottom/top easting label when it reaches that edge.
+      const bandAtSouth = band.south === south;
+      const bandAtNorth = band.north === north;
+
+      // Constant-easting lines (run north-south), densified along northing.
+      const firstE = Math.ceil(eMin / zoneStep) * zoneStep;
+      for (let e = firstE; e <= eMax && count < maxLines; e += zoneStep) {
+        const coords: [number, number][] = [];
+        for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
+          const n = nMin + ((nMax - nMin) * i) / UTM_LINE_SEGMENTS;
+          const point = project(e, n);
+          if (point) coords.push(point);
+        }
+        if (coords.length < 2) continue;
+        lineFeatures.push({
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: coords },
+        });
+        if (settings.showLabels) {
+          // Snap the label onto the viewport edge (matching the geographic grid)
+          // so the line's endpoint sits under the label text rather than poking
+          // out beside it, where a short line stub would read as a stray "-".
+          if (bandAtSouth) {
+            labelFeatures.push(
+              labelFeature(coords[0][0], south, formatEasting(e), "bottom"),
+            );
+          }
+          if (showAllEdges && bandAtNorth) {
+            const top = coords[coords.length - 1];
+            labelFeatures.push(labelFeature(top[0], north, formatEasting(e), "top"));
+          }
+        }
+        count += 1;
       }
-      count += 1;
+
+      // Constant-northing lines (run east-west), densified along easting.
+      const firstN = Math.ceil(nMin / zoneStep) * zoneStep;
+      for (let n = firstN; n <= nMax && count < maxLines; n += zoneStep) {
+        const coords: [number, number][] = [];
+        for (let i = 0; i <= UTM_LINE_SEGMENTS; i += 1) {
+          const e = eMin + ((eMax - eMin) * i) / UTM_LINE_SEGMENTS;
+          const point = project(e, n);
+          if (point) coords.push(point);
+        }
+        if (coords.length < 2) continue;
+        lineFeatures.push({
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: coords },
+        });
+        if (settings.showLabels) {
+          // Snap onto the zone's west/east boundary so the line endpoint tucks
+          // under the label text instead of showing a stub beside it.
+          labelFeatures.push(
+            labelFeature(clipWest, coords[0][1], formatNorthing(n), "left"),
+          );
+          if (showAllEdges) {
+            const right = coords[coords.length - 1];
+            labelFeatures.push(labelFeature(clipEast, right[1], formatNorthing(n), "right"));
+          }
+        }
+        count += 1;
+      }
     }
 
     // One zone-designation label per visible zone, centred along the top edge.
