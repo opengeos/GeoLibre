@@ -1807,6 +1807,16 @@
       "projectName": "Nombre del proyecto",
       "storymapEllipsis": "Mapa narrativo..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Anotaciones",
+      "maplibre-gl-streetview": "Vista de calle",
+      "maplibre-gl-time-slider": "Control de tiempo",
+      "maplibre-gl-esri-wayback": "Imágenes históricas",
+      "maplibre-gl-swipe": "Comparador de capas",
+      "geolibre-elevation-profile": "Perfil de elevación",
+      "maplibre-gl-basemap-control": "Mapas base",
+      "maplibre-layer-control": "Control de capas"
+    },
     "fileDrop": {
       "overlayTitle": "Suelte archivos vectoriales o ráster aquí para añadir capas",
       "overlaySubtext": "Sus datos se añaden instantáneamente al panel de capas.",

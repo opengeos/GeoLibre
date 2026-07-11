@@ -1873,6 +1873,16 @@
       "projectName": "Имя проекта",
       "storymapEllipsis": "История на карте..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Аннотации",
+      "maplibre-gl-streetview": "Панорама улиц",
+      "maplibre-gl-time-slider": "Ползунок времени",
+      "maplibre-gl-esri-wayback": "Исторические снимки",
+      "maplibre-gl-swipe": "Сравнение слоёв",
+      "geolibre-elevation-profile": "Профиль высот",
+      "maplibre-gl-basemap-control": "Базовые карты",
+      "maplibre-layer-control": "Управление слоями"
+    },
     "fileDrop": {
       "overlayTitle": "Перетащите сюда векторные или растровые файлы, чтобы добавить слои",
       "overlaySubtext": "Ваши данные мгновенно добавляются на панель слоёв.",

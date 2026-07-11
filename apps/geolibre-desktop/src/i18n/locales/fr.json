@@ -1807,6 +1807,16 @@
       "projectName": "Nom du projet",
       "storymapEllipsis": "Story Map..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Annotations",
+      "maplibre-gl-streetview": "Vue de rue",
+      "maplibre-gl-time-slider": "Curseur temporel",
+      "maplibre-gl-esri-wayback": "Imagerie historique",
+      "maplibre-gl-swipe": "Comparateur de couches",
+      "geolibre-elevation-profile": "Profil d'élévation",
+      "maplibre-gl-basemap-control": "Fonds de carte",
+      "maplibre-layer-control": "Contrôle des couches"
+    },
     "fileDrop": {
       "overlayTitle": "Déposez des fichiers vectoriels ou raster ici pour ajouter des couches",
       "overlaySubtext": "Vos données sont ajoutées instantanément au panneau Couches.",

@@ -1774,6 +1774,16 @@
       "projectName": "项目名称",
       "storymapEllipsis": "故事地图..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "注释",
+      "maplibre-gl-streetview": "街景",
+      "maplibre-gl-time-slider": "时间滑块",
+      "maplibre-gl-esri-wayback": "历史影像",
+      "maplibre-gl-swipe": "图层滑动对比",
+      "geolibre-elevation-profile": "高程剖面",
+      "maplibre-gl-basemap-control": "底图",
+      "maplibre-layer-control": "图层控制"
+    },
     "fileDrop": {
       "overlayTitle": "将矢量或栅格文件拖放到此处以添加图层",
       "overlaySubtext": "您的数据会立即添加到图层面板。",

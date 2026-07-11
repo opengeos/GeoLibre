@@ -1807,6 +1807,16 @@
       "projectName": "Projektname",
       "storymapEllipsis": "Story Map..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Anmerkungen",
+      "maplibre-gl-streetview": "Straßenansicht",
+      "maplibre-gl-time-slider": "Zeitschieberegler",
+      "maplibre-gl-esri-wayback": "Historische Bilder",
+      "maplibre-gl-swipe": "Ebenen-Wischer",
+      "geolibre-elevation-profile": "Höhenprofil",
+      "maplibre-gl-basemap-control": "Basiskarten",
+      "maplibre-layer-control": "Ebenensteuerung"
+    },
     "fileDrop": {
       "overlayTitle": "Vektor- oder Rasterdateien hier ablegen, um Ebenen hinzuzufügen",
       "overlaySubtext": "Ihre Daten werden sofort dem Ebenen-Panel hinzugefügt.",

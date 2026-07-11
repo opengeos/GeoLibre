@@ -1807,6 +1807,16 @@
       "projectName": "Proje adı",
       "storymapEllipsis": "Hikaye Haritası..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Ek açıklamalar",
+      "maplibre-gl-streetview": "Sokak Görünümü",
+      "maplibre-gl-time-slider": "Zaman Kaydırıcısı",
+      "maplibre-gl-esri-wayback": "Tarihsel Görüntüler",
+      "maplibre-gl-swipe": "Katman Kaydırma",
+      "geolibre-elevation-profile": "Yükseklik Profili",
+      "maplibre-gl-basemap-control": "Temel Haritalar",
+      "maplibre-layer-control": "Katman Denetimi"
+    },
     "fileDrop": {
       "overlayTitle": "Katman eklemek için vektör veya raster dosyaları buraya bırakın",
       "overlaySubtext": "Verileriniz Katmanlar paneline anında eklenir.",

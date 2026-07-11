@@ -1859,6 +1859,16 @@
       "projectName": "Project name",
       "storymapEllipsis": "Story Map..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Annotations",
+      "maplibre-gl-streetview": "Street View",
+      "maplibre-gl-time-slider": "Time Slider",
+      "maplibre-gl-esri-wayback": "Historical Imagery",
+      "maplibre-gl-swipe": "Layer Swipe",
+      "geolibre-elevation-profile": "Elevation Profile",
+      "maplibre-gl-basemap-control": "Basemaps",
+      "maplibre-layer-control": "Layer Control"
+    },
     "fileDrop": {
       "overlayTitle": "Drop vector or raster files here to add layers",
       "overlaySubtext": "Your data is added instantly to the Layers panel.",

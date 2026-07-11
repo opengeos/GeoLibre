@@ -1774,6 +1774,16 @@
       "projectName": "Nama proyek",
       "storymapEllipsis": "Peta Cerita..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Anotasi",
+      "maplibre-gl-streetview": "Tampilan Jalan",
+      "maplibre-gl-time-slider": "Penggeser Waktu",
+      "maplibre-gl-esri-wayback": "Citra Historis",
+      "maplibre-gl-swipe": "Geser Lapisan",
+      "geolibre-elevation-profile": "Profil Ketinggian",
+      "maplibre-gl-basemap-control": "Peta Dasar",
+      "maplibre-layer-control": "Kontrol Lapisan"
+    },
     "fileDrop": {
       "overlayTitle": "Jatuhkan file vektor atau raster di sini untuk menambahkan layer",
       "overlaySubtext": "Data Anda langsung ditambahkan ke panel Layer.",

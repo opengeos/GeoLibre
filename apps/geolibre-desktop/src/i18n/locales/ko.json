@@ -1774,6 +1774,16 @@
       "projectName": "프로젝트 이름",
       "storymapEllipsis": "스토리 맵..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "주석",
+      "maplibre-gl-streetview": "거리 뷰",
+      "maplibre-gl-time-slider": "시간 슬라이더",
+      "maplibre-gl-esri-wayback": "과거 영상",
+      "maplibre-gl-swipe": "레이어 스와이프",
+      "geolibre-elevation-profile": "고도 프로파일",
+      "maplibre-gl-basemap-control": "베이스맵",
+      "maplibre-layer-control": "레이어 컨트롤"
+    },
     "fileDrop": {
       "overlayTitle": "벡터 또는 래스터 파일을 여기에 놓아 레이어를 추가하세요",
       "overlaySubtext": "데이터가 레이어 패널에 즉시 추가됩니다.",

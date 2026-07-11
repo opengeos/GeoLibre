@@ -1807,6 +1807,16 @@
       "projectName": "Nome do projeto",
       "storymapEllipsis": "Story Map..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Anotações",
+      "maplibre-gl-streetview": "Visão da rua",
+      "maplibre-gl-time-slider": "Controle de tempo",
+      "maplibre-gl-esri-wayback": "Imagens históricas",
+      "maplibre-gl-swipe": "Comparação de camadas",
+      "geolibre-elevation-profile": "Perfil de elevação",
+      "maplibre-gl-basemap-control": "Mapas base",
+      "maplibre-layer-control": "Controle de camadas"
+    },
     "fileDrop": {
       "overlayTitle": "Solte arquivos vetoriais ou raster aqui para adicionar camadas",
       "overlaySubtext": "Seus dados são adicionados instantaneamente ao painel de camadas.",

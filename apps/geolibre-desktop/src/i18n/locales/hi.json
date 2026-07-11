@@ -1807,6 +1807,16 @@
       "projectName": "प्रोजेक्ट नाम",
       "storymapEllipsis": "स्टोरी मैप..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "एनोटेशन",
+      "maplibre-gl-streetview": "स्ट्रीट व्यू",
+      "maplibre-gl-time-slider": "समय स्लाइडर",
+      "maplibre-gl-esri-wayback": "ऐतिहासिक इमेजरी",
+      "maplibre-gl-swipe": "लेयर स्वाइप",
+      "geolibre-elevation-profile": "ऊँचाई प्रोफ़ाइल",
+      "maplibre-gl-basemap-control": "बेसमैप",
+      "maplibre-layer-control": "लेयर नियंत्रण"
+    },
     "fileDrop": {
       "overlayTitle": "लेयर जोड़ने के लिए वेक्टर या रैस्टर फ़ाइलें यहाँ छोड़ें",
       "overlaySubtext": "आपका डेटा तुरंत लेयर्स पैनल में जोड़ दिया जाता है।",

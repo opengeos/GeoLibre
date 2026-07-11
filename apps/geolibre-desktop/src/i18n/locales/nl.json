@@ -1807,6 +1807,16 @@
       "projectName": "Projectnaam",
       "storymapEllipsis": "Story Map..."
     },
+    "plugin": {
+      "maplibre-gl-annotations": "Annotaties",
+      "maplibre-gl-streetview": "Straatbeeld",
+      "maplibre-gl-time-slider": "Tijdschuif",
+      "maplibre-gl-esri-wayback": "Historische beelden",
+      "maplibre-gl-swipe": "Lagen vergelijken",
+      "geolibre-elevation-profile": "Hoogteprofiel",
+      "maplibre-gl-basemap-control": "Basiskaarten",
+      "maplibre-layer-control": "Laagbeheer"
+    },
     "fileDrop": {
       "overlayTitle": "Sleep vector- of rasterbestanden hierheen om lagen toe te voegen",
       "overlaySubtext": "Uw gegevens worden direct toegevoegd aan het lagenpaneel.",
