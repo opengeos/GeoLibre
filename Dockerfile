@@ -40,9 +40,10 @@ FROM python:3.12-slim-bookworm AS runtime
 ARG TARGETARCH
 
 # libexpat1 is a runtime dependency of rasterio (pulled in by rio-cogeo) that
-# the slim base image does not ship.
+# the slim base image does not ship. openssl provides `openssl passwd` used by
+# entrypoint.sh to hash the optional Basic Auth password.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends nginx libexpat1 \
+  && apt-get install -y --no-install-recommends nginx libexpat1 openssl \
   && rm -rf /var/lib/apt/lists/* \
   && rm -f /etc/nginx/sites-enabled/default
 
@@ -78,14 +79,23 @@ RUN mkdir -p /data
 # from a dev server on another port). This image is intended for local/single-user
 # use; on a public host those allowances let the served JS probe each visitor's
 # loopback. Drop them from the CSP before publishing publicly.
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Ship nginx.conf as an immutable template (not loaded directly). entrypoint.sh
+# renders it to /etc/nginx/conf.d/default.conf on every boot, substituting the
+# per-launch sidecar token, so a container restart never keeps a stale token.
+COPY docker/nginx.conf /etc/nginx/nginx.conf.template
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+  # Default auth snippet (disabled). entrypoint.sh rewrites it at start based
+  # on GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD; baking a valid default keeps
+  # `nginx -t` and non-entrypoint invocations working.
+  && printf '# Basic Auth disabled (GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD not set).\n' > /etc/nginx/geolibre-auth.conf
 COPY --from=build /app/apps/geolibre-desktop/dist /usr/share/nginx/html
 
 EXPOSE 80
 
+# /healthz is exempt from the optional Basic Auth, so the check keeps passing
+# when GEOLIBRE_AUTH_USER/GEOLIBRE_AUTH_PASSWORD are set.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/', timeout=4).status==200 else 1)" || exit 1
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1/healthz', timeout=4).status==200 else 1)" || exit 1
 
 CMD ["/usr/local/bin/entrypoint.sh"]

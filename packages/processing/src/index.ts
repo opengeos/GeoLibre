@@ -79,6 +79,7 @@ export {
 } from "./raster-client";
 export {
   checkSidecarHealth,
+  setSidecarAuthToken,
   clearRemoteWhiteboxCatalogSnapshotCache,
   fetchConversionJob,
   fetchConversionStatus,

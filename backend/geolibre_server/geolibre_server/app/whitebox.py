@@ -19,6 +19,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from . import conversion
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -724,6 +725,91 @@ def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[
     return str(path)
 
 
+def _ensure_within_roots(path_value: str) -> None:
+    """Reject a Whitebox path argument that escapes the configured roots.
+
+    No-op when ``GEOLIBRE_CONVERSION_ROOTS`` is unset (the desktop default,
+    where paths are the user's own filesystem). When it is set (the Docker/web
+    build, whose sidecar is reachable same-origin through the nginx proxy),
+    attacker-supplied ``*_in``/``*_out`` paths and batch directories are confined
+    to those roots so ``/whitebox/run`` cannot read or overwrite arbitrary
+    container files — the same confinement the conversion and raster routers
+    already enforce via :func:`_is_within_roots`.
+
+    Args:
+        path_value: A path string taken from the run request parameters.
+
+    Raises:
+        HTTPException: 403 when a root allowlist is configured and the resolved
+            path lies outside every allowlisted root.
+    """
+    # _is_within_roots returns True when no allowlist is configured, so this is a
+    # no-op on desktop and only confines paths in the Docker/web build.
+    try:
+        within_roots = conversion._is_within_roots(Path(path_value).expanduser())
+    except ValueError as error:
+        # e.g. an embedded NUL byte makes Path.resolve() raise; reject with a 403
+        # rather than letting it surface as an uncaught 500.
+        raise HTTPException(status_code=403, detail=f"Invalid path: {error}") from error
+    if not within_roots:
+        raise HTTPException(
+            status_code=403,
+            detail="Path is outside the allowed processing directories",
+        )
+
+
+def _looks_like_fs_path(value: str) -> bool:
+    """Whether a parameter value looks like a filesystem path that could escape.
+
+    A value is "escape-shaped" when it is absolute (POSIX ``/…`` or a Windows
+    drive ``C:\\…``) or contains a ``..`` parent-traversal segment. Relative
+    paths without ``..`` stay under the working directory and cannot reach
+    outside the roots, and plain scalar strings (numbers, enums, CRS codes) are
+    ignored. This lets the sandbox check key off the *value shape* rather than
+    the client-declared ``kind`` — ``request.tool`` is free-form and untrusted,
+    so a caller could mislabel a path parameter's ``kind`` to skip a kind-based
+    check while still passing a real path Whitebox will act on.
+
+    Args:
+        value: A raw string parameter value from the run request.
+
+    Returns:
+        True when the value should be confined to the allowlisted roots.
+    """
+    text = value.strip()
+    if not text:
+        return False
+    if text.startswith(("/", "\\")):
+        return True
+    if len(text) >= 2 and text[1] == ":" and text[0].isascii() and text[0].isalpha():
+        return True
+    return ".." in text.replace("\\", "/").split("/")
+
+
+def _pinned_working_directory(absolute_paths: list[str]) -> str:
+    """Choose the root to pin the non-batch subprocess cwd to.
+
+    Prefer the allowlisted root that already contains one of the run's
+    (validated) absolute path arguments, so a relative path argument resolves
+    alongside them; fall back to the first configured root. Without this, a
+    multi-root ``GEOLIBRE_CONVERSION_ROOTS`` deployment would resolve every
+    relative path against root #0 regardless of which root the run's files live
+    under.
+
+    Args:
+        absolute_paths: Validated absolute path arguments seen in this run.
+
+    Returns:
+        An allowlisted root directory to use as the subprocess cwd.
+    """
+    for path in absolute_paths:
+        resolved = Path(path).expanduser().resolve()
+        for root in conversion._CONVERSION_ROOTS:
+            if resolved == Path(root) or resolved.is_relative_to(root):
+                return root
+    return conversion._CONVERSION_ROOTS[0]
+
+
 def _prepare_arguments(
     request: WhiteboxRunRequest,
     temp_paths: list[Path],
@@ -745,13 +831,28 @@ def _prepare_arguments(
     }
     args: dict[str, Any] = {}
     working_directory: str | None = None
+    absolute_paths: list[str] = []
     for name, value in request.parameters.items():
         spec = specs.get(str(name), {})
         kind = str(spec.get("kind") or "")
         if name in request.layer_inputs:
+            # Embedded layers are materialized to a server-owned temp file, so
+            # the caller never controls this path.
             value = _write_layer_input(name, request.layer_inputs[name], temp_paths)
+        elif isinstance(value, str) and _looks_like_fs_path(value):
+            # A path-shaped value must stay inside the allowlisted roots,
+            # regardless of the client-declared `kind`. `request.tool` is
+            # untrusted free-form input, so keying off `kind.endswith("_in"/"_out")`
+            # could be bypassed by mislabelling a path parameter; validate by the
+            # value's shape instead.
+            _ensure_within_roots(value)
+            # Remember absolute path args so the cwd pin can target the root they
+            # live under in a multi-root deployment.
+            if Path(value).expanduser().is_absolute():
+                absolute_paths.append(value)
         batch_directory = _batch_working_directory(value, spec)
         if batch_directory:
+            _ensure_within_roots(batch_directory)
             if working_directory and working_directory != batch_directory:
                 raise ValueError("Only one Whitebox batch input directory is supported.")
             working_directory = batch_directory
@@ -764,6 +865,35 @@ def _prepare_arguments(
         kind = str(spec.get("kind") or "")
         if kind.endswith("_out") and not args.get(name) and not working_directory:
             args[name] = _default_output_path(request.tool_id, name, kind)
+
+    # When a root allowlist is configured and this is not a batch run, pin the
+    # subprocess working directory to an allowlisted root. Whitebox resolves a
+    # *relative* path argument (e.g. "out.tif" — not "escape-shaped", so it skips
+    # _ensure_within_roots) against its cwd; without this that cwd is the
+    # sidecar's own (WORKDIR /app in the Docker image), letting a relative value
+    # read or write outside GEOLIBRE_CONVERSION_ROOTS. Pinning cwd to a root
+    # keeps relative paths inside the sandbox. Set after default outputs are
+    # generated so their `not working_directory` condition still holds. The root
+    # is chosen from the run's absolute paths (so multi-root deployments resolve
+    # relative paths under the right root), falling back to the first root.
+    if working_directory is None and conversion._CONVERSION_ROOTS:
+        working_directory = _pinned_working_directory(absolute_paths)
+
+    # Defense in depth: the cwd pin above confines a plain relative arg, but if an
+    # allowlisted root contains a symlink pointing outside it, a relative value
+    # could still traverse out. Resolve every relative, separator-bearing arg
+    # against the pinned working directory (Path.resolve follows symlinks) and
+    # reject anything that lands outside the roots. Absolute / `..` values were
+    # already validated in the loop above via _ensure_within_roots.
+    if working_directory is not None and conversion._CONVERSION_ROOTS:
+        base = Path(working_directory)
+        for value in args.values():
+            # Every non-absolute string arg — including a bare filename like
+            # "pwned.tif", which could itself be a symlink planted at the root —
+            # is resolved against the pinned cwd and checked. Absolute / `..`
+            # values were already validated in the loop above.
+            if isinstance(value, str) and not Path(value).is_absolute():
+                _ensure_within_roots(str(base / value))
     return args, working_directory
 
 

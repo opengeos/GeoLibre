@@ -7,6 +7,7 @@ import {
   Loader2,
   Send,
   Settings,
+  ShieldAlert,
   Sparkles,
   Square,
   Wrench,
@@ -16,6 +17,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -170,17 +172,88 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     () => loadStored(MODEL_STORAGE_KEY) ?? "",
   );
 
+  // Queue of model-generated code snippets (run_python / run_maplibre_js)
+  // awaiting the user's approval, each with the promise resolver its tool
+  // callback is blocked on. A queue (not a single slot) so two tool calls
+  // dispatched before the user responds to the first don't drop the first
+  // request's resolver — they are shown and resolved one at a time.
+  //
+  // The ref is authoritative: it's read/drained synchronously (including in the
+  // unmount cleanup, where a React state updater is not guaranteed to run and
+  // must not carry side effects). The state only mirrors the ref for rendering.
+  type PendingCode = {
+    id: number;
+    tool: "run_python" | "run_maplibre_js";
+    code: string;
+    resolve: (approved: boolean) => void;
+  };
+  const codeQueueRef = useRef<PendingCode[]>([]);
+  const [codeQueue, setCodeQueue] = useState<PendingCode[]>([]);
+  // Once the user opts in, skip the prompt for the rest of this session.
+  const alwaysAllowCodeRef = useRef(false);
+  // Monotonic id so each queued prompt has a stable React key.
+  const codeReqIdRef = useRef(0);
+
+  // Stable (only touches the ref + the stable state setter) so the session
+  // useMemo below can depend on it without rebuilding the session each render.
+  const commitQueue = useCallback((next: PendingCode[]): void => {
+    codeQueueRef.current = next;
+    setCodeQueue(next);
+  }, []);
+
+  // Resolve the head request and advance the queue. "Always allow" only skips
+  // *future* confirmations (via alwaysAllowCodeRef); items already queued behind
+  // the head are still surfaced for individual review — otherwise a second,
+  // unreviewed snippet the model queued in the same turn would be rubber-stamped.
+  const decideCode = (approved: boolean, alwaysAllow: boolean): void => {
+    if (approved && alwaysAllow) alwaysAllowCodeRef.current = true;
+    const queue = codeQueueRef.current;
+    if (queue.length === 0) return;
+    const [head, ...rest] = queue;
+    head.resolve(approved);
+    commitQueue(rest);
+  };
+
+  // Decline every queued request (used when the run is stopped/torn down).
+  const declineAllPendingCode = (): void => {
+    for (const item of codeQueueRef.current) item.resolve(false);
+    commitQueue([]);
+  };
+
   // One session per mounted panel; conversation history lives inside it.
   const session = useMemo(
     () =>
       new AssistantSession({
         getMapController: () => mapControllerRef.current,
+        // Gate assistant-authored code behind an explicit confirmation (unless
+        // the user has opted into always-allow for this session). Prompt-injected
+        // content could otherwise make the model run code that exfiltrates data.
+        confirmCodeExecution: ({ tool, code }) =>
+          alwaysAllowCodeRef.current
+            ? Promise.resolve(true)
+            : new Promise<boolean>((resolve) => {
+                const id = (codeReqIdRef.current += 1);
+                commitQueue([
+                  ...codeQueueRef.current,
+                  { id, tool, code, resolve },
+                ]);
+              }),
       }),
-    [mapControllerRef],
+    [mapControllerRef, commitQueue],
   );
 
-  // Tear down the session and any in-flight run on unmount.
-  useEffect(() => () => session.cancel(), [session]);
+  // Tear down the session and any in-flight run on unmount. Drain the queue ref
+  // synchronously (resolving each pending approval as declined) so their blocked
+  // tool promises don't hang; done directly on the ref, not via a state updater
+  // that may never run after unmount.
+  useEffect(
+    () => () => {
+      session.cancel();
+      for (const item of codeQueueRef.current) item.resolve(false);
+      codeQueueRef.current = [];
+    },
+    [session],
+  );
 
   // On unmount mid-drag, tear down the drag's window listeners.
   useEffect(() => () => resizeCleanupRef.current?.(), []);
@@ -310,6 +383,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const stop = () => {
     cancelledGenerationRef.current = sendGenerationRef.current;
     session.cancel();
+    // Decline any code awaiting approval so a stopped run doesn't leave the
+    // confirmation prompt (and its blocked tool promises) hanging.
+    declineAllPendingCode();
     runningRef.current = false;
     setRunning(false);
   };
@@ -651,6 +727,111 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           )}
         </div>
       )}
+
+      {codeQueue.length > 0 ? (
+        <CodeApprovalOverlay
+          key={codeQueue[0].id}
+          tool={codeQueue[0].tool}
+          code={codeQueue[0].code}
+          onDecide={decideCode}
+        />
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * Modal shown before the assistant runs a `run_python` / `run_maplibre_js`
+ * snippet. Displays the code and requires an explicit decision, with an opt-in
+ * to skip the prompt for the rest of the session.
+ */
+function CodeApprovalOverlay({
+  tool,
+  code,
+  onDecide,
+}: {
+  tool: "run_python" | "run_maplibre_js";
+  code: string;
+  onDecide: (approved: boolean, alwaysAllow: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const language = tool === "run_python" ? "Python" : "JavaScript";
+  // Move focus to the safe default (Decline) when the prompt opens so keyboard
+  // users land inside the dialog, and let Escape dismiss it as a decline.
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const declineRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    declineRef.current?.focus();
+  }, []);
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 p-4">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("assistant.codeApprovalTitle")}
+        className="flex max-h-full w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-4 shadow-lg"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            onDecide(false, false);
+            return;
+          }
+          // Trap Tab within this security-critical dialog so a keyboard user
+          // can't move focus to background controls while the prompt is open.
+          if (event.key === "Tab") {
+            const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
+              'button, input, [href], [tabindex]:not([tabindex="-1"])',
+            );
+            if (!focusables || focusables.length === 0) return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            const active = document.activeElement;
+            if (event.shiftKey && active === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && active === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        }}
+      >
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-semibold">
+            {t("assistant.codeApprovalTitle")}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("assistant.codeApprovalBody", { language })}
+        </p>
+        <pre className="max-h-48 overflow-auto rounded border bg-muted p-2 text-xs">
+          <code>{code}</code>
+        </pre>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={alwaysAllow}
+            onChange={(event) => setAlwaysAllow(event.target.checked)}
+          />
+          {t("assistant.codeApprovalAlways")}
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button
+            ref={declineRef}
+            size="sm"
+            variant="outline"
+            onClick={() => onDecide(false, false)}
+          >
+            {t("assistant.codeApprovalDecline")}
+          </Button>
+          <Button size="sm" onClick={() => onDecide(true, alwaysAllow)}>
+            {t("assistant.codeApprovalRun")}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

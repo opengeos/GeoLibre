@@ -22,6 +22,12 @@ import {
   pluginAssetUrlFromSource,
   resolvePluginAssetUrl,
 } from "./plugin-asset-url";
+import {
+  computePluginBundleHash,
+  pinPluginBundle,
+  removePluginBundlePin,
+  verifyPluginBundleIntegrity,
+} from "./plugin-integrity";
 import { isTauri } from "./tauri-io";
 
 interface ExternalPluginBundleError {
@@ -190,7 +196,40 @@ async function loadPluginUrlBundles(
   );
   for (const [index, result] of results.entries()) {
     if (result.status === "fulfilled") {
-      bundles.push(result.value);
+      const bundle = result.value;
+      // Refuse to auto-execute a URL bundle whose code changed since it was
+      // last trusted (a silent-update / compromised-host vector). First sight
+      // pins it; a changed hash is held back until the user reloads it
+      // explicitly (which re-pins). Isolate a verification failure (e.g.
+      // crypto.subtle unavailable) to this one URL — letting it throw here would
+      // reject the whole loadExternalPlugins Promise.all and drop every plugin.
+      try {
+        const integrity = await verifyPluginBundleIntegrity(
+          manifestUrls[index],
+          bundle,
+        );
+        if (integrity.status === "changed") {
+          issues.push({
+            archiveName: bundle.archiveName,
+            sourceUrl: bundle.sourceUrl,
+            message:
+              `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
+              "Open Settings → Plugins and reload it to review and accept the update.",
+          });
+          continue;
+        }
+      } catch (error) {
+        issues.push({
+          archiveName: bundle.archiveName,
+          sourceUrl: bundle.sourceUrl,
+          message:
+            error instanceof Error
+              ? `Could not verify plugin integrity: ${error.message}`
+              : "Could not verify plugin bundle integrity.",
+        });
+        continue;
+      }
+      bundles.push(bundle);
     } else {
       issues.push({
         archiveName: manifestUrls[index],
@@ -555,13 +594,22 @@ export function unloadRemovedUrlPlugins(
   // synchronously, so removing entries in a separate pass avoids mutating the
   // map while iterating it.
   const toRemove: string[] = [];
+  const removedUrls = new Set<string>();
   for (const [pluginId, source] of externallyLoadedPluginSources) {
-    if (isManagedUrlSource(source) && !keep.has(source)) toRemove.push(pluginId);
+    if (isManagedUrlSource(source) && !keep.has(source)) {
+      toRemove.push(pluginId);
+      removedUrls.add(source);
+    }
   }
   for (const pluginId of toRemove) {
     manager.unregister(pluginId, app);
     removeExternalPluginStyle(pluginId);
     externallyLoadedPluginSources.delete(pluginId);
+  }
+  // Drop integrity pins for URLs no longer installed, so re-adding one later
+  // re-pins from a fresh review rather than silently matching a stale hash.
+  for (const url of removedUrls) {
+    removePluginBundlePin(url);
   }
   return toRemove;
 }
@@ -679,6 +727,9 @@ async function reloadExternalUrlPluginUncoalesced(
   externallyLoadedPluginSources.delete(existingId);
   manager.register(plugin);
   externallyLoadedPluginSources.set(plugin.id, manifestUrl);
+  // Explicit user reload: accept this version as the new trusted baseline so the
+  // next auto-scan doesn't flag it as changed.
+  pinPluginBundle(manifestUrl, await computePluginBundleHash(bundle));
   if (bundle.styleSource) {
     injectExternalPluginStyle(plugin.id, bundle.styleSource);
   }

@@ -229,9 +229,67 @@ pub fn run() {
         .expect("error while running GeoLibre Desktop");
 }
 
+/// Whether `read_project_file` may read `path`: an absolute local path (POSIX
+/// `/...` or a Windows drive-letter `C:\...`, never a UNC `\\host\share`), free
+/// of `..` traversal, ending in a GeoLibre project extension — `.geolibre` or
+/// `.geolibre.json`. These are the canonical formats `saveProject` writes and
+/// `isGeoLibreProjectPath` recognizes in `tauri-io.ts`.
+///
+/// Without this, the command was an arbitrary local-file reader: any webview JS
+/// or loaded plugin could `invoke("read_project_file", { path: "~/.ssh/id_rsa" })`
+/// and receive the contents. A bare `.json` extension is deliberately NOT
+/// accepted: plenty of real secrets are JSON (GCP service-account keys,
+/// `application_default_credentials.json`, editor/CLI configs with tokens), so
+/// requiring the `.geolibre` marker keeps those out while still reading every
+/// real project. Byte-oriented like `is_allowed_local_vector_path` so Windows
+/// paths behave the same on any host.
+pub(crate) fn is_allowed_project_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
+
+    // Reject UNC paths ("\\server\share" and "//server/share").
+    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
+        return false;
+    }
+
+    let is_posix_absolute = bytes.first() == Some(&b'/');
+    let is_windows_drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && is_separator(bytes[2]);
+    if !is_posix_absolute && !is_windows_drive {
+        return false;
+    }
+
+    if path.split(['/', '\\']).any(|segment| segment == "..") {
+        return false;
+    }
+
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".geolibre") || lower.ends_with(".geolibre.json")
+}
+
 #[tauri::command]
 fn read_project_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
+    if !is_allowed_project_path(&path) {
+        return Err(format!(
+            "Refusing to read \"{path}\": not an absolute local project file path"
+        ));
+    }
+    // Resolve symlinks and re-check the extension, so a symlink named
+    // `*.geolibre`/`*.geolibre.json` can't redirect the read to an arbitrary
+    // target (e.g. `~/notes.geolibre.json -> ~/.ssh/id_rsa`). Only the resolved
+    // extension is re-checked (not the full guard): `canonicalize` yields a
+    // `\\?\C:\…` verbatim path on Windows, which the UNC check would reject.
+    let canonical =
+        fs::canonicalize(&path).map_err(|error| format!("Could not read project file: {error}"))?;
+    let resolved = canonical.to_string_lossy().to_ascii_lowercase();
+    if !(resolved.ends_with(".geolibre") || resolved.ends_with(".geolibre.json")) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a non-project file"
+        ));
+    }
+    fs::read_to_string(&canonical).map_err(|error| format!("Could not read project file: {error}"))
 }
 
 /// Local vector file extensions the restore path may re-read (lowercased, no
@@ -494,6 +552,169 @@ fn close_oauth_popups(app: tauri::AppHandle) {
     }
 }
 
+/// Error surfaced when a fetch would reach a blocked address.
+const SSRF_BLOCKED_MESSAGE: &str =
+    "Refusing to fetch a link-local, unspecified, or multicast address";
+
+/// Whether an IP sits in a range a webview- or plugin-triggered fetch must not
+/// reach. This is the SSRF guard for [`fetch_url_bytes`] and
+/// [`resolve_url_redirect`]: those commands issue requests from the desktop
+/// process's network position and hand the body/redirect back to the webview, so
+/// without this a rogue plugin could read cloud metadata (169.254.169.254) — the
+/// classic SSRF target — that browser `fetch` cannot reach because of CORS.
+///
+/// Loopback and private/LAN ranges are deliberately NOT blocked: the app is
+/// built to load XYZ tiles, COGs, and PMTiles from a user's own
+/// `http://localhost:<port>` or LAN dev server (issue #387), and these commands
+/// are the desktop fetch path for that data. Blocking them would break a
+/// documented workflow. Sensitive loopback services (the Python sidecar, the
+/// Jupyter server) are individually token-gated, so the residual reachability of
+/// loopback/LAN is acceptable; link-local/metadata, which has no such guard, is
+/// blocked.
+fn is_disallowed_ip(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_link_local() // 169.254.0.0/16 (incl. cloud metadata)
+                || v4.is_unspecified() // 0.0.0.0
+                || v4.is_broadcast()
+                || v4.is_multicast()
+        }
+        IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return is_disallowed_ip(IpAddr::V4(mapped));
+            }
+            let segments = v6.segments();
+            // Deprecated IPv4-compatible form `::a.b.c.d` (all-zero 96-bit
+            // prefix, no `ffff` marker, and not `::`/`::1`). `to_ipv4_mapped`
+            // only covers `::ffff:a.b.c.d`, so classify the embedded IPv4 here
+            // too — otherwise `::169.254.169.254` would slip past the guard.
+            if segments[..6].iter().all(|&s| s == 0) && !(segments[6] == 0 && segments[7] <= 1) {
+                let embedded = std::net::Ipv4Addr::new(
+                    (segments[6] >> 8) as u8,
+                    (segments[6] & 0xff) as u8,
+                    (segments[7] >> 8) as u8,
+                    (segments[7] & 0xff) as u8,
+                );
+                return is_disallowed_ip(IpAddr::V4(embedded));
+            }
+            // Not handled: 6to4 (2002::/16) and Teredo (2001::/32) also embed an
+            // IPv4 address, so e.g. 2002:a9fe:a9fe:: could reach 169.254.169.254.
+            // These transition mechanisms are effectively defunct and unrouted on
+            // modern hosts, so the practical risk is negligible; noted so this
+            // isn't mistaken for full coverage of every IPv4-embedding form.
+            v6.is_unspecified()
+                || v6.is_multicast()
+                // fe80::/10 link-local
+                || (segments[0] & 0xffc0) == 0xfe80
+        }
+    }
+}
+
+/// Reject a parsed URL that is non-HTTP(S) or whose host resolves to a
+/// private/loopback/link-local address. Hostname hosts are resolved and rejected
+/// if *any* resolved address is disallowed, so a name that points at an internal
+/// IP cannot slip through.
+fn url_is_fetchable(url: &reqwest::Url) -> Result<(), String> {
+    use std::net::ToSocketAddrs;
+    match url.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("Unsupported URL scheme: {other}")),
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| "URL has no host".to_string())?;
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = bare.parse::<std::net::IpAddr>() {
+        return if is_disallowed_ip(ip) {
+            Err(SSRF_BLOCKED_MESSAGE.to_string())
+        } else {
+            Ok(())
+        };
+    }
+    let port = url.port_or_known_default().unwrap_or(0);
+    let mut resolved_any = false;
+    for addr in (bare, port)
+        .to_socket_addrs()
+        .map_err(|error| format!("Could not resolve host {bare}: {error}"))?
+    {
+        resolved_any = true;
+        if is_disallowed_ip(addr.ip()) {
+            return Err(SSRF_BLOCKED_MESSAGE.to_string());
+        }
+    }
+    if resolved_any {
+        Ok(())
+    } else {
+        Err(format!("Could not resolve host {bare}"))
+    }
+}
+
+/// Parse and SSRF-validate a URL string before a request is issued.
+fn ensure_fetchable_url(url: &str) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url).map_err(|error| format!("Invalid URL: {error}"))?;
+    url_is_fetchable(&parsed)
+}
+
+/// A redirect policy that re-applies [`url_is_fetchable`] to every hop, so a
+/// public URL that 3xx-redirects to an internal address is not followed.
+fn guarded_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= 10 {
+            return attempt.stop();
+        }
+        match url_is_fetchable(attempt.url()) {
+            Ok(()) => attempt.follow(),
+            Err(_) => attempt.stop(),
+        }
+    })
+}
+
+/// A DNS resolver that drops any address in a blocked range, so reqwest connects
+/// only to IPs that passed [`is_disallowed_ip`].
+///
+/// [`url_is_fetchable`] validates the host *before* the request, but reqwest
+/// re-resolves the name when it opens the connection, so a check-then-connect
+/// gap remains: an attacker controlling DNS (short TTL) could answer the
+/// pre-check with a public IP and the actual connection with `169.254.169.254`.
+/// Enforcing the filter inside the resolver reqwest actually uses — for the
+/// initial request and every redirect hop — closes that rebinding window.
+struct GuardedDnsResolver;
+
+impl reqwest::dns::Resolve for GuardedDnsResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        use std::net::ToSocketAddrs;
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            // std getaddrinfo blocks, but these are low-volume tile/URL fetches.
+            let resolved = (host.as_str(), 0u16).to_socket_addrs();
+            let addrs: Vec<std::net::SocketAddr> = match resolved {
+                Ok(iter) => iter.filter(|addr| !is_disallowed_ip(addr.ip())).collect(),
+                Err(error) => {
+                    return Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                }
+            };
+            if addrs.is_empty() {
+                return Err(SSRF_BLOCKED_MESSAGE.into());
+            }
+            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// Build a blocking HTTP client that enforces the SSRF guard at connect time
+/// (via [`GuardedDnsResolver`]) and re-validates redirect hops.
+fn guarded_http_client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
+        .redirect(guarded_redirect_policy())
+        .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
+        .user_agent("GeoLibre Desktop")
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))
+}
+
 #[tauri::command]
 async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
     tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url))
@@ -502,16 +723,9 @@ async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
 }
 
 fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
-    if !url.starts_with("https://") && !url.starts_with("http://") {
-        return Err("Only HTTP and HTTPS URLs can be fetched".to_string());
-    }
+    ensure_fetchable_url(&url)?;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))
-        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client = guarded_http_client(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))?;
 
     let response = client
         .get(&url)
@@ -983,16 +1197,9 @@ async fn resolve_url_redirect(url: String) -> Result<String, String> {
 }
 
 fn resolve_url_redirect_blocking(url: String) -> Result<String, String> {
-    if !url.starts_with("https://") && !url.starts_with("http://") {
-        return Err("Only HTTP and HTTPS URLs can be resolved".to_string());
-    }
+    ensure_fetchable_url(&url)?;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))
-        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client = guarded_http_client(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))?;
 
     if let Ok(head_response) = client.head(&url).send() {
         if has_xyz_placeholders(head_response.url().as_str()) {
@@ -1081,6 +1288,9 @@ struct MartinServerInfo {
 struct SidecarServerInfo {
     base_url: String,
     port: u16,
+    /// Per-launch bearer token the frontend must send on every sidecar request
+    /// (see [`sidecar_token`]).
+    token: String,
 }
 
 #[derive(Serialize)]
@@ -1203,6 +1413,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
                 return Ok(SidecarServerInfo {
                     base_url,
                     port: SIDECAR_PORT,
+                    token: sidecar_token().to_string(),
                 });
             }
             *process = None;
@@ -1210,10 +1421,23 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     }
 
     if sidecar_health_is_ready(&base_url) {
-        return Ok(SidecarServerInfo {
-            base_url,
-            port: SIDECAR_PORT,
-        });
+        if sidecar_accepts_token(&base_url, sidecar_token()) {
+            return Ok(SidecarServerInfo {
+                base_url,
+                port: SIDECAR_PORT,
+                token: sidecar_token().to_string(),
+            });
+        }
+        // A sidecar is listening but rejects this session's token — an orphan
+        // from a previous launch still holding the port. We can't reclaim it
+        // (no child handle here, and /shutdown is token-protected), so fail with
+        // a clear message rather than handing back a token that 401s every call.
+        return Err(
+            "A GeoLibre processing server from a previous session is still \
+             running on port 8765 but does not accept this session's token. \
+             Quit any stray GeoLibre processes and try again."
+                .to_string(),
+        );
     }
 
     let uv = ensure_managed_uv(&app)?;
@@ -1243,6 +1467,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .arg(SIDECAR_PORT.to_string())
         .current_dir(&project_dir)
         .env("GEOLIBRE_UV", &uv)
+        .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
         .env("UV_CACHE_DIR", runtime_dir.join("uv-cache"))
         .env("UV_PYTHON_INSTALL_DIR", runtime_dir.join("uv-python"))
@@ -1278,6 +1503,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     Ok(SidecarServerInfo {
         base_url,
         port: SIDECAR_PORT,
+        token: sidecar_token().to_string(),
     })
 }
 
@@ -1595,6 +1821,21 @@ fn sidecar_base_url() -> String {
     format!("http://127.0.0.1:{SIDECAR_PORT}")
 }
 
+/// A per-launch shared secret the frontend must present on every sidecar
+/// request. The sidecar binds loopback and is CORS-restricted, but neither stops
+/// a cross-origin simple POST (CSRF) or a DNS-rebinding read; this token does.
+///
+/// Generated once per desktop process (128 CSPRNG bits) and reused for the
+/// process lifetime so the early-return paths of `start_geolibre_sidecar` (when
+/// the sidecar is already running) hand back the same token that was injected
+/// via `GEOLIBRE_SIDECAR_TOKEN` at spawn time. A sidecar started outside this
+/// process (e.g. a `python -m` dev run) leaves the env var unset and simply does
+/// not enforce the token, so those flows keep working.
+fn sidecar_token() -> &'static str {
+    static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TOKEN.get_or_init(generate_jupyter_token)
+}
+
 fn sidecar_health_is_ready(base_url: &str) -> bool {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
@@ -1609,12 +1850,43 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the sidecar already listening at `base_url` accepts `token`.
+///
+/// `/health` is token-exempt, so it cannot reveal a token mismatch. This probes
+/// `/algorithms` (a cheap authenticated endpoint) *with* the token so an orphan
+/// sidecar from a previous launch — started with a different per-launch token,
+/// and not killed because `Drop` doesn't run on `SIGKILL` — is detected rather
+/// than silently 401ing every later request. A tokenless dev sidecar
+/// (`GEOLIBRE_SIDECAR_TOKEN` unset) accepts any header and returns 200, so it is
+/// still reused.
+fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
+    let Ok(client) = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+    else {
+        return false;
+    };
+    client
+        .get(format!("{base_url}/algorithms"))
+        .header("x-geolibre-token", token)
+        .send()
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
+}
+
 fn request_sidecar_shutdown(base_url: &str) {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build();
     if let Ok(client) = client {
-        let _ = client.post(format!("{base_url}/shutdown")).send();
+        // /shutdown is token-protected (only /health is exempt), so attach this
+        // session's token. This shuts down a sidecar we started or adopted (same
+        // token); a true cross-launch orphan (different token) 401s and falls
+        // through to the force-kill path, as before.
+        let _ = client
+            .post(format!("{base_url}/shutdown"))
+            .header("x-geolibre-token", sidecar_token())
+            .send();
     }
 }
 
@@ -2587,8 +2859,85 @@ fn configure_linux_webkit() {}
 
 #[cfg(test)]
 mod tests {
-    use super::{find_zip_manifest_path, is_allowed_local_vector_path, plugin_archive_file_name};
+    use super::{
+        ensure_fetchable_url, find_zip_manifest_path, is_allowed_local_vector_path,
+        is_allowed_project_path, is_disallowed_ip, plugin_archive_file_name,
+    };
     use std::io::{Cursor, Write};
+    use std::net::IpAddr;
+
+    #[test]
+    fn blocks_link_local_and_metadata_ips() {
+        for ip in [
+            "169.254.169.254",        // cloud metadata (link-local)
+            "169.254.0.1",            // link-local
+            "0.0.0.0",                // unspecified
+            "255.255.255.255",        // broadcast
+            "::",                     // unspecified
+            "fe80::1",                // link-local
+            "::ffff:169.254.169.254", // IPv4-mapped metadata
+            "::169.254.169.254",      // IPv4-compatible metadata (deprecated)
+        ] {
+            assert!(
+                is_disallowed_ip(ip.parse::<IpAddr>().unwrap()),
+                "expected {ip} to be blocked"
+            );
+        }
+    }
+
+    #[test]
+    fn allows_public_loopback_and_lan_ips() {
+        // Public plus loopback/LAN, which stay reachable for local tile/COG
+        // data (issue #387). Only link-local/metadata is blocked.
+        for ip in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "93.184.216.34",
+            "2606:4700:4700::1111",
+            "127.0.0.1",    // loopback (local dev tile server)
+            "192.168.1.10", // LAN
+            "10.0.0.5",     // LAN
+            "::1",          // loopback
+        ] {
+            assert!(
+                !is_disallowed_ip(ip.parse::<IpAddr>().unwrap()),
+                "expected {ip} to be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn ensure_fetchable_url_blocks_metadata_and_bad_schemes() {
+        assert!(ensure_fetchable_url("http://169.254.169.254/latest/meta-data").is_err());
+        assert!(ensure_fetchable_url("file:///etc/passwd").is_err());
+        assert!(ensure_fetchable_url("ftp://example.com/x").is_err());
+        // Public and loopback/LAN literals are allowed (local data workflow).
+        assert!(ensure_fetchable_url("https://1.1.1.1/").is_ok());
+        assert!(ensure_fetchable_url("http://127.0.0.1:8081/tiles/0/0/0.png").is_ok());
+        assert!(ensure_fetchable_url("http://[::1]:8081/data.pmtiles").is_ok());
+    }
+
+    #[test]
+    fn project_path_guard_allows_projects_and_blocks_secrets() {
+        assert!(is_allowed_project_path("/home/u/map.geolibre.json"));
+        assert!(is_allowed_project_path("/home/u/map.geolibre"));
+        assert!(is_allowed_project_path("C:\\Users\\u\\map.geolibre.json"));
+        // Secrets and traversal are refused.
+        assert!(!is_allowed_project_path("/home/u/.ssh/id_rsa"));
+        assert!(!is_allowed_project_path("/home/u/.aws/credentials"));
+        assert!(!is_allowed_project_path(
+            "/home/u/../../etc/hosts.geolibre.json"
+        ));
+        assert!(!is_allowed_project_path("relative/map.geolibre.json"));
+        assert!(!is_allowed_project_path(
+            "\\\\server\\share\\map.geolibre.json"
+        ));
+        // A bare .json file (e.g. a JSON credential store) is NOT a project.
+        assert!(!is_allowed_project_path(
+            "/home/u/.config/gcloud/application_default_credentials.json"
+        ));
+        assert!(!is_allowed_project_path("C:\\Users\\u\\map.json"));
+    }
 
     #[test]
     fn allows_absolute_vector_paths() {
