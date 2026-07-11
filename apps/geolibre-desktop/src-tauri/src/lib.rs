@@ -584,10 +584,24 @@ fn is_disallowed_ip(ip: std::net::IpAddr) -> bool {
             if let Some(mapped) = v6.to_ipv4_mapped() {
                 return is_disallowed_ip(IpAddr::V4(mapped));
             }
+            let segments = v6.segments();
+            // Deprecated IPv4-compatible form `::a.b.c.d` (all-zero 96-bit
+            // prefix, no `ffff` marker, and not `::`/`::1`). `to_ipv4_mapped`
+            // only covers `::ffff:a.b.c.d`, so classify the embedded IPv4 here
+            // too — otherwise `::169.254.169.254` would slip past the guard.
+            if segments[..6].iter().all(|&s| s == 0) && !(segments[6] == 0 && segments[7] <= 1) {
+                let embedded = std::net::Ipv4Addr::new(
+                    (segments[6] >> 8) as u8,
+                    (segments[6] & 0xff) as u8,
+                    (segments[7] >> 8) as u8,
+                    (segments[7] & 0xff) as u8,
+                );
+                return is_disallowed_ip(IpAddr::V4(embedded));
+            }
             v6.is_unspecified()
                 || v6.is_multicast()
                 // fe80::/10 link-local
-                || (v6.segments()[0] & 0xffc0) == 0xfe80
+                || (segments[0] & 0xffc0) == 0xfe80
         }
     }
 }
@@ -2857,6 +2871,7 @@ mod tests {
             "::",                     // unspecified
             "fe80::1",                // link-local
             "::ffff:169.254.169.254", // IPv4-mapped metadata
+            "::169.254.169.254",      // IPv4-compatible metadata (deprecated)
         ] {
             assert!(
                 is_disallowed_ip(ip.parse::<IpAddr>().unwrap()),

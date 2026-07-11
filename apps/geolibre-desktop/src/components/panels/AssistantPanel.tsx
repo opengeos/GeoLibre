@@ -17,6 +17,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -193,10 +194,12 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // Monotonic id so each queued prompt has a stable React key.
   const codeReqIdRef = useRef(0);
 
-  const commitQueue = (next: PendingCode[]): void => {
+  // Stable (only touches the ref + the stable state setter) so the session
+  // useMemo below can depend on it without rebuilding the session each render.
+  const commitQueue = useCallback((next: PendingCode[]): void => {
     codeQueueRef.current = next;
     setCodeQueue(next);
-  };
+  }, []);
 
   // Resolve the head request and advance the queue. "Always allow" only skips
   // *future* confirmations (via alwaysAllowCodeRef); items already queued behind
@@ -236,7 +239,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 ]);
               }),
       }),
-    [mapControllerRef],
+    [mapControllerRef, commitQueue],
   );
 
   // Tear down the session and any in-flight run on unmount. Drain the queue ref
