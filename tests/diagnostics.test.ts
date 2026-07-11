@@ -300,6 +300,19 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(getDiagnosticsSnapshot().totalCount, 0);
   });
 
+  it("keeps the benign three.js multiple-instances warning out of diagnostics but echoes it", () => {
+    let echoed: unknown[] | null = null;
+    console.warn = (...args: unknown[]) => {
+      echoed = args;
+    };
+    install();
+    const message = "WARNING: Multiple instances of Three.js being imported.";
+    console.warn(message);
+    // Echoed to the console for contributors, but not recorded in the panel.
+    assert.deepEqual(echoed, [message]);
+    assert.equal(getDiagnosticsSnapshot().totalCount, 0);
+  });
+
   it("flags an unmarked non-ok response as an error", async () => {
     win.fetch = (() =>
       Promise.resolve(

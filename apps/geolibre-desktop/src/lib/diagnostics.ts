@@ -67,8 +67,16 @@ const TAURI_IPC_FALLBACK_WARNING =
 // projection is active — globe simply ignores the around-point and the camera
 // still moves correctly. It is harmless but fires on routine interaction, so it
 // is kept out of the diagnostics panel (still echoed to the console for devs).
+//
+// three.js warns this once when more than one copy of its module ends up in the
+// bundle. Several first- and third-party deps (deck.gl mesh layers, the 3D
+// tiles / lidar / splat plugins, mapillary-js) each pull in three at slightly
+// different versions, so a single deduped copy is not guaranteed. The warning
+// is cosmetic — our three usage does not rely on cross-copy identity — so it is
+// kept out of the diagnostics panel (still echoed to the console for devs).
 const BENIGN_CONSOLE_WARNINGS = [
   "Easing around a point is not supported under globe projection.",
+  "WARNING: Multiple instances of Three.js being imported.",
 ];
 
 /** Whether a console.warn message is a known-benign warning to drop entirely. */
