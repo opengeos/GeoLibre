@@ -25,9 +25,12 @@ const SEQUENCE_LAYER_ID = "geolibre-mapillary-sequence";
 const SEQUENCE_HIGHLIGHT_LAYER_ID = "geolibre-mapillary-sequence-highlight";
 const IMAGE_LAYER_ID = "geolibre-mapillary-image";
 const SELECTED_LAYER_ID = "geolibre-mapillary-selected-marker";
-// The Layers-panel entry that stands in for the (imperatively added) coverage
-// layers so the user can toggle/reorder them like any other layer (#5).
-const COVERAGE_STORE_LAYER_ID = "geolibre-mapillary-coverage-layer";
+// The Layers-panel entries that stand in for the (imperatively added) coverage
+// layers so the user can toggle/reorder/restyle them like any other layer. The
+// sequence lines and image points are surfaced separately so each can be shown,
+// hidden, and styled on its own.
+const LINES_STORE_LAYER_ID = "geolibre-mapillary-lines-layer";
+const POINTS_STORE_LAYER_ID = "geolibre-mapillary-points-layer";
 // The point layer carrying a clickable image `id` property.
 const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID];
 // Only draw the individual image points once zoomed in; at lower zooms the
@@ -64,7 +67,8 @@ export interface MapillaryLabels {
   tokenLabel: string;
   loading: string;
   loadError: string;
-  coverageLayer: string;
+  coverageLines: string;
+  coveragePoints: string;
 }
 
 let labels: MapillaryLabels = {
@@ -78,7 +82,8 @@ let labels: MapillaryLabels = {
   tokenLabel: "Mapillary access token",
   loading: "Loading imagery…",
   loadError: "Could not load this image.",
-  coverageLayer: "Mapillary Coverage",
+  coverageLines: "Mapillary Sequences",
+  coveragePoints: "Mapillary Images",
 };
 
 export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
@@ -265,30 +270,42 @@ function addCoverage(activeMap: MapLibreMap): void {
     });
   }
 
-  // Surface the coverage as a single first-class Layers-panel entry so the user
-  // can hide/show, reorder, and restyle it. Seed the store style with the
-  // Mapillary green (and let the layer-sync drive the paint, i.e. no
-  // controlOwnsPaint) so the Style panel's colour/opacity/stroke controls
-  // actually apply to the sequence lines and image points.
+  // Surface the coverage as two first-class Layers-panel entries (sequence lines
+  // and image points) so each can be shown/hidden, reordered, and restyled on
+  // its own. The layer-sync drives the paint from these store styles (no
+  // controlOwnsPaint), so the Style panel's controls apply. The points sit above
+  // the lines, matching the on-map draw order.
   appRef?.registerExternalNativeLayer?.({
-    id: COVERAGE_STORE_LAYER_ID,
-    name: labels.coverageLayer,
+    id: LINES_STORE_LAYER_ID,
+    name: labels.coverageLines,
     type: "vector-tiles",
-    nativeLayerIds: [SEQUENCE_LAYER_ID, IMAGE_LAYER_ID],
+    nativeLayerIds: [SEQUENCE_LAYER_ID],
     sourceIds: [SOURCE_ID],
     opacity: 0.9,
+    // Lines take their colour/width from the stroke (outline) style.
+    style: { strokeColor: COVERAGE_COLOR, strokeWidth: 2 },
+  });
+  appRef?.registerExternalNativeLayer?.({
+    id: POINTS_STORE_LAYER_ID,
+    name: labels.coveragePoints,
+    type: "vector-tiles",
+    nativeLayerIds: [IMAGE_LAYER_ID],
+    sourceIds: [SOURCE_ID],
+    opacity: 0.9,
+    // Points: green fill with a thin white outline.
     style: {
       fillColor: COVERAGE_COLOR,
-      strokeColor: COVERAGE_COLOR,
-      strokeWidth: 2,
       circleRadius: 4,
+      strokeColor: "#ffffff",
+      strokeWidth: 1,
       fillOpacity: 0.9,
     },
   });
 }
 
 function removeCoverage(activeMap: MapLibreMap): void {
-  appRef?.unregisterExternalNativeLayer?.(COVERAGE_STORE_LAYER_ID);
+  appRef?.unregisterExternalNativeLayer?.(LINES_STORE_LAYER_ID);
+  appRef?.unregisterExternalNativeLayer?.(POINTS_STORE_LAYER_ID);
   for (const id of [
     SELECTED_LAYER_ID,
     SEQUENCE_HIGHLIGHT_LAYER_ID,

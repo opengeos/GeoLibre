@@ -216,7 +216,8 @@ export function TopToolbar({
       tokenLabel: t("mapillary.tokenLabel"),
       loading: t("mapillary.loading"),
       loadError: t("mapillary.loadError"),
-      coverageLayer: t("mapillary.coverageLayer"),
+      coverageLines: t("mapillary.coverageLines"),
+      coveragePoints: t("mapillary.coveragePoints"),
     });
     setGraticuleLabels({
       title: t("graticule.title"),

@@ -2026,7 +2026,8 @@
     "tokenLabel": "Mapillary access token",
     "loading": "Loading imagery…",
     "loadError": "Could not load this image.",
-    "coverageLayer": "Mapillary Coverage"
+    "coverageLines": "Mapillary Sequences",
+    "coveragePoints": "Mapillary Images"
   },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
