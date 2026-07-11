@@ -1860,7 +1860,14 @@ fn request_sidecar_shutdown(base_url: &str) {
         .timeout(Duration::from_millis(500))
         .build();
     if let Ok(client) = client {
-        let _ = client.post(format!("{base_url}/shutdown")).send();
+        // /shutdown is token-protected (only /health is exempt), so attach this
+        // session's token. This shuts down a sidecar we started or adopted (same
+        // token); a true cross-launch orphan (different token) 401s and falls
+        // through to the force-kill path, as before.
+        let _ = client
+            .post(format!("{base_url}/shutdown"))
+            .header("x-geolibre-token", sidecar_token())
+            .send();
     }
 }
 

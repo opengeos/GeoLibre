@@ -847,6 +847,22 @@ def _prepare_arguments(
     # generated so their `not working_directory` condition still holds.
     if working_directory is None and conversion._CONVERSION_ROOTS:
         working_directory = conversion._CONVERSION_ROOTS[0]
+
+    # Defense in depth: the cwd pin above confines a plain relative arg, but if an
+    # allowlisted root contains a symlink pointing outside it, a relative value
+    # could still traverse out. Resolve every relative, separator-bearing arg
+    # against the pinned working directory (Path.resolve follows symlinks) and
+    # reject anything that lands outside the roots. Absolute / `..` values were
+    # already validated in the loop above via _ensure_within_roots.
+    if working_directory is not None and conversion._CONVERSION_ROOTS:
+        base = Path(working_directory)
+        for value in args.values():
+            if (
+                isinstance(value, str)
+                and ("/" in value or "\\" in value)
+                and not Path(value).is_absolute()
+            ):
+                _ensure_within_roots(str(base / value))
     return args, working_directory
 
 

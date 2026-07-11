@@ -228,6 +228,44 @@ def test_whitebox_relative_path_confined_by_cwd(
     assert working_directory == str(root.resolve())
 
 
+def test_whitebox_relative_path_through_symlink_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """A relative arg traversing a symlink that escapes the root is rejected."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    root = tmp_path / "data"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    # A symlink inside the root pointing outside it.
+    (root / "escape").symlink_to(outside)
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {"id": "t", "params": [{"name": "output", "kind": "raster_out"}]}
+    request = WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"output": "escape/secret.tif"},
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(request, [])
+    assert excinfo.value.status_code == 403
+
+    # A relative path staying inside the root is accepted.
+    ok = WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"output": "subdir/out.tif"},
+        tool=tool,
+    )
+    args, _ = _prepare_arguments(ok, [])
+    assert args["output"] == "subdir/out.tif"
+
+
 def test_whitebox_null_byte_path_is_rejected(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

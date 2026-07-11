@@ -198,20 +198,17 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     setCodeQueue(next);
   };
 
-  // Resolve the head request and advance the queue. When the user approves with
-  // "always allow", drain the rest as approved too.
+  // Resolve the head request and advance the queue. "Always allow" only skips
+  // *future* confirmations (via alwaysAllowCodeRef); items already queued behind
+  // the head are still surfaced for individual review — otherwise a second,
+  // unreviewed snippet the model queued in the same turn would be rubber-stamped.
   const decideCode = (approved: boolean, alwaysAllow: boolean): void => {
     if (approved && alwaysAllow) alwaysAllowCodeRef.current = true;
     const queue = codeQueueRef.current;
     if (queue.length === 0) return;
     const [head, ...rest] = queue;
     head.resolve(approved);
-    if (approved && alwaysAllow) {
-      for (const item of rest) item.resolve(true);
-      commitQueue([]);
-    } else {
-      commitQueue(rest);
-    }
+    commitQueue(rest);
   };
 
   // Decline every queued request (used when the run is stopped/torn down).
