@@ -453,7 +453,9 @@ class RouteAnimationEngine {
     this.rafId = null;
     if (this.destroyed || !this.settings.playing || this.totalMeters <= 0) return;
     if (this.lastFrame !== null) {
-      const elapsedSec = (now - this.lastFrame) / 1000;
+      // Cap the delta so a long stall (backgrounded/minimized tab pauses rAF)
+      // resumes smoothly instead of making the marker jump far ahead.
+      const elapsedSec = Math.min(0.25, (now - this.lastFrame) / 1000);
       const advanced =
         (elapsedSec * this.settings.speedMps) / this.totalMeters;
       advanceRouteProgress(advanced);
@@ -590,7 +592,14 @@ export function setRouteAnimationSettings(
 
 /** Convenience toggle for the play/pause button. */
 export function toggleRouteAnimationPlaying(): void {
-  setRouteAnimationSettings({ playing: !settings.playing });
+  // Pressing Play after a non-looping route has finished restarts from the top,
+  // otherwise playback would immediately re-stop at the end and appear to do
+  // nothing.
+  const restart = !settings.playing && settings.progress >= 1;
+  setRouteAnimationSettings({
+    playing: !settings.playing,
+    progress: restart ? 0 : settings.progress,
+  });
 }
 
 /** Scrub to an absolute progress in `[0, 1]` (used by the panel slider). */
@@ -662,9 +671,12 @@ export function restoreRouteAnimation(
     ...DEFAULT_ROUTE_ANIMATION_SETTINGS,
   });
   next.playing = false;
-  // Drop the previous project's geometry so the engine doesn't briefly draw a
-  // stale route on the new map; the panel re-resolves it from `layerId`.
+  // Drop the previous project's geometry so nothing draws a stale route while the
+  // panel re-resolves it from `layerId`. Clear both the module cache and any live
+  // engine: an already-open panel keeps its engine (attachEngine only rebuilds on
+  // a map change), so without this it would keep rendering the old route.
   routeCoords = [];
+  engine?.setRoute([]);
   const shouldOpen = Boolean(
     state && typeof state === "object" && (state as { open?: unknown }).open,
   );

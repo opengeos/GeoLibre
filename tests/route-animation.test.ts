@@ -302,6 +302,20 @@ describe("route-animation store", () => {
     assert.equal(getRouteAnimationSettings().playing, false);
   });
 
+  it("restarts from the top when replaying a finished (non-looping) route", () => {
+    resetStore();
+    setRouteAnimationSettings({ loop: false, progress: 0.9, playing: true });
+    advanceRouteProgress(0.2);
+    // Route reached the end and stopped.
+    assert.equal(getRouteAnimationSettings().progress, 1);
+    assert.equal(getRouteAnimationSettings().playing, false);
+    // Pressing Play again rewinds to the start instead of silently re-stopping.
+    toggleRouteAnimationPlaying();
+    const replay = getRouteAnimationSettings();
+    assert.equal(replay.playing, true);
+    assert.equal(replay.progress, 0);
+  });
+
   it("wraps progress when looping and stops at the end otherwise", () => {
     resetStore();
     setRouteAnimationSettings({ loop: true, progress: 0.9, playing: true });

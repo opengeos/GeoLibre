@@ -88,6 +88,24 @@ function coordsFromGeometry(
 const toLngLat = (position: number[]): LngLat => [position[0], position[1]];
 
 /**
+ * Index of the segment `[segment-1, segment]` that contains `distance`, i.e. the
+ * smallest `i` in `[1, n-1]` with `cumulative[i] >= distance` (the last segment
+ * when `distance` is at/beyond the end). `cumulative` is monotonically
+ * non-decreasing, so this is a binary search — O(log n) instead of an O(n) scan
+ * on every animation frame, which matters for densely-sampled tracks.
+ */
+function segmentAtDistance(cumulative: number[], distance: number): number {
+  let lo = 1;
+  let hi = cumulative.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (cumulative[mid] < distance) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
  * Locate the coordinate a given distance along a polyline, with its heading.
  *
  * Distances are clamped to `[0, totalLength]`, so `0` returns the first vertex
@@ -110,11 +128,7 @@ export function pointAlongLine(
   const total = cumulative[cumulative.length - 1];
   const distance = Math.max(0, Math.min(distanceMeters, total));
 
-  // Find the segment [segment-1, segment] that contains `distance`.
-  let segment = 1;
-  while (segment < coords.length - 1 && cumulative[segment] < distance) {
-    segment += 1;
-  }
+  const segment = segmentAtDistance(cumulative, distance);
 
   const segStart = cumulative[segment - 1];
   const segEnd = cumulative[segment];
@@ -152,17 +166,11 @@ export function sliceLineAtDistance(
   const distance = Math.max(0, Math.min(distanceMeters, total));
   if (distance <= 0) return [];
 
-  const traveled: LngLat[] = [coords[0]];
-  for (let i = 1; i < coords.length; i += 1) {
-    if (cumulative[i] < distance) {
-      traveled.push(coords[i]);
-    } else {
-      break;
-    }
-  }
-
-  const head = pointAlongLine(coords, cumulative, distance).coord;
-  traveled.push(head);
+  // Original vertices strictly before `distance` are coords[0..segment-1]; the
+  // interpolated point at `distance` caps the trail exactly under the marker.
+  const segment = segmentAtDistance(cumulative, distance);
+  const traveled = coords.slice(0, segment);
+  traveled.push(pointAlongLine(coords, cumulative, distance).coord);
   return traveled;
 }
 
