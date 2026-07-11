@@ -786,6 +786,30 @@ def _looks_like_fs_path(value: str) -> bool:
     return ".." in text.replace("\\", "/").split("/")
 
 
+def _pinned_working_directory(absolute_paths: list[str]) -> str:
+    """Choose the root to pin the non-batch subprocess cwd to.
+
+    Prefer the allowlisted root that already contains one of the run's
+    (validated) absolute path arguments, so a relative path argument resolves
+    alongside them; fall back to the first configured root. Without this, a
+    multi-root ``GEOLIBRE_CONVERSION_ROOTS`` deployment would resolve every
+    relative path against root #0 regardless of which root the run's files live
+    under.
+
+    Args:
+        absolute_paths: Validated absolute path arguments seen in this run.
+
+    Returns:
+        An allowlisted root directory to use as the subprocess cwd.
+    """
+    for path in absolute_paths:
+        resolved = Path(path).expanduser().resolve()
+        for root in conversion._CONVERSION_ROOTS:
+            if resolved == Path(root) or resolved.is_relative_to(root):
+                return root
+    return conversion._CONVERSION_ROOTS[0]
+
+
 def _prepare_arguments(
     request: WhiteboxRunRequest,
     temp_paths: list[Path],
@@ -807,6 +831,7 @@ def _prepare_arguments(
     }
     args: dict[str, Any] = {}
     working_directory: str | None = None
+    absolute_paths: list[str] = []
     for name, value in request.parameters.items():
         spec = specs.get(str(name), {})
         kind = str(spec.get("kind") or "")
@@ -821,6 +846,10 @@ def _prepare_arguments(
             # could be bypassed by mislabelling a path parameter; validate by the
             # value's shape instead.
             _ensure_within_roots(value)
+            # Remember absolute path args so the cwd pin can target the root they
+            # live under in a multi-root deployment.
+            if Path(value).expanduser().is_absolute():
+                absolute_paths.append(value)
         batch_directory = _batch_working_directory(value, spec)
         if batch_directory:
             _ensure_within_roots(batch_directory)
@@ -844,9 +873,11 @@ def _prepare_arguments(
     # sidecar's own (WORKDIR /app in the Docker image), letting a relative value
     # read or write outside GEOLIBRE_CONVERSION_ROOTS. Pinning cwd to a root
     # keeps relative paths inside the sandbox. Set after default outputs are
-    # generated so their `not working_directory` condition still holds.
+    # generated so their `not working_directory` condition still holds. The root
+    # is chosen from the run's absolute paths (so multi-root deployments resolve
+    # relative paths under the right root), falling back to the first root.
     if working_directory is None and conversion._CONVERSION_ROOTS:
-        working_directory = conversion._CONVERSION_ROOTS[0]
+        working_directory = _pinned_working_directory(absolute_paths)
 
     # Defense in depth: the cwd pin above confines a plain relative arg, but if an
     # allowlisted root contains a symlink pointing outside it, a relative value

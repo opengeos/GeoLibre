@@ -228,6 +228,44 @@ def test_whitebox_relative_path_confined_by_cwd(
     assert working_directory == str(root.resolve())
 
 
+def test_whitebox_cwd_pins_to_root_of_absolute_input(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """With multiple roots, the cwd pins to the root holding an absolute arg."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    root0 = tmp_path / "data"
+    root0.mkdir()
+    root1 = tmp_path / "scratch"
+    root1.mkdir()
+    monkeypatch.setattr(
+        conversion,
+        "_CONVERSION_ROOTS",
+        [str(root0.resolve()), str(root1.resolve())],
+    )
+
+    tool = {
+        "id": "t",
+        "params": [
+            {"name": "input", "kind": "raster_in"},
+            {"name": "output", "kind": "raster_out"},
+        ],
+    }
+    # Absolute input under the *second* root; relative output should resolve
+    # there too, so the cwd is pinned to root1 rather than root0.
+    request = WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"input": str(root1 / "dem.tif"), "output": "out.tif"},
+        tool=tool,
+    )
+    _, working_directory = _prepare_arguments(request, [])
+    assert working_directory == str(root1.resolve())
+
+
 def test_whitebox_relative_path_through_symlink_is_rejected(
     monkeypatch: pytest.MonkeyPatch, tmp_path
 ) -> None:

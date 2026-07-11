@@ -598,6 +598,11 @@ fn is_disallowed_ip(ip: std::net::IpAddr) -> bool {
                 );
                 return is_disallowed_ip(IpAddr::V4(embedded));
             }
+            // Not handled: 6to4 (2002::/16) and Teredo (2001::/32) also embed an
+            // IPv4 address, so e.g. 2002:a9fe:a9fe:: could reach 169.254.169.254.
+            // These transition mechanisms are effectively defunct and unrouted on
+            // modern hosts, so the practical risk is negligible; noted so this
+            // isn't mistaken for full coverage of every IPv4-embedding form.
             v6.is_unspecified()
                 || v6.is_multicast()
                 // fe80::/10 link-local

@@ -86,7 +86,11 @@ async def require_sidecar_token(request: Request, call_next):
 
 # Reject requests whose Host header is not a loopback name, blocking
 # DNS-rebinding attacks that would otherwise let a remote page treat the sidecar
-# as same-origin. ``testserver`` is Starlette's TestClient default host.
+# as same-origin. ``testserver`` is Starlette's TestClient default host. These
+# are the IPv4 loopback names uvicorn binds (``--host 127.0.0.1``); no IPv6
+# loopback (``::1``) is listed because the server never binds it — and
+# TrustedHostMiddleware's ``Host.split(":")[0]`` mis-parses a bracketed
+# ``[::1]:port`` anyway, so IPv6 binding would need revisiting here first.
 app.add_middleware(
     TrustedHostMiddleware,
     allowed_hosts=["localhost", "127.0.0.1", "testserver"],
