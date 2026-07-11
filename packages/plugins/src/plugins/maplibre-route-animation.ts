@@ -208,8 +208,9 @@ class RouteAnimationEngine {
     this.handleStyleData = this.handleStyleData.bind(this);
     this.tick = this.tick.bind(this);
     map.on("styledata", this.handleStyleData);
+    // setRoute() starts the animation loop itself when settings.playing and the
+    // route has length, so no extra play() call is needed here.
     this.setRoute(coords);
-    if (settings.playing && this.totalMeters > 0) this.play();
   }
 
   getMapInstance(): MapLibreMap {
@@ -394,6 +395,11 @@ class RouteAnimationEngine {
     }
     if (this.map.getSource(TRAIL_SOURCE_ID)) {
       this.map.removeSource(TRAIL_SOURCE_ID);
+    }
+    // Drop the generated arrow sprite too, so teardown leaves no leftover state.
+    if (this.map.hasImage(ARROW_ICON_ID)) {
+      this.map.removeImage(ARROW_ICON_ID);
+      this.iconColor = "";
     }
   }
 
@@ -612,6 +618,12 @@ export function setRouteAnimationRoute(coords: LngLat[]): void {
   routeCoords = coords;
   if (unchanged) return;
   engine?.setRoute(coords);
+  // If the route can no longer be animated (e.g. the selected layer was deleted),
+  // clear `playing` so the panel doesn't keep showing a disabled Pause button.
+  if (coords.length < 2 && settings.playing) {
+    settings = { ...settings, playing: false };
+    notifyState();
+  }
 }
 
 /**

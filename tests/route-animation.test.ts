@@ -288,6 +288,20 @@ describe("route-animation store", () => {
     assert.equal(getRouteAnimationSettings().progress, 0.5);
   });
 
+  it("stops playback when the route becomes unanimatable", () => {
+    resetStore();
+    setRouteAnimationRoute([
+      [0, 0],
+      [1, 1],
+    ]);
+    setRouteAnimationSettings({ playing: true });
+    assert.equal(getRouteAnimationSettings().playing, true);
+    // The selected layer disappears → empty route → playback must stop so the
+    // panel doesn't show a stuck (disabled) Pause button.
+    setRouteAnimationRoute([]);
+    assert.equal(getRouteAnimationSettings().playing, false);
+  });
+
   it("wraps progress when looping and stops at the end otherwise", () => {
     resetStore();
     setRouteAnimationSettings({ loop: true, progress: 0.9, playing: true });
