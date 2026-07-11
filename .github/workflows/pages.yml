@@ -66,6 +66,11 @@ jobs:
           # bare name below so vite.config.ts can expose local/CI test setups.
           VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          # Mapillary access token, baked into the client bundle so the
+          # Mapillary/Street View plugins work without each visitor pasting a
+          # token. It ends up publicly readable in the served JS, so it is not a
+          # true secret; a repo variable works as well as a secret here.
+          VITE_MAPILLARY_ACCESS_TOKEN: ${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
           # Public relay URL (baked into the client bundle), not a secret. Lights
           # up live collaboration; requires the workers/collab relay to be
           # deployed (see docs/collaboration.md).

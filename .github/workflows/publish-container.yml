@@ -65,5 +65,6 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           build-args: |
             VITE_GEE_OAUTH_CLIENT_ID=${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+            VITE_MAPILLARY_ACCESS_TOKEN=${{ secrets.VITE_MAPILLARY_ACCESS_TOKEN || vars.VITE_MAPILLARY_ACCESS_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
