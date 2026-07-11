@@ -77,7 +77,16 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     getRouteAnimationSnapshot,
     getRouteAnimationSnapshot,
   );
-  const layers = useAppStore((s) => s.layers);
+  // A stable key that only changes when geojson layers are added/removed/reordered
+  // — NOT on unrelated per-layer edits (opacity/visibility/style rebuild the whole
+  // `layers` array). Keying the effects below on this instead of the array avoids
+  // re-resolving geometry (and resetting playback) on every unrelated layer tweak.
+  const geojsonLayerKey = useAppStore((s) =>
+    s.layers
+      .filter((layer) => layer.type === "geojson")
+      .map((layer) => layer.id)
+      .join(","),
+  );
   const [lineLayers, setLineLayers] = useState<LineLayerOption[]>([]);
   const [collapsed, setCollapsed] = useState(false);
   const [position, setPosition] = useState(() => ({
@@ -99,36 +108,46 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
 
   // Discover which geojson layers contain line geometry. Resolution is async for
   // Add Vector Layer geojson-mode layers (features live in a map source), so this
-  // runs in an effect and guards against overlapping runs.
+  // runs in an effect and guards against overlapping runs. Candidates resolve
+  // concurrently. Fresh layers are read via `getState()` so this depends only on
+  // the geojson-layer key, not the churning `layers` array.
   useEffect(() => {
     let cancelled = false;
     const map = mapControllerRef.current?.getMap() ?? undefined;
-    const candidates = layers.filter((layer) => layer.type === "geojson");
+    const candidates = useAppStore
+      .getState()
+      .layers.filter((layer) => layer.type === "geojson");
     (async () => {
-      const matches: LineLayerOption[] = [];
-      for (const layer of candidates) {
-        const fc = await resolveLayerGeojson(layer, map).catch(() => null);
-        if (cancelled) return;
-        if (fc && flattenToLine(fc).length >= 2) {
-          matches.push({ id: layer.id, name: layer.name });
-        }
+      const resolved = await Promise.all(
+        candidates.map(async (layer) => {
+          const fc = await resolveLayerGeojson(layer, map).catch(() => null);
+          return fc && flattenToLine(fc).length >= 2
+            ? { id: layer.id, name: layer.name }
+            : null;
+        }),
+      );
+      if (!cancelled) {
+        setLineLayers(
+          resolved.filter((m): m is LineLayerOption => m !== null),
+        );
       }
-      if (!cancelled) setLineLayers(matches);
     })();
     return () => {
       cancelled = true;
     };
-  }, [layers, mapControllerRef]);
+  }, [geojsonLayerKey, mapControllerRef]);
 
-  // Resolve the selected layer's geometry and hand it to the engine. Re-runs when
-  // the selection changes or the layer's data updates.
+  // Resolve the selected layer's geometry and hand it to the engine. Re-runs on
+  // selection change or when the set of geojson layers changes (not on unrelated
+  // per-layer edits). `setRouteAnimationRoute` no-ops when the geometry is
+  // unchanged, so playback is never reset by this.
   useEffect(() => {
     let cancelled = false;
     if (!layerId) {
       setRouteAnimationRoute([]);
       return;
     }
-    const layer = layers.find((l) => l.id === layerId);
+    const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!layer) {
       setRouteAnimationRoute([]);
       return;
@@ -142,7 +161,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [layerId, layers, mapControllerRef]);
+  }, [layerId, geojsonLayerKey, mapControllerRef]);
 
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button,input,select")) return;

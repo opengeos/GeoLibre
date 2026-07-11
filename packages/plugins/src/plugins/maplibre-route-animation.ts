@@ -595,16 +595,23 @@ export function setRouteAnimationProgress(progress: number): void {
 /**
  * Hand the engine the geometry of the currently selected line layer. Called by
  * the panel, which has the store/map access needed to resolve a layer to
- * coordinates. Resets progress to the start when the route changes.
+ * coordinates.
+ *
+ * This does NOT touch progress: the panel resets progress to 0 when the user
+ * picks a different layer, and a project load restores its saved progress. So a
+ * plain re-resolution (e.g. an unrelated layer edit re-running the panel effect)
+ * or a load must never snap a running/restored animation back to the start. When
+ * the coordinates are unchanged the engine already holds them, so it is a no-op.
  */
 export function setRouteAnimationRoute(coords: LngLat[]): void {
+  const unchanged =
+    coords.length === routeCoords.length &&
+    coords.every(
+      (c, i) => c[0] === routeCoords[i][0] && c[1] === routeCoords[i][1],
+    );
   routeCoords = coords;
-  const shouldResetProgress = settings.progress !== 0;
-  if (shouldResetProgress) {
-    settings = { ...settings, progress: 0 };
-  }
+  if (unchanged) return;
   engine?.setRoute(coords);
-  if (shouldResetProgress) notifyState();
 }
 
 /**
@@ -643,6 +650,9 @@ export function restoreRouteAnimation(
     ...DEFAULT_ROUTE_ANIMATION_SETTINGS,
   });
   next.playing = false;
+  // Drop the previous project's geometry so the engine doesn't briefly draw a
+  // stale route on the new map; the panel re-resolves it from `layerId`.
+  routeCoords = [];
   const shouldOpen = Boolean(
     state && typeof state === "object" && (state as { open?: unknown }).open,
   );

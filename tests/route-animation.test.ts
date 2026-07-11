@@ -12,9 +12,18 @@ import {
   normalizeRouteAnimationSettings,
   restoreRouteAnimation,
   setRouteAnimationProgress,
+  setRouteAnimationRoute,
   setRouteAnimationSettings,
   toggleRouteAnimationPlaying,
 } from "../packages/plugins/src/plugins/maplibre-route-animation";
+import {
+  bearingBetween,
+  flattenToLine,
+  measureLine,
+  pointAlongLine,
+  sliceLineAtDistance,
+  type LngLat,
+} from "../packages/plugins/src/plugins/route-animation-geometry";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
 
 // A minimal app whose map is never available, so the module's store logic runs
@@ -27,14 +36,6 @@ function resetStore(): void {
   restoreRouteAnimation(mapLessApp, undefined);
   setRouteAnimationSettings({ ...DEFAULT_ROUTE_ANIMATION_SETTINGS });
 }
-import {
-  bearingBetween,
-  flattenToLine,
-  measureLine,
-  pointAlongLine,
-  sliceLineAtDistance,
-  type LngLat,
-} from "../packages/plugins/src/plugins/route-animation-geometry";
 
 // A simple two-segment path: due east, then due north. Coordinates are chosen
 // near the equator so the two legs are close to equal length in meters.
@@ -267,6 +268,24 @@ describe("route-animation store", () => {
     // Out-of-range scrubs clamp.
     setRouteAnimationProgress(2);
     assert.equal(getRouteAnimationSettings().progress, 1);
+  });
+
+  it("does not reset progress when the route is (re)set", () => {
+    resetStore();
+    setRouteAnimationProgress(0.5);
+    // A fresh route mid-playback must not snap back to the start — the panel
+    // owns the reset-on-selection, not the route setter.
+    setRouteAnimationRoute([
+      [0, 0],
+      [1, 1],
+    ]);
+    assert.equal(getRouteAnimationSettings().progress, 0.5);
+    // Re-setting the identical route is likewise a no-op for progress.
+    setRouteAnimationRoute([
+      [0, 0],
+      [1, 1],
+    ]);
+    assert.equal(getRouteAnimationSettings().progress, 0.5);
   });
 
   it("wraps progress when looping and stops at the end otherwise", () => {
