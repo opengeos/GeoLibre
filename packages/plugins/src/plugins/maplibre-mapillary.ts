@@ -313,10 +313,12 @@ function addCoverage(activeMap: MapLibreMap): void {
     nativeLayerIds: [OVERVIEW_LAYER_ID, IMAGE_LAYER_ID],
     sourceIds: [SOURCE_ID],
     opacity: 0.9,
-    // Points: green fill with a thin white outline.
+    // Points: green fill with a thin white outline. A small radius keeps the
+    // dense low-zoom overview points from smothering the map (the radius is
+    // shared with the high-zoom image points, which read fine at this size).
     style: {
       fillColor: COVERAGE_COLOR,
-      circleRadius: 4,
+      circleRadius: 3,
       strokeColor: "#ffffff",
       strokeWidth: 1,
       fillOpacity: 0.9,
