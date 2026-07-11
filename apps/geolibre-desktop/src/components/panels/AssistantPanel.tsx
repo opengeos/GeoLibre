@@ -232,8 +232,19 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     [mapControllerRef],
   );
 
-  // Tear down the session and any in-flight run on unmount.
-  useEffect(() => () => session.cancel(), [session]);
+  // Tear down the session and any in-flight run on unmount. Also decline any
+  // pending code-approval prompts so their blocked tool promises don't hang if
+  // the panel unmounts while the queue is non-empty.
+  useEffect(
+    () => () => {
+      session.cancel();
+      setCodeQueue((queue) => {
+        for (const item of queue) item.resolve(false);
+        return [];
+      });
+    },
+    [session],
+  );
 
   // On unmount mid-drag, tear down the drag's window listeners.
   useEffect(() => () => resizeCleanupRef.current?.(), []);

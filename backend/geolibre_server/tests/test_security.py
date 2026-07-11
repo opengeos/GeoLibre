@@ -198,6 +198,61 @@ def test_whitebox_path_check_ignores_mislabeled_kind(
     assert args["input"] == "EPSG:4326"
 
 
+def test_whitebox_relative_path_confined_by_cwd(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """A relative path arg is confined by pinning the subprocess cwd to a root.
+
+    A bare filename like ``pwned.tif`` is not "escape-shaped", so it isn't
+    rejected — instead the run's working directory is pinned to an allowlisted
+    root so Whitebox resolves it inside the sandbox rather than the sidecar's cwd.
+    """
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {"id": "t", "params": [{"name": "output", "kind": "raster_out"}]}
+    request = WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"output": "pwned.tif"},
+        tool=tool,
+    )
+    args, working_directory = _prepare_arguments(request, [])
+    assert args["output"] == "pwned.tif"
+    assert working_directory == str(root.resolve())
+
+
+def test_whitebox_null_byte_path_is_rejected(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """An embedded NUL byte yields a clean 403, not an uncaught 500."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {"id": "t", "params": [{"name": "input", "kind": "raster_in"}]}
+    request = WhiteboxRunRequest(
+        tool_id="t",
+        parameters={"input": "/data/x\x00y.tif"},
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(request, [])
+    assert excinfo.value.status_code == 403
+
+
 def test_whitebox_paths_unconfined_without_roots(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

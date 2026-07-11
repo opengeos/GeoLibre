@@ -276,7 +276,20 @@ fn read_project_file(path: String) -> Result<String, String> {
             "Refusing to read \"{path}\": not an absolute local project file path"
         ));
     }
-    fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
+    // Resolve symlinks and re-check the extension, so a symlink named
+    // `*.geolibre`/`*.geolibre.json` can't redirect the read to an arbitrary
+    // target (e.g. `~/notes.geolibre.json -> ~/.ssh/id_rsa`). Only the resolved
+    // extension is re-checked (not the full guard): `canonicalize` yields a
+    // `\\?\C:\…` verbatim path on Windows, which the UNC check would reject.
+    let canonical =
+        fs::canonicalize(&path).map_err(|error| format!("Could not read project file: {error}"))?;
+    let resolved = canonical.to_string_lossy().to_ascii_lowercase();
+    if !(resolved.ends_with(".geolibre") || resolved.ends_with(".geolibre.json")) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a non-project file"
+        ));
+    }
+    fs::read_to_string(&canonical).map_err(|error| format!("Could not read project file: {error}"))
 }
 
 /// Local vector file extensions the restore path may re-read (lowercased, no
@@ -1389,11 +1402,23 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     }
 
     if sidecar_health_is_ready(&base_url) {
-        return Ok(SidecarServerInfo {
-            base_url,
-            port: SIDECAR_PORT,
-            token: sidecar_token().to_string(),
-        });
+        if sidecar_accepts_token(&base_url, sidecar_token()) {
+            return Ok(SidecarServerInfo {
+                base_url,
+                port: SIDECAR_PORT,
+                token: sidecar_token().to_string(),
+            });
+        }
+        // A sidecar is listening but rejects this session's token — an orphan
+        // from a previous launch still holding the port. We can't reclaim it
+        // (no child handle here, and /shutdown is token-protected), so fail with
+        // a clear message rather than handing back a token that 401s every call.
+        return Err(
+            "A GeoLibre processing server from a previous session is still \
+             running on port 8765 but does not accept this session's token. \
+             Quit any stray GeoLibre processes and try again."
+                .to_string(),
+        );
     }
 
     let uv = ensure_managed_uv(&app)?;
@@ -1801,6 +1826,30 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
     };
     client
         .get(format!("{base_url}/health"))
+        .send()
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
+}
+
+/// Whether the sidecar already listening at `base_url` accepts `token`.
+///
+/// `/health` is token-exempt, so it cannot reveal a token mismatch. This probes
+/// `/algorithms` (a cheap authenticated endpoint) *with* the token so an orphan
+/// sidecar from a previous launch — started with a different per-launch token,
+/// and not killed because `Drop` doesn't run on `SIGKILL` — is detected rather
+/// than silently 401ing every later request. A tokenless dev sidecar
+/// (`GEOLIBRE_SIDECAR_TOKEN` unset) accepts any header and returns 200, so it is
+/// still reused.
+fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
+    let Ok(client) = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+    else {
+        return false;
+    };
+    client
+        .get(format!("{base_url}/algorithms"))
+        .header("x-geolibre-token", token)
         .send()
         .map(|response| response.status().is_success())
         .unwrap_or(false)

@@ -29,10 +29,23 @@ export interface PluginBundleForHashing {
 export async function computePluginBundleHash(
   bundle: PluginBundleForHashing,
 ): Promise<string> {
-  // NUL-separate so entry/style boundaries can't be shifted to collide.
-  const payload = `${bundle.entrySource}\u0000${bundle.styleSource ?? ""}`;
-  const data = new TextEncoder().encode(payload);
-  const digest = await crypto.subtle.digest("SHA-256", data);
+  // Hash entry and style independently, then hash the two digests together --
+  // rather than concatenating the raw sources with a delimiter. A delimiter can
+  // be forged: a NUL byte is legal inside JS/CSS source, so an attacker
+  // controlling what is served could shift the entry/style boundary across a
+  // planted NUL and make a later, different (entry, style) pair reproduce the
+  // pinned hash, defeating change detection. Fixed-length digests have no such
+  // boundary ambiguity.
+  const encoder = new TextEncoder();
+  const [entryDigest, styleDigest] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(bundle.entrySource)),
+    crypto.subtle.digest("SHA-256", encoder.encode(bundle.styleSource ?? "")),
+  ]);
+  const combined = new Uint8Array([
+    ...new Uint8Array(entryDigest),
+    ...new Uint8Array(styleDigest),
+  ]);
+  const digest = await crypto.subtle.digest("SHA-256", combined);
   return Array.from(new Uint8Array(digest))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");

@@ -19,7 +19,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from .conversion import _is_within_roots
+from . import conversion
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -745,7 +745,13 @@ def _ensure_within_roots(path_value: str) -> None:
     """
     # _is_within_roots returns True when no allowlist is configured, so this is a
     # no-op on desktop and only confines paths in the Docker/web build.
-    if not _is_within_roots(Path(path_value).expanduser()):
+    try:
+        within_roots = conversion._is_within_roots(Path(path_value).expanduser())
+    except ValueError as error:
+        # e.g. an embedded NUL byte makes Path.resolve() raise; reject with a 403
+        # rather than letting it surface as an uncaught 500.
+        raise HTTPException(status_code=403, detail=f"Invalid path: {error}") from error
+    if not within_roots:
         raise HTTPException(
             status_code=403,
             detail="Path is outside the allowed processing directories",
@@ -830,6 +836,17 @@ def _prepare_arguments(
         kind = str(spec.get("kind") or "")
         if kind.endswith("_out") and not args.get(name) and not working_directory:
             args[name] = _default_output_path(request.tool_id, name, kind)
+
+    # When a root allowlist is configured and this is not a batch run, pin the
+    # subprocess working directory to an allowlisted root. Whitebox resolves a
+    # *relative* path argument (e.g. "out.tif" — not "escape-shaped", so it skips
+    # _ensure_within_roots) against its cwd; without this that cwd is the
+    # sidecar's own (WORKDIR /app in the Docker image), letting a relative value
+    # read or write outside GEOLIBRE_CONVERSION_ROOTS. Pinning cwd to a root
+    # keeps relative paths inside the sandbox. Set after default outputs are
+    # generated so their `not working_directory` condition still holds.
+    if working_directory is None and conversion._CONVERSION_ROOTS:
+        working_directory = conversion._CONVERSION_ROOTS[0]
     return args, working_directory
 
 
