@@ -26,6 +26,16 @@ if [ -n "${GEOLIBRE_AUTH_USER:-}" ] || [ -n "${GEOLIBRE_AUTH_PASSWORD:-}" ]; the
       exit 1
       ;;
   esac
+  # An embedded newline would make `openssl passwd -stdin` hash each line
+  # separately and corrupt the single-entry htpasswd; fail loudly instead.
+  NL='
+'
+  case "${GEOLIBRE_AUTH_USER}${GEOLIBRE_AUTH_PASSWORD}" in
+    *"$NL"*)
+      echo "ERROR: GEOLIBRE_AUTH_USER and GEOLIBRE_AUTH_PASSWORD must not contain newlines." >&2
+      exit 1
+      ;;
+  esac
   # -stdin keeps the password out of the openssl process's argv.
   HASH=$(printf '%s\n' "$GEOLIBRE_AUTH_PASSWORD" | openssl passwd -apr1 -stdin)
   printf '%s:%s\n' "$GEOLIBRE_AUTH_USER" "$HASH" > "$HTPASSWD"

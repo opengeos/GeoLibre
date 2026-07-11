@@ -203,6 +203,11 @@ The browser prompts for the credentials on first visit. `/healthz` stays
 unauthenticated so the container health check keeps working. When the
 variables are unset (the default), no authentication is applied.
 
+As with any Docker env var, a password passed with `-e` lands in your shell
+history and is readable on the host via `docker inspect`. Beyond quick local
+testing, prefer `--env-file` with a permission-restricted file, or a secrets
+manager.
+
 This is a single shared credential, not per-user accounts. Basic Auth sends
 credentials with every request, so on anything beyond a trusted local network
 put a TLS-terminating reverse proxy (Caddy, Traefik, nginx) in front of the
