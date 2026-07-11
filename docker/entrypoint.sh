@@ -25,14 +25,21 @@ if [ -n "${GEOLIBRE_AUTH_USER:-}" ] || [ -n "${GEOLIBRE_AUTH_PASSWORD:-}" ]; the
       echo "ERROR: GEOLIBRE_AUTH_USER must not contain ':' (htpasswd field separator)." >&2
       exit 1
       ;;
+    '#'*)
+      echo "ERROR: GEOLIBRE_AUTH_USER must not start with '#' (htpasswd treats such lines as comments)." >&2
+      exit 1
+      ;;
   esac
   # An embedded newline would make `openssl passwd -stdin` hash each line
-  # separately and corrupt the single-entry htpasswd; fail loudly instead.
+  # separately and corrupt the single-entry htpasswd; a CR (e.g. from a
+  # CRLF-terminated --env-file) would silently become part of the stored
+  # credential. Fail loudly instead.
   NL='
 '
+  CR=$(printf '\r')
   case "${GEOLIBRE_AUTH_USER}${GEOLIBRE_AUTH_PASSWORD}" in
-    *"$NL"*)
-      echo "ERROR: GEOLIBRE_AUTH_USER and GEOLIBRE_AUTH_PASSWORD must not contain newlines." >&2
+    *"$NL"*|*"$CR"*)
+      echo "ERROR: GEOLIBRE_AUTH_USER and GEOLIBRE_AUTH_PASSWORD must not contain newlines or carriage returns." >&2
       exit 1
       ;;
   esac
