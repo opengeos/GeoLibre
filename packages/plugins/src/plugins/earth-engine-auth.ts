@@ -247,17 +247,18 @@ async function authenticateEarthEngineViaTauri(
     { clientId: oauthClientId },
   );
 
-  const popup = window.open(
-    session.url,
-    "geolibre-earth-engine-oauth",
-    "popup,width=520,height=680",
-  );
-  if (!popup) {
-    throw new Error("Earth Engine sign-in popup was blocked.");
-  }
+  // Open the loopback OAuth helper page (served by the Rust
+  // `start_earth_engine_oauth` command on 127.0.0.1) in the SYSTEM BROWSER, not
+  // an in-app child webview. Routing it through window.open spawned a second app
+  // window on Linux (WebKitGTK) and crashed the macOS WKWebView, because Tauri's
+  // on_new_window handler turns window.open into a native child window. The
+  // browser runs Google Identity Services against the registered
+  // http://localhost origin and POSTs the token back to the loopback server,
+  // which we poll for below.
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(session.url);
 
-  const token = await waitForTauriEarthEngineToken(session.state, popup);
-  popup.close();
+  const token = await waitForTauriEarthEngineToken(session.state);
   return normalizeEarthEngineAccessToken(token);
 }
 
@@ -269,21 +270,16 @@ async function loadEarthEngine(): Promise<EarthEngineApi> {
 
 async function waitForTauriEarthEngineToken(
   state: string,
-  popup: Window,
 ): Promise<TauriEarthEngineOAuthToken> {
-  let closedPolls = 0;
+  // The helper page now runs in the system browser, so there is no popup window
+  // handle to watch for cancellation; poll the loopback server for the token and
+  // fall back to the timeout below if the user abandons the browser sign-in.
   for (let poll = 0; poll < 300; poll += 1) {
     const token = await invoke<TauriEarthEngineOAuthToken | null>(
       "poll_earth_engine_oauth",
       { stateId: state },
     );
     if (token) return token;
-    if (popup.closed) {
-      closedPolls += 1;
-      if (closedPolls > 2) {
-        throw new Error("Earth Engine sign-in was cancelled.");
-      }
-    }
     await delay(1000);
   }
   throw new Error("Earth Engine sign-in timed out.");
