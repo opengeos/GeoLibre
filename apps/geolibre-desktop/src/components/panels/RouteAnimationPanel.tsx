@@ -149,7 +149,11 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     }
     const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
     if (!layer) {
+      // The selected layer was removed from the project: clear the route and the
+      // stale selection so the dropdown falls back to the placeholder and a save
+      // doesn't persist a layerId that no longer exists.
       setRouteAnimationRoute([]);
+      setRouteAnimationSettings({ layerId: null });
       return;
     }
     const map = mapControllerRef.current?.getMap() ?? undefined;

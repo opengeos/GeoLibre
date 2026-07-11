@@ -405,10 +405,22 @@ class RouteAnimationEngine {
 
   /** Draw the marker (and trail) at the current progress; optionally follow. */
   render(): void {
-    if (this.destroyed || this.totalMeters <= 0) return;
+    if (this.destroyed) return;
     const markerSource = this.map.getSource(MARKER_SOURCE_ID) as
       | GeoJSONSource
       | undefined;
+    const trailSource = this.map.getSource(TRAIL_SOURCE_ID) as
+      | GeoJSONSource
+      | undefined;
+
+    // No animatable route: actively clear the marker/trail so a stale or
+    // placeholder feature (e.g. the initial [0, 0] point) never lingers on the
+    // map before a layer is picked or after the selected layer is removed.
+    if (this.totalMeters <= 0) {
+      markerSource?.setData({ type: "FeatureCollection", features: [] });
+      trailSource?.setData(emptyLine());
+      return;
+    }
     if (!markerSource) return;
 
     const distance = this.settings.progress * this.totalMeters;
@@ -420,9 +432,6 @@ class RouteAnimationEngine {
     markerSource.setData(markerFeature(coord, bearing));
 
     if (this.settings.showTrail) {
-      const trailSource = this.map.getSource(TRAIL_SOURCE_ID) as
-        | GeoJSONSource
-        | undefined;
       trailSource?.setData(
         lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
       );
@@ -602,9 +611,18 @@ export function toggleRouteAnimationPlaying(): void {
   });
 }
 
-/** Scrub to an absolute progress in `[0, 1]` (used by the panel slider). */
+/**
+ * Scrub to an absolute progress in `[0, 1]` (used by the panel slider). Uses the
+ * engine's lightweight `applyProgress` path rather than the full `applySettings`
+ * reconciliation, so dragging the slider only re-renders the marker/trail
+ * instead of re-running layout/paint updates on every tick.
+ */
 export function setRouteAnimationProgress(progress: number): void {
-  setRouteAnimationSettings({ progress });
+  const clamped = Math.max(0, Math.min(1, progress));
+  if (!Number.isFinite(clamped) || clamped === settings.progress) return;
+  settings = { ...settings, progress: clamped };
+  engine?.applyProgress(clamped);
+  notifyState();
 }
 
 /**
@@ -629,8 +647,11 @@ export function setRouteAnimationRoute(coords: LngLat[]): void {
   engine?.setRoute(coords);
   // If the route can no longer be animated (e.g. the selected layer was deleted),
   // clear `playing` so the panel doesn't keep showing a disabled Pause button.
+  // Sync the engine too, otherwise its stale `this.settings.playing === true`
+  // would auto-start the loop the next time a valid route is set.
   if (coords.length < 2 && settings.playing) {
     settings = { ...settings, playing: false };
+    engine?.applySettings(settings);
     notifyState();
   }
 }
@@ -686,6 +707,11 @@ export function restoreRouteAnimation(
     notifyState();
     changed = true;
   }
+  // Push the restored settings into an already-attached engine (panel open on
+  // the same map, so attachEngine below is a no-op): otherwise the marker/trail
+  // keep the previous project's color/markerStyle/speed/playing until the user
+  // touches a control. A fresh engine picks these up via its constructor.
+  engine?.applySettings(settings);
   const wasVisible = panelVisible;
   if (shouldOpen) openRouteAnimationPanel(app);
   else closeRouteAnimationPanel(app);
