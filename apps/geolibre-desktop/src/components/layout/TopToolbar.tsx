@@ -109,6 +109,7 @@ import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { LoadFeaturesIntoEditorDialog } from "./LoadFeaturesIntoEditorDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { RecordTourDialog } from "./RecordTourDialog";
+import { RecordVideoDialog } from "./RecordVideoDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { OfflineManagerDialog } from "./OfflineManagerDialog";
@@ -359,6 +360,7 @@ export function TopToolbar({
   const [offlineManagerOpen, setOfflineManagerOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [recordTourOpen, setRecordTourOpen] = useState(false);
+  const [recordVideoOpen, setRecordVideoOpen] = useState(false);
   const [georeferencerOpen, setGeoreferencerOpen] = useState(false);
   const [setViewOpen, setSetViewOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -1073,6 +1075,7 @@ export function TopToolbar({
           onTogglePrecipitation={() => toggle(PRECIPITATION_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
           onOpenRecordTour={() => setRecordTourOpen(true)}
+          onOpenRecordVideo={() => setRecordVideoOpen(true)}
         />
       )}
       {isMenuVisible(uiProfile, "plugins") && (
@@ -1129,6 +1132,11 @@ export function TopToolbar({
       <RecordTourDialog
         open={recordTourOpen}
         onOpenChange={setRecordTourOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <RecordVideoDialog
+        open={recordVideoOpen}
+        onOpenChange={setRecordVideoOpen}
         mapControllerRef={mapControllerRef}
       />
       <GeoreferencerDialog

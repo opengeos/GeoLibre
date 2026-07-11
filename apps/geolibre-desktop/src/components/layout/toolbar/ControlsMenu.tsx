@@ -36,7 +36,12 @@ import {
   DropdownMenuTrigger,
   Slider,
 } from "@geolibre/ui";
-import { ClipboardList, SlidersHorizontal, Video } from "lucide-react";
+import {
+  ClipboardList,
+  Clapperboard,
+  SlidersHorizontal,
+  Video,
+} from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ToolbarPanels } from "../../../hooks/useToolbarPanels";
@@ -70,6 +75,7 @@ interface ControlsMenuProps {
   onTogglePrecipitation: () => void;
   onOpenFieldCollection: () => void;
   onOpenRecordTour: () => void;
+  onOpenRecordVideo: () => void;
 }
 
 /** The Controls menu: built-in map controls, atmosphere/routing toggles, and panels. */
@@ -95,6 +101,7 @@ export function ControlsMenu({
   onTogglePrecipitation,
   onOpenFieldCollection,
   onOpenRecordTour,
+  onOpenRecordVideo,
 }: ControlsMenuProps) {
   const { t } = useTranslation();
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
@@ -103,7 +110,9 @@ export function ControlsMenu({
   // so the submenu is disabled while the map is in a flat projection (#783). The
   // GlobeControl toggle syncs this preference via the map "projectiontransition"
   // event, so the menu reacts the moment the user switches projections.
-  const globeActive = useAppStore((s) => s.preferences.map.projection === "globe");
+  const globeActive = useAppStore(
+    (s) => s.preferences.map.projection === "globe"
+  );
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
   const setPreferences = useAppStore((s) => s.setPreferences);
   // The globe cannot spin while the map bounds are locked, so enabling spin
@@ -133,7 +142,7 @@ export function ControlsMenu({
   // any visible item, so the separator below it isn't left orphaned.
   const anyTopControls =
     MAP_CONTROL_ITEMS.some((control) =>
-      show(`controls.mapControl.${control.id}`),
+      show(`controls.mapControl.${control.id}`)
     ) ||
     show("controls.atmosphereEffects") ||
     show("controls.clouds") ||
@@ -175,7 +184,7 @@ export function ControlsMenu({
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {MAP_CONTROL_ITEMS.filter((control) =>
-            show(`controls.mapControl.${control.id}`),
+            show(`controls.mapControl.${control.id}`)
           ).map((control) => (
             <DropdownMenuItem
               key={control.id}
@@ -302,7 +311,8 @@ export function ControlsMenu({
           )}
           {anyMiddleControls &&
             (show("controls.fieldCollection") ||
-              show("controls.recordTour")) && <DropdownMenuSeparator />}
+              show("controls.recordTour") ||
+              show("controls.recordVideo")) && <DropdownMenuSeparator />}
           {show("controls.fieldCollection") && (
             <DropdownMenuItem onSelect={onOpenFieldCollection}>
               <ClipboardList className="mr-2 h-3.5 w-3.5" />
@@ -313,6 +323,12 @@ export function ControlsMenu({
             <DropdownMenuItem onSelect={onOpenRecordTour}>
               <Video className="mr-2 h-3.5 w-3.5" />
               {t("toolbar.item.recordTour")}
+            </DropdownMenuItem>
+          )}
+          {show("controls.recordVideo") && (
+            <DropdownMenuItem onSelect={onOpenRecordVideo}>
+              <Clapperboard className="mr-2 h-3.5 w-3.5" />
+              {t("toolbar.item.recordVideo")}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

@@ -288,6 +288,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.viewState", menuId: "controls", labelKey: "toolbar.item.viewState", tier: "advanced" },
   { id: "controls.fieldCollection", menuId: "controls", labelKey: "toolbar.item.fieldCollection", tier: "advanced" },
   { id: "controls.recordTour", menuId: "controls", labelKey: "toolbar.item.recordTour", tier: "advanced" },
+  { id: "controls.recordVideo", menuId: "controls", labelKey: "toolbar.item.recordVideo", tier: "advanced" },
   // Settings (the Settings menu and its Language/Layout/Interface entries always show)
   { id: "settings.mapPreferences", menuId: "settings", labelKey: "settings.menu.mapPreferences", tier: "intermediate" },
   { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },
