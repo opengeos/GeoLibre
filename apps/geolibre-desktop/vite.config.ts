@@ -72,6 +72,21 @@ if (!process.env.VITE_CESIUM_TOKEN) {
   }
 }
 
+// Earth Engine OAuth client ID: same bare→prefixed bridge as the Google Maps
+// and Cesium keys. The app reads `import.meta.env.VITE_GEE_OAUTH_CLIENT_ID`, so
+// a bare `GEE_OAUTH_CLIENT_ID` (shell/.zshrc or an .env file) is surfaced under
+// the prefixed name here; otherwise Vite ignores the unprefixed var and the
+// plugin falls back to its hardcoded DEFAULT_GEE_OAUTH_CLIENT_ID.
+if (!process.env.VITE_GEE_OAUTH_CLIENT_ID) {
+  const geeOauthClientId =
+    process.env.GEE_OAUTH_CLIENT_ID ||
+    FILE_ENV.VITE_GEE_OAUTH_CLIENT_ID ||
+    FILE_ENV.GEE_OAUTH_CLIENT_ID;
+  if (geeOauthClientId) {
+    process.env.VITE_GEE_OAUTH_CLIENT_ID = geeOauthClientId;
+  }
+}
+
 // Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
 // (`npm run build`), so their presence flags a desktop build. Used below to drop
 // the service worker from the desktop bundle.

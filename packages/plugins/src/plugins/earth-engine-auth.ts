@@ -3,7 +3,23 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
-  "141292844612-gitmgm28jkmkujonfkrkvdaqjiqt6qkf.apps.googleusercontent.com";
+  "937635412428-qc3albpo6dtm2jdp2o5mk8biqlh0i6vo.apps.googleusercontent.com";
+
+// The OAuth scopes GeoLibre requests for Earth Engine. Deliberately minimal so
+// the app can pass Google's OAuth verification without the broad `cloud-platform`
+// scope: the @google/earthengine SDK requests earthengine + cloud-platform +
+// full drive by default, but GeoLibre only displays tiles/thumbnails and exports
+// to Drive — it never touches Cloud Storage, BigQuery, or project/asset
+// management, so cloud-platform is unnecessary. Keep this in sync with the scope
+// list in the desktop helper page (src-tauri/src/earth_engine_oauth.rs).
+//   - earthengine: request/display Earth Engine map tiles and visualizations.
+//   - drive.file:  the EE control's "Export" writes to Google Drive; drive.file
+//     is the non-sensitive per-file scope, avoiding the restricted full-drive
+//     scope (and its CASA security assessment).
+export const EARTH_ENGINE_OAUTH_SCOPES = [
+  "https://www.googleapis.com/auth/earthengine",
+  "https://www.googleapis.com/auth/drive.file",
+];
 
 export type EarthEngineImportMetaEnv = {
   VITE_GEE_OAUTH_CLIENT_ID?: unknown;
@@ -37,6 +53,7 @@ type EarthEngineApi = {
       onFailure: (error: unknown) => void,
       extraScopes?: unknown,
       onImmediateFailed?: () => void,
+      suppressDefaultScopes?: boolean,
     ) => void;
     authenticateViaPopup?: (
       onSuccess: () => void,
@@ -229,12 +246,16 @@ async function authenticateEarthEngineViaBrowser(
       reject(new Error("Earth Engine OAuth authentication is unavailable."));
       return;
     }
+    // Suppress the SDK's default scopes (earthengine + cloud-platform + full
+    // drive) and request only EARTH_ENGINE_OAUTH_SCOPES, so the web path asks
+    // for the same minimal set as the desktop helper page.
     earthEngine.data.authenticateViaOauth(
       oauthClientId,
       onSuccess,
       onFailure,
-      undefined,
+      EARTH_ENGINE_OAUTH_SCOPES,
       onImmediateFailed,
+      true,
     );
   });
 }
@@ -247,17 +268,18 @@ async function authenticateEarthEngineViaTauri(
     { clientId: oauthClientId },
   );
 
-  const popup = window.open(
-    session.url,
-    "geolibre-earth-engine-oauth",
-    "popup,width=520,height=680",
-  );
-  if (!popup) {
-    throw new Error("Earth Engine sign-in popup was blocked.");
-  }
+  // Open the loopback OAuth helper page (served by the Rust
+  // `start_earth_engine_oauth` command on 127.0.0.1) in the SYSTEM BROWSER, not
+  // an in-app child webview. Routing it through window.open spawned a second app
+  // window on Linux (WebKitGTK) and crashed the macOS WKWebView, because Tauri's
+  // on_new_window handler turns window.open into a native child window. The
+  // browser runs Google Identity Services against the registered
+  // http://localhost origin and POSTs the token back to the loopback server,
+  // which we poll for below.
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(session.url);
 
-  const token = await waitForTauriEarthEngineToken(session.state, popup);
-  popup.close();
+  const token = await waitForTauriEarthEngineToken(session.state);
   return normalizeEarthEngineAccessToken(token);
 }
 
@@ -269,21 +291,16 @@ async function loadEarthEngine(): Promise<EarthEngineApi> {
 
 async function waitForTauriEarthEngineToken(
   state: string,
-  popup: Window,
 ): Promise<TauriEarthEngineOAuthToken> {
-  let closedPolls = 0;
+  // The helper page now runs in the system browser, so there is no popup window
+  // handle to watch for cancellation; poll the loopback server for the token and
+  // fall back to the timeout below if the user abandons the browser sign-in.
   for (let poll = 0; poll < 300; poll += 1) {
     const token = await invoke<TauriEarthEngineOAuthToken | null>(
       "poll_earth_engine_oauth",
       { stateId: state },
     );
     if (token) return token;
-    if (popup.closed) {
-      closedPolls += 1;
-      if (closedPolls > 2) {
-        throw new Error("Earth Engine sign-in was cancelled.");
-      }
-    }
     await delay(1000);
   }
   throw new Error("Earth Engine sign-in timed out.");
