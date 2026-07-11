@@ -23,6 +23,11 @@ const SOURCE_ID = "geolibre-mapillary-coverage";
 const SELECTED_SOURCE_ID = "geolibre-mapillary-selected";
 const SEQUENCE_LAYER_ID = "geolibre-mapillary-sequence";
 const SEQUENCE_HIGHLIGHT_LAYER_ID = "geolibre-mapillary-sequence-highlight";
+// Two point source-layers make up the "images" coverage: `overview` carries the
+// sampled low-zoom points, `image` the full-resolution points once zoomed in.
+// Together they show coverage points at every zoom, including the low zooms where
+// Mapillary serves no sequence lines.
+const OVERVIEW_LAYER_ID = "geolibre-mapillary-overview";
 const IMAGE_LAYER_ID = "geolibre-mapillary-image";
 const SELECTED_LAYER_ID = "geolibre-mapillary-selected-marker";
 // The Layers-panel entries that stand in for the (imperatively added) coverage
@@ -31,11 +36,10 @@ const SELECTED_LAYER_ID = "geolibre-mapillary-selected-marker";
 // hidden, and styled on its own.
 const LINES_STORE_LAYER_ID = "geolibre-mapillary-lines-layer";
 const POINTS_STORE_LAYER_ID = "geolibre-mapillary-points-layer";
-// The point layer carrying a clickable image `id` property.
-const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID];
-// Only draw the individual image points once zoomed in; at lower zooms the
-// coverage shows as sequence lines only, since a whole region's worth of dots is
-// overwhelming (mapillary.com/app behaves the same way).
+// The point layers carrying a clickable image `id` property.
+const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID, OVERVIEW_LAYER_ID];
+// Hand off between the two point source-layers: `overview` below this zoom,
+// full-resolution `image` at and above it.
 const POINT_MIN_ZOOM = 14;
 
 // Mapillary green for coverage, orange for the currently viewed image, and a
@@ -231,9 +235,25 @@ function addCoverage(activeMap: MapLibreMap): void {
     });
   }
 
-  // Individual image points only — the low-zoom "overview" point set is
-  // deliberately not drawn, so zoomed-out views show sequence lines rather than
-  // a region-wide cloud of dots.
+  // Low-zoom sampled points so coverage shows as points even where Mapillary
+  // serves no sequence lines (below z6). Handed off to the full-resolution image
+  // layer at POINT_MIN_ZOOM.
+  if (!activeMap.getLayer(OVERVIEW_LAYER_ID)) {
+    activeMap.addLayer({
+      id: OVERVIEW_LAYER_ID,
+      type: "circle",
+      source: SOURCE_ID,
+      "source-layer": "overview",
+      maxzoom: POINT_MIN_ZOOM,
+      paint: {
+        "circle-color": COVERAGE_COLOR,
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 1.5, 13, 3],
+        "circle-opacity": 0.85,
+      },
+    });
+  }
+
+  // Full-resolution image points once zoomed in.
   if (!activeMap.getLayer(IMAGE_LAYER_ID)) {
     activeMap.addLayer({
       id: IMAGE_LAYER_ID,
@@ -289,7 +309,8 @@ function addCoverage(activeMap: MapLibreMap): void {
     id: POINTS_STORE_LAYER_ID,
     name: labels.coveragePoints,
     type: "vector-tiles",
-    nativeLayerIds: [IMAGE_LAYER_ID],
+    // Overview (low zoom) + image (high zoom) so the points span every zoom.
+    nativeLayerIds: [OVERVIEW_LAYER_ID, IMAGE_LAYER_ID],
     sourceIds: [SOURCE_ID],
     opacity: 0.9,
     // Points: green fill with a thin white outline.
@@ -310,6 +331,7 @@ function removeCoverage(activeMap: MapLibreMap): void {
     SELECTED_LAYER_ID,
     SEQUENCE_HIGHLIGHT_LAYER_ID,
     IMAGE_LAYER_ID,
+    OVERVIEW_LAYER_ID,
     SEQUENCE_LAYER_ID,
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
