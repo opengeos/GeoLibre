@@ -36,8 +36,9 @@ if [ -n "${GEOLIBRE_AUTH_USER:-}" ] || [ -n "${GEOLIBRE_AUTH_PASSWORD:-}" ]; the
       exit 1
       ;;
   esac
-  # -stdin keeps the password out of the openssl process's argv.
-  HASH=$(printf '%s\n' "$GEOLIBRE_AUTH_PASSWORD" | openssl passwd -apr1 -stdin)
+  # -6 = SHA-512 crypt (supported by nginx via glibc crypt(), stronger than
+  # the MD5-based apr1); -stdin keeps the password out of openssl's argv.
+  HASH=$(printf '%s\n' "$GEOLIBRE_AUTH_PASSWORD" | openssl passwd -6 -stdin)
   printf '%s:%s\n' "$GEOLIBRE_AUTH_USER" "$HASH" > "$HTPASSWD"
   # nginx workers (www-data) open the htpasswd at request time.
   chown root:www-data "$HTPASSWD"
