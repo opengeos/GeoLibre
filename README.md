@@ -187,6 +187,30 @@ behavior):
 docker run --rm -p 8080:80 -e GEOLIBRE_DISABLE_SIDECAR=1 geolibre
 ```
 
+### Password protection (optional)
+
+Set `GEOLIBRE_AUTH_USER` and `GEOLIBRE_AUTH_PASSWORD` to put the whole
+container (the app and the `/sidecar` API) behind HTTP Basic Auth:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  geolibre
+```
+
+The browser prompts for the credentials on first visit. `/healthz` stays
+unauthenticated so the container health check keeps working. When the
+variables are unset (the default), no authentication is applied.
+
+This is a single shared credential, not per-user accounts. Basic Auth sends
+credentials with every request, so on anything beyond a trusted local network
+put a TLS-terminating reverse proxy (Caddy, Traefik, nginx) in front of the
+container. For multi-user or SSO needs, use an auth proxy such as
+`oauth2-proxy` or Authelia in front of the unmodified image instead. Also see
+the note in `docker/nginx.conf` about dropping the `localhost` CSP allowances
+before exposing the image publicly.
+
 The published image is available from GitHub Container Registry:
 
 ```bash

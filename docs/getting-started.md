@@ -122,6 +122,18 @@ docker pull ghcr.io/opengeos/geolibre:latest
 docker run --rm -p 8080:80 ghcr.io/opengeos/geolibre:latest
 ```
 
+To require a username and password, set `GEOLIBRE_AUTH_USER` and
+`GEOLIBRE_AUTH_PASSWORD`; nginx then protects the app and the `/sidecar` API
+with HTTP Basic Auth (a single shared credential). Pair it with a
+TLS-terminating reverse proxy outside trusted networks:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  ghcr.io/opengeos/geolibre:latest
+```
+
 For deployments under a URL subpath, pass the app base at build time:
 
 ```bash
