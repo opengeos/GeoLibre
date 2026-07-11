@@ -88,6 +88,22 @@ describe("diagnostics network info capture", () => {
     assert.equal(snapshot.warningCount, 1);
   });
 
+  it("redacts sensitive query params from a URL embedded in the detail", () => {
+    appendDiagnostic({
+      category: "network",
+      level: "error",
+      message: "GET fetch_url_bytes failed (network)",
+      // A native reqwest error embeds the full request URL, including secrets.
+      detail:
+        "error sending request for url (https://tiles.example.com/1/2/3.png?api_key=SECRET123): connection refused",
+    });
+    const [record] = getDiagnosticsSnapshot().records;
+    // The param value is replaced with the REDACTED marker (URL-encoded in the
+    // query string); the important guarantee is the secret no longer appears.
+    assert.ok(record.detail?.includes("REDACTED"));
+    assert.ok(!record.detail?.includes("SECRET123"));
+  });
+
   it("does not filter info-level entries from other categories", () => {
     appendDiagnostic({
       category: "console",

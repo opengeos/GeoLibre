@@ -74,7 +74,9 @@ describe("nativeHttpFailureRecord", () => {
       10,
     );
     assert.equal(record.level, "error");
-    assert.match(record.message, /failed \(request failed\)/);
+    // An "unknown" classification (an ordinary non-2xx status) must not render
+    // the redundant "failed (request failed)".
+    assert.equal(record.message, "GET fetch_url_bytes failed");
     assert.equal(record.detail, "Request failed with status 500 Internal Server Error");
   });
 });

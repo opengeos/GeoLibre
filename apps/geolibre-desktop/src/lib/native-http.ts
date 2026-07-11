@@ -65,12 +65,18 @@ export function nativeHttpFailureRecord(
   durationMs: number,
   context?: string,
 ): DiagnosticInput {
-  const { label, hint } = classifyFetchFailure(error);
+  const { kind, label, hint } = classifyFetchFailure(error);
   const rawError = formatNativeError(error);
   return {
     category: "network",
     level: "error",
-    message: `GET ${command} failed (${label})`,
+    // Only append the classification when it says something useful; an ordinary
+    // non-2xx status is "unknown" (label "request failed"), and appending it
+    // would read as the redundant "failed (request failed)".
+    message:
+      kind !== "unknown"
+        ? `GET ${command} failed (${label})`
+        : `GET ${command} failed`,
     detail: hint ? `${hint}\n\n${rawError}` : rawError,
     durationMs,
     method: "GET",

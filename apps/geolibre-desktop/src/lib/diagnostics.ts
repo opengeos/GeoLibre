@@ -271,6 +271,21 @@ function redactUrl(raw: string): string {
   }
 }
 
+// Matches an http(s) URL embedded in free text, stopping before whitespace or a
+// closing delimiter so a URL inside `(...)` or quotes is captured without its
+// surrounding punctuation.
+const EMBEDDED_URL = /https?:\/\/[^\s)"'<>]+/g;
+
+// A record's `detail` often carries a raw error string, and a native
+// (Rust/reqwest) error embeds the full request URL verbatim — including any
+// `api_key`/`token` query param that `redactUrl` strips from the record's `url`
+// field. The detail is rendered in the panel and included in the "Copy JSON"
+// export, so redact any URLs it contains the same way, keeping secrets out of
+// exported diagnostics.
+function redactUrlsInText(text: string): string {
+  return text.replace(EMBEDDED_URL, (match) => redactUrl(match));
+}
+
 function requestUrl(input: Parameters<typeof fetch>[0]): string {
   if (input instanceof Request) return input.url;
   if (input instanceof URL) return input.toString();
@@ -310,7 +325,7 @@ export function appendDiagnostic(input: DiagnosticInput): void {
     id: `diagnostic-${Date.now()}-${sequence++}`,
     timestamp: input.timestamp ?? new Date().toISOString(),
     message: truncate(input.message),
-    detail: input.detail ? truncate(input.detail) : undefined,
+    detail: input.detail ? truncate(redactUrlsInText(input.detail)) : undefined,
     source: input.source ? truncate(input.source) : undefined,
     url: input.url ? truncate(redactUrl(input.url)) : undefined,
   };

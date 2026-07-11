@@ -1,6 +1,7 @@
 import type { GeoLibreLayer, GeoLibreProject } from "@geolibre/core";
+import { invoke } from "@tauri-apps/api/core";
 import { addProtocol, type RequestParameters } from "maplibre-gl";
-import { fetchUrlBytes, resolveUrlRedirect } from "./native-http";
+import { resolveUrlRedirect } from "./native-http";
 import { isTauri } from "./tauri-io";
 
 const XYZ_TILE_PROTOCOL = "geolibre-xyz";
@@ -82,7 +83,14 @@ export function registerXyzTileProtocol(): void {
 
   addProtocol(XYZ_TILE_PROTOCOL, async (request) => {
     const url = parseXyzTileRequest(request);
-    const bytes = await fetchUrlBytes(url, { context: "XYZ tile" });
+    // This handler runs once per tile, so — unlike the one-shot native calls
+    // routed through native-http — it deliberately calls `invoke` directly and
+    // is NOT recorded in diagnostics: a fast pan over a tile server's coverage
+    // edge returns 404s in bulk, and recording each would re-render the panel
+    // per tile and evict more relevant entries from the 500-record ring buffer.
+    const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
+      url,
+    });
     const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
     return {
       data: array.buffer.slice(

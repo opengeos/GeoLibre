@@ -19,7 +19,13 @@ import {
   parseVideoCorner,
   resolveDelimitedTextDelimiter,
   savedPostgresConnectionLabel,
+  serviceRequestErrorMessage,
 } from "../apps/geolibre-desktop/src/components/layout/add-data/helpers";
+import type { TFunction } from "i18next";
+
+// A minimal `t` stub: returns the key so the branch taken is observable, and
+// echoes the fallback for the default branch.
+const fakeT = ((key: string) => key) as unknown as TFunction;
 
 describe("add-data path helpers", () => {
   it("extracts the file name from POSIX and Windows paths", () => {
@@ -440,5 +446,47 @@ describe("attributionForTileUrl", () => {
       undefined,
     );
     assert.equal(attributionForTileUrl("not a url"), undefined);
+  });
+});
+
+describe("serviceRequestErrorMessage", () => {
+  it("maps a network/TLS/CORS failure to the localized network message", () => {
+    assert.equal(
+      serviceRequestErrorMessage(new TypeError("Failed to fetch"), fakeT, "fallback"),
+      "addData.common.networkFailure",
+    );
+  });
+
+  it("maps a native TLS error string to the localized network message", () => {
+    assert.equal(
+      serviceRequestErrorMessage(
+        "Request failed: invalid peer certificate",
+        fakeT,
+        "fallback",
+      ),
+      "addData.common.networkFailure",
+    );
+  });
+
+  it("maps a timeout to the localized timeout message", () => {
+    assert.equal(
+      serviceRequestErrorMessage(new Error("The request timed out."), fakeT, "fallback"),
+      "addData.common.requestTimedOut",
+    );
+  });
+
+  it("falls through to the error's own message for an unclassified failure", () => {
+    assert.equal(
+      serviceRequestErrorMessage(
+        new Error("The WFS service returned an error."),
+        fakeT,
+        "fallback",
+      ),
+      "The WFS service returned an error.",
+    );
+  });
+
+  it("uses the fallback when an unclassified error carries no message", () => {
+    assert.equal(serviceRequestErrorMessage({}, fakeT, "fallback"), "fallback");
   });
 });
