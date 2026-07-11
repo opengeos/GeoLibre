@@ -21,6 +21,7 @@ import {
   restoreLidarLayers,
   restorePlanetaryComputerLayers,
   reattachSun,
+  reattachRouteAnimation,
   restoreRasterLayers,
   restoreThreeDTilesLayers,
   restoreVectorLayers,
@@ -119,6 +120,7 @@ import { AttributeTable } from "../panels/AttributeTable";
 import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
 import { SunPanel } from "../panels/SunPanel";
+import { RouteAnimationPanel } from "../panels/RouteAnimationPanel";
 import {
   PluginRightPanel,
   PLUGIN_PANEL_DEFAULT_WIDTH,
@@ -931,6 +933,10 @@ export function DesktopShell({
     // Project loads open/close it via the plugin's applyProjectState (invoked by
     // restoreProjectState above).
     reattachSun(appAPI);
+    // The route animation likewise owns native marker/trail layers, so rebind it
+    // to the (possibly new) map after a re-init/basemap swap without deriving
+    // open/closed state (project loads handle that via applyProjectState).
+    reattachRouteAnimation(appAPI);
     // Rebind the directions tool to the (possibly new) map instance after a
     // map re-init, since restoreProjectState skips an already-active plugin.
     restoreDirections(appAPI, pluginManager.isActive(DIRECTIONS_PLUGIN_ID));
@@ -1875,6 +1881,9 @@ export function DesktopShell({
           </SectionErrorBoundary>
           <SectionErrorBoundary label="Sun simulation panel">
             <SunPanel />
+          </SectionErrorBoundary>
+          <SectionErrorBoundary label="Route animation panel">
+            <RouteAnimationPanel mapControllerRef={mapControllerRef} />
           </SectionErrorBoundary>
           {/* Rendered here (not in TopToolbar) so the dialog the status badge
               reopens stays mounted even in toolbar-hidden layouts (#754). */}

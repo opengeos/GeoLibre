@@ -1406,6 +1406,28 @@
       "close": "Close",
       "localTimeNote": "Times shown in your computer's time zone."
     },
+    "routeAnimation": {
+      "title": "Route Animation",
+      "layer": "Route layer",
+      "selectLayer": "Select a line layer…",
+      "noLineLayers": "No line layers in the project",
+      "play": "Play",
+      "pause": "Pause",
+      "loop": "Loop animation",
+      "progress": "Progress",
+      "speed": "Speed",
+      "followCamera": "Follow",
+      "marker": "Marker",
+      "markerStyle": {
+        "arrow": "Arrow (heading)",
+        "point": "Point",
+        "none": "None"
+      },
+      "trail": "Trail",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "close": "Close"
+    },
     "setView": {
       "title": "Set View",
       "description": "Move the map to an exact camera.",
@@ -1761,6 +1783,8 @@
       "precipitationTime": "Time",
       "sun": "Sun",
       "sunTooltip": "Simulate the sun's position and the day/night terminator for any date and time.",
+      "routeAnimation": "Route Animation",
+      "routeAnimationTooltip": "Animate a marker along a line layer, with play/pause, speed, a trail, and camera follow.",
       "spinGlobeBoundsTitle": "Bounds are locked",
       "spinGlobeBoundsDesc": "The globe can't spin while the map bounds are locked.",
       "spinGlobeBoundsHint": "Unlocking the bounds lets the globe spin freely. You can re-lock them anytime in Settings.",

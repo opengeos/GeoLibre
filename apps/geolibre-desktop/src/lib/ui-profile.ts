@@ -268,6 +268,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // so hiding it would leave the effect on with no way to turn it off.
   { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "basic" },
   { id: "controls.sun", menuId: "controls", labelKey: "toolbar.item.sun", tier: "intermediate" },
+  { id: "controls.routeAnimation", menuId: "controls", labelKey: "toolbar.item.routeAnimation", tier: "intermediate" },
   { id: "controls.spinGlobe", menuId: "controls", labelKey: "toolbar.item.spinGlobe", tier: "intermediate" },
   { id: "controls.graticule", menuId: "controls", labelKey: "toolbar.item.graticule", tier: "intermediate" },
   // Id kept as `controls.clouds` (not renamed to `controls.weather`) so a

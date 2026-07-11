@@ -140,6 +140,7 @@ export function ControlsMenu({
     show("controls.spinGlobe") ||
     show("controls.graticule") ||
     show("controls.sun") ||
+    show("controls.routeAnimation") ||
     show("controls.directions") ||
     show("controls.reverseGeocode");
   // Whether the middle group (panels) has any visible item. The separator that
@@ -209,6 +210,15 @@ export function ControlsMenu({
             >
               {t("toolbar.item.sun")}
               {panels.sun.visible ? " ✓" : ""}
+            </DropdownMenuItem>
+          )}
+          {show("controls.routeAnimation") && (
+            <DropdownMenuItem
+              title={t("toolbar.item.routeAnimationTooltip")}
+              onSelect={panels.routeAnimation.toggle}
+            >
+              {t("toolbar.item.routeAnimation")}
+              {panels.routeAnimation.visible ? " ✓" : ""}
             </DropdownMenuItem>
           )}
           {show("controls.spinGlobe") && (

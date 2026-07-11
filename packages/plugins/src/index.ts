@@ -411,3 +411,35 @@ export {
   type TimeWindow,
 } from "./plugins/time-slider-binding";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";
+export {
+  DEFAULT_ROUTE_ANIMATION_SETTINGS,
+  ROUTE_ANIM_SPEED_MAX,
+  ROUTE_ANIM_SPEED_MIN,
+  ROUTE_ANIMATION_PLUGIN_ID,
+  ROUTE_MARKER_STYLES,
+  closeRouteAnimationPanel,
+  getRouteAnimationSettings,
+  getRouteAnimationSnapshot,
+  isRouteAnimationPanelVisible,
+  maplibreRouteAnimationPlugin,
+  normalizeRouteAnimationSettings,
+  openRouteAnimationPanel,
+  reattachRouteAnimation,
+  restoreRouteAnimation,
+  setRouteAnimationProgress,
+  setRouteAnimationRoute,
+  setRouteAnimationSettings,
+  subscribeRouteAnimation,
+  subscribeRouteAnimationPanel,
+  toggleRouteAnimationPlaying,
+  type RouteAnimationSettings,
+  type RouteMarkerStyle,
+} from "./plugins/maplibre-route-animation";
+export {
+  bearingBetween,
+  flattenToLine,
+  measureLine,
+  pointAlongLine,
+  sliceLineAtDistance,
+  type PointOnLine,
+} from "./plugins/route-animation-geometry";

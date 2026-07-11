@@ -7,6 +7,7 @@ import {
   closeMinimapPanel,
   closePrintPanel,
   closeSearchPlacesPanel,
+  closeRouteAnimationPanel,
   closeSpinGlobePanel,
   closeSunPanel,
   closeViewStatePanel,
@@ -19,6 +20,7 @@ import {
   isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
+  isRouteAnimationPanelVisible,
   isSpinGlobePanelVisible,
   isSunPanelVisible,
   isViewStatePanelVisible,
@@ -30,6 +32,7 @@ import {
   openMinimapPanel,
   openPrintPanel,
   openSearchPlacesPanel,
+  openRouteAnimationPanel,
   openSpinGlobePanel,
   openSunPanel,
   openViewStatePanel,
@@ -42,6 +45,7 @@ import {
   subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
+  subscribeRouteAnimationPanel,
   subscribeSpinGlobePanel,
   subscribeSunPanel,
   subscribeViewStatePanel,
@@ -61,6 +65,7 @@ export interface ToolbarPanels {
   searchPlaces: ToolbarPanel;
   spinGlobe: ToolbarPanel;
   sun: ToolbarPanel;
+  routeAnimation: ToolbarPanel;
   print: ToolbarPanel;
   colorbar: ToolbarPanel;
   legend: ToolbarPanel;
@@ -95,6 +100,11 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     subscribeSunPanel,
     isSunPanelVisible,
     isSunPanelVisible,
+  );
+  const routeAnimationVisible = useSyncExternalStore(
+    subscribeRouteAnimationPanel,
+    isRouteAnimationPanelVisible,
+    isRouteAnimationPanelVisible,
   );
   const printVisible = useSyncExternalStore(
     subscribePrintPanel,
@@ -171,6 +181,16 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
           return;
         }
         openSunPanel(appApi);
+      },
+    },
+    routeAnimation: {
+      visible: routeAnimationVisible,
+      toggle: () => {
+        if (routeAnimationVisible) {
+          closeRouteAnimationPanel(appApi);
+          return;
+        }
+        openRouteAnimationPanel(appApi);
       },
     },
     print: {
