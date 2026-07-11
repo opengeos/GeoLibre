@@ -2,7 +2,7 @@
 
 _Last updated: July 10, 2026_
 
-GeoLibre ("GeoLibre", "the app") is a free, open-source GIS application
+GeoLibre ("the app") is a free, open-source GIS application
 developed by the OpenGeos community. By downloading, installing, or using
 GeoLibre — including its desktop, web, and embedded builds — you agree to these
 Terms of Service ("Terms"). If you do not agree, do not use the app.
@@ -17,10 +17,10 @@ those features are described in our [Privacy Policy](privacy.md).
 
 ## License
 
-GeoLibre is open-source software distributed under the terms of its license, as
-published in the project repository at
-<https://github.com/opengeos/GeoLibre>. Your use, modification, and
-redistribution of the software are governed by that license. These Terms
+GeoLibre is open-source software distributed under the MIT License, as published
+in the project repository at
+<https://github.com/opengeos/GeoLibre/blob/main/LICENSE>. Your use, modification,
+and redistribution of the software are governed by that license. These Terms
 supplement, and do not replace, the software license.
 
 ## Acceptable use
@@ -64,9 +64,11 @@ their availability, content, or conduct.
 ## Your content
 
 GeoLibre does not claim ownership of the data, files, or projects you open or
-create with it. You retain all rights to your content. Because your content is
-processed locally on your device, you are responsible for backing it up and for
-the lawful use of any data you load.
+create with it. You retain all rights to your content. Most processing occurs
+locally on your device. If you enable an online feature, such as real-time
+collaboration or a third-party integration, applicable data may be transmitted
+to that service as described in our [Privacy Policy](privacy.md). You are
+responsible for backing up your content and for its lawful use.
 
 ## Disclaimer of warranties
 
