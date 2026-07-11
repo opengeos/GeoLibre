@@ -275,11 +275,15 @@ async function fetchCapabilitiesText(
     const { fetchUrlBytes } = await import("../../../lib/native-http");
     const timeout = AbortSignal.timeout(30_000);
     const abort = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    const bytesPromise = fetchUrlBytes(requestUrl, {
+      context: "OGC GetCapabilities",
+    });
+    // If the abort/timeout wins the race, the native call is left unobserved;
+    // swallow its later rejection so it does not surface as an unhandled
+    // rejection (it is still recorded in diagnostics by the native-http wrapper).
+    bytesPromise.catch(() => {});
     try {
-      const bytes = await Promise.race([
-        fetchUrlBytes(requestUrl, { context: "OGC GetCapabilities" }),
-        rejectOnAbort(abort),
-      ]);
+      const bytes = await Promise.race([bytesPromise, rejectOnAbort(abort)]);
       const array = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       return { ok: true, status: 200, text: decodeXmlBytes(array) };
     } catch (error) {

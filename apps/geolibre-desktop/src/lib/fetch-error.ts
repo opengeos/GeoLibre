@@ -24,13 +24,13 @@ export interface FetchFailure {
 // Browser fetch collapses every network-layer failure into this opaque message.
 const BROWSER_NETWORK_MESSAGES = ["failed to fetch", "load failed"];
 
-// Phrases a native reqwest error uses for the same underlying failures. Matched
-// case-insensitively against the error text so the native path can be narrowed
-// to a network failure even though it never throws a browser TypeError. Kept to
-// specific multi-word phrases (rather than bare words like "connect"/"network")
-// so a request URL embedded in reqwest's message — e.g. `error sending request
-// for url (https://host/connect)` — cannot collide with a keyword and
-// misclassify an unrelated failure.
+// Keywords a native reqwest error uses for the same underlying failures. Matched
+// case-insensitively against the error text (with any embedded request URL
+// stripped first — see `classifyFetchFailure`) so the native path can be
+// narrowed to a network failure even though it never throws a browser
+// TypeError. Because the URL is removed before matching, a word appearing only
+// in the URL's path or query (e.g. a `/certificate` path or `?timeout=30`
+// param) cannot collide with these keywords.
 const NATIVE_NETWORK_KEYWORDS = [
   "certificate",
   "tls",
@@ -105,9 +105,7 @@ export function classifyFetchFailure(error: unknown): FetchFailure {
   }
 
   const lowerMessage = message.toLowerCase();
-  if (lowerMessage.includes("timed out") || lowerMessage.includes("timeout")) {
-    return { kind: "timeout", label: "timed out", hint: TIMEOUT_HINT };
-  }
+  // The browser's opaque TypeError carries no URL, so match it on the full text.
   if (isBrowserNetworkMessage(lowerMessage)) {
     return {
       kind: "network",
@@ -115,7 +113,17 @@ export function classifyFetchFailure(error: unknown): FetchFailure {
       hint: BROWSER_NETWORK_HINT,
     };
   }
-  if (isNativeNetworkMessage(lowerMessage)) {
+  // A native reqwest error embeds the full request URL (usually in parens);
+  // strip it before keyword/timeout matching so a word in the URL's path or
+  // query — a `?timeout=30` param, a `/certificate` path — cannot collide with a
+  // keyword and misclassify the failure.
+  const causeText = lowerMessage
+    .replace(/\(https?:\/\/[^)]*\)/g, " ")
+    .replace(/https?:\/\/\S+/g, " ");
+  if (causeText.includes("timed out") || causeText.includes("timeout")) {
+    return { kind: "timeout", label: "timed out", hint: TIMEOUT_HINT };
+  }
+  if (isNativeNetworkMessage(causeText)) {
     return { kind: "network", label: "network", hint: NATIVE_NETWORK_HINT };
   }
   return { kind: "unknown", label: "request failed", hint: null };

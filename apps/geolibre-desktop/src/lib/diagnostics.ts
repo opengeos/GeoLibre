@@ -239,7 +239,13 @@ function safeStringify(value: unknown): string {
   }
 }
 
-function formatUnknown(value: unknown): string {
+/**
+ * Renders an arbitrary thrown value as a diagnostics detail string: an Error's
+ * stack (or message), a string as-is, anything else JSON-stringified. Exported
+ * so callers that build their own records (e.g. native-http.ts) format errors
+ * the same way.
+ */
+export function formatUnknown(value: unknown): string {
   if (value instanceof Error) return value.stack ?? value.message;
   if (typeof value === "string") return value;
   return safeStringify(value);
@@ -324,7 +330,10 @@ export function appendDiagnostic(input: DiagnosticInput): void {
     ...input,
     id: `diagnostic-${Date.now()}-${sequence++}`,
     timestamp: input.timestamp ?? new Date().toISOString(),
-    message: truncate(input.message),
+    // Runtime/plugin/console emitters can forward an arbitrary error or console
+    // string (which may embed a tokenized URL) into either field, so redact both
+    // the same way as the `url` field before storing/exporting them.
+    message: truncate(redactUrlsInText(input.message)),
     detail: input.detail ? truncate(redactUrlsInText(input.detail)) : undefined,
     source: input.source ? truncate(input.source) : undefined,
     url: input.url ? truncate(redactUrl(input.url)) : undefined,

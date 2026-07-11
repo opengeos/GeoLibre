@@ -62,6 +62,22 @@ describe("classifyFetchFailure", () => {
     );
   });
 
+  it("does not misclassify a network failure whose URL has a 'timeout' query param", () => {
+    // The real cause is a refused connection; `timeout=30` is only a URL param,
+    // so stripping the embedded URL must keep this classified as network.
+    const result = classifyFetchFailure(
+      "error sending request for url (https://host/wfs?timeout=30): connection refused",
+    );
+    assert.equal(result.kind, "network");
+  });
+
+  it("still classifies a genuine native timeout message", () => {
+    assert.equal(
+      classifyFetchFailure("error sending request: operation timed out").kind,
+      "timeout",
+    );
+  });
+
   it("does not misclassify a non-network error whose URL contains a network word", () => {
     // "connect" appears only as a URL path substring, not as a real error cause,
     // so the tightened phrase matching must leave it unclassified.

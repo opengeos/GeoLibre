@@ -11,7 +11,11 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { appendDiagnostic, type DiagnosticInput } from "./diagnostics";
+import {
+  appendDiagnostic,
+  formatUnknown,
+  type DiagnosticInput,
+} from "./diagnostics";
 import { classifyFetchFailure } from "./fetch-error";
 
 /** The native HTTP commands exposed by the Tauri backend. */
@@ -20,12 +24,6 @@ export type NativeHttpCommand = "fetch_url_bytes" | "resolve_url_redirect";
 interface NativeHttpOptions {
   /** Short feature label (e.g. "WFS GetCapabilities") added to the record. */
   context?: string;
-}
-
-function formatNativeError(error: unknown): string {
-  if (error instanceof Error) return error.stack ?? error.message;
-  if (typeof error === "string") return error;
-  return String(error);
 }
 
 function recordSource(command: NativeHttpCommand, context?: string): string {
@@ -66,7 +64,7 @@ export function nativeHttpFailureRecord(
   context?: string,
 ): DiagnosticInput {
   const { kind, label, hint } = classifyFetchFailure(error);
-  const rawError = formatNativeError(error);
+  const rawError = formatUnknown(error);
   return {
     category: "network",
     level: "error",
