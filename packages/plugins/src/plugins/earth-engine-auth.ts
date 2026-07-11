@@ -3,7 +3,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
-  "141292844612-gitmgm28jkmkujonfkrkvdaqjiqt6qkf.apps.googleusercontent.com";
+  "937635412428-qc3albpo6dtm2jdp2o5mk8biqlh0i6vo.apps.googleusercontent.com";
 
 export type EarthEngineImportMetaEnv = {
   VITE_GEE_OAUTH_CLIENT_ID?: unknown;
