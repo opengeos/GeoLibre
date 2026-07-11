@@ -933,8 +933,8 @@ mod tests {
         )
         .expect("write prj sidecar");
 
-        let crs = read_prj_sidecar_crs(&shp_path.to_string_lossy())
-            .expect("prj sidecar resolves a CRS");
+        let crs =
+            read_prj_sidecar_crs(&shp_path.to_string_lossy()).expect("prj sidecar resolves a CRS");
         assert_eq!(
             crs,
             "PROJCS[\"British_National_Grid\",GEOGCS[\"GCS_OSGB_1936\"]]"

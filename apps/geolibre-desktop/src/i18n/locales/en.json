@@ -2192,7 +2192,12 @@
     "thinking": "Working…",
     "toolError": "failed",
     "provider": "LLM provider",
-    "model": "Model"
+    "model": "Model",
+    "codeApprovalTitle": "Run assistant code?",
+    "codeApprovalBody": "The assistant wants to run {{language}} code in the app. Review it first — it can change the map and access app data.",
+    "codeApprovalAlways": "Allow assistant code for the rest of this session",
+    "codeApprovalRun": "Run",
+    "codeApprovalDecline": "Cancel"
   },
   "storymap": {
     "title": "Story Map",

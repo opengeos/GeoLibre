@@ -43,6 +43,43 @@ function resolveSidecarBaseUrl(): string {
 }
 
 const DEFAULT_SIDECAR_URL = resolveSidecarBaseUrl();
+
+/**
+ * Per-launch sidecar auth token. The desktop shell mints it when it spawns the
+ * sidecar and hands it back through `start_geolibre_sidecar`; {@link
+ * setSidecarAuthToken} stashes it here so {@link sidecarFetch} can attach it to
+ * every request. Null in the browser/Docker build, where the same-origin nginx
+ * proxy injects the token instead and the sidecar is unreachable directly.
+ */
+let sidecarAuthToken: string | null = null;
+
+/**
+ * Record (or clear) the sidecar auth token. Call after `startGeoLibreSidecar()`
+ * returns. Passing an empty/nullish value clears it.
+ *
+ * @param token - The per-launch token from the desktop backend, or null.
+ */
+export function setSidecarAuthToken(token: string | null | undefined): void {
+  sidecarAuthToken = token && token.trim() ? token.trim() : null;
+}
+
+/**
+ * `fetch` wrapper for sidecar requests that attaches the per-launch auth token
+ * (as `X-GeoLibre-Token`) when one is set. Used for every sidecar endpoint call;
+ * external fetches (e.g. the Whitebox catalog snapshot on GitHub) use plain
+ * `fetch` so the token is never sent off-host.
+ *
+ * @param input - The sidecar request URL.
+ * @param init - Optional fetch init; its headers are preserved.
+ * @returns The fetch response promise.
+ */
+function sidecarFetch(input: string, init?: RequestInit): Promise<Response> {
+  if (!sidecarAuthToken) return fetch(input, init);
+  const headers = new Headers(init?.headers);
+  headers.set("X-GeoLibre-Token", sidecarAuthToken);
+  return fetch(input, { ...init, headers });
+}
+
 const WHITEBOX_CATALOG_SNAPSHOT_URL =
   "https://raw.githubusercontent.com/opengeos/Whitebox-Next-Gen-ArcGIS/main/WNG/data/catalog_snapshot.json";
 
@@ -199,7 +236,7 @@ export async function checkSidecarHealth(
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<SidecarHealth | null> {
   try {
-    const res = await fetch(`${baseUrl}/health`);
+    const res = await sidecarFetch(`${baseUrl}/health`);
     if (!res.ok) return null;
     return (await res.json()) as SidecarHealth;
   } catch {
@@ -211,7 +248,7 @@ export async function fetchSidecarAlgorithms(
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<SidecarAlgorithm[]> {
   try {
-    const res = await fetch(`${baseUrl}/algorithms`);
+    const res = await sidecarFetch(`${baseUrl}/algorithms`);
     if (!res.ok) return [];
     const data = (await res.json()) as { algorithms: SidecarAlgorithm[] };
     return data.algorithms ?? [];
@@ -227,7 +264,7 @@ export async function fetchWhiteboxStatus(
 ): Promise<WhiteboxStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/whitebox/status`);
+    res = await sidecarFetch(`${baseUrl}/whitebox/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -242,7 +279,7 @@ export async function fetchWhiteboxTools(
 ): Promise<WhiteboxTool[]> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/whitebox/tools`);
+    res = await sidecarFetch(`${baseUrl}/whitebox/tools`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -317,7 +354,7 @@ export async function fetchWhiteboxTool(
   toolId: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<unknown> {
-  const res = await fetch(`${baseUrl}/whitebox/tools/${encodeURIComponent(toolId)}`);
+  const res = await sidecarFetch(`${baseUrl}/whitebox/tools/${encodeURIComponent(toolId)}`);
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not load Whitebox tool"));
   }
@@ -328,7 +365,7 @@ export async function runWhiteboxTool(
   request: RunWhiteboxToolRequest,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<WhiteboxJob> {
-  const res = await fetch(`${baseUrl}/whitebox/run`, {
+  const res = await sidecarFetch(`${baseUrl}/whitebox/run`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
@@ -343,7 +380,7 @@ export async function fetchWhiteboxJob(
   jobId: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<WhiteboxJob> {
-  const res = await fetch(`${baseUrl}/whitebox/jobs/${encodeURIComponent(jobId)}`);
+  const res = await sidecarFetch(`${baseUrl}/whitebox/jobs/${encodeURIComponent(jobId)}`);
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not load Whitebox job"));
   }
@@ -354,7 +391,7 @@ export async function fetchWhiteboxJsonOutput(
   path: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<unknown> {
-  const res = await fetch(
+  const res = await sidecarFetch(
     `${baseUrl}/whitebox/output?path=${encodeURIComponent(path)}`,
   );
   if (!res.ok) {
@@ -451,7 +488,7 @@ export async function fetchConversionStatus(
 ): Promise<ConversionStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/conversion/status`);
+    res = await sidecarFetch(`${baseUrl}/conversion/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -564,7 +601,7 @@ export async function fetchRasterStatus(
 ): Promise<RasterStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/raster/status`);
+    res = await sidecarFetch(`${baseUrl}/raster/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -603,7 +640,7 @@ async function startConversion(
 ): Promise<ConversionJob> {
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await sidecarFetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -623,7 +660,7 @@ export async function fetchConversionJob(
 ): Promise<ConversionJob> {
   let res: Response;
   try {
-    res = await fetch(
+    res = await sidecarFetch(
       `${baseUrl}/conversion/jobs/${encodeURIComponent(jobId)}`,
     );
   } catch (error) {
@@ -662,7 +699,7 @@ export async function fetchVectorStatus(
 ): Promise<VectorStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/vector/status`);
+    res = await sidecarFetch(`${baseUrl}/vector/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -678,7 +715,7 @@ export async function runVectorTool(
 ): Promise<VectorToolResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/vector/run`, {
+    res = await sidecarFetch(`${baseUrl}/vector/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -725,7 +762,7 @@ export async function writeVectorToSource(
 ): Promise<WriteVectorToSourceResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/vector/write`, {
+    res = await sidecarFetch(`${baseUrl}/vector/write`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -806,7 +843,7 @@ export async function fetchPostgisStatus(
 ): Promise<PostgisStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/postgis/status`);
+    res = await sidecarFetch(`${baseUrl}/postgis/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -823,7 +860,7 @@ export async function listPostgisTables(
 ): Promise<PostgisTableInfo[]> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/postgis/tables`, {
+    res = await sidecarFetch(`${baseUrl}/postgis/tables`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ connection }),
@@ -845,7 +882,7 @@ export async function readPostgisTable(
 ): Promise<ReadPostgisTableResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/postgis/read`, {
+    res = await sidecarFetch(`${baseUrl}/postgis/read`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -871,7 +908,7 @@ export async function writePostgisTable(
 ): Promise<WritePostgisTableResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/postgis/write`, {
+    res = await sidecarFetch(`${baseUrl}/postgis/write`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -928,7 +965,7 @@ export async function fetchMlStatus(
 ): Promise<MlStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/ml/status`);
+    res = await sidecarFetch(`${baseUrl}/ml/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -979,7 +1016,7 @@ export async function mlSegment(
 
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/ml/segment/${mode}`, {
+    res = await sidecarFetch(`${baseUrl}/ml/segment/${mode}`, {
       method: "POST",
       body: form,
     });
@@ -1028,7 +1065,7 @@ export async function fetchSqlStatus(
 ): Promise<SqlEngineStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/sql/status`);
+    res = await sidecarFetch(`${baseUrl}/sql/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -1045,7 +1082,7 @@ export async function runSedonaSql(
 ): Promise<SedonaSqlResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/sql/run`, {
+    res = await sidecarFetch(`${baseUrl}/sql/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),

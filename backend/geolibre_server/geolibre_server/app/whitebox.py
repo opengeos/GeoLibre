@@ -19,6 +19,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from .conversion import _is_within_roots
 from .runtime import (
     RUNTIME_CATALOG_TIMEOUT_SECS,
     RUNTIME_DISCOVERY_TIMEOUT_SECS,
@@ -724,6 +725,33 @@ def _write_layer_input(param_name: str, layer: dict[str, Any], temp_paths: list[
     return str(path)
 
 
+def _ensure_within_roots(path_value: str) -> None:
+    """Reject a Whitebox path argument that escapes the configured roots.
+
+    No-op when ``GEOLIBRE_CONVERSION_ROOTS`` is unset (the desktop default,
+    where paths are the user's own filesystem). When it is set (the Docker/web
+    build, whose sidecar is reachable same-origin through the nginx proxy),
+    attacker-supplied ``*_in``/``*_out`` paths and batch directories are confined
+    to those roots so ``/whitebox/run`` cannot read or overwrite arbitrary
+    container files — the same confinement the conversion and raster routers
+    already enforce via :func:`_is_within_roots`.
+
+    Args:
+        path_value: A path string taken from the run request parameters.
+
+    Raises:
+        HTTPException: 403 when a root allowlist is configured and the resolved
+            path lies outside every allowlisted root.
+    """
+    # _is_within_roots returns True when no allowlist is configured, so this is a
+    # no-op on desktop and only confines paths in the Docker/web build.
+    if not _is_within_roots(Path(path_value).expanduser()):
+        raise HTTPException(
+            status_code=403,
+            detail="Path is outside the allowed processing directories",
+        )
+
+
 def _prepare_arguments(
     request: WhiteboxRunRequest,
     temp_paths: list[Path],
@@ -749,9 +777,15 @@ def _prepare_arguments(
         spec = specs.get(str(name), {})
         kind = str(spec.get("kind") or "")
         if name in request.layer_inputs:
+            # Embedded layers are materialized to a server-owned temp file, so
+            # the caller never controls this path.
             value = _write_layer_input(name, request.layer_inputs[name], temp_paths)
+        elif kind.endswith(("_in", "_out")) and isinstance(value, str) and value.strip():
+            # Caller-supplied file path: keep it inside the allowlisted roots.
+            _ensure_within_roots(value)
         batch_directory = _batch_working_directory(value, spec)
         if batch_directory:
+            _ensure_within_roots(batch_directory)
             if working_directory and working_directory != batch_directory:
                 raise ValueError("Only one Whitebox batch input directory is supported.")
             working_directory = batch_directory

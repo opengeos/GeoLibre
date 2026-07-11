@@ -30,6 +30,19 @@ import { webSearch } from "./web-search";
 export interface AssistantToolDeps {
   /** Returns the live map controller, or null before the map mounts. */
   getMapController: () => MapController | null;
+  /**
+   * Ask the user to approve executing model-generated code before it runs.
+   * Resolves true to proceed, false to decline. The assistant can be steered by
+   * untrusted content (e.g. `web_search` results, layer attributes) into
+   * emitting a `run_python`/`run_maplibre_js` snippet that exfiltrates secrets
+   * or mutates the app, so these two tools are gated behind an explicit user
+   * confirmation. When omitted (e.g. in tests) code runs without a prompt; the
+   * desktop UI always provides it.
+   */
+  confirmCodeExecution?: (request: {
+    tool: "run_python" | "run_maplibre_js";
+    code: string;
+  }) => Promise<boolean>;
 }
 
 /** A short, model-facing description of one layer (no feature data leaked). */
@@ -255,6 +268,18 @@ export function createAssistantTools(
   // Shared Pyodide scripting context for run_python (exposes the `geolibre`
   // facade that drives the live map).
   const pyDeps = consoleDeps(deps.getMapController);
+
+  /**
+   * Gate model-authored code behind the user's confirmation hook. Returns true
+   * when execution may proceed (approved, or no hook configured).
+   */
+  const approveCodeExecution = (
+    toolName: "run_python" | "run_maplibre_js",
+    code: string,
+  ): Promise<boolean> =>
+    deps.confirmCodeExecution
+      ? deps.confirmCodeExecution({ tool: toolName, code })
+      : Promise.resolve(true);
 
   /** The current map viewport as [west, south, east, north], or null. */
   const viewBbox = (): [number, number, number, number] | null => {
@@ -575,6 +600,12 @@ export function createAssistantTools(
       code: z.string().describe("Python source to execute."),
     }),
     callback: async (input) => {
+      if (!(await approveCodeExecution("run_python", input.code))) {
+        return json({
+          output: "",
+          error: "The user declined to run this Python code.",
+        });
+      }
       const result = await runConsoleCode(pyDeps, input.code);
       // Cap stdout so a snippet printing megabytes can't blow the model's
       // context window on the next turn.
@@ -598,7 +629,10 @@ export function createAssistantTools(
           "JavaScript function body; `map` and `maplibregl` are in scope.",
         ),
     }),
-    callback: (input) => {
+    callback: async (input) => {
+      if (!(await approveCodeExecution("run_maplibre_js", input.code))) {
+        return json({ ok: false, error: "The user declined to run this code." });
+      }
       const map = deps.getMapController()?.getMap();
       if (!map) throw new Error("The map is not ready yet.");
       // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func

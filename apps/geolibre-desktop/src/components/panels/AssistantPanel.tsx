@@ -7,6 +7,7 @@ import {
   Loader2,
   Send,
   Settings,
+  ShieldAlert,
   Sparkles,
   Square,
   Wrench,
@@ -170,11 +171,39 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     () => loadStored(MODEL_STORAGE_KEY) ?? "",
   );
 
+  // A model-generated code snippet (run_python / run_maplibre_js) awaiting the
+  // user's approval, plus the promise resolver the tool callback is blocked on.
+  const [pendingCode, setPendingCode] = useState<{
+    tool: "run_python" | "run_maplibre_js";
+    code: string;
+    resolve: (approved: boolean) => void;
+  } | null>(null);
+  // Once the user opts in, skip the prompt for the rest of this session.
+  const alwaysAllowCodeRef = useRef(false);
+
+  // Resolve the pending approval and dismiss the prompt.
+  const decideCode = (approved: boolean, alwaysAllow: boolean): void => {
+    if (approved && alwaysAllow) alwaysAllowCodeRef.current = true;
+    setPendingCode((current) => {
+      current?.resolve(approved);
+      return null;
+    });
+  };
+
   // One session per mounted panel; conversation history lives inside it.
   const session = useMemo(
     () =>
       new AssistantSession({
         getMapController: () => mapControllerRef.current,
+        // Gate assistant-authored code behind an explicit confirmation (unless
+        // the user has opted into always-allow for this session). Prompt-injected
+        // content could otherwise make the model run code that exfiltrates data.
+        confirmCodeExecution: ({ tool, code }) =>
+          alwaysAllowCodeRef.current
+            ? Promise.resolve(true)
+            : new Promise<boolean>((resolve) => {
+                setPendingCode({ tool, code, resolve });
+              }),
       }),
     [mapControllerRef],
   );
@@ -310,6 +339,9 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   const stop = () => {
     cancelledGenerationRef.current = sendGenerationRef.current;
     session.cancel();
+    // Decline any code awaiting approval so a stopped run doesn't leave the
+    // confirmation prompt (and its blocked tool promise) hanging.
+    decideCode(false, false);
     runningRef.current = false;
     setRunning(false);
   };
@@ -651,6 +683,76 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           )}
         </div>
       )}
+
+      {pendingCode ? (
+        <CodeApprovalOverlay
+          tool={pendingCode.tool}
+          code={pendingCode.code}
+          onDecide={decideCode}
+        />
+      ) : null}
     </section>
+  );
+}
+
+/**
+ * Modal shown before the assistant runs a `run_python` / `run_maplibre_js`
+ * snippet. Displays the code and requires an explicit decision, with an opt-in
+ * to skip the prompt for the rest of the session.
+ */
+function CodeApprovalOverlay({
+  tool,
+  code,
+  onDecide,
+}: {
+  tool: "run_python" | "run_maplibre_js";
+  code: string;
+  onDecide: (approved: boolean, alwaysAllow: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [alwaysAllow, setAlwaysAllow] = useState(false);
+  const language = tool === "run_python" ? "Python" : "JavaScript";
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("assistant.codeApprovalTitle")}
+        className="flex max-h-full w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-4 shadow-lg"
+      >
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 text-amber-500" />
+          <span className="text-sm font-semibold">
+            {t("assistant.codeApprovalTitle")}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {t("assistant.codeApprovalBody", { language })}
+        </p>
+        <pre className="max-h-48 overflow-auto rounded border bg-muted p-2 text-xs">
+          <code>{code}</code>
+        </pre>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={alwaysAllow}
+            onChange={(event) => setAlwaysAllow(event.target.checked)}
+          />
+          {t("assistant.codeApprovalAlways")}
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onDecide(false, false)}
+          >
+            {t("assistant.codeApprovalDecline")}
+          </Button>
+          <Button size="sm" onClick={() => onDecide(true, alwaysAllow)}>
+            {t("assistant.codeApprovalRun")}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

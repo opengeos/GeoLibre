@@ -1,0 +1,170 @@
+"""Security tests for the sidecar: auth token, Host validation, path sandbox."""
+
+from __future__ import annotations
+
+import importlib
+
+import pytest
+from fastapi import HTTPException
+from starlette.testclient import TestClient
+
+
+def _reload_app(monkeypatch: pytest.MonkeyPatch, token: str | None):
+    """Reload the FastAPI app module with GEOLIBRE_SIDECAR_TOKEN set or unset.
+
+    Args:
+        monkeypatch: Pytest monkeypatch fixture.
+        token: Token to place in the environment, or None to unset it.
+
+    Returns:
+        The freshly reloaded ``geolibre_server.app.main`` module.
+    """
+    if token is None:
+        monkeypatch.delenv("GEOLIBRE_SIDECAR_TOKEN", raising=False)
+    else:
+        monkeypatch.setenv("GEOLIBRE_SIDECAR_TOKEN", token)
+    import geolibre_server.app.main as main
+
+    return importlib.reload(main)
+
+
+def test_no_token_env_leaves_endpoints_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without GEOLIBRE_SIDECAR_TOKEN, requests are not challenged (dev/tests)."""
+    main = _reload_app(monkeypatch, None)
+    client = TestClient(main.app)
+    assert client.get("/health").status_code == 200
+    assert client.get("/algorithms").status_code == 200
+
+
+def test_token_required_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With a token set, work endpoints demand it; /health stays exempt."""
+    main = _reload_app(monkeypatch, "s3cr3t")
+    try:
+        client = TestClient(main.app)
+        # Health is exempt so the readiness probe keeps working.
+        assert client.get("/health").status_code == 200
+        # Missing / wrong token is rejected.
+        assert client.get("/algorithms").status_code == 401
+        assert (
+            client.get("/algorithms", headers={"X-GeoLibre-Token": "nope"}).status_code
+            == 401
+        )
+        # Correct token via either accepted header passes.
+        assert (
+            client.get(
+                "/algorithms", headers={"X-GeoLibre-Token": "s3cr3t"}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.get(
+                "/algorithms", headers={"Authorization": "Bearer s3cr3t"}
+            ).status_code
+            == 200
+        )
+    finally:
+        _reload_app(monkeypatch, None)
+
+
+def test_untrusted_host_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A non-loopback Host header is rejected (DNS-rebinding defense)."""
+    main = _reload_app(monkeypatch, "s3cr3t")
+    try:
+        client = TestClient(main.app)
+        assert (
+            client.get(
+                "/algorithms",
+                headers={"Host": "evil.example.com", "X-GeoLibre-Token": "s3cr3t"},
+            ).status_code
+            == 400
+        )
+        assert (
+            client.get(
+                "/algorithms",
+                headers={"Host": "127.0.0.1:8765", "X-GeoLibre-Token": "s3cr3t"},
+            ).status_code
+            == 200
+        )
+    finally:
+        _reload_app(monkeypatch, None)
+
+
+def test_whitebox_path_confined_to_roots(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Whitebox input/output paths outside the allowlisted roots are rejected."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    # Configure a single allowlisted root (mirrors the Docker GEOLIBRE_CONVERSION_ROOTS).
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    tool = {
+        "id": "some_raster_tool",
+        "params": [
+            {"name": "input", "kind": "raster_in"},
+            {"name": "output", "kind": "raster_out"},
+        ],
+    }
+
+    # An input path escaping the roots is refused.
+    outside = WhiteboxRunRequest(
+        tool_id="some_raster_tool",
+        parameters={"input": "/etc/passwd", "output": str(root / "out.tif")},
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(outside, [])
+    assert excinfo.value.status_code == 403
+
+    # An output path escaping the roots is refused.
+    bad_output = WhiteboxRunRequest(
+        tool_id="some_raster_tool",
+        parameters={
+            "input": str(root / "in.tif"),
+            "output": "/usr/share/nginx/html/x.tif",
+        },
+        tool=tool,
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        _prepare_arguments(bad_output, [])
+    assert excinfo.value.status_code == 403
+
+    # Paths inside the roots are accepted.
+    ok = WhiteboxRunRequest(
+        tool_id="some_raster_tool",
+        parameters={"input": str(root / "in.tif"), "output": str(root / "out.tif")},
+        tool=tool,
+    )
+    args, _ = _prepare_arguments(ok, [])
+    assert args["input"] == str(root / "in.tif")
+    assert args["output"] == str(root / "out.tif")
+
+
+def test_whitebox_paths_unconfined_without_roots(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no allowlist (desktop default), any path is accepted."""
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [])
+    tool = {
+        "id": "some_raster_tool",
+        "params": [{"name": "input", "kind": "raster_in"}],
+    }
+    request = WhiteboxRunRequest(
+        tool_id="some_raster_tool",
+        parameters={"input": "/anywhere/on/disk.tif"},
+        tool=tool,
+    )
+    args, _ = _prepare_arguments(request, [])
+    assert args["input"] == "/anywhere/on/disk.tif"
