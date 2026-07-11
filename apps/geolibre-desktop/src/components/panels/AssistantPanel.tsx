@@ -176,41 +176,48 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
   // callback is blocked on. A queue (not a single slot) so two tool calls
   // dispatched before the user responds to the first don't drop the first
   // request's resolver — they are shown and resolved one at a time.
-  const [codeQueue, setCodeQueue] = useState<
-    Array<{
-      id: number;
-      tool: "run_python" | "run_maplibre_js";
-      code: string;
-      resolve: (approved: boolean) => void;
-    }>
-  >([]);
+  //
+  // The ref is authoritative: it's read/drained synchronously (including in the
+  // unmount cleanup, where a React state updater is not guaranteed to run and
+  // must not carry side effects). The state only mirrors the ref for rendering.
+  type PendingCode = {
+    id: number;
+    tool: "run_python" | "run_maplibre_js";
+    code: string;
+    resolve: (approved: boolean) => void;
+  };
+  const codeQueueRef = useRef<PendingCode[]>([]);
+  const [codeQueue, setCodeQueue] = useState<PendingCode[]>([]);
   // Once the user opts in, skip the prompt for the rest of this session.
   const alwaysAllowCodeRef = useRef(false);
   // Monotonic id so each queued prompt has a stable React key.
   const codeReqIdRef = useRef(0);
 
+  const commitQueue = (next: PendingCode[]): void => {
+    codeQueueRef.current = next;
+    setCodeQueue(next);
+  };
+
   // Resolve the head request and advance the queue. When the user approves with
   // "always allow", drain the rest as approved too.
   const decideCode = (approved: boolean, alwaysAllow: boolean): void => {
     if (approved && alwaysAllow) alwaysAllowCodeRef.current = true;
-    setCodeQueue((queue) => {
-      if (queue.length === 0) return queue;
-      const [head, ...rest] = queue;
-      head.resolve(approved);
-      if (approved && alwaysAllow) {
-        for (const item of rest) item.resolve(true);
-        return [];
-      }
-      return rest;
-    });
+    const queue = codeQueueRef.current;
+    if (queue.length === 0) return;
+    const [head, ...rest] = queue;
+    head.resolve(approved);
+    if (approved && alwaysAllow) {
+      for (const item of rest) item.resolve(true);
+      commitQueue([]);
+    } else {
+      commitQueue(rest);
+    }
   };
 
   // Decline every queued request (used when the run is stopped/torn down).
   const declineAllPendingCode = (): void => {
-    setCodeQueue((queue) => {
-      for (const item of queue) item.resolve(false);
-      return [];
-    });
+    for (const item of codeQueueRef.current) item.resolve(false);
+    commitQueue([]);
   };
 
   // One session per mounted panel; conversation history lives inside it.
@@ -226,22 +233,24 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             ? Promise.resolve(true)
             : new Promise<boolean>((resolve) => {
                 const id = (codeReqIdRef.current += 1);
-                setCodeQueue((queue) => [...queue, { id, tool, code, resolve }]);
+                commitQueue([
+                  ...codeQueueRef.current,
+                  { id, tool, code, resolve },
+                ]);
               }),
       }),
     [mapControllerRef],
   );
 
-  // Tear down the session and any in-flight run on unmount. Also decline any
-  // pending code-approval prompts so their blocked tool promises don't hang if
-  // the panel unmounts while the queue is non-empty.
+  // Tear down the session and any in-flight run on unmount. Drain the queue ref
+  // synchronously (resolving each pending approval as declined) so their blocked
+  // tool promises don't hang; done directly on the ref, not via a state updater
+  // that may never run after unmount.
   useEffect(
     () => () => {
       session.cancel();
-      setCodeQueue((queue) => {
-        for (const item of queue) item.resolve(false);
-        return [];
-      });
+      for (const item of codeQueueRef.current) item.resolve(false);
+      codeQueueRef.current = [];
     },
     [session],
   );
@@ -750,6 +759,7 @@ function CodeApprovalOverlay({
   const language = tool === "run_python" ? "Python" : "JavaScript";
   // Move focus to the safe default (Decline) when the prompt opens so keyboard
   // users land inside the dialog, and let Escape dismiss it as a decline.
+  const dialogRef = useRef<HTMLDivElement>(null);
   const declineRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     declineRef.current?.focus();
@@ -757,6 +767,7 @@ function CodeApprovalOverlay({
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 p-4">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t("assistant.codeApprovalTitle")}
@@ -765,6 +776,25 @@ function CodeApprovalOverlay({
           if (event.key === "Escape") {
             event.stopPropagation();
             onDecide(false, false);
+            return;
+          }
+          // Trap Tab within this security-critical dialog so a keyboard user
+          // can't move focus to background controls while the prompt is open.
+          if (event.key === "Tab") {
+            const focusables = dialogRef.current?.querySelectorAll<HTMLElement>(
+              'button, input, [href], [tabindex]:not([tabindex="-1"])',
+            );
+            if (!focusables || focusables.length === 0) return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            const active = document.activeElement;
+            if (event.shiftKey && active === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && active === last) {
+              event.preventDefault();
+              first.focus();
+            }
           }
         }}
       >
