@@ -5,6 +5,22 @@ import { invoke } from "@tauri-apps/api/core";
 export const DEFAULT_GEE_OAUTH_CLIENT_ID =
   "937635412428-qc3albpo6dtm2jdp2o5mk8biqlh0i6vo.apps.googleusercontent.com";
 
+// The OAuth scopes GeoLibre requests for Earth Engine. Deliberately minimal so
+// the app can pass Google's OAuth verification without the broad `cloud-platform`
+// scope: the @google/earthengine SDK requests earthengine + cloud-platform +
+// full drive by default, but GeoLibre only displays tiles/thumbnails and exports
+// to Drive — it never touches Cloud Storage, BigQuery, or project/asset
+// management, so cloud-platform is unnecessary. Keep this in sync with the scope
+// list in the desktop helper page (src-tauri/src/earth_engine_oauth.rs).
+//   - earthengine: request/display Earth Engine map tiles and visualizations.
+//   - drive.file:  the EE control's "Export" writes to Google Drive; drive.file
+//     is the non-sensitive per-file scope, avoiding the restricted full-drive
+//     scope (and its CASA security assessment).
+export const EARTH_ENGINE_OAUTH_SCOPES = [
+  "https://www.googleapis.com/auth/earthengine",
+  "https://www.googleapis.com/auth/drive.file",
+];
+
 export type EarthEngineImportMetaEnv = {
   VITE_GEE_OAUTH_CLIENT_ID?: unknown;
   VITE_GEE_PROJECT_ID?: unknown;
@@ -37,6 +53,7 @@ type EarthEngineApi = {
       onFailure: (error: unknown) => void,
       extraScopes?: unknown,
       onImmediateFailed?: () => void,
+      suppressDefaultScopes?: boolean,
     ) => void;
     authenticateViaPopup?: (
       onSuccess: () => void,
@@ -229,12 +246,16 @@ async function authenticateEarthEngineViaBrowser(
       reject(new Error("Earth Engine OAuth authentication is unavailable."));
       return;
     }
+    // Suppress the SDK's default scopes (earthengine + cloud-platform + full
+    // drive) and request only EARTH_ENGINE_OAUTH_SCOPES, so the web path asks
+    // for the same minimal set as the desktop helper page.
     earthEngine.data.authenticateViaOauth(
       oauthClientId,
       onSuccess,
       onFailure,
-      undefined,
+      EARTH_ENGINE_OAUTH_SCOPES,
       onImmediateFailed,
+      true,
     );
   });
 }
