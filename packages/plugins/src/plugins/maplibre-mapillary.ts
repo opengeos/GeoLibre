@@ -23,14 +23,17 @@ const SOURCE_ID = "geolibre-mapillary-coverage";
 const SELECTED_SOURCE_ID = "geolibre-mapillary-selected";
 const SEQUENCE_LAYER_ID = "geolibre-mapillary-sequence";
 const SEQUENCE_HIGHLIGHT_LAYER_ID = "geolibre-mapillary-sequence-highlight";
-const OVERVIEW_LAYER_ID = "geolibre-mapillary-overview";
 const IMAGE_LAYER_ID = "geolibre-mapillary-image";
 const SELECTED_LAYER_ID = "geolibre-mapillary-selected-marker";
 // The Layers-panel entry that stands in for the (imperatively added) coverage
 // layers so the user can toggle/reorder them like any other layer (#5).
 const COVERAGE_STORE_LAYER_ID = "geolibre-mapillary-coverage-layer";
-// The point layers that carry a clickable image `id` property.
-const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID, OVERVIEW_LAYER_ID];
+// The point layer carrying a clickable image `id` property.
+const CLICKABLE_LAYER_IDS = [IMAGE_LAYER_ID];
+// Only draw the individual image points once zoomed in; at lower zooms the
+// coverage shows as sequence lines only, since a whole region's worth of dots is
+// overwhelming (mapillary.com/app behaves the same way).
+const POINT_MIN_ZOOM = 14;
 
 // Mapillary green for coverage, orange for the currently viewed image, and a
 // magenta highlight for the selected image's whole sequence, matching the
@@ -223,28 +226,16 @@ function addCoverage(activeMap: MapLibreMap): void {
     });
   }
 
-  if (!activeMap.getLayer(OVERVIEW_LAYER_ID)) {
-    activeMap.addLayer({
-      id: OVERVIEW_LAYER_ID,
-      type: "circle",
-      source: SOURCE_ID,
-      "source-layer": "overview",
-      maxzoom: 14,
-      paint: {
-        "circle-color": COVERAGE_COLOR,
-        "circle-radius": ["interpolate", ["linear"], ["zoom"], 6, 1.5, 13, 3],
-        "circle-opacity": 0.85,
-      },
-    });
-  }
-
+  // Individual image points only — the low-zoom "overview" point set is
+  // deliberately not drawn, so zoomed-out views show sequence lines rather than
+  // a region-wide cloud of dots.
   if (!activeMap.getLayer(IMAGE_LAYER_ID)) {
     activeMap.addLayer({
       id: IMAGE_LAYER_ID,
       type: "circle",
       source: SOURCE_ID,
       "source-layer": "image",
-      minzoom: 14,
+      minzoom: POINT_MIN_ZOOM,
       paint: {
         "circle-color": COVERAGE_COLOR,
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 4, 20, 7],
@@ -283,7 +274,7 @@ function addCoverage(activeMap: MapLibreMap): void {
     id: COVERAGE_STORE_LAYER_ID,
     name: labels.coverageLayer,
     type: "vector-tiles",
-    nativeLayerIds: [SEQUENCE_LAYER_ID, OVERVIEW_LAYER_ID, IMAGE_LAYER_ID],
+    nativeLayerIds: [SEQUENCE_LAYER_ID, IMAGE_LAYER_ID],
     sourceIds: [SOURCE_ID],
     opacity: 0.9,
     style: {
@@ -302,7 +293,6 @@ function removeCoverage(activeMap: MapLibreMap): void {
     SELECTED_LAYER_ID,
     SEQUENCE_HIGHLIGHT_LAYER_ID,
     IMAGE_LAYER_ID,
-    OVERVIEW_LAYER_ID,
     SEQUENCE_LAYER_ID,
   ]) {
     if (activeMap.getLayer(id)) activeMap.removeLayer(id);
