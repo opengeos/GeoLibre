@@ -99,6 +99,22 @@ describe("normalizeRouteAnimationSettings", () => {
     assert.equal(s.showTrail, false);
   });
 
+  it("accepts valid hex colors and rejects malformed ones", () => {
+    assert.equal(
+      normalizeRouteAnimationSettings({ color: "#ff0000" }).color,
+      "#ff0000",
+    );
+    assert.equal(normalizeRouteAnimationSettings({ color: "#abc" }).color, "#abc");
+    assert.equal(
+      normalizeRouteAnimationSettings({ color: "red" }).color,
+      DEFAULT_ROUTE_ANIMATION_SETTINGS.color,
+    );
+    assert.equal(
+      normalizeRouteAnimationSettings({ color: "#12" }).color,
+      DEFAULT_ROUTE_ANIMATION_SETTINGS.color,
+    );
+  });
+
   it("accepts valid marker styles and falls back for invalid ones", () => {
     assert.equal(
       normalizeRouteAnimationSettings({ markerStyle: "point" }).markerStyle,

@@ -1417,6 +1417,7 @@
       "progress": "Progress",
       "speed": "Speed",
       "followCamera": "Follow",
+      "color": "Track color",
       "marker": "Marker",
       "markerStyle": {
         "arrow": "Arrow (heading)",

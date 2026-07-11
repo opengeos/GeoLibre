@@ -34,7 +34,6 @@ const POINT_LAYER_ID = "geolibre-route-anim-point-layer";
 const TRAIL_SOURCE_ID = "geolibre-route-anim-trail-source";
 const TRAIL_LAYER_ID = "geolibre-route-anim-trail-layer";
 const ARROW_ICON_ID = "geolibre-route-anim-arrow";
-const MARKER_COLOR = "#2563eb";
 
 /**
  * How the moving position is drawn:
@@ -68,7 +67,12 @@ export interface RouteAnimationSettings {
   markerStyle: RouteMarkerStyle;
   /** When true, a line is drawn over the portion of the route already traveled. */
   showTrail: boolean;
+  /** Hex color (`#rgb`/`#rrggbb`) of the marker and trail. */
+  color: string;
 }
+
+const DEFAULT_COLOR = "#2563eb";
+const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 export const ROUTE_ANIM_SPEED_MIN = 1;
 export const ROUTE_ANIM_SPEED_MAX = 1000;
@@ -82,6 +86,7 @@ export const DEFAULT_ROUTE_ANIMATION_SETTINGS: RouteAnimationSettings = {
   followCamera: false,
   markerStyle: "arrow",
   showTrail: true,
+  color: DEFAULT_COLOR,
 };
 
 function clampNumber(
@@ -120,6 +125,10 @@ export function normalizeRouteAnimationSettings(
       ? (c.markerStyle as RouteMarkerStyle)
       : base.markerStyle,
     showTrail: typeof c.showTrail === "boolean" ? c.showTrail : base.showTrail,
+    color:
+      typeof c.color === "string" && HEX_COLOR.test(c.color)
+        ? c.color
+        : base.color,
   };
 }
 
@@ -135,7 +144,8 @@ function settingsEqual(
     a.progress === b.progress &&
     a.followCamera === b.followCamera &&
     a.markerStyle === b.markerStyle &&
-    a.showTrail === b.showTrail
+    a.showTrail === b.showTrail &&
+    a.color === b.color
   );
 }
 
@@ -150,7 +160,7 @@ function isDefaultSettings(value: RouteAnimationSettings): boolean {
 
 const ARROW_SIZE = 48;
 
-function createArrowIcon(): ImageData | null {
+function createArrowIcon(color: string): ImageData | null {
   const canvas = document.createElement("canvas");
   canvas.width = ARROW_SIZE;
   canvas.height = ARROW_SIZE;
@@ -164,7 +174,7 @@ function createArrowIcon(): ImageData | null {
   ctx.lineTo(c, ARROW_SIZE - 16);
   ctx.lineTo(8, ARROW_SIZE - 8);
   ctx.closePath();
-  ctx.fillStyle = "#2563eb";
+  ctx.fillStyle = color;
   ctx.fill();
   ctx.lineWidth = 3;
   ctx.strokeStyle = "#ffffff";
@@ -185,6 +195,8 @@ class RouteAnimationEngine {
   private rafId: number | null = null;
   private lastFrame: number | null = null;
   private destroyed = false;
+  // Color the arrow icon was last drawn with, so we only redraw on change.
+  private iconColor = "";
 
   constructor(
     map: MapLibreMap,
@@ -258,8 +270,11 @@ class RouteAnimationEngine {
     if (!this.map.isStyleLoaded()) return;
 
     if (!this.map.hasImage(ARROW_ICON_ID)) {
-      const icon = createArrowIcon();
-      if (icon) this.map.addImage(ARROW_ICON_ID, icon, { pixelRatio: 2 });
+      const icon = createArrowIcon(this.settings.color);
+      if (icon) {
+        this.map.addImage(ARROW_ICON_ID, icon, { pixelRatio: 2 });
+        this.iconColor = this.settings.color;
+      }
     }
 
     if (!this.map.getSource(TRAIL_SOURCE_ID)) {
@@ -277,7 +292,7 @@ class RouteAnimationEngine {
         metadata: { "geolibre:internal": true },
         layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          "line-color": MARKER_COLOR,
+          "line-color": this.settings.color,
           "line-width": 4,
           "line-opacity": 0.85,
         },
@@ -299,7 +314,7 @@ class RouteAnimationEngine {
         metadata: { "geolibre:internal": true },
         paint: {
           "circle-radius": 4,
-          "circle-color": MARKER_COLOR,
+          "circle-color": this.settings.color,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -347,6 +362,26 @@ class RouteAnimationEngine {
         "visibility",
         this.settings.showTrail ? "visible" : "none",
       );
+    }
+    this.applyColor();
+  }
+
+  /** Recolor the trail, point, and arrow marker to the current color. */
+  private applyColor(): void {
+    const color = this.settings.color;
+    if (this.map.getLayer(TRAIL_LAYER_ID)) {
+      this.map.setPaintProperty(TRAIL_LAYER_ID, "line-color", color);
+    }
+    if (this.map.getLayer(POINT_LAYER_ID)) {
+      this.map.setPaintProperty(POINT_LAYER_ID, "circle-color", color);
+    }
+    // The arrow is a raster icon, so recolor means redrawing the image.
+    if (this.iconColor !== color && this.map.hasImage(ARROW_ICON_ID)) {
+      const icon = createArrowIcon(color);
+      if (icon) {
+        this.map.updateImage(ARROW_ICON_ID, icon);
+        this.iconColor = color;
+      }
     }
   }
 

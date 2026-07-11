@@ -94,6 +94,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     followCamera,
     markerStyle,
     showTrail,
+    color,
   } = settings;
 
   // Discover which geojson layers contain line geometry. Resolution is async for
@@ -357,7 +358,17 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <input
+            type="color"
+            aria-label={t("toolbar.routeAnimation.color")}
+            title={t("toolbar.routeAnimation.color")}
+            value={color}
+            onChange={(e) =>
+              setRouteAnimationSettings({ color: e.target.value })
+            }
+            className="h-7 w-9 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
+          />
           <ToggleChip
             active={followCamera}
             icon={<Video className="h-3.5 w-3.5" />}
