@@ -231,17 +231,18 @@ pub fn run() {
 
 /// Whether `read_project_file` may read `path`: an absolute local path (POSIX
 /// `/...` or a Windows drive-letter `C:\...`, never a UNC `\\host\share`), free
-/// of `..` traversal, ending in a GeoLibre project extension (`.geolibre`,
-/// `.geolibre.json`, or `.json` — the extensions the project open/save dialogs
-/// use in `tauri-io.ts`).
+/// of `..` traversal, ending in a GeoLibre project extension — `.geolibre` or
+/// `.geolibre.json`. These are the canonical formats `saveProject` writes and
+/// `isGeoLibreProjectPath` recognizes in `tauri-io.ts`.
 ///
 /// Without this, the command was an arbitrary local-file reader: any webview JS
 /// or loaded plugin could `invoke("read_project_file", { path: "~/.ssh/id_rsa" })`
-/// and receive the contents. The extension gate is not airtight (a JSON-shaped
-/// secret could still match), but it blocks the high-value targets (SSH/cloud
-/// credentials, extension-less config, browser cookie DBs) while still reading
-/// the project files this path needs. Byte-oriented like
-/// `is_allowed_local_vector_path` so Windows paths behave the same on any host.
+/// and receive the contents. A bare `.json` extension is deliberately NOT
+/// accepted: plenty of real secrets are JSON (GCP service-account keys,
+/// `application_default_credentials.json`, editor/CLI configs with tokens), so
+/// requiring the `.geolibre` marker keeps those out while still reading every
+/// real project. Byte-oriented like `is_allowed_local_vector_path` so Windows
+/// paths behave the same on any host.
 pub(crate) fn is_allowed_project_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
@@ -265,7 +266,7 @@ pub(crate) fn is_allowed_project_path(path: &str) -> bool {
     }
 
     let lower = path.to_ascii_lowercase();
-    lower.ends_with(".geolibre") || lower.ends_with(".json")
+    lower.ends_with(".geolibre") || lower.ends_with(".geolibre.json")
 }
 
 #[tauri::command]
@@ -637,6 +638,51 @@ fn guarded_redirect_policy() -> reqwest::redirect::Policy {
     })
 }
 
+/// A DNS resolver that drops any address in a blocked range, so reqwest connects
+/// only to IPs that passed [`is_disallowed_ip`].
+///
+/// [`url_is_fetchable`] validates the host *before* the request, but reqwest
+/// re-resolves the name when it opens the connection, so a check-then-connect
+/// gap remains: an attacker controlling DNS (short TTL) could answer the
+/// pre-check with a public IP and the actual connection with `169.254.169.254`.
+/// Enforcing the filter inside the resolver reqwest actually uses — for the
+/// initial request and every redirect hop — closes that rebinding window.
+struct GuardedDnsResolver;
+
+impl reqwest::dns::Resolve for GuardedDnsResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        use std::net::ToSocketAddrs;
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            // std getaddrinfo blocks, but these are low-volume tile/URL fetches.
+            let resolved = (host.as_str(), 0u16).to_socket_addrs();
+            let addrs: Vec<std::net::SocketAddr> = match resolved {
+                Ok(iter) => iter.filter(|addr| !is_disallowed_ip(addr.ip())).collect(),
+                Err(error) => {
+                    return Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                }
+            };
+            if addrs.is_empty() {
+                return Err(SSRF_BLOCKED_MESSAGE.into());
+            }
+            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// Build a blocking HTTP client that enforces the SSRF guard at connect time
+/// (via [`GuardedDnsResolver`]) and re-validates redirect hops.
+fn guarded_http_client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
+        .redirect(guarded_redirect_policy())
+        .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
+        .user_agent("GeoLibre Desktop")
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))
+}
+
 #[tauri::command]
 async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
     tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url))
@@ -647,13 +693,7 @@ async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
 fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
     ensure_fetchable_url(&url)?;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))
-        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .redirect(guarded_redirect_policy())
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client = guarded_http_client(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))?;
 
     let response = client
         .get(&url)
@@ -1127,13 +1167,7 @@ async fn resolve_url_redirect(url: String) -> Result<String, String> {
 fn resolve_url_redirect_blocking(url: String) -> Result<String, String> {
     ensure_fetchable_url(&url)?;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))
-        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .redirect(guarded_redirect_policy())
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client = guarded_http_client(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))?;
 
     if let Ok(head_response) = client.head(&url).send() {
         if has_xyz_placeholders(head_response.url().as_str()) {
@@ -2811,13 +2845,22 @@ mod tests {
     fn project_path_guard_allows_projects_and_blocks_secrets() {
         assert!(is_allowed_project_path("/home/u/map.geolibre.json"));
         assert!(is_allowed_project_path("/home/u/map.geolibre"));
-        assert!(is_allowed_project_path("C:\\Users\\u\\map.json"));
+        assert!(is_allowed_project_path("C:\\Users\\u\\map.geolibre.json"));
         // Secrets and traversal are refused.
         assert!(!is_allowed_project_path("/home/u/.ssh/id_rsa"));
         assert!(!is_allowed_project_path("/home/u/.aws/credentials"));
-        assert!(!is_allowed_project_path("/home/u/../../etc/hosts.json"));
-        assert!(!is_allowed_project_path("relative/map.json"));
-        assert!(!is_allowed_project_path("\\\\server\\share\\map.json"));
+        assert!(!is_allowed_project_path(
+            "/home/u/../../etc/hosts.geolibre.json"
+        ));
+        assert!(!is_allowed_project_path("relative/map.geolibre.json"));
+        assert!(!is_allowed_project_path(
+            "\\\\server\\share\\map.geolibre.json"
+        ));
+        // A bare .json file (e.g. a JSON credential store) is NOT a project.
+        assert!(!is_allowed_project_path(
+            "/home/u/.config/gcloud/application_default_credentials.json"
+        ));
+        assert!(!is_allowed_project_path("C:\\Users\\u\\map.json"));
     }
 
     #[test]

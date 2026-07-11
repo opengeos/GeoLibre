@@ -752,6 +752,34 @@ def _ensure_within_roots(path_value: str) -> None:
         )
 
 
+def _looks_like_fs_path(value: str) -> bool:
+    """Whether a parameter value looks like a filesystem path that could escape.
+
+    A value is "escape-shaped" when it is absolute (POSIX ``/…`` or a Windows
+    drive ``C:\\…``) or contains a ``..`` parent-traversal segment. Relative
+    paths without ``..`` stay under the working directory and cannot reach
+    outside the roots, and plain scalar strings (numbers, enums, CRS codes) are
+    ignored. This lets the sandbox check key off the *value shape* rather than
+    the client-declared ``kind`` — ``request.tool`` is free-form and untrusted,
+    so a caller could mislabel a path parameter's ``kind`` to skip a kind-based
+    check while still passing a real path Whitebox will act on.
+
+    Args:
+        value: A raw string parameter value from the run request.
+
+    Returns:
+        True when the value should be confined to the allowlisted roots.
+    """
+    text = value.strip()
+    if not text:
+        return False
+    if text.startswith(("/", "\\")):
+        return True
+    if len(text) >= 2 and text[1] == ":" and text[0].isascii() and text[0].isalpha():
+        return True
+    return ".." in text.replace("\\", "/").split("/")
+
+
 def _prepare_arguments(
     request: WhiteboxRunRequest,
     temp_paths: list[Path],
@@ -780,8 +808,12 @@ def _prepare_arguments(
             # Embedded layers are materialized to a server-owned temp file, so
             # the caller never controls this path.
             value = _write_layer_input(name, request.layer_inputs[name], temp_paths)
-        elif kind.endswith(("_in", "_out")) and isinstance(value, str) and value.strip():
-            # Caller-supplied file path: keep it inside the allowlisted roots.
+        elif isinstance(value, str) and _looks_like_fs_path(value):
+            # A path-shaped value must stay inside the allowlisted roots,
+            # regardless of the client-declared `kind`. `request.tool` is
+            # untrusted free-form input, so keying off `kind.endswith("_in"/"_out")`
+            # could be bypassed by mislabelling a path parameter; validate by the
+            # value's shape instead.
             _ensure_within_roots(value)
         batch_directory = _batch_working_directory(value, spec)
         if batch_directory:

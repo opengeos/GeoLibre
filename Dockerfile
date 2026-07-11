@@ -78,7 +78,10 @@ RUN mkdir -p /data
 # from a dev server on another port). This image is intended for local/single-user
 # use; on a public host those allowances let the served JS probe each visitor's
 # loopback. Drop them from the CSP before publishing publicly.
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Ship nginx.conf as an immutable template (not loaded directly). entrypoint.sh
+# renders it to /etc/nginx/conf.d/default.conf on every boot, substituting the
+# per-launch sidecar token, so a container restart never keeps a stale token.
+COPY docker/nginx.conf /etc/nginx/nginx.conf.template
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 COPY --from=build /app/apps/geolibre-desktop/dist /usr/share/nginx/html

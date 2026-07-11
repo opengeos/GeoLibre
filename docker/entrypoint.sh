@@ -13,10 +13,30 @@ set -e
 GEOLIBRE_SIDECAR_TOKEN="${GEOLIBRE_SIDECAR_TOKEN:-$(python -c 'import secrets; print(secrets.token_hex(16))')}"
 export GEOLIBRE_SIDECAR_TOKEN
 
-# Substitute the token into the nginx /sidecar/ proxy config (the token is hex,
-# so it is safe inside the sed replacement).
-sed -i "s|__GEOLIBRE_SIDECAR_TOKEN__|${GEOLIBRE_SIDECAR_TOKEN}|g" \
-  /etc/nginx/conf.d/default.conf
+# The token is embedded in a double-quoted nginx header value, so reject any
+# character that could break the config (quotes, backslashes, whitespace, &).
+# The auto-generated hex always passes; an operator override must be URL-safe.
+case "$GEOLIBRE_SIDECAR_TOKEN" in
+  "" | *[!A-Za-z0-9._-]*)
+    echo "GEOLIBRE_SIDECAR_TOKEN must be non-empty and contain only [A-Za-z0-9._-]" >&2
+    exit 1
+    ;;
+esac
+
+# Render the nginx config from the immutable image template on every boot. The
+# template is never mutated, so a container *restart* (which re-runs this script
+# with a freshly generated token but keeps the writable layer) always writes a
+# config whose forwarded token matches the token exported to uvicorn above.
+# Python's str.replace handles the token literally (no shell/sed metacharacter
+# surprises).
+python -c '
+import os
+token = os.environ["GEOLIBRE_SIDECAR_TOKEN"]
+src = open("/etc/nginx/nginx.conf.template").read()
+open("/etc/nginx/conf.d/default.conf", "w").write(
+    src.replace("__GEOLIBRE_SIDECAR_TOKEN__", token)
+)
+'
 
 if [ "${GEOLIBRE_DISABLE_SIDECAR:-0}" != "1" ]; then
   python -m uvicorn geolibre_server.app.main:app \

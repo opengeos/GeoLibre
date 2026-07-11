@@ -171,22 +171,45 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     () => loadStored(MODEL_STORAGE_KEY) ?? "",
   );
 
-  // A model-generated code snippet (run_python / run_maplibre_js) awaiting the
-  // user's approval, plus the promise resolver the tool callback is blocked on.
-  const [pendingCode, setPendingCode] = useState<{
-    tool: "run_python" | "run_maplibre_js";
-    code: string;
-    resolve: (approved: boolean) => void;
-  } | null>(null);
+  // Queue of model-generated code snippets (run_python / run_maplibre_js)
+  // awaiting the user's approval, each with the promise resolver its tool
+  // callback is blocked on. A queue (not a single slot) so two tool calls
+  // dispatched before the user responds to the first don't drop the first
+  // request's resolver — they are shown and resolved one at a time.
+  const [codeQueue, setCodeQueue] = useState<
+    Array<{
+      id: number;
+      tool: "run_python" | "run_maplibre_js";
+      code: string;
+      resolve: (approved: boolean) => void;
+    }>
+  >([]);
   // Once the user opts in, skip the prompt for the rest of this session.
   const alwaysAllowCodeRef = useRef(false);
+  // Monotonic id so each queued prompt has a stable React key.
+  const codeReqIdRef = useRef(0);
 
-  // Resolve the pending approval and dismiss the prompt.
+  // Resolve the head request and advance the queue. When the user approves with
+  // "always allow", drain the rest as approved too.
   const decideCode = (approved: boolean, alwaysAllow: boolean): void => {
     if (approved && alwaysAllow) alwaysAllowCodeRef.current = true;
-    setPendingCode((current) => {
-      current?.resolve(approved);
-      return null;
+    setCodeQueue((queue) => {
+      if (queue.length === 0) return queue;
+      const [head, ...rest] = queue;
+      head.resolve(approved);
+      if (approved && alwaysAllow) {
+        for (const item of rest) item.resolve(true);
+        return [];
+      }
+      return rest;
+    });
+  };
+
+  // Decline every queued request (used when the run is stopped/torn down).
+  const declineAllPendingCode = (): void => {
+    setCodeQueue((queue) => {
+      for (const item of queue) item.resolve(false);
+      return [];
     });
   };
 
@@ -202,7 +225,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
           alwaysAllowCodeRef.current
             ? Promise.resolve(true)
             : new Promise<boolean>((resolve) => {
-                setPendingCode({ tool, code, resolve });
+                const id = (codeReqIdRef.current += 1);
+                setCodeQueue((queue) => [...queue, { id, tool, code, resolve }]);
               }),
       }),
     [mapControllerRef],
@@ -340,8 +364,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
     cancelledGenerationRef.current = sendGenerationRef.current;
     session.cancel();
     // Decline any code awaiting approval so a stopped run doesn't leave the
-    // confirmation prompt (and its blocked tool promise) hanging.
-    decideCode(false, false);
+    // confirmation prompt (and its blocked tool promises) hanging.
+    declineAllPendingCode();
     runningRef.current = false;
     setRunning(false);
   };
@@ -684,10 +708,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
         </div>
       )}
 
-      {pendingCode ? (
+      {codeQueue.length > 0 ? (
         <CodeApprovalOverlay
-          tool={pendingCode.tool}
-          code={pendingCode.code}
+          key={codeQueue[0].id}
+          tool={codeQueue[0].tool}
+          code={codeQueue[0].code}
           onDecide={decideCode}
         />
       ) : null}

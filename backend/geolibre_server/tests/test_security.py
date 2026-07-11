@@ -146,6 +146,50 @@ def test_whitebox_path_confined_to_roots(
     assert args["output"] == str(root / "out.tif")
 
 
+def test_whitebox_path_check_ignores_mislabeled_kind(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """A path smuggled under a non-path ``kind`` is still confined to the roots.
+
+    ``request.tool`` is untrusted free-form input, so a caller can mislabel a
+    file parameter's ``kind`` (e.g. ``"string"``) to try to skip the sandbox.
+    The check keys off the value shape, so it still fires.
+    """
+    from geolibre_server.app import conversion
+    from geolibre_server.app.whitebox import (
+        WhiteboxRunRequest,
+        _prepare_arguments,
+    )
+
+    root = tmp_path / "data"
+    root.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(root.resolve())])
+
+    # Mislabel the real path parameter as a plain "string" kind.
+    tool = {
+        "id": "some_raster_tool",
+        "params": [{"name": "input", "kind": "string"}],
+    }
+    for escaping in ("/etc/passwd", "../../etc/passwd"):
+        request = WhiteboxRunRequest(
+            tool_id="some_raster_tool",
+            parameters={"input": escaping},
+            tool=tool,
+        )
+        with pytest.raises(HTTPException) as excinfo:
+            _prepare_arguments(request, [])
+        assert excinfo.value.status_code == 403
+
+    # A non-path scalar string is not mistaken for a path.
+    request = WhiteboxRunRequest(
+        tool_id="some_raster_tool",
+        parameters={"input": "EPSG:4326"},
+        tool=tool,
+    )
+    args, _ = _prepare_arguments(request, [])
+    assert args["input"] == "EPSG:4326"
+
+
 def test_whitebox_paths_unconfined_without_roots(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
