@@ -737,6 +737,12 @@ function CodeApprovalOverlay({
   const { t } = useTranslation();
   const [alwaysAllow, setAlwaysAllow] = useState(false);
   const language = tool === "run_python" ? "Python" : "JavaScript";
+  // Move focus to the safe default (Decline) when the prompt opens so keyboard
+  // users land inside the dialog, and let Escape dismiss it as a decline.
+  const declineRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    declineRef.current?.focus();
+  }, []);
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-background/80 p-4">
       <div
@@ -744,6 +750,12 @@ function CodeApprovalOverlay({
         aria-modal="true"
         aria-label={t("assistant.codeApprovalTitle")}
         className="flex max-h-full w-full max-w-md flex-col gap-3 rounded-lg border bg-card p-4 shadow-lg"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            onDecide(false, false);
+          }
+        }}
       >
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-500" />
@@ -767,6 +779,7 @@ function CodeApprovalOverlay({
         </label>
         <div className="flex justify-end gap-2">
           <Button
+            ref={declineRef}
             size="sm"
             variant="outline"
             onClick={() => onDecide(false, false)}

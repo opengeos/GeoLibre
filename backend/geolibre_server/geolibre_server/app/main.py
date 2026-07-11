@@ -42,6 +42,11 @@ from .whitebox import router as whitebox_router
 # own: a browser can send a simple cross-origin POST without a preflight (CSRF),
 # and a DNS-rebinding attacker can read responses too. The token closes both.
 SIDECAR_TOKEN = os.environ.get("GEOLIBRE_SIDECAR_TOKEN", "").strip()
+# Compared as bytes: Starlette decodes request headers as latin-1, so a header
+# with a byte > 0x7F arrives as a non-ASCII ``str`` and ``hmac.compare_digest``
+# would raise ``TypeError`` (turning an auth failure into a 500). Encoding both
+# sides keeps the comparison constant-time and simply fails to match.
+_SIDECAR_TOKEN_BYTES = SIDECAR_TOKEN.encode("utf-8")
 
 # Endpoints reachable without the token: the health probe (used by the Rust
 # readiness poll and the frontend before it holds a token) and CORS preflight.
@@ -69,8 +74,9 @@ async def require_sidecar_token(request: Request, call_next):
             auth = request.headers.get("authorization", "")
             if auth.lower().startswith("bearer "):
                 provided = auth[7:].strip()
-        # Constant-time compare so a timing side channel cannot leak the token.
-        if not hmac.compare_digest(provided, SIDECAR_TOKEN):
+        # Constant-time compare (on bytes; see _SIDECAR_TOKEN_BYTES) so a timing
+        # side channel cannot leak the token and a non-ASCII header can't crash.
+        if not hmac.compare_digest(provided.encode("utf-8"), _SIDECAR_TOKEN_BYTES):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Missing or invalid sidecar token"},

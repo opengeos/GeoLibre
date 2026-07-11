@@ -200,18 +200,32 @@ async function loadPluginUrlBundles(
       // Refuse to auto-execute a URL bundle whose code changed since it was
       // last trusted (a silent-update / compromised-host vector). First sight
       // pins it; a changed hash is held back until the user reloads it
-      // explicitly (which re-pins).
-      const integrity = await verifyPluginBundleIntegrity(
-        manifestUrls[index],
-        bundle,
-      );
-      if (integrity.status === "changed") {
+      // explicitly (which re-pins). Isolate a verification failure (e.g.
+      // crypto.subtle unavailable) to this one URL — letting it throw here would
+      // reject the whole loadExternalPlugins Promise.all and drop every plugin.
+      try {
+        const integrity = await verifyPluginBundleIntegrity(
+          manifestUrls[index],
+          bundle,
+        );
+        if (integrity.status === "changed") {
+          issues.push({
+            archiveName: bundle.archiveName,
+            sourceUrl: bundle.sourceUrl,
+            message:
+              `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
+              "Open Settings → Plugins and reload it to review and accept the update.",
+          });
+          continue;
+        }
+      } catch (error) {
         issues.push({
           archiveName: bundle.archiveName,
           sourceUrl: bundle.sourceUrl,
           message:
-            `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
-            "Open Settings → Plugins and reload it to review and accept the update.",
+            error instanceof Error
+              ? `Could not verify plugin integrity: ${error.message}`
+              : "Could not verify plugin bundle integrity.",
         });
         continue;
       }

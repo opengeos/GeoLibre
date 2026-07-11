@@ -62,6 +62,14 @@ def test_token_required_when_configured(monkeypatch: pytest.MonkeyPatch) -> None
             ).status_code
             == 200
         )
+        # A non-ASCII token header (raw latin-1 bytes on the wire) must fail auth
+        # (401), not crash the byte comparison with a TypeError (500).
+        assert (
+            client.get(
+                "/algorithms", headers={"X-GeoLibre-Token": b"t\xe9k\xe9n"}
+            ).status_code
+            == 401
+        )
     finally:
         _reload_app(monkeypatch, None)
 
