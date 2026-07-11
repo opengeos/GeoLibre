@@ -41,6 +41,14 @@ export interface TourKeyframe {
 // same range the controls enforce.
 /** Default frames per second sampled from the canvas. */
 export const DEFAULT_FPS = 30;
+/**
+ * Target video bitrate (bits per second). MediaRecorder's implicit default is
+ * conservative (~2.5 Mbps), which visibly blurs detailed map imagery and text;
+ * ~12 Mbps keeps the recording crisp at typical canvas sizes while staying a
+ * reasonable file size. Browsers clamp this to their supported range, so an
+ * over-ambitious value is capped rather than rejected.
+ */
+const DEFAULT_VIDEO_BITS_PER_SECOND = 12_000_000;
 /** Lowest selectable frame rate. */
 export const MIN_FPS = 10;
 /** Highest selectable frame rate. */
@@ -711,7 +719,10 @@ export async function recordTour({
   const stream = canvas.captureStream(fps);
   let recorder: MediaRecorder;
   try {
-    recorder = new MediaRecorder(stream, { mimeType });
+    recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: DEFAULT_VIDEO_BITS_PER_SECOND,
+    });
   } catch {
     // The constructor can still reject a codec that isTypeSupported accepted;
     // stop the capture so it isn't leaked when we never reach the finally below,

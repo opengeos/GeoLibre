@@ -742,6 +742,15 @@ export function reattachRouteAnimation(app: GeoLibreAppAPI): void {
 /** Default frames per second sampled from the canvas while recording. */
 export const ROUTE_VIDEO_FPS = 30;
 
+/**
+ * Target video bitrate (bits per second). MediaRecorder's implicit default is
+ * conservative (~2.5 Mbps), which visibly blurs detailed map imagery and text;
+ * ~12 Mbps keeps the export crisp at typical canvas sizes while staying a
+ * reasonable file size. Browsers clamp this to their supported range, so an
+ * over-ambitious value is capped rather than rejected.
+ */
+const ROUTE_VIDEO_BITS_PER_SECOND = 12_000_000;
+
 /** How long to wait for the encoder's final `onstop` before giving up (ms). */
 const ROUTE_VIDEO_STOP_TIMEOUT_MS = 10_000;
 
@@ -880,7 +889,10 @@ export async function recordRouteAnimation({
   const stream = canvas.captureStream(fps);
   let recorder: MediaRecorder;
   try {
-    recorder = new MediaRecorder(stream, { mimeType });
+    recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: ROUTE_VIDEO_BITS_PER_SECOND,
+    });
   } catch {
     // The constructor can still reject a codec that isTypeSupported accepted;
     // release the capture and report it as unsupported.
