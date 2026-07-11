@@ -4,22 +4,30 @@ import {
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
   ROUTE_MARKER_STYLES,
+  RouteVideoUnsupportedError,
   type RouteMarkerStyle,
   closeRouteAnimationPanel,
   flattenToLine,
+  getRouteAnimationDurationSeconds,
   getRouteAnimationSnapshot,
   isRouteAnimationPanelVisible,
+  isRouteVideoSupported,
+  pickRouteVideoMimeType,
+  recordRouteAnimation,
   setRouteAnimationProgress,
   setRouteAnimationRoute,
   setRouteAnimationSettings,
   subscribeRouteAnimation,
   subscribeRouteAnimationPanel,
   toggleRouteAnimationPlaying,
+  videoExtensionForMime,
 } from "@geolibre/plugins";
 import { Button, Select, Slider } from "@geolibre/ui";
 import {
   ChevronDown,
   ChevronUp,
+  Circle,
+  Film,
   Navigation,
   Pause,
   Play,
@@ -32,12 +40,25 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
+import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { resolveLayerGeojson } from "../../lib/vector-export";
+
+// Video-recording capability is a static browser feature, so probe it once at
+// module load rather than re-running the MediaRecorder checks on every render.
+const VIDEO_SUPPORTED = isRouteVideoSupported();
+const VIDEO_MIME = pickRouteVideoMimeType();
+// Which container the browser will actually produce, so the button can honestly
+// say "MP4" or fall back to "WebM" (Firefox can't encode MP4 via MediaRecorder).
+const VIDEO_EXTENSION = VIDEO_MIME ? videoExtensionForMime(VIDEO_MIME) : "mp4";
+
+/** Recording lifecycle: idle, capturing the canvas, or writing the file. */
+type RecordStatus = "idle" | "recording" | "saving";
 
 const PANEL_WIDTH = 340;
 const EDGE_MARGIN = 12;
@@ -93,6 +114,17 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     x: EDGE_MARGIN,
     y: EDGE_MARGIN,
   }));
+  // Video-export state: the recording lifecycle, capture progress, the last
+  // save/record outcome, and an abort controller to stop an in-flight capture.
+  const [recordStatus, setRecordStatus] = useState<RecordStatus>("idle");
+  const [recordPercent, setRecordPercent] = useState(0);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [savedVideoName, setSavedVideoName] = useState<string | null>(null);
+  const recordAbortRef = useRef<AbortController | null>(null);
+  // True while capturing or writing the file: playback-driving controls are
+  // frozen (the recorder owns playback) and the panel can't be closed/collapsed
+  // out from under the running capture.
+  const busy = recordStatus !== "idle";
 
   const {
     layerId,
@@ -204,6 +236,68 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
   };
 
   const hasRoute = Boolean(layerId) && lineLayers.some((l) => l.id === layerId);
+  // Estimated length of one full pass at the current speed, shown next to the
+  // export button so the user knows how long the video will be. Recomputed each
+  // render (speed and layer changes both re-render this component).
+  const estimatedSeconds =
+    hasRoute && VIDEO_SUPPORTED ? getRouteAnimationDurationSeconds() : 0;
+
+  // Record a single pass of the animation to a video file, then save it. The
+  // recorder drives playback from the start to the end; on completion the file
+  // is written under a user-chosen name (native dialog on Tauri/Chromium, a
+  // download elsewhere). An empty clip (stopped immediately) is treated as a
+  // cancel rather than saving an unusable file.
+  const handleRecord = async () => {
+    setVideoError(null);
+    setSavedVideoName(null);
+    setRecordPercent(0);
+    setRecordStatus("recording");
+    const controller = new AbortController();
+    recordAbortRef.current = controller;
+    try {
+      const { blob, extension } = await recordRouteAnimation({
+        signal: controller.signal,
+        onProgress: (fraction) => setRecordPercent(Math.round(fraction * 100)),
+      });
+      if (blob.size === 0) {
+        setRecordStatus("idle");
+        return;
+      }
+      setRecordStatus("saving");
+      const isMp4 = extension === "mp4";
+      const fileType = isMp4
+        ? t("toolbar.routeAnimation.videoFileTypeMp4")
+        : t("toolbar.routeAnimation.videoFileTypeWebm");
+      // Use the plain container MIME (without the codecs parameter) for the file
+      // picker's accept map and the saved Blob's type.
+      const baseMime = isMp4 ? "video/mp4" : "video/webm";
+      const name = await saveBinaryFileWithFallback(blob, {
+        defaultName: `route-animation.${extension}`,
+        filters: [{ name: fileType, extensions: [extension] }],
+        browserTypes: [
+          { description: fileType, accept: { [baseMime]: [`.${extension}`] } },
+        ],
+        mimeType: baseMime,
+      });
+      // A cancelled save dialog returns null; leave no "saved" banner in that case.
+      if (name) setSavedVideoName(name);
+      setRecordStatus("idle");
+    } catch (err) {
+      // Aborts resolve cleanly above, so this only fires for real failures.
+      console.warn("Route animation recording failed", err);
+      setVideoError(
+        err instanceof RouteVideoUnsupportedError
+          ? t("toolbar.routeAnimation.videoUnsupported")
+          : t("toolbar.routeAnimation.videoError"),
+      );
+      setRecordStatus("idle");
+    } finally {
+      recordAbortRef.current = null;
+      setRecordPercent(0);
+    }
+  };
+
+  const stopRecording = () => recordAbortRef.current?.abort();
 
   return (
     <div
@@ -227,7 +321,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             variant="ghost"
             size="icon"
             className="ml-auto h-6 w-6"
-            disabled={!hasRoute}
+            disabled={!hasRoute || busy}
             aria-label={
               playing
                 ? t("toolbar.routeAnimation.pause")
@@ -246,6 +340,9 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           variant="ghost"
           size="icon"
           className={collapsed ? "h-6 w-6" : "ml-auto h-6 w-6"}
+          // Collapsing hides the Stop control, so keep the panel expanded while a
+          // capture is running.
+          disabled={busy}
           aria-expanded={!collapsed}
           aria-label={
             collapsed
@@ -269,6 +366,9 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           variant="ghost"
           size="icon"
           className="h-6 w-6"
+          // Closing detaches the engine mid-capture, which would strand the
+          // recording; block it until the capture finishes.
+          disabled={busy}
           aria-label={t("toolbar.routeAnimation.close")}
           onClick={() => closeRouteAnimationPanel()}
         >
@@ -284,6 +384,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           </span>
           <Select
             value={layerId ?? ""}
+            disabled={busy}
             onChange={(e) =>
               setRouteAnimationSettings({
                 layerId: e.target.value || null,
@@ -310,7 +411,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             variant="default"
             size="icon"
             className="h-9 w-9"
-            disabled={!hasRoute}
+            disabled={!hasRoute || busy}
             aria-label={
               playing
                 ? t("toolbar.routeAnimation.pause")
@@ -339,6 +440,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             variant={loop ? "default" : "outline"}
             size="icon"
             className="h-8 w-8"
+            disabled={busy}
             aria-pressed={loop}
             aria-label={t("toolbar.routeAnimation.loop")}
             title={t("toolbar.routeAnimation.loop")}
@@ -407,6 +509,78 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             onClick={() => setRouteAnimationSettings({ showTrail: !showTrail })}
           />
         </div>
+
+        {/* Video export: record one full pass of the animation to a video file.
+            Only shown when the browser can record the canvas. */}
+        {VIDEO_SUPPORTED && (
+          <div className="space-y-1.5 border-t border-border pt-3">
+            {recordStatus === "recording" ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2"
+              >
+                <Circle className="h-3 w-3 shrink-0 animate-pulse fill-red-500 text-red-500" />
+                <span className="flex-1 text-xs font-medium tabular-nums">
+                  {t("toolbar.routeAnimation.recordingStatus", {
+                    percent: recordPercent,
+                  })}
+                </span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7"
+                  onClick={stopRecording}
+                >
+                  {t("toolbar.routeAnimation.stop")}
+                </Button>
+              </div>
+            ) : recordStatus === "saving" ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex items-center gap-2"
+              >
+                <span className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-muted border-t-foreground" />
+                <span className="text-xs font-medium">
+                  {t("toolbar.routeAnimation.savingVideo")}
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 flex-1"
+                  disabled={!hasRoute}
+                  onClick={handleRecord}
+                >
+                  <Film className="mr-1.5 h-3.5 w-3.5" />
+                  {VIDEO_EXTENSION === "mp4"
+                    ? t("toolbar.routeAnimation.saveVideoMp4")
+                    : t("toolbar.routeAnimation.saveVideoWebm")}
+                </Button>
+                {estimatedSeconds > 0 && (
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {t("toolbar.routeAnimation.estimatedLength", {
+                      seconds: estimatedSeconds.toFixed(1),
+                    })}
+                  </span>
+                )}
+              </div>
+            )}
+            {savedVideoName && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                {t("toolbar.routeAnimation.videoSaved", {
+                  name: savedVideoName,
+                })}
+              </p>
+            )}
+            {videoError && (
+              <p className="text-xs text-destructive">{videoError}</p>
+            )}
+          </div>
+        )}
       </div>
       )}
     </div>

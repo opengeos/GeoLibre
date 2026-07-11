@@ -5,16 +5,21 @@ import {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
+  ROUTE_VIDEO_MIME_CANDIDATES,
   advanceRouteProgress,
+  getRouteAnimationDurationSeconds,
   getRouteAnimationSettings,
   isRouteAnimationPanelVisible,
+  isRouteAnimationRecordable,
   maplibreRouteAnimationPlugin,
   normalizeRouteAnimationSettings,
+  pickVideoMimeType,
   restoreRouteAnimation,
   setRouteAnimationProgress,
   setRouteAnimationRoute,
   setRouteAnimationSettings,
   toggleRouteAnimationPlaying,
+  videoExtensionForMime,
 } from "../packages/plugins/src/plugins/maplibre-route-animation";
 import {
   bearingBetween,
@@ -361,5 +366,64 @@ describe("route-animation store", () => {
     // Restoring an empty/closed project closes the panel again.
     restoreRouteAnimation(mapLessApp, undefined);
     assert.equal(isRouteAnimationPanelVisible(), false);
+  });
+});
+
+describe("video export helpers", () => {
+  it("maps a MIME type to the right file extension", () => {
+    assert.equal(videoExtensionForMime("video/mp4"), "mp4");
+    assert.equal(videoExtensionForMime("video/mp4;codecs=avc1.42E01E"), "mp4");
+    assert.equal(videoExtensionForMime("video/webm;codecs=vp9"), "webm");
+    assert.equal(videoExtensionForMime("video/webm"), "webm");
+  });
+
+  it("prefers MP4 over WebM when both are supported", () => {
+    const mime = pickVideoMimeType(ROUTE_VIDEO_MIME_CANDIDATES, () => true);
+    assert.ok(mime?.startsWith("video/mp4"));
+    assert.equal(videoExtensionForMime(mime as string), "mp4");
+  });
+
+  it("falls back to WebM when MP4 is unsupported", () => {
+    const mime = pickVideoMimeType(
+      ROUTE_VIDEO_MIME_CANDIDATES,
+      (type) => type.startsWith("video/webm"),
+    );
+    assert.ok(mime?.startsWith("video/webm"));
+    assert.equal(videoExtensionForMime(mime as string), "webm");
+  });
+
+  it("returns null when nothing is supported", () => {
+    assert.equal(
+      pickVideoMimeType(ROUTE_VIDEO_MIME_CANDIDATES, () => false),
+      null,
+    );
+  });
+
+  it("estimates the pass duration from route length and speed", () => {
+    resetStore();
+    // No route yet: nothing to record, so the duration is zero.
+    assert.equal(getRouteAnimationDurationSeconds(), 0);
+
+    setRouteAnimationRoute(LINE);
+    const { totalMeters } = measureLine(LINE);
+    setRouteAnimationSettings({ speedMps: 100 });
+    assert.ok(
+      Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 100) < 1e-6,
+    );
+    // Halving the speed doubles the estimated length.
+    setRouteAnimationSettings({ speedMps: 50 });
+    assert.ok(
+      Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 50) < 1e-6,
+    );
+    resetStore();
+  });
+
+  it("is not recordable without an attached engine", () => {
+    resetStore();
+    setRouteAnimationRoute(LINE);
+    // The map-less test app never attaches an engine, so even a valid route is
+    // not recordable — recording needs a live canvas to capture.
+    assert.equal(isRouteAnimationRecordable(), false);
+    resetStore();
   });
 });

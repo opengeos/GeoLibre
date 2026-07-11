@@ -727,6 +727,269 @@ export function reattachRouteAnimation(app: GeoLibreAppAPI): void {
   else detachEngine();
 }
 
+// ---------------------------------------------------------------------------
+// Video export: record the animated marker to an MP4 (or WebM) file by
+// capturing the live MapLibre canvas while a single, non-looping pass plays.
+//
+// The map canvas is created with `preserveDrawingBuffer: true` (see
+// `packages/map/src/map-controller.ts`), so `canvas.captureStream()` works
+// without any constructor change — the same approach the Record Map Tour
+// feature uses. MP4/H.264 is preferred so the export honors the "save as MP4"
+// intent, with WebM as a fallback for browsers (notably Firefox) whose
+// MediaRecorder cannot encode MP4, so the saved file is always a playable video.
+// ---------------------------------------------------------------------------
+
+/** Default frames per second sampled from the canvas while recording. */
+export const ROUTE_VIDEO_FPS = 30;
+
+/** How long to wait for the encoder's final `onstop` before giving up (ms). */
+const ROUTE_VIDEO_STOP_TIMEOUT_MS = 10_000;
+
+/**
+ * Recording container/codecs tried in order; the first the browser's
+ * MediaRecorder supports is used. MP4/H.264 is preferred, with WebM as a
+ * fallback for browsers whose MediaRecorder cannot produce MP4.
+ */
+export const ROUTE_VIDEO_MIME_CANDIDATES = [
+  "video/mp4;codecs=avc1.42E01E",
+  "video/mp4;codecs=avc1",
+  "video/mp4",
+  "video/webm;codecs=vp9",
+  "video/webm;codecs=vp8",
+  "video/webm",
+] as const;
+
+/** File extension matching a recording MIME type (`mp4` for MP4, else `webm`). */
+export function videoExtensionForMime(mimeType: string): "mp4" | "webm" {
+  return mimeType.startsWith("video/mp4") ? "mp4" : "webm";
+}
+
+/**
+ * Pick the first supported recording MIME type from a candidate list. Returns
+ * `null` when none are supported. Kept pure (the support check is injected) so
+ * it can be unit tested without a DOM.
+ *
+ * @param candidates - MIME types to try, in preference order
+ * @param isSupported - Predicate telling whether a MIME type can be recorded
+ * @returns The first supported MIME type, or `null` when none are
+ */
+export function pickVideoMimeType(
+  candidates: readonly string[],
+  isSupported: (type: string) => boolean,
+): string | null {
+  for (const type of candidates) {
+    if (isSupported(type)) return type;
+  }
+  return null;
+}
+
+/** The recording MIME type this browser will use, or `null` when unsupported. */
+export function pickRouteVideoMimeType(): string | null {
+  if (typeof MediaRecorder === "undefined") return null;
+  return pickVideoMimeType(ROUTE_VIDEO_MIME_CANDIDATES, (type) =>
+    MediaRecorder.isTypeSupported(type),
+  );
+}
+
+/** True when the current browser can record the map canvas to a video file. */
+export function isRouteVideoSupported(): boolean {
+  return (
+    typeof MediaRecorder !== "undefined" &&
+    typeof HTMLCanvasElement !== "undefined" &&
+    typeof HTMLCanvasElement.prototype.captureStream === "function" &&
+    pickRouteVideoMimeType() !== null
+  );
+}
+
+/**
+ * Estimated wall-clock length, in seconds, of one full pass of the current
+ * route at the current speed (`totalMeters / speedMps`), which is exactly what
+ * {@link recordRouteAnimation} captures. Returns `0` when no animatable route is
+ * loaded, so the panel can show the user how long the video will be.
+ *
+ * @returns The estimated pass duration in seconds, or `0` when there is no route
+ */
+export function getRouteAnimationDurationSeconds(): number {
+  const { totalMeters } = measureLine(routeCoords);
+  if (totalMeters <= 0 || settings.speedMps <= 0) return 0;
+  return totalMeters / settings.speedMps;
+}
+
+/** True when an engine is attached and there is an animatable route to record. */
+export function isRouteAnimationRecordable(): boolean {
+  return engine !== null && measureLine(routeCoords).totalMeters > 0;
+}
+
+/** Raised when the browser cannot record the canvas (no MediaRecorder / codec). */
+export class RouteVideoUnsupportedError extends Error {
+  constructor(message = "Canvas recording is not supported in this browser.") {
+    super(message);
+    this.name = "RouteVideoUnsupportedError";
+  }
+}
+
+/** A finished route-animation recording plus how it should be saved. */
+export interface RouteAnimationRecording {
+  /** The encoded video. */
+  blob: Blob;
+  /** The MIME type the video was encoded with. */
+  mimeType: string;
+  /** File extension matching {@link mimeType} (`mp4` or `webm`). */
+  extension: "mp4" | "webm";
+}
+
+/** Options for {@link recordRouteAnimation}. */
+export interface RecordRouteAnimationOptions {
+  /** Frames per second sampled from the canvas (defaults to {@link ROUTE_VIDEO_FPS}). */
+  fps?: number;
+  /** Aborts the recording early; the partial video up to that point is kept. */
+  signal?: AbortSignal;
+  /** Reports progress in `[0, 1]` as the pass plays. */
+  onProgress?: (fraction: number) => void;
+}
+
+/**
+ * Record one full, non-looping pass of the current route animation to a video
+ * file and resolve with the encoded blob.
+ *
+ * Plays the marker from the start of the route to the end at the current speed
+ * while capturing the live MapLibre canvas with a `MediaRecorder`. The user's
+ * current progress, playback, and loop settings are saved and restored
+ * afterward, so recording never disturbs the on-screen animation state.
+ *
+ * @param options - Frame rate, an optional abort signal, and a progress callback
+ * @returns The encoded video with its MIME type and file extension
+ * @throws {RouteVideoUnsupportedError} When the browser cannot record the canvas
+ * @throws {Error} When no engine is attached or the route has no length
+ */
+export async function recordRouteAnimation({
+  fps = ROUTE_VIDEO_FPS,
+  signal,
+  onProgress,
+}: RecordRouteAnimationOptions = {}): Promise<RouteAnimationRecording> {
+  if (!engine) {
+    throw new Error("The route animation is not active.");
+  }
+  if (measureLine(routeCoords).totalMeters <= 0) {
+    throw new Error("Select a line layer with length before recording.");
+  }
+  const mimeType = pickRouteVideoMimeType();
+  if (!mimeType) throw new RouteVideoUnsupportedError();
+
+  const map = engine.getMapInstance();
+  const canvas = map.getCanvas();
+  if (typeof canvas.captureStream !== "function") {
+    throw new RouteVideoUnsupportedError();
+  }
+
+  const stream = canvas.captureStream(fps);
+  let recorder: MediaRecorder;
+  try {
+    recorder = new MediaRecorder(stream, { mimeType });
+  } catch {
+    // The constructor can still reject a codec that isTypeSupported accepted;
+    // release the capture and report it as unsupported.
+    for (const track of stream.getTracks()) track.stop();
+    throw new RouteVideoUnsupportedError();
+  }
+
+  // Save the user's playback state so recording is non-destructive: it plays a
+  // pass from the start, then restores exactly where they were.
+  const saved = {
+    progress: settings.progress,
+    playing: settings.playing,
+    loop: settings.loop,
+  };
+
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) chunks.push(event.data);
+  };
+
+  let recorderFailed = false;
+  const finished = new Promise<Blob>((resolve, reject) => {
+    recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+    recorder.onerror = (event) => {
+      // Surface the browser's own diagnosis (e.g. SecurityError) so a field
+      // failure is debuggable rather than a generic message.
+      const cause = (event as Event & { error?: DOMException }).error;
+      recorderFailed = true;
+      reject(
+        new Error(`Recording failed: ${cause?.message ?? "unknown error"}`, {
+          cause,
+        }),
+      );
+    };
+  });
+
+  // Resolve when the pass reaches the end (the engine flips `playing` off at
+  // progress 1 with loop forced off), the recording is aborted, or the encoder
+  // errors. Subscribed before playback starts so no completion is missed.
+  const played = new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      unsubscribe();
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    };
+    const unsubscribe = subscribeRouteAnimation(() => {
+      onProgress?.(settings.progress);
+      if (recorderFailed || (!settings.playing && settings.progress >= 1)) {
+        finish();
+      }
+    });
+    if (signal?.aborted) {
+      finish();
+    } else {
+      signal?.addEventListener("abort", finish, { once: true });
+    }
+  });
+
+  // Keep the captured stream fed with fresh frames even on slow segments where
+  // the marker barely moves between the engine's own per-frame renders.
+  let rafId = 0;
+  const pump = () => {
+    map.triggerRepaint();
+    rafId = window.requestAnimationFrame(pump);
+  };
+
+  try {
+    // Park at the start (loop off so the pass stops at the end); this renders the
+    // opening frame. Then start capturing and begin the pass.
+    setRouteAnimationSettings({ progress: 0, loop: false, playing: false });
+    onProgress?.(0);
+    recorder.start(1000);
+    rafId = window.requestAnimationFrame(pump);
+    setRouteAnimationSettings({ playing: true });
+    // `finished` only settles on stop (below) or a recorder error; racing it
+    // here means an encoder failure breaks out promptly instead of hanging.
+    await Promise.race([played, finished]);
+  } finally {
+    window.cancelAnimationFrame(rafId);
+    if (recorder.state !== "inactive") recorder.stop();
+    // recorder.stop() finalizes the file but does not stop the canvas capture.
+    for (const track of stream.getTracks()) track.stop();
+    // Restore the user's original playback position and flags.
+    setRouteAnimationSettings(saved);
+  }
+
+  // Guard against a browser that never fires onstop leaving this await hung.
+  const timeout = new Promise<never>((_, reject) => {
+    const timer = window.setTimeout(
+      () => reject(new Error("Recording timed out waiting for the encoder.")),
+      ROUTE_VIDEO_STOP_TIMEOUT_MS,
+    );
+    void finished.then(
+      () => window.clearTimeout(timer),
+      () => window.clearTimeout(timer),
+    );
+  });
+  const blob = await Promise.race([finished, timeout]);
+  return { blob, mimeType, extension: videoExtensionForMime(mimeType) };
+}
+
 export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
   id: ROUTE_ANIMATION_PLUGIN_ID,
   name: "Route Animation",

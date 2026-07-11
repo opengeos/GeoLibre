@@ -1425,6 +1425,17 @@
         "none": "None"
       },
       "trail": "Trail",
+      "saveVideoMp4": "Save as MP4",
+      "saveVideoWebm": "Save as WebM",
+      "estimatedLength": "≈ {{seconds}} s",
+      "recordingStatus": "Recording… {{percent}}%",
+      "savingVideo": "Saving video…",
+      "stop": "Stop",
+      "videoSaved": "Saved {{name}}",
+      "videoError": "Could not record the animation. Please try again.",
+      "videoUnsupported": "Video recording isn't supported in this browser.",
+      "videoFileTypeMp4": "MP4 video",
+      "videoFileTypeWebm": "WebM video",
       "collapse": "Collapse",
       "expand": "Expand",
       "close": "Close"
