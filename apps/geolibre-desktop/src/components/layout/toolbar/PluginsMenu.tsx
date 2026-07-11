@@ -8,6 +8,7 @@ import {
   PRECIPITATION_PLUGIN_ID,
   REVERSE_GEOCODE_PLUGIN_ID,
   EFFECTS_PLUGIN_ID,
+  ROUTE_ANIMATION_PLUGIN_ID,
   SUN_PLUGIN_ID,
   WEB_SERVICE_PLUGIN_IDS,
 } from "@geolibre/plugins";
@@ -151,6 +152,7 @@ export function PluginsMenu({
           if (
             p.id === EFFECTS_PLUGIN_ID ||
             p.id === SUN_PLUGIN_ID ||
+            p.id === ROUTE_ANIMATION_PLUGIN_ID ||
             p.id === DIRECTIONS_PLUGIN_ID ||
             p.id === REVERSE_GEOCODE_PLUGIN_ID ||
             p.id === GRATICULE_PLUGIN_ID ||
