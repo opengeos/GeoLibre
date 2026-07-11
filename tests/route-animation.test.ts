@@ -10,7 +10,6 @@ import {
   getRouteAnimationDurationSeconds,
   getRouteAnimationSettings,
   isRouteAnimationPanelVisible,
-  isRouteAnimationRecordable,
   maplibreRouteAnimationPlugin,
   normalizeRouteAnimationSettings,
   pickVideoMimeType,
@@ -415,15 +414,6 @@ describe("video export helpers", () => {
     assert.ok(
       Math.abs(getRouteAnimationDurationSeconds() - totalMeters / 50) < 1e-6,
     );
-    resetStore();
-  });
-
-  it("is not recordable without an attached engine", () => {
-    resetStore();
-    setRouteAnimationRoute(LINE);
-    // The map-less test app never attaches an engine, so even a valid route is
-    // not recordable — recording needs a live canvas to capture.
-    assert.equal(isRouteAnimationRecordable(), false);
     resetStore();
   });
 });

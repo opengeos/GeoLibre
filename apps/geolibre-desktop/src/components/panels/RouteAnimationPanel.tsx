@@ -268,8 +268,9 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       const fileType = isMp4
         ? t("toolbar.routeAnimation.videoFileTypeMp4")
         : t("toolbar.routeAnimation.videoFileTypeWebm");
-      // Use the plain container MIME (without the codecs parameter) for the file
-      // picker's accept map and the saved Blob's type.
+      // The plain container MIME (without the codecs parameter) for the file
+      // picker's accept map. The blob is already typed with this by
+      // `recordRouteAnimation`, so no re-typing is needed here.
       const baseMime = isMp4 ? "video/mp4" : "video/webm";
       const name = await saveBinaryFileWithFallback(blob, {
         defaultName: `route-animation.${extension}`,
@@ -432,6 +433,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
               max={1}
               step={0.001}
               value={progress}
+              disabled={busy}
               format={(v) => `${Math.round(v * 100)}%`}
               onChange={(v) => setRouteAnimationProgress(v)}
             />
@@ -456,6 +458,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           max={ROUTE_ANIM_SPEED_MAX}
           step={1}
           value={speedMps}
+          disabled={busy}
           format={(v) => `${Math.round(v)} m/s`}
           onChange={(v) => setRouteAnimationSettings({ speedMps: v })}
         />
@@ -468,6 +471,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             <Select
               aria-label={t("toolbar.routeAnimation.marker")}
               value={markerStyle}
+              disabled={busy}
               onChange={(e) =>
                 setRouteAnimationSettings({
                   markerStyle: e.target.value as RouteMarkerStyle,
@@ -489,15 +493,17 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             aria-label={t("toolbar.routeAnimation.color")}
             title={t("toolbar.routeAnimation.color")}
             value={color}
+            disabled={busy}
             onChange={(e) =>
               setRouteAnimationSettings({ color: e.target.value })
             }
-            className="h-7 w-9 cursor-pointer rounded-md border border-input bg-transparent p-0.5"
+            className="h-7 w-9 cursor-pointer rounded-md border border-input bg-transparent p-0.5 disabled:cursor-not-allowed disabled:opacity-50"
           />
           <ToggleChip
             active={followCamera}
             icon={<Video className="h-3.5 w-3.5" />}
             label={t("toolbar.routeAnimation.followCamera")}
+            disabled={busy}
             onClick={() =>
               setRouteAnimationSettings({ followCamera: !followCamera })
             }
@@ -506,6 +512,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
             active={showTrail}
             icon={<Spline className="h-3.5 w-3.5" />}
             label={t("toolbar.routeAnimation.trail")}
+            disabled={busy}
             onClick={() => setRouteAnimationSettings({ showTrail: !showTrail })}
           />
         </div>
@@ -591,15 +598,17 @@ interface ToggleChipProps {
   active: boolean;
   icon: React.ReactNode;
   label: string;
+  disabled?: boolean;
   onClick: () => void;
 }
 
-function ToggleChip({ active, icon, label, onClick }: ToggleChipProps) {
+function ToggleChip({ active, icon, label, disabled, onClick }: ToggleChipProps) {
   return (
     <Button
       variant={active ? "default" : "outline"}
       size="sm"
       className="h-7 gap-1.5 px-2 text-xs"
+      disabled={disabled}
       aria-pressed={active}
       onClick={onClick}
     >
@@ -615,6 +624,7 @@ interface SliderRowProps {
   max: number;
   step: number;
   value: number;
+  disabled?: boolean;
   format: (value: number) => string;
   onChange: (value: number) => void;
 }
@@ -625,6 +635,7 @@ function SliderRow({
   max,
   step,
   value,
+  disabled,
   format,
   onChange,
 }: SliderRowProps) {
@@ -640,6 +651,7 @@ function SliderRow({
         max={max}
         step={step}
         value={[value]}
+        disabled={disabled}
         onValueChange={([v]: number[]) => onChange(v ?? value)}
       />
     </div>

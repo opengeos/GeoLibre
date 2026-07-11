@@ -425,7 +425,6 @@ export {
   getRouteAnimationSettings,
   getRouteAnimationSnapshot,
   isRouteAnimationPanelVisible,
-  isRouteAnimationRecordable,
   isRouteVideoSupported,
   maplibreRouteAnimationPlugin,
   normalizeRouteAnimationSettings,

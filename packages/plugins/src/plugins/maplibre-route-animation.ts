@@ -815,11 +815,6 @@ export function getRouteAnimationDurationSeconds(): number {
   return totalMeters / settings.speedMps;
 }
 
-/** True when an engine is attached and there is an animatable route to record. */
-export function isRouteAnimationRecordable(): boolean {
-  return engine !== null && measureLine(routeCoords).totalMeters > 0;
-}
-
 /** Raised when the browser cannot record the canvas (no MediaRecorder / codec). */
 export class RouteVideoUnsupportedError extends Error {
   constructor(message = "Canvas recording is not supported in this browser.") {
@@ -901,19 +896,32 @@ export async function recordRouteAnimation({
     loop: settings.loop,
   };
 
+  // Label the output blob with the plain container type (e.g. `video/mp4`), not
+  // the full codec string `mimeType` carries — a Blob's own `.type` is what the
+  // save/download path keys off, and the codec suffix is irrelevant there.
+  const extension = videoExtensionForMime(mimeType);
+  const containerType = extension === "mp4" ? "video/mp4" : "video/webm";
+
   const chunks: Blob[] = [];
   recorder.ondataavailable = (event) => {
     if (event.data && event.data.size > 0) chunks.push(event.data);
   };
 
+  // Tears down the route/abort listeners set up by the `played` promise below.
+  // Hoisted so every exit path — normal end, abort, and a recorder error (which
+  // rejects `finished` without resolving `played`) — can run it via `finally`,
+  // rather than leaking a stale subscription after a failed recording.
+  let cleanUpPlayed = () => {};
+
   let recorderFailed = false;
   const finished = new Promise<Blob>((resolve, reject) => {
-    recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+    recorder.onstop = () => resolve(new Blob(chunks, { type: containerType }));
     recorder.onerror = (event) => {
       // Surface the browser's own diagnosis (e.g. SecurityError) so a field
       // failure is debuggable rather than a generic message.
       const cause = (event as Event & { error?: DOMException }).error;
       recorderFailed = true;
+      cleanUpPlayed();
       reject(
         new Error(`Recording failed: ${cause?.message ?? "unknown error"}`, {
           cause,
@@ -922,9 +930,16 @@ export async function recordRouteAnimation({
     };
   });
 
-  // Resolve when the pass reaches the end (the engine flips `playing` off at
-  // progress 1 with loop forced off), the recording is aborted, or the encoder
-  // errors. Subscribed before playback starts so no completion is missed.
+  // `started` gates the completion check until the real pass begins: the setup
+  // below briefly sets `playing: false` (at progress 0), which must not count as
+  // "finished". Once true, ANY transition to `!playing` ends the wait — that
+  // covers both the normal end (progress reaches 1) AND the route becoming
+  // unanimatable mid-pass (e.g. its layer deleted elsewhere sets `playing:false`
+  // at progress < 1), which would otherwise hang the recording forever.
+  let started = false;
+  // Resolve when the pass reaches the end, the route stops being animatable, the
+  // recording is aborted, or the encoder errors. Subscribed before playback
+  // starts so no completion is missed.
   const played = new Promise<void>((resolve) => {
     let settled = false;
     const finish = () => {
@@ -934,9 +949,10 @@ export async function recordRouteAnimation({
       signal?.removeEventListener("abort", finish);
       resolve();
     };
+    cleanUpPlayed = finish;
     const unsubscribe = subscribeRouteAnimation(() => {
       onProgress?.(settings.progress);
-      if (recorderFailed || (!settings.playing && settings.progress >= 1)) {
+      if (recorderFailed || (started && !settings.playing)) {
         finish();
       }
     });
@@ -962,12 +978,16 @@ export async function recordRouteAnimation({
     onProgress?.(0);
     recorder.start(1000);
     rafId = window.requestAnimationFrame(pump);
+    started = true;
     setRouteAnimationSettings({ playing: true });
     // `finished` only settles on stop (below) or a recorder error; racing it
     // here means an encoder failure breaks out promptly instead of hanging.
     await Promise.race([played, finished]);
   } finally {
     window.cancelAnimationFrame(rafId);
+    // A recorder error rejects `finished` without resolving `played`, so its
+    // listeners are still attached here — release them on every exit path.
+    cleanUpPlayed();
     if (recorder.state !== "inactive") recorder.stop();
     // recorder.stop() finalizes the file but does not stop the canvas capture.
     for (const track of stream.getTracks()) track.stop();
@@ -987,7 +1007,7 @@ export async function recordRouteAnimation({
     );
   });
   const blob = await Promise.race([finished, timeout]);
-  return { blob, mimeType, extension: videoExtensionForMime(mimeType) };
+  return { blob, mimeType, extension };
 }
 
 export const maplibreRouteAnimationPlugin: GeoLibrePlugin = {
