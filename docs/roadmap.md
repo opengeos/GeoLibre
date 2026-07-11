@@ -292,12 +292,29 @@
 - [x] Legend populates automatically from a paletted raster's embedded color table, matching the map colors without manual entry
 - [x] Website and GitHub links added to the Help menu for quick access to the project home and source
 
-## v1.10: I3S scene layers, OGC API vector tiles, and local NetCDF/HDF loading (current)
+## v1.10: I3S scene layers, OGC API vector tiles, and local NetCDF/HDF loading
 
 - [x] Add ArcGIS I3S scene layers (Integrated Mesh and 3D Object layers) as a data source, streamed and rendered in 3D on the shared deck.gl instance through a Tile3DLayer with the I3SLoader
 - [x] Add Data now supports OGC API - Tiles vector tile services as a remote source, so standards-based vector tile endpoints can be added alongside XYZ and ArcGIS vector tiles
 - [x] Load local HDF5 and NetCDF-4 files directly from disk, extending the NetCDF/HDF workflow beyond Cloud-Optimized references to files already on your machine
 - [x] GeoEditor plugin can pull the vector features currently visible in the map view into the editor, so you can start editing what you are looking at without re-importing the source data
+
+## v2.0: A 3D globe, planetary mapping, symbology interchange, and editable source layers (current)
+
+- [x] Switch any map pane to a **CesiumJS 3D globe** view that stays camera-synced with the 2D maps and mirrors the layer stack, adding a true photorealistic globe alongside the flat workspace (requires a Cesium Ion token)
+- [x] Planetary mapping with the OpenPlanetaryMap basemap set, dedicated Mars and Moon basemaps, a per-project ellipsoid, and a planet switcher in the Layers panel, plus an expanded EOX Maps catalog and dark-mode-aware basemap theming
+- [x] Import and export vector layer symbology as OGC SLD, QGIS QML, and Mapbox GL style JSON, so styles round-trip between GeoLibre, QGIS, and the Mapbox/MapLibre ecosystem
+- [x] Edit vector layers and write the changes back to their source, covering GeoPackage and GeoJSON files as well as PostGIS database tables
+- [x] New Weather menu with live cloud and precipitation radar overlays (RainViewer), a Clouds overlay in the Controls menu, and a Google Earth-style sun position simulation for realistic lighting
+- [x] Richer KML/KMZ support: render GroundOverlay images as map overlays (animated through the Time Slider when time-tagged) and display embedded Collada (.dae) 3D models
+- [x] Render vector layers that carry Z coordinates in true 3D rather than flattening them onto the ground plane
+- [x] Extract COG, WMS, and XYZ bounding-box subsets directly in the browser, and build a normalized-difference index from any HTTP COG
+- [x] New built-in plugins: a Mapillary coverage and street-level image viewer, a Historical Imagery panel, and an Elevation Profile tool, plus a UTM easting/northing grid mode for the Gridlines overlay
+- [x] Field Calculator can compute geometry length and area, and the attribute table supports Ctrl- and Shift-click multi-row selection
+- [x] Google Earth-style camera-reset keyboard shortcuts, View in Google Maps and View in Google Earth actions, and a double-click terrain control for setting vertical exaggeration
+- [x] Import delimited text (CSV) without coordinates as a standalone attribute table
+- [x] All 13 locale catalogs completed, with the remaining hardcoded panel and dialog strings migrated to the translation system
+- [x] The AI assistant can read provider API keys from OS environment variables, and the desktop diagnostics network log now captures native Tauri HTTP requests and classifies failed `fetch()` errors
 
 ## Plugin marketplace and registry (design)
 

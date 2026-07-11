@@ -1,6 +1,6 @@
 {
   "name": "geolibre-desktop",
-  "version": "1.10.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
