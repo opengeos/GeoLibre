@@ -208,7 +208,9 @@
       "noFileSelected": "No file selected",
       "loading": "Loading...",
       "workspaceLayerPlaceholder": "workspace:layer",
-      "requestFailed": "Request failed with status {{status}}"
+      "requestFailed": "Request failed with status {{status}}",
+      "networkFailure": "Could not reach the service. Check that the host is reachable and that its TLS certificate, firewall, and proxy settings allow the request; in the browser it may also be blocked by CORS, so try the desktop app.",
+      "requestTimedOut": "The request timed out. The host may be slow, unreachable, or blocked by a firewall or proxy."
     },
     "serviceLibrary": {
       "title": "Saved services",

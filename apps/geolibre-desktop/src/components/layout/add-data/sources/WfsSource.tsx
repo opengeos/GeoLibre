@@ -4,10 +4,10 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchWfsGeoJson } from "../../../../lib/layer-refresh";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
-import { fetchFailureMessage } from "../../../../lib/fetch-error";
 import {
   createBaseLayer,
   fetchWfsFeatureTypes,
+  serviceRequestErrorMessage,
   stripOgcOperationParams,
   type WfsFeatureTypeOption,
 } from "../helpers";
@@ -128,7 +128,9 @@ export function WfsSource() {
     } catch (error) {
       if (isStale()) return;
       setTypeOptions([]);
-      setRetrieveError(fetchFailureMessage(error, t("addData.wfs.retrieveError")));
+      setRetrieveError(
+        serviceRequestErrorMessage(error, t, t("addData.wfs.retrieveError")),
+      );
     } finally {
       if (token === retrieveTokenRef.current) setIsRetrieving(false);
     }

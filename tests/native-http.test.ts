@@ -59,8 +59,10 @@ describe("nativeHttpFailureRecord", () => {
     );
     assert.equal(record.level, "error");
     assert.match(record.message, /failed \(network\)/);
-    // The hint comes first, then the raw error is preserved for debugging.
-    assert.ok(record.detail?.includes("CORS"));
+    // The native hint comes first (no CORS / "try the desktop app" advice, since
+    // this path already runs in the desktop app), then the raw error follows.
+    assert.ok(record.detail?.includes("certificate"));
+    assert.ok(!record.detail?.includes("CORS"));
     assert.ok(record.detail?.includes("invalid peer certificate"));
   });
 

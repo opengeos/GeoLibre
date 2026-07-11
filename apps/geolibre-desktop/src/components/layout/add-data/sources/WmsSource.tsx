@@ -3,12 +3,12 @@ import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { DEFAULT_WMS_ENDPOINT, DEFAULT_WMS_LAYERS } from "../constants";
-import { fetchFailureMessage } from "../../../../lib/fetch-error";
 import {
   createBaseLayer,
   createWmsTileUrl,
   fetchWmsCapabilities,
   normalizeWmsVersion,
+  serviceRequestErrorMessage,
   stripOgcOperationParams,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
@@ -158,7 +158,9 @@ export function WmsSource() {
     } catch (error) {
       if (isStale()) return;
       setLayerOptions([]);
-      setRetrieveError(fetchFailureMessage(error, t("addData.wms.retrieveError")));
+      setRetrieveError(
+        serviceRequestErrorMessage(error, t, t("addData.wms.retrieveError")),
+      );
     } finally {
       if (token === retrieveTokenRef.current) setIsRetrieving(false);
     }

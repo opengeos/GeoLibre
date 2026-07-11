@@ -447,7 +447,7 @@ export function installDiagnosticsCapture(): () => void {
           ? `${method} aborted`
           : benignStartup
             ? `${method} request failed (benign Tauri custom-protocol warm-up)`
-            : failure
+            : failure && failure.kind !== "unknown"
               ? `${method} request failed (${failure.label})`
               : `${method} request failed`,
         detail:

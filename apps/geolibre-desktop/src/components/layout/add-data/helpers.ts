@@ -5,6 +5,8 @@
 
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
+import type { TFunction } from "i18next";
+import { classifyFetchFailure } from "../../../lib/fetch-error";
 import { isTauri } from "../../../lib/is-tauri";
 import {
   DELIMITED_TEXT_DELIMITERS,
@@ -201,6 +203,25 @@ export function errorMessage(error: unknown, fallback: string): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string" && error.trim()) return error;
   return fallback;
+}
+
+/**
+ * Builds a translated, user-facing message for a failed service request in the
+ * Add Data forms. A network/TLS/CORS or timeout failure (the ones the browser
+ * or native path report opaquely) maps to a localized hint; anything else keeps
+ * the error's own message so a service exception or status text still shows
+ * through. This routes the fetch-error classification through `t()` so the form
+ * does not surface an untranslated string next to its localized labels.
+ */
+export function serviceRequestErrorMessage(
+  error: unknown,
+  t: TFunction,
+  fallback: string,
+): string {
+  const { kind } = classifyFetchFailure(error);
+  if (kind === "network") return t("addData.common.networkFailure");
+  if (kind === "timeout") return t("addData.common.requestTimedOut");
+  return errorMessage(error, fallback);
 }
 
 function isViteDevServer(): boolean {

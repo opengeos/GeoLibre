@@ -422,4 +422,18 @@ describe("diagnostics startup transient suppression", () => {
     // The raw error is still preserved after the hint.
     assert.ok(record.detail?.includes("Failed to fetch"));
   });
+
+  it("does not append a redundant label for an unclassified failure", async () => {
+    win.fetch = (() =>
+      Promise.reject(new Error("some opaque failure"))) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "error");
+    // An "unknown" classification must not render "request failed (request failed)".
+    assert.equal(record.message, "GET request failed");
+    assert.ok(!/\(request failed\)/.test(record.message));
+  });
 });

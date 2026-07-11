@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import {
-  classifyFetchFailure,
-  fetchFailureMessage,
-} from "../apps/geolibre-desktop/src/lib/fetch-error";
+import { classifyFetchFailure } from "../apps/geolibre-desktop/src/lib/fetch-error";
 
 describe("classifyFetchFailure", () => {
   it("classifies an AbortError as an abort with no hint", () => {
@@ -30,31 +27,49 @@ describe("classifyFetchFailure", () => {
     const result = classifyFetchFailure(new TypeError("Failed to fetch"));
     assert.equal(result.kind, "network");
     assert.equal(result.label, "network/TLS/CORS");
+    // The browser hint keeps the CORS / "try the desktop app" advice.
     assert.ok(result.hint?.includes("CORS"));
+    assert.ok(result.hint?.includes("desktop app"));
   });
 
   it("classifies the WebKit 'Load failed' TypeError as network", () => {
     assert.equal(classifyFetchFailure(new TypeError("Load failed")).kind, "network");
   });
 
-  it("classifies a native reqwest TLS certificate error string as network", () => {
+  it("classifies a native reqwest TLS certificate error string as network without the CORS advice", () => {
     const result = classifyFetchFailure(
       "Request failed: error sending request: invalid peer certificate",
     );
     assert.equal(result.kind, "network");
+    assert.equal(result.label, "network");
+    // The native path already runs in the desktop app, so its hint drops the
+    // CORS / "try the desktop app" sentence.
     assert.ok(result.hint);
+    assert.ok(!result.hint?.includes("CORS"));
+    assert.ok(!result.hint?.includes("desktop app"));
   });
 
-  it("classifies a native DNS/connection error string as network", () => {
+  it("classifies native DNS/connection error strings as network", () => {
     assert.equal(
       classifyFetchFailure("Request failed: dns error: failed to lookup host")
         .kind,
       "network",
     );
     assert.equal(
-      classifyFetchFailure("Request failed: connection refused").kind,
+      classifyFetchFailure("Request failed: connection refused (os error 111)")
+        .kind,
       "network",
     );
+  });
+
+  it("does not misclassify a non-network error whose URL contains a network word", () => {
+    // "connect" appears only as a URL path substring, not as a real error cause,
+    // so the tightened phrase matching must leave it unclassified.
+    const result = classifyFetchFailure(
+      "error decoding response body for url (https://host/api/connect): invalid json",
+    );
+    assert.equal(result.kind, "unknown");
+    assert.equal(result.hint, null);
   });
 
   it("leaves an unrecognized error as unknown with no hint", () => {
@@ -64,26 +79,9 @@ describe("classifyFetchFailure", () => {
     assert.equal(result.kind, "unknown");
     assert.equal(result.hint, null);
   });
-});
 
-describe("fetchFailureMessage", () => {
-  it("returns the classified hint for a network failure", () => {
-    const message = fetchFailureMessage(
-      new TypeError("Failed to fetch"),
-      "fallback",
-    );
-    assert.ok(message.includes("CORS"));
-  });
-
-  it("returns the error's own message when it is not a recognized failure", () => {
-    const message = fetchFailureMessage(
-      new Error("The WFS service returned an error."),
-      "fallback",
-    );
-    assert.equal(message, "The WFS service returned an error.");
-  });
-
-  it("falls back when the error carries no message", () => {
-    assert.equal(fetchFailureMessage({}, "fallback"), "fallback");
+  it("reads the message from a non-Error, non-DOMException value safely", () => {
+    assert.equal(classifyFetchFailure({}).kind, "unknown");
+    assert.equal(classifyFetchFailure(undefined).kind, "unknown");
   });
 });
