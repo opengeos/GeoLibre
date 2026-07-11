@@ -37,8 +37,8 @@ import {
   Slider,
 } from "@geolibre/ui";
 import {
-  ClipboardList,
   Clapperboard,
+  ClipboardList,
   SlidersHorizontal,
   Video,
 } from "lucide-react";
@@ -110,9 +110,7 @@ export function ControlsMenu({
   // so the submenu is disabled while the map is in a flat projection (#783). The
   // GlobeControl toggle syncs this preference via the map "projectiontransition"
   // event, so the menu reacts the moment the user switches projections.
-  const globeActive = useAppStore(
-    (s) => s.preferences.map.projection === "globe"
-  );
+  const globeActive = useAppStore((s) => s.preferences.map.projection === "globe");
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
   const setPreferences = useAppStore((s) => s.setPreferences);
   // The globe cannot spin while the map bounds are locked, so enabling spin
@@ -142,7 +140,7 @@ export function ControlsMenu({
   // any visible item, so the separator below it isn't left orphaned.
   const anyTopControls =
     MAP_CONTROL_ITEMS.some((control) =>
-      show(`controls.mapControl.${control.id}`)
+      show(`controls.mapControl.${control.id}`),
     ) ||
     show("controls.atmosphereEffects") ||
     show("controls.clouds") ||
@@ -184,7 +182,7 @@ export function ControlsMenu({
           <DropdownMenuLabel>{t("toolbar.item.mapControls")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {MAP_CONTROL_ITEMS.filter((control) =>
-            show(`controls.mapControl.${control.id}`)
+            show(`controls.mapControl.${control.id}`),
           ).map((control) => (
             <DropdownMenuItem
               key={control.id}

@@ -12,7 +12,7 @@ describe("pickSupportedMimeType", () => {
     // Only WebM/VP8 is supported here, so MP4 (earlier in the list) is skipped.
     const supported = new Set(["video/webm;codecs=vp8", "video/webm"]);
     const chosen = pickSupportedMimeType(MAP_RECORD_MIME_CANDIDATES, (t) =>
-      supported.has(t)
+      supported.has(t),
     );
     assert.equal(chosen, "video/webm;codecs=vp8");
   });
@@ -20,7 +20,7 @@ describe("pickSupportedMimeType", () => {
   it("prefers MP4 when available", () => {
     const chosen = pickSupportedMimeType(
       MAP_RECORD_MIME_CANDIDATES,
-      () => true
+      () => true,
     );
     assert.equal(chosen, "video/mp4;codecs=avc1.42E01E");
   });
@@ -28,7 +28,7 @@ describe("pickSupportedMimeType", () => {
   it("returns null when nothing is supported", () => {
     const chosen = pickSupportedMimeType(
       MAP_RECORD_MIME_CANDIDATES,
-      () => false
+      () => false,
     );
     assert.equal(chosen, null);
   });
@@ -65,7 +65,7 @@ describe("computeCaptureRect", () => {
       { x: 50, y: 25, width: 100, height: 75 },
       800,
       600,
-      400
+      400,
     );
     assert.ok(rect);
     assert.equal(rect.sx, 100); // 50 * 2
@@ -82,7 +82,7 @@ describe("computeCaptureRect", () => {
       { x: 700, y: 500, width: 400, height: 400 },
       800,
       600,
-      800
+      800,
     );
     assert.ok(rect);
     assert.equal(rect.sx, 700);
@@ -97,7 +97,7 @@ describe("computeCaptureRect", () => {
       { x: 0, y: 0, width: 101, height: 99 },
       800,
       600,
-      800
+      800,
     );
     assert.ok(rect);
     assert.equal(rect.sw, 101);
@@ -116,7 +116,7 @@ describe("computeCaptureRect", () => {
       { x: 10, y: 10, width: 1, height: 1 },
       800,
       600,
-      800
+      800,
     );
     assert.equal(rect, null);
   });
@@ -126,7 +126,7 @@ describe("computeCaptureRect", () => {
       { x: 10, y: 20, width: 40, height: 30 },
       800,
       600,
-      0
+      0,
     );
     assert.ok(rect);
     assert.equal(rect.sx, 10);

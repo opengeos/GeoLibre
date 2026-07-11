@@ -76,7 +76,7 @@ export const MAP_RECORD_MIME_CANDIDATES = [
  */
 export function pickSupportedMimeType(
   candidates: readonly string[],
-  isSupported: (type: string) => boolean
+  isSupported: (type: string) => boolean,
 ): string | null {
   for (const type of candidates) {
     if (isSupported(type)) return type;
@@ -96,7 +96,7 @@ export function isMapRecordingSupported(): boolean {
     typeof HTMLCanvasElement !== "undefined" &&
     typeof HTMLCanvasElement.prototype.captureStream === "function" &&
     pickSupportedMimeType(MAP_RECORD_MIME_CANDIDATES, (t) =>
-      MediaRecorder.isTypeSupported(t)
+      MediaRecorder.isTypeSupported(t),
     ) !== null
   );
 }
@@ -147,7 +147,7 @@ export function computeCaptureRect(
   region: RecordRegion | null,
   baseWidth: number,
   baseHeight: number,
-  cssWidth: number
+  cssWidth: number,
 ): CaptureRect | null {
   if (baseWidth < 2 || baseHeight < 2) return null;
   if (!region) {
@@ -173,7 +173,7 @@ export function computeCaptureRect(
   const right = Math.min(Math.max(rawX + region.width * scale, 0), baseWidth);
   const bottom = Math.min(
     Math.max(rawY + region.height * scale, 0),
-    baseHeight
+    baseHeight,
   );
   const sw = right - left;
   const sh = bottom - top;
@@ -194,8 +194,12 @@ export interface RecordMapOptions {
   region?: RecordRegion | null;
   /** Frames per second sampled from the canvas. */
   fps: number;
-  /** Stops the recording; the take up to that point is kept. */
-  signal?: AbortSignal;
+  /**
+   * Stops the recording; the take up to that point is kept. Required — a healthy
+   * recording only ends when this aborts, so without it the returned promise
+   * would never settle and the RAF loop / MediaRecorder would run forever.
+   */
+  signal: AbortSignal;
   /** Reports elapsed seconds while recording, for a live timer. */
   onElapsed?: (seconds: number) => void;
 }
@@ -229,7 +233,7 @@ export async function recordMapCanvas({
   const mimeType = pickSupportedMimeType(
     MAP_RECORD_MIME_CANDIDATES,
     (t) =>
-      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t)
+      typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(t),
   );
   // mimeType is null when MediaRecorder is undefined (the callback returns false
   // for every candidate), so this also covers the no-MediaRecorder case.
@@ -242,7 +246,7 @@ export async function recordMapCanvas({
     region ?? null,
     base.width,
     base.height,
-    cssWidth
+    cssWidth,
   );
   if (!rect) {
     throw new Error("The recording area is empty or the map is not ready.");
@@ -279,7 +283,11 @@ export async function recordMapCanvas({
   };
 
   let recorderFailed = false;
+  // Captured so the compositor loop can fail the recording if the *base* map
+  // canvas becomes unreadable mid-capture (see drawFrame).
+  let failRecording: (error: Error) => void = () => {};
   const finished = new Promise<Blob>((resolve, reject) => {
+    failRecording = reject;
     recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
     recorder.onerror = (event) => {
       const cause = (event as Event & { error?: DOMException }).error;
@@ -287,7 +295,7 @@ export async function recordMapCanvas({
       reject(
         new Error(`Recording failed: ${cause?.message ?? "unknown error"}`, {
           cause,
-        })
+        }),
       );
     };
   });
@@ -306,7 +314,7 @@ export async function recordMapCanvas({
       region ?? null,
       base.width,
       base.height,
-      liveCssWidth
+      liveCssWidth,
     );
     if (frameRect) {
       ctx.clearRect(0, 0, out.width, out.height);
@@ -328,14 +336,29 @@ export async function recordMapCanvas({
             0,
             0,
             out.width,
-            out.height
+            out.height,
           );
-        } catch {
+        } catch (err) {
           // A tainted or zero-size overlay (e.g. cross-origin deck.gl) is only
           // cosmetic; keep the base-map frame rather than aborting the capture.
+          // But if the *base* map canvas itself is unreadable (e.g. cross-origin
+          // tiles tainted it), fail the recording instead of silently producing
+          // a blank/partial video the dialog would report as a success — matching
+          // captureMapImage, which rethrows for the base canvas.
+          if (c === base && !recorderFailed) {
+            recorderFailed = true;
+            failRecording(
+              new Error("Recording failed: the map canvas is unreadable.", {
+                cause: err,
+              }),
+            );
+          }
         }
       });
     }
+    // Stop scheduling frames once the recording has failed; the finally below
+    // cancels the last pending frame and stops the recorder.
+    if (recorderFailed) return;
     if (startedAt) {
       const seconds = Math.floor((performance.now() - startedAt) / 1000);
       if (seconds !== lastSeconds) {
@@ -349,7 +372,7 @@ export async function recordMapCanvas({
   const stopRecorder = () => {
     if (recorder.state !== "inactive") recorder.stop();
   };
-  signal?.addEventListener("abort", stopRecorder, { once: true });
+  signal.addEventListener("abort", stopRecorder, { once: true });
 
   try {
     // Flush encoded chunks every second so memory stays flat over long
@@ -360,12 +383,12 @@ export async function recordMapCanvas({
     // Recording runs until the caller aborts (Stop button) or the recorder
     // errors; both settle the promise below.
     await new Promise<void>((resolve) => {
-      if (signal?.aborted || recorderFailed) return resolve();
+      if (signal.aborted || recorderFailed) return resolve();
       const done = () => {
-        signal?.removeEventListener("abort", done);
+        signal.removeEventListener("abort", done);
         resolve();
       };
-      signal?.addEventListener("abort", done, { once: true });
+      signal.addEventListener("abort", done, { once: true });
       // The recorder's onerror rejects `finished`; observe it so a mid-recording
       // encoder failure ends the wait instead of hanging until the user stops.
       void finished.catch(done);
@@ -373,7 +396,7 @@ export async function recordMapCanvas({
   } finally {
     cancelAnimationFrame(rafId);
     stopRecorder();
-    signal?.removeEventListener("abort", stopRecorder);
+    signal.removeEventListener("abort", stopRecorder);
     // recorder.stop() finalizes the file but does not stop the canvas capture,
     // so end the stream's tracks to release it.
     for (const track of stream.getTracks()) track.stop();
@@ -381,14 +404,18 @@ export async function recordMapCanvas({
 
   // Guard against a browser that never fires onstop (a page-unload race, a
   // torn-down stream) leaving this await hung and the dialog stuck "saving".
-  const timeout = new Promise<never>((_, reject) => {
+  // Rather than discard the whole take, resolve with whatever chunks were
+  // already flushed (recorder.start(1000) flushes every second), so a long
+  // recording that hangs only on the final flush yields a slightly-truncated
+  // video instead of nothing.
+  const timeout = new Promise<Blob>((resolve) => {
     const timer = setTimeout(
-      () => reject(new Error("Recording timed out waiting for the encoder.")),
-      STOP_TIMEOUT_MS
+      () => resolve(new Blob(chunks, { type: mimeType })),
+      STOP_TIMEOUT_MS,
     );
     void finished.then(
       () => clearTimeout(timer),
-      () => clearTimeout(timer)
+      () => clearTimeout(timer),
     );
   });
   const blob = await Promise.race([finished, timeout]);

@@ -30,7 +30,7 @@ interface CanvasRect {
 
 function rectFromPoints(
   a: { x: number; y: number },
-  b: { x: number; y: number }
+  b: { x: number; y: number },
 ): CanvasRect {
   return {
     x: Math.min(a.x, b.x),
@@ -141,6 +141,16 @@ export function RegionSelectOverlay({
     onSelect(rect);
   };
 
+  // A cancelled gesture (touch/pen interruption, OS gesture) is not a completed
+  // drag, so drop the in-progress rectangle without committing a crop. Release
+  // the capture only if it is still held.
+  const onPointerCancel = (event: React.PointerEvent) => {
+    if (!startRef.current) return;
+    startRef.current = null;
+    setDragRect(null);
+    overlayRef.current?.releasePointerCapture?.(event.pointerId);
+  };
+
   // In select mode the live rubber band takes over; otherwise show the committed
   // region as a fixed frame.
   const shown: CanvasRect | null = mode === "select" ? dragRect : region;
@@ -165,7 +175,7 @@ export function RegionSelectOverlay({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
+      onPointerCancel={onPointerCancel}
     >
       {shown && (
         <div

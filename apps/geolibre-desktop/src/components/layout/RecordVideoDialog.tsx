@@ -11,7 +11,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import {
@@ -39,6 +39,9 @@ type Status = "idle" | "recording" | "ready" | "saving";
 type Mode = "whole" | "region";
 
 const DEFAULT_FILE_NAME = "map-recording";
+// Hoisted so the save path doesn't recompile it on every call (and to satisfy
+// the e18e/prefer-static-regex lint rule).
+const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
 
 // Codec support is a static browser capability, so probe it once at module load
 // rather than re-running the MediaRecorder.isTypeSupported() checks per render.
@@ -49,7 +52,7 @@ function clamp(
   value: number,
   min: number,
   max: number,
-  fallback: number
+  fallback: number,
 ): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.min(max, Math.max(min, value));
@@ -134,14 +137,14 @@ export function RecordVideoDialog({
     // Keep the panel within the viewport so it can't be dragged off-screen.
     const x = Math.max(
       0,
-      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width)
+      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width),
     );
     const y = Math.max(
       0,
       Math.min(
         event.clientY - dragOffset.current.y,
-        window.innerHeight - height
-      )
+        window.innerHeight - height,
+      ),
     );
     setPos({ x, y });
   };
@@ -209,7 +212,7 @@ export function RecordVideoDialog({
       setError(
         err instanceof MapRecordingUnsupportedError
           ? t("recordVideo.unsupported")
-          : t("recordVideo.recordError")
+          : t("recordVideo.recordError"),
       );
       setStatus("idle");
     } finally {
@@ -220,6 +223,16 @@ export function RecordVideoDialog({
 
   const stopRecording = () => abortRef.current?.abort();
 
+  // Abort any in-flight recording if the panel is closed or the component
+  // unmounts (e.g. the toolbar/map is torn down), so recordMapCanvas can't keep
+  // its RAF loop and MediaRecorder running after the dialog is gone. A finished
+  // recording has already cleared abortRef in startRecording's finally, so this
+  // only cancels a still-running take.
+  useEffect(() => {
+    if (!open) abortRef.current?.abort();
+    return () => abortRef.current?.abort();
+  }, [open]);
+
   const handleSave = async () => {
     if (!pendingRec || savingRef.current) return;
     savingRef.current = true;
@@ -228,7 +241,7 @@ export function RecordVideoDialog({
     try {
       const ext = pendingRec.extension;
       const base =
-        fileName.trim().replace(/\.(mp4|webm)$/i, "") || DEFAULT_FILE_NAME;
+        fileName.trim().replace(VIDEO_EXTENSION_RE, "") || DEFAULT_FILE_NAME;
       const fileType = t("recordVideo.videoFileType");
       const name = await saveBinaryFileWithFallback(pendingRec.blob, {
         defaultName: `${base}.${ext}`,
@@ -297,7 +310,7 @@ export function RecordVideoDialog({
         style={pos ? { left: pos.x, top: pos.y } : undefined}
         className={cn(
           "fixed z-40 flex w-80 max-w-[95vw] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
-          pos ? "" : "left-4 top-16"
+          pos ? "" : "left-4 top-16",
         )}
       >
         {/* Drag handle / title bar. */}
@@ -462,6 +475,7 @@ export function RecordVideoDialog({
               disabled={
                 !RECORDING_SUPPORTED ||
                 status === "saving" ||
+                selecting ||
                 (mode === "region" && !region)
               }
               onClick={startRecording}
