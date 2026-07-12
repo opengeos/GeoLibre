@@ -9,6 +9,7 @@ import {
   Loader2,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { BrowserNode } from "../../lib/browser-tree";
 
 interface BrowserTreeNodeProps {
@@ -50,6 +51,7 @@ export function BrowserTreeNode({
   onToggle,
   onActivate,
 }: BrowserTreeNodeProps) {
+  const { t } = useTranslation();
   const isGroup = Boolean(node.children);
   const isExpanded = expanded.has(node.id);
   const Icon = nodeIcon(node, isExpanded);
@@ -92,6 +94,11 @@ export function BrowserTreeNode({
           <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
         <span className="truncate">{node.label}</span>
+        {node.builtin ? (
+          <span className="ml-1 shrink-0 rounded border px-1 text-[10px] uppercase leading-tight text-muted-foreground">
+            {t("browser.builtinBadge")}
+          </span>
+        ) : null}
         {typeof node.count === "number" && node.count > 0 ? (
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">
             {node.count}

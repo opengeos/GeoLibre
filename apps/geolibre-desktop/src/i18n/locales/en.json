@@ -6,7 +6,8 @@
     "searchPlaceholder": "Search data sources",
     "empty": "No saved services or recent projects yet.",
     "noMatches": "No matches.",
-    "addFailed": "Could not add this data source."
+    "addFailed": "Could not add this data source.",
+    "builtinBadge": "built-in"
   },
   "about": {
     "trigger": "About",

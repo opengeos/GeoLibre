@@ -2,7 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import { Button, Input, ScrollArea } from "@geolibre/ui";
 import { FolderTree, Search, X } from "lucide-react";
-import { useMemo, useState, type RefObject } from "react";
+import { useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
@@ -30,7 +30,7 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
 /**
  * The Browser (Data Source Manager) panel — a QGIS-style tree that unifies the
  * app's data entry points into one navigable surface. This MVP lists the
- * saved-service library (grouped by category) and recent projects; clicking a
+ * saved-service library (grouped by kind) and recent projects; clicking a
  * service adds it to the map via {@link applyServiceEntry}, and clicking a
  * recent project opens it.
  *
@@ -50,6 +50,20 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
   );
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Ref mirror of busyId for the re-entrancy guard: two clicks dispatched
+  // back-to-back (before React commits the state update and the button's
+  // disabled prop) would both read a stale `busyId === null`, so the guard
+  // checks the ref, which is set synchronously (cf. isSavingRef in
+  // useProjectFileActions). The state drives the spinner/disabled UI.
+  const busyRef = useRef<string | null>(null);
+  const beginBusy = (id: string) => {
+    busyRef.current = id;
+    setBusyId(id);
+  };
+  const endBusy = () => {
+    busyRef.current = null;
+    setBusyId(null);
+  };
 
   const filtered = useMemo(
     () => filterBrowserTree(tree, query),
@@ -77,7 +91,7 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
     // Ignore a second activation while one is still resolving (a fast
     // double-click, or clicking another entry mid-fetch), so an async add
     // cannot run twice and duplicate the layer.
-    if (busyId != null) return;
+    if (busyRef.current != null) return;
     setError(null);
     // Also clear any prior recent-open failure: handleOpenRecent sets
     // projectFiles.actionError but this panel owns an isolated hook instance
@@ -86,7 +100,7 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
     if (node.kind === "service" && node.serviceId) {
       const entry = serviceById(node.serviceId);
       if (!entry) return;
-      setBusyId(node.id);
+      beginBusy(node.id);
       try {
         await applyServiceEntry(entry, { addLayer, mapControllerRef });
       } catch (err) {
@@ -96,17 +110,17 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
         console.error("Failed to add service", err);
         setError(t("browser.addFailed"));
       } finally {
-        setBusyId(null);
+        endBusy();
       }
     } else if (node.kind === "recent-project" && node.projectPath) {
       // Keep the panel open until the open settles: handleOpenRecent never
       // throws (it records a failure in projectFiles.actionError, surfaced
       // below), so closing early would hide that error from the user.
-      setBusyId(node.id);
+      beginBusy(node.id);
       try {
         await projectFiles.handleOpenRecent(node.projectPath);
       } finally {
-        setBusyId(null);
+        endBusy();
       }
     }
   };
