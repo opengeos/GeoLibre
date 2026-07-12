@@ -878,6 +878,10 @@ export class MapController {
       createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
     );
     this.applyView(this.readView());
+    // The ellipsoid can change here (Settings' celestial-body dropdown) without
+    // the basemap changing, so redraw the body-aware scale bar now — the store's
+    // ellipsoid subscription has already updated the active-radius singleton.
+    this.scaleControl?.refresh();
   }
 
   readView(): MapViewState {
