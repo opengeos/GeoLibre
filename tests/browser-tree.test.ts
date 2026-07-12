@@ -166,6 +166,23 @@ describe("filterBrowserTree", () => {
     assert.equal(imagery?.children?.length, 1);
   });
 
+  it("counts total matching leaves, not surviving subgroups, on a section", () => {
+    // Two services under one category, so a match on the category label keeps
+    // both leaves but leaves the section with a single surviving child.
+    const twoInImagery = buildBrowserTree({
+      services: [
+        service("a", "Aerial", "Imagery"),
+        service("b", "Satellite", "Imagery"),
+      ],
+      recentProjects: [],
+    });
+    const out = filterBrowserTree(twoInImagery, "imagery");
+    // The Services badge must report 2 (both visible leaves), not 1 (one
+    // surviving category).
+    assert.equal(find(out, "section:services")?.count, 2);
+    assert.equal(find(out, "category:Imagery")?.count, 2);
+  });
+
   it("does not mutate the input tree", () => {
     const before = tree[0].children?.length;
     filterBrowserTree(tree, "landsat");

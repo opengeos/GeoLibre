@@ -74,6 +74,10 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
     });
 
   const activate = async (node: BrowserNode) => {
+    // Ignore a second activation while one is still resolving (a fast
+    // double-click, or clicking another entry mid-fetch), so an async add
+    // cannot run twice and duplicate the layer.
+    if (busyId != null) return;
     setError(null);
     if (node.kind === "service" && node.serviceId) {
       const entry = serviceById(node.serviceId);
@@ -89,9 +93,15 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
         setBusyId(null);
       }
     } else if (node.kind === "recent-project" && node.projectPath) {
-      // Opening replaces the current project view, so close the panel.
-      setBrowserPanelOpen(false);
-      void projectFiles.handleOpenRecent(node.projectPath);
+      // Keep the panel open until the open settles: handleOpenRecent never
+      // throws (it records a failure in projectFiles.actionError, surfaced
+      // below), so closing early would hide that error from the user.
+      setBusyId(node.id);
+      try {
+        await projectFiles.handleOpenRecent(node.projectPath);
+      } finally {
+        setBusyId(null);
+      }
     }
   };
 
@@ -128,8 +138,10 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
         />
       </div>
 
-      {error ? (
-        <p className="border-b px-3 py-2 text-xs text-destructive">{error}</p>
+      {error ?? projectFiles.actionError ? (
+        <p className="border-b px-3 py-2 text-xs text-destructive">
+          {error ?? projectFiles.actionError}
+        </p>
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">

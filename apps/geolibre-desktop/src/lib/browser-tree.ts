@@ -169,7 +169,15 @@ export function filterBrowserTree(
       .map(prune)
       .filter((child): child is BrowserNode => child !== null);
     if (children.length === 0) return null;
-    return { ...node, children, count: children.length };
+    // Sum each surviving child's own matching-leaf count (leaves have no count,
+    // so fall back to 1) rather than counting immediate children, so an
+    // intermediate group (e.g. Services → category → service) reports the total
+    // matching leaves beneath it, not the number of surviving subgroups.
+    return {
+      ...node,
+      children,
+      count: children.reduce((sum, child) => sum + (child.count ?? 1), 0),
+    };
   };
 
   return nodes
