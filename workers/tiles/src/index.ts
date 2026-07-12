@@ -43,6 +43,27 @@ const DATASETS: Record<string, string> = {
 // Worker can never be coerced into fetching an arbitrary upstream path.
 const TILE_PATH = /^\/opm\/([a-z0-9-]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/;
 
+// OpenAerialMap metadata search proxy. The OAM `/meta` API only sends CORS
+// headers for the OAM web app origin, so a browser fetch from GeoLibre is
+// blocked; this route fetches it server-side (no CORS applies server-to-server)
+// and re-emits the JSON with `Access-Control-Allow-Origin: *` — the same thing
+// leafmap.oam_search gets for free by calling the API from Python. The upstream
+// path is fixed and only an allowlist of query params is forwarded, so this
+// stays a named proxy, never an open one.
+const OAM_META_PATH = "/oam/meta";
+const OAM_META_UPSTREAM = "https://api.openaerialmap.org/meta";
+const OAM_META_PARAMS = new Set([
+  "bbox",
+  "limit",
+  "page",
+  "order_by",
+  "sort",
+  "acquisition_from",
+  "acquisition_to",
+]);
+// Searches change as imagery is added, so cache only briefly at the edge.
+const OAM_CACHE_CONTROL = "public, max-age=120";
+
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, OPTIONS",
@@ -82,10 +103,43 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/" || url.pathname === "") {
       return new Response(
-        "GeoLibre planetary tile proxy. Usage: /opm/<dataset>/<z>/<x>/<y>.png\n" +
+        "GeoLibre tile + service proxy.\n" +
+          "  Planetary tiles: /opm/<dataset>/<z>/<x>/<y>.png\n" +
+          "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
           `Datasets: ${Object.keys(DATASETS).join(", ")}\n`,
         { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
       );
+    }
+
+    // OpenAerialMap metadata search: forward the allowlisted query params to the
+    // fixed upstream and re-emit the JSON with CORS (see OAM_META_PATH above).
+    if (url.pathname === OAM_META_PATH) {
+      const upstream = new URL(OAM_META_UPSTREAM);
+      for (const [key, value] of url.searchParams) {
+        if (OAM_META_PARAMS.has(key)) upstream.searchParams.append(key, value);
+      }
+      let originResponse: Response;
+      try {
+        originResponse = await fetch(upstream.toString(), {
+          headers: { accept: "application/json" },
+          cf: { cacheTtl: 120 },
+        });
+      } catch {
+        return new Response("Bad Gateway", {
+          status: 502,
+          headers: CORS_HEADERS,
+        });
+      }
+      const headers = new Headers(CORS_HEADERS);
+      headers.set(
+        "content-type",
+        originResponse.headers.get("content-type") ?? "application/json",
+      );
+      headers.set("cache-control", OAM_CACHE_CONTROL);
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers,
+      });
     }
 
     const match = TILE_PATH.exec(url.pathname);

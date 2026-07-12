@@ -11,6 +11,14 @@ import {
 export const OPENAERIALMAP_PLUGIN_ID = "maplibre-gl-openaerialmap";
 const PANEL_ID = OPENAERIALMAP_PLUGIN_ID;
 const PAGE_SIZE = 20;
+// The OpenAerialMap metadata API is CORS-locked to the OAM web app origin, so a
+// browser fetch from GeoLibre is blocked. GeoLibre's tiles Worker
+// (workers/tiles, tiles.geolibre.app) re-emits it server-side with CORS, which
+// is the one endpoint that works uniformly across the web, dev, and Jupyter
+// embed builds (leafmap.oam_search avoids this entirely by calling the API
+// server-side in Python). The desktop app fetches the API directly through its
+// native (CORS-bypassing) HTTP, so its search bbox never leaves for the Worker.
+const OAM_SEARCH_PROXY_ENDPOINT = "https://tiles.geolibre.app/oam";
 const ATTRIBUTION =
   '<a href="https://openaerialmap.org/" target="_blank" rel="noopener">OpenAerialMap</a>';
 
@@ -96,13 +104,23 @@ async function fetchPage(
   bbox: [number, number, number, number],
   page: number,
 ): Promise<OamSearchResult> {
-  if (appRef?.fetchArrayBuffer) {
+  // Desktop (Tauri): fetch the OAM API directly through the host's native
+  // HTTP, which bypasses browser CORS and keeps the query on-device.
+  const isTauri =
+    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  if (isTauri && appRef?.fetchArrayBuffer) {
     const url = buildSearchUrl({ bbox, page, limit: PAGE_SIZE });
     const buffer = await appRef.fetchArrayBuffer(url);
     const body = JSON.parse(new TextDecoder().decode(buffer));
     return parseSearchResponse(body, page, PAGE_SIZE);
   }
-  return searchOpenAerialMap({ bbox, page, limit: PAGE_SIZE });
+  // Web / dev / embed: route through the tiles Worker, which adds CORS.
+  return searchOpenAerialMap({
+    bbox,
+    page,
+    limit: PAGE_SIZE,
+    endpoint: OAM_SEARCH_PROXY_ENDPOINT,
+  });
 }
 
 /** Adds an image to the map as a native raster tile layer and zooms to it. */
