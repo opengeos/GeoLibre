@@ -98,13 +98,23 @@
     "applyCustom": "Aplicar",
     "invalidUrl": "Introduzca una URL de estilo HTTP o HTTPS válida.",
     "sectionMoon": "La Luna",
-    "sectionMars": "Marte"
+    "sectionMars": "Marte",
+    "sectionOther": "Otros cuerpos celestes"
   },
   "planetSwitcher": {
     "label": "Cuerpo celeste",
     "earth": "Tierra",
     "moon": "Luna",
-    "mars": "Marte"
+    "mars": "Marte",
+    "mercury": "Mercurio",
+    "venus": "Venus",
+    "io": "Ío",
+    "europa": "Europa",
+    "ganymede": "Ganímedes",
+    "callisto": "Calisto",
+    "titan": "Titán",
+    "pluto": "Plutón",
+    "charon": "Caronte"
   },
   "common": {
     "pickColorFromScreen": "Elegir un color de la pantalla",

@@ -98,13 +98,23 @@
     "applyCustom": "Toepassen",
     "invalidUrl": "Voer een geldige HTTP- of HTTPS-stijl-URL in.",
     "sectionMoon": "De Maan",
-    "sectionMars": "Mars"
+    "sectionMars": "Mars",
+    "sectionOther": "Andere hemellichamen"
   },
   "planetSwitcher": {
     "label": "Hemellichaam",
     "earth": "Aarde",
     "moon": "Maan",
-    "mars": "Mars"
+    "mars": "Mars",
+    "mercury": "Mercurius",
+    "venus": "Venus",
+    "io": "Io",
+    "europa": "Europa",
+    "ganymede": "Ganymedes",
+    "callisto": "Callisto",
+    "titan": "Titan",
+    "pluto": "Pluto",
+    "charon": "Charon"
   },
   "common": {
     "pickColorFromScreen": "Kies een kleur van het scherm",

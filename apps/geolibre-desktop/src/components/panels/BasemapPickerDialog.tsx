@@ -25,7 +25,11 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
-import { planetaryBodySectionKey } from "../../lib/planetary-sections";
+import {
+  planetaryBasemapLabel,
+  planetaryBasemapSectionKey,
+} from "../../lib/planetary-sections";
+import { CollapsibleSection } from "../CollapsibleSection";
 
 // Picking the "Liberty 3D" preset applies the Liberty style and tilts the
 // current camera into a 3D perspective in place (matching the New Project
@@ -47,7 +51,7 @@ function PresetButton({ name, selected, onSelect }: PresetButtonProps) {
       type="button"
       aria-pressed={selected}
       className={cn(
-        "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
+        "flex min-h-10 items-center justify-center rounded-md border px-3 py-1.5 text-center text-sm font-medium leading-tight transition-colors",
         "hover:bg-accent hover:text-accent-foreground",
         selected
           ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
@@ -218,23 +222,35 @@ export function BasemapPickerDialog({
             </div>
           ) : null}
 
-          {PLANETARY_BASEMAP_GROUPS.map((group) => (
-            <div key={group.ellipsoidId} className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                {t(planetaryBodySectionKey(group.ellipsoidId))}
-              </p>
+          {PLANETARY_BASEMAP_GROUPS.map((group) => {
+            const heading = t(planetaryBasemapSectionKey(group.id));
+            const grid = (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {group.basemaps.map((basemap) => (
                   <PresetButton
                     key={basemap.id}
-                    name={basemap.name}
+                    name={planetaryBasemapLabel(basemap, group.id)}
                     selected={activeChoice === basemap.id}
                     onSelect={() => applyPlanetary(basemap)}
                   />
                 ))}
               </div>
-            </div>
-          ))}
+            );
+            // The "other bodies" section holds many entries, so collapse it to
+            // keep the panel short; the Moon/Mars sections stay always-visible.
+            return group.id === "other" ? (
+              <CollapsibleSection key={group.id} title={heading}>
+                {grid}
+              </CollapsibleSection>
+            ) : (
+              <div key={group.id} className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {heading}
+                </p>
+                {grid}
+              </div>
+            );
+          })}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">

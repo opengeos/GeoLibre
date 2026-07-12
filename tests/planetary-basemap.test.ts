@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { useAppStore, undo } from "../packages/core/src/store";
-import { getPlanetaryBasemapById } from "../packages/core/src/ellipsoids";
+import {
+  ELLIPSOIDS,
+  getEllipsoid,
+  getPlanetaryBasemapById,
+  PLANET_SWITCHER_OPTIONS,
+  PLANETARY_BASEMAPS,
+} from "../packages/core/src/ellipsoids";
 import { setHistoryCoalesceMs } from "../packages/core/src/history";
 
 const mars = getPlanetaryBasemapById("mars-viking-mdim21")!;
@@ -36,6 +42,44 @@ describe("applyPlanetaryBasemap", () => {
     const state = useAppStore.getState();
     assert.equal(state.basemapStyleUrl, earth.styleUrl);
     assert.equal(state.preferences, before);
+  });
+});
+
+describe("planetary basemap catalog invariants", () => {
+  it("every basemap depicts a known ellipsoid", () => {
+    const ids = new Set(ELLIPSOIDS.map((e) => e.id));
+    for (const b of PLANETARY_BASEMAPS) {
+      assert.ok(ids.has(b.ellipsoidId), `${b.id} → ${b.ellipsoidId}`);
+    }
+  });
+
+  it("basemap ids are unique", () => {
+    const ids = PLANETARY_BASEMAPS.map((b) => b.id);
+    assert.equal(new Set(ids).size, ids.length);
+  });
+
+  it("every planet-switcher option resolves to a basemap on that body", () => {
+    for (const option of PLANET_SWITCHER_OPTIONS) {
+      const basemap = getPlanetaryBasemapById(option.basemapId);
+      assert.ok(basemap, `no basemap for ${option.basemapId}`);
+      assert.equal(basemap!.ellipsoidId, option.ellipsoidId);
+    }
+  });
+});
+
+describe("applyPlanetaryBasemap for a reprojected WMS body", () => {
+  beforeEach(() => {
+    setHistoryCoalesceMs(0);
+    useAppStore.getState().newProject({ name: "reset" });
+  });
+
+  it("syncs the ellipsoid to a newly-added USGS body (Mercury)", () => {
+    const mercury = getPlanetaryBasemapById("mercury-messenger-color")!;
+    assert.equal(getEllipsoid("mercury").id, "mercury");
+    useAppStore.getState().applyPlanetaryBasemap(mercury);
+    const state = useAppStore.getState();
+    assert.equal(state.basemapStyleUrl, mercury.styleUrl);
+    assert.equal(state.preferences.map.ellipsoidId, "mercury");
   });
 });
 

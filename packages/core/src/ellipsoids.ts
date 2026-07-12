@@ -35,8 +35,11 @@ export interface Ellipsoid {
 }
 
 /**
- * Built-in ellipsoids. Earth is WGS 84; the Moon and Mars use IAU-adopted
- * figures. The Moon is modelled as a sphere (its flattening is negligible).
+ * Built-in ellipsoids. Earth is WGS 84; every other body uses IAU-adopted
+ * figures. Only Earth and Mars are appreciably oblate; the rest are modelled as
+ * spheres (`inverseFlattening: 0`), which is how the IAU/USGS simple-cylindrical
+ * products treat them and is well within the accuracy MapLibre's unit-sphere
+ * rendering can represent anyway.
  */
 export const ELLIPSOIDS = [
   {
@@ -56,6 +59,60 @@ export const ELLIPSOIDS = [
     name: "Mars (IAU 2000)",
     semiMajorAxisMeters: 3396190,
     inverseFlattening: 169.894447,
+  },
+  {
+    id: "mercury",
+    name: "Mercury",
+    semiMajorAxisMeters: 2439400,
+    inverseFlattening: 0,
+  },
+  {
+    id: "venus",
+    name: "Venus",
+    semiMajorAxisMeters: 6051800,
+    inverseFlattening: 0,
+  },
+  {
+    id: "io",
+    name: "Io",
+    semiMajorAxisMeters: 1821600,
+    inverseFlattening: 0,
+  },
+  {
+    id: "europa",
+    name: "Europa",
+    semiMajorAxisMeters: 1560800,
+    inverseFlattening: 0,
+  },
+  {
+    id: "ganymede",
+    name: "Ganymede",
+    semiMajorAxisMeters: 2631200,
+    inverseFlattening: 0,
+  },
+  {
+    id: "callisto",
+    name: "Callisto",
+    semiMajorAxisMeters: 2410300,
+    inverseFlattening: 0,
+  },
+  {
+    id: "titan",
+    name: "Titan",
+    semiMajorAxisMeters: 2574730,
+    inverseFlattening: 0,
+  },
+  {
+    id: "pluto",
+    name: "Pluto",
+    semiMajorAxisMeters: 1188300,
+    inverseFlattening: 0,
+  },
+  {
+    id: "charon",
+    name: "Charon",
+    semiMajorAxisMeters: 606000,
+    inverseFlattening: 0,
   },
 ] as const satisfies readonly Ellipsoid[];
 
@@ -155,6 +212,21 @@ const opmCredit = (source: string) => `${source} · ${OPM_ATTRIBUTION}`;
 // mosaics that lack it. Its dataset keys mirror the DATASETS map in that Worker.
 // Tile path: `${TILE_PROXY_BASE}/<dataset>/{z}/{x}/{y}.png`.
 const TILE_PROXY_BASE = "https://tiles.geolibre.app/opm";
+
+// The GeoLibre tiles Worker's reprojection endpoint, which warps the USGS
+// Astrogeology equirectangular WMS layers to Web Mercator so MapLibre can render
+// them (the USGS server offers no EPSG:3857 for these bodies). Its dataset keys
+// mirror the WMS_DATASETS map in that Worker (workers/tiles/src/index.ts).
+// Tile path: `${WMS_PROXY_BASE}/<dataset>/{z}/{x}/{y}.png` — standard XYZ.
+const WMS_PROXY_BASE = "https://tiles.geolibre.app/wms";
+
+// USGS Astrogeology, the origin of every reprojected WMS basemap below.
+const USGS_ASTRO_ATTRIBUTION =
+  '<a href="https://astrogeology.usgs.gov/">USGS Astrogeology</a>';
+
+/** Data-source credit joined with the USGS Astrogeology attribution. */
+const usgsCredit = (source: string) =>
+  `${source} · ${USGS_ASTRO_ATTRIBUTION}`;
 
 // The OpenPlanetaryMap Mars and Moon basemaps
 // (https://openplanetarymap.org/basemaps/). Every one is a pre-rendered raster
@@ -256,6 +328,130 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
     attribution: OPM_ATTRIBUTION,
     ellipsoidId: "moon",
   },
+  // --- Mercury ------------------------------------------------------------
+  // USGS Astrogeology WMS layers reprojected to Web Mercator by the tiles
+  // Worker (see WMS_PROXY_BASE). Standard XYZ, so no `scheme`.
+  {
+    id: "mercury-messenger-color",
+    name: "MESSENGER Colour Mosaic",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mercury-messenger-color`,
+    tileUrl: `${WMS_PROXY_BASE}/mercury-messenger-color/{z}/{x}/{y}.png`,
+    maxZoom: 7,
+    attribution: usgsCredit("NASA / JHU APL / CIW"),
+    ellipsoidId: "mercury",
+  },
+  {
+    id: "mercury-messenger",
+    name: "MESSENGER Basemap",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}mercury-messenger`,
+    tileUrl: `${WMS_PROXY_BASE}/mercury-messenger/{z}/{x}/{y}.png`,
+    maxZoom: 7,
+    attribution: usgsCredit("NASA / JHU APL"),
+    ellipsoidId: "mercury",
+  },
+  // --- Venus --------------------------------------------------------------
+  {
+    id: "venus-magellan",
+    name: "Magellan FMAP",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}venus-magellan`,
+    tileUrl: `${WMS_PROXY_BASE}/venus-magellan/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL"),
+    ellipsoidId: "venus",
+  },
+  {
+    id: "venus-magellan-color",
+    name: "Magellan C3-MDIR Colour",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}venus-magellan-color`,
+    tileUrl: `${WMS_PROXY_BASE}/venus-magellan-color/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL"),
+    ellipsoidId: "venus",
+  },
+  // --- Jupiter's Galilean moons -------------------------------------------
+  {
+    id: "io-galileo-color",
+    name: "Galileo SSI Colour",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}io-galileo-color`,
+    tileUrl: `${WMS_PROXY_BASE}/io-galileo-color/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL"),
+    ellipsoidId: "io",
+  },
+  {
+    id: "europa-galileo-voyager",
+    name: "Galileo / Voyager",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}europa-galileo-voyager`,
+    tileUrl: `${WMS_PROXY_BASE}/europa-galileo-voyager/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL"),
+    ellipsoidId: "europa",
+  },
+  {
+    id: "ganymede-galileo-voyager",
+    name: "Galileo / Voyager",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}ganymede-galileo-voyager`,
+    tileUrl: `${WMS_PROXY_BASE}/ganymede-galileo-voyager/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL"),
+    ellipsoidId: "ganymede",
+  },
+  {
+    id: "callisto-galileo-voyager",
+    name: "Galileo / Voyager",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}callisto-galileo-voyager`,
+    tileUrl: `${WMS_PROXY_BASE}/callisto-galileo-voyager/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL"),
+    ellipsoidId: "callisto",
+  },
+  // --- Saturn's moon Titan ------------------------------------------------
+  {
+    id: "titan-cassini",
+    name: "Cassini ISS Mosaic",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}titan-cassini`,
+    tileUrl: `${WMS_PROXY_BASE}/titan-cassini/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL / SSI"),
+    ellipsoidId: "titan",
+  },
+  {
+    id: "titan-hisar",
+    name: "Cassini HiSAR Mosaic",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}titan-hisar`,
+    tileUrl: `${WMS_PROXY_BASE}/titan-hisar/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JPL / USGS"),
+    ellipsoidId: "titan",
+  },
+  // --- Pluto & Charon -----------------------------------------------------
+  {
+    id: "pluto-mosaic",
+    name: "New Horizons Mosaic",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}pluto-mosaic`,
+    tileUrl: `${WMS_PROXY_BASE}/pluto-mosaic/{z}/{x}/{y}.png`,
+    maxZoom: 7,
+    attribution: usgsCredit("NASA / JHU APL / SwRI"),
+    ellipsoidId: "pluto",
+  },
+  {
+    id: "pluto-color",
+    name: "New Horizons Colour Shaded Relief",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}pluto-color`,
+    tileUrl: `${WMS_PROXY_BASE}/pluto-color/{z}/{x}/{y}.png`,
+    maxZoom: 7,
+    attribution: usgsCredit("NASA / JHU APL / SwRI"),
+    ellipsoidId: "pluto",
+  },
+  {
+    id: "charon-mosaic",
+    name: "New Horizons Mosaic",
+    styleUrl: `${PLANETARY_BASEMAP_SENTINEL_PREFIX}charon-mosaic`,
+    tileUrl: `${WMS_PROXY_BASE}/charon-mosaic/{z}/{x}/{y}.png`,
+    maxZoom: 6,
+    attribution: usgsCredit("NASA / JHU APL / SwRI"),
+    ellipsoidId: "charon",
+  },
   // --- Earth --------------------------------------------------------------
   // Satellite imagery the planet switcher pairs with Earth. Not shown in the
   // basemap picker's Moon/Mars sections (PLANETARY_BODY_ORDER excludes Earth) —
@@ -274,25 +470,61 @@ export const PLANETARY_BASEMAPS: readonly PlanetaryBasemap[] = [
   },
 ] as const;
 
-/** The celestial bodies with basemaps, in the order the UI groups them. */
-const PLANETARY_BODY_ORDER: readonly EllipsoidId[] = ["moon", "mars"];
+/**
+ * The section a planetary basemap is grouped under in the New Project and
+ * Change Basemap pickers. The Moon and Mars keep dedicated sections (they are
+ * the most-used bodies and each has several mosaics); every other body is
+ * collapsed into a single "other" section so the picker isn't a wall of
+ * one-item headings.
+ */
+export type PlanetaryBasemapSectionId = "moon" | "mars" | "other";
 
-/** A celestial body paired with the planetary basemaps that depict it. */
+/** A picker section paired with the planetary basemaps it lists. */
 export interface PlanetaryBasemapGroup {
-  ellipsoidId: EllipsoidId;
+  id: PlanetaryBasemapSectionId;
   basemaps: readonly PlanetaryBasemap[];
 }
 
+// Bodies that get their own picker section. Earth is excluded entirely (its
+// basemaps live in the OpenFreeMap/Protomaps picker); everything else lands in
+// "other".
+const DEDICATED_SECTION_BODIES: readonly EllipsoidId[] = ["moon", "mars"];
+
 /**
- * {@link PLANETARY_BASEMAPS} grouped by celestial body, so the New Project and
- * Change Basemap panels can render one section per body (The Moon, Mars)
- * instead of a single flat "Planetary" list.
+ * {@link PLANETARY_BASEMAPS} grouped for the pickers: one section each for the
+ * Moon and Mars, then a single "Other celestial bodies" section for the rest,
+ * in {@link PLANETARY_BASEMAPS} order (grouped by body). Empty sections are
+ * dropped.
  */
-export const PLANETARY_BASEMAP_GROUPS: readonly PlanetaryBasemapGroup[] =
-  PLANETARY_BODY_ORDER.map((ellipsoidId) => ({
-    ellipsoidId,
-    basemaps: PLANETARY_BASEMAPS.filter((b) => b.ellipsoidId === ellipsoidId),
-  })).filter((group) => group.basemaps.length > 0);
+export const PLANETARY_BASEMAP_GROUPS: readonly PlanetaryBasemapGroup[] = (
+  [
+    { id: "moon", ellipsoidId: "moon" },
+    { id: "mars", ellipsoidId: "mars" },
+    { id: "other", ellipsoidId: null },
+  ] as const
+)
+  .map(({ id, ellipsoidId }) => {
+    const basemaps = PLANETARY_BASEMAPS.filter((b) =>
+      ellipsoidId
+        ? b.ellipsoidId === ellipsoidId
+        : b.ellipsoidId !== "earth" &&
+          !DEDICATED_SECTION_BODIES.includes(b.ellipsoidId),
+    );
+    // The combined "other" section spans many bodies, so order it alphabetically
+    // by body name; a stable sort keeps each body's basemaps grouped together.
+    return {
+      id,
+      basemaps:
+        id === "other"
+          ? [...basemaps].sort((a, b) =>
+              getEllipsoid(a.ellipsoidId).name.localeCompare(
+                getEllipsoid(b.ellipsoidId).name,
+              ),
+            )
+          : basemaps,
+    };
+  })
+  .filter((group) => group.basemaps.length > 0);
 
 // Basemap ids the OpenPlanetaryMap migration renamed or dropped, mapped to the
 // nearest current basemap. Lets a project saved before the migration keep a
@@ -337,9 +569,19 @@ export function getPlanetaryBasemapById(
  * Viking mosaic for Mars.
  */
 export const PLANET_SWITCHER_OPTIONS = [
+  // The three most-used bodies lead; the rest follow alphabetically.
   { ellipsoidId: "earth", basemapId: "earth-usgs-imagery" },
   { ellipsoidId: "moon", basemapId: "moon-hillshaded-albedo" },
   { ellipsoidId: "mars", basemapId: "mars-viking-mdim21" },
+  { ellipsoidId: "callisto", basemapId: "callisto-galileo-voyager" },
+  { ellipsoidId: "charon", basemapId: "charon-mosaic" },
+  { ellipsoidId: "europa", basemapId: "europa-galileo-voyager" },
+  { ellipsoidId: "ganymede", basemapId: "ganymede-galileo-voyager" },
+  { ellipsoidId: "io", basemapId: "io-galileo-color" },
+  { ellipsoidId: "mercury", basemapId: "mercury-messenger-color" },
+  { ellipsoidId: "pluto", basemapId: "pluto-mosaic" },
+  { ellipsoidId: "titan", basemapId: "titan-cassini" },
+  { ellipsoidId: "venus", basemapId: "venus-magellan" },
 ] as const satisfies readonly {
   ellipsoidId: EllipsoidId;
   basemapId: string;
