@@ -2,6 +2,7 @@ import { useAppStore } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 import {
   buildSearchUrl,
+  HTTP_URL_RE,
   type OamImage,
   type OamSearchResult,
   parseSearchResponse,
@@ -21,8 +22,6 @@ const PAGE_SIZE = 20;
 const OAM_SEARCH_PROXY_ENDPOINT = "https://tiles.geolibre.app/oam";
 const ATTRIBUTION =
   '<a href="https://openaerialmap.org/" target="_blank" rel="noopener">OpenAerialMap</a>';
-/** Matches an absolute http(s) URL. */
-const HTTP_URL_RE = /^https?:\/\//i;
 
 /**
  * User-facing strings for the panel. This package is framework-agnostic and
@@ -44,6 +43,7 @@ export interface OpenAerialMapLabels {
   zoom: string;
   download: string;
   addTitle: string;
+  removeTitle: string;
   addUnavailableTitle: string;
   zoomTitle: string;
   downloadTitle: string;
@@ -59,12 +59,13 @@ export const DEFAULT_OPENAERIALMAP_LABELS: OpenAerialMapLabels = {
   noResults: "No imagery found in this view.",
   showing: (shown, total) => `Showing ${shown} of ${total} images.`,
   searchError: (message) =>
-    `Could not reach OpenAerialMap: ${message}. The catalog API may be blocked by CORS in this environment.`,
+    `Could not reach OpenAerialMap: ${message}. Please try again.`,
   add: "Add",
   remove: "Remove",
   zoom: "Zoom",
   download: "Download",
   addTitle: "Add this image to the map",
+  removeTitle: "Remove this image from the map",
   addUnavailableTitle: "No tile service available for this image",
   zoomTitle: "Zoom to this image",
   downloadTitle: "Download the source GeoTIFF",
@@ -307,7 +308,7 @@ function buildPanel(container: HTMLElement): () => void {
   const renderResults = (): void => {
     results.innerHTML = "";
     for (const image of images) {
-      results.appendChild(buildCard(image, renderResults));
+      results.appendChild(buildCard(image));
     }
     moreButton.hidden = images.length >= found;
     addedSignature = computeAddedSignature();
@@ -327,7 +328,17 @@ function buildPanel(container: HTMLElement): () => void {
       images = [];
       found = 0;
     }
-    if (!bbox) return;
+    if (!bbox) {
+      // The map isn't ready (e.g. the panel opened before the map mounted), so
+      // there's nothing to search. Reflect the now-empty state in the DOM rather
+      // than leaving the previous search's cards and Load-more button behind.
+      if (reset) {
+        results.innerHTML = "";
+        moreButton.hidden = true;
+        setStatus(labels.hint);
+      }
+      return;
+    }
 
     // Cancel any earlier request still in flight so it doesn't run to completion
     // against the OAM API / Worker.
@@ -385,8 +396,12 @@ function buildPanel(container: HTMLElement): () => void {
   };
 }
 
-/** Builds one result card. `rerender` refreshes the list after an add/remove. */
-function buildCard(image: OamImage, rerender: () => void): HTMLElement {
+/**
+ * Builds one result card. After an add/remove the list is rebuilt by the store
+ * subscription in {@link buildPanel} (zustand notifies listeners synchronously
+ * on the `set()` inside add/removeToMap), so the click handler doesn't re-render.
+ */
+function buildCard(image: OamImage): HTMLElement {
   const card = document.createElement("div");
   card.style.cssText = CSS.card;
 
@@ -424,11 +439,14 @@ function buildCard(image: OamImage, rerender: () => void): HTMLElement {
   addButton.textContent = added ? labels.remove : labels.add;
   addButton.style.cssText = added ? CSS.actionActive : CSS.action;
   addButton.disabled = !image.tileUrl;
-  addButton.title = image.tileUrl ? labels.addTitle : labels.addUnavailableTitle;
+  addButton.title = !image.tileUrl
+    ? labels.addUnavailableTitle
+    : added
+      ? labels.removeTitle
+      : labels.addTitle;
   addButton.addEventListener("click", () => {
     if (isAdded(image)) removeFromMap(image);
     else addToMap(image);
-    rerender();
   });
 
   const zoomButton = document.createElement("button");

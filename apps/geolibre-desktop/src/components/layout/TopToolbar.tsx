@@ -235,6 +235,7 @@ export function TopToolbar({
       zoom: t("openAerialMap.zoom"),
       download: t("openAerialMap.download"),
       addTitle: t("openAerialMap.addTitle"),
+      removeTitle: t("openAerialMap.removeTitle"),
       addUnavailableTitle: t("openAerialMap.addUnavailableTitle"),
       zoomTitle: t("openAerialMap.zoomTitle"),
       downloadTitle: t("openAerialMap.downloadTitle"),

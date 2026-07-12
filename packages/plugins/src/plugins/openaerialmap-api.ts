@@ -155,7 +155,7 @@ function asString(value: unknown): string | null {
 }
 
 /** Matches an absolute http(s) URL. */
-const HTTP_URL_RE = /^https?:\/\//i;
+export const HTTP_URL_RE = /^https?:\/\//i;
 
 /**
  * Reads an http(s) URL from an unknown value, else null. Guards against a
