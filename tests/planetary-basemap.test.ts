@@ -6,6 +6,7 @@ import {
   getEllipsoid,
   getPlanetaryBasemapById,
   PLANET_SWITCHER_OPTIONS,
+  PLANETARY_BASEMAP_GROUPS,
   PLANETARY_BASEMAPS,
 } from "../packages/core/src/ellipsoids";
 import { setHistoryCoalesceMs } from "../packages/core/src/history";
@@ -64,6 +65,51 @@ describe("planetary basemap catalog invariants", () => {
       assert.ok(basemap, `no basemap for ${option.basemapId}`);
       assert.equal(basemap!.ellipsoidId, option.ellipsoidId);
     }
+  });
+});
+
+describe("PLANETARY_BASEMAP_GROUPS (picker sections)", () => {
+  const groupsById = new Map(PLANETARY_BASEMAP_GROUPS.map((g) => [g.id, g]));
+
+  it("gives the Moon and Mars their own body-only sections", () => {
+    for (const id of ["moon", "mars"] as const) {
+      const group = groupsById.get(id);
+      assert.ok(group, `missing ${id} section`);
+      assert.ok(group!.basemaps.length > 0);
+      assert.ok(group!.basemaps.every((b) => b.ellipsoidId === id));
+    }
+  });
+
+  it("collects every other (non-Earth) body into the 'other' section", () => {
+    const other = groupsById.get("other");
+    assert.ok(other, "missing 'other' section");
+    const bodies = new Set(other!.basemaps.map((b) => b.ellipsoidId));
+    assert.deepEqual(
+      [...bodies].sort(),
+      [
+        "callisto",
+        "charon",
+        "europa",
+        "ganymede",
+        "io",
+        "mercury",
+        "pluto",
+        "titan",
+        "venus",
+      ],
+    );
+    // Earth, Moon and Mars must never leak into 'other'.
+    for (const id of ["earth", "moon", "mars"]) {
+      assert.ok(!bodies.has(id), `${id} should not be in 'other'`);
+    }
+  });
+
+  it("orders the 'other' section alphabetically by body name", () => {
+    const names = groupsById
+      .get("other")!
+      .basemaps.map((b) => getEllipsoid(b.ellipsoidId).name);
+    const sorted = [...names].sort((a, b) => a.localeCompare(b));
+    assert.deepEqual(names, sorted);
   });
 });
 

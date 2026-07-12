@@ -1,6 +1,6 @@
 import { cn } from "@geolibre/ui";
 import { ChevronRight } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 interface CollapsibleSectionProps {
   /** Heading text shown on the toggle row. */
@@ -22,11 +22,13 @@ export function CollapsibleSection({
   children,
 }: CollapsibleSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const contentId = useId();
   return (
     <div className="space-y-2">
       <button
         type="button"
         aria-expanded={open}
+        aria-controls={contentId}
         onClick={() => setOpen((prev) => !prev)}
         className="flex w-full items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
@@ -39,7 +41,9 @@ export function CollapsibleSection({
         />
         {title}
       </button>
-      {open ? children : null}
+      {/* Wrapper is always present so aria-controls resolves; children mount
+          only when expanded. */}
+      <div id={contentId}>{open ? children : null}</div>
     </div>
   );
 }

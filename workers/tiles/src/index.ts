@@ -137,12 +137,13 @@ const WMS_PATH = /^\/wms\/([a-z0-9-]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/;
 // Edge length of a reprojected tile. Matches MapLibre's default `tileSize`.
 const WMS_TILE_SIZE = 256;
 
-// Highest zoom the reprojection endpoint will serve. The mosaics top out around
-// native zoom 7, so this leaves a little overzoom headroom while capping abuse:
-// beyond it the `x`/`y < 2**z` check is useless (2**z dwarfs the regex's 7-digit
-// ceiling), so a client could hammer USGS + the PNG codec with unlimited
-// distinct high-z cache keys.
-const MAX_WMS_ZOOM = 10;
+// Highest zoom the reprojection endpoint will serve. The mosaics top out at
+// native zoom 7 (MapLibre never requests past a source's maxzoom), so this sits
+// one level above that and rejects everything deeper. Without it the
+// `x`/`y < 2**z` check is useless at high z (2**z dwarfs the regex's 7-digit
+// ceiling), letting a client hammer USGS + the PNG codec with unlimited distinct
+// cache keys — each miss here is CPU-bound, unlike the byte-forwarding /opm path.
+const MAX_WMS_ZOOM = 8;
 
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -328,6 +329,13 @@ async function handleWmsTile(
     // A WMS ServiceException is XML, not an image — don't feed it to the PNG
     // decoder. Answer with a transparent tile so the black-space backdrop shows
     // through. Draining the body frees the connection.
+    //
+    // Unlike the /opm path (which forwards the real upstream status), a failure
+    // here renders as a blank tile, so log it — otherwise a typo'd map/layer in
+    // a WMS_DATASETS entry would fail silently as an all-blank basemap in prod.
+    console.warn(
+      `WMS reproject miss: dataset=${dataset} status=${origin.status} content-type=${contentType || "?"}`,
+    );
     await origin.arrayBuffer().catch(() => undefined);
     const resp = pngResponse(transparentTile(), NEGATIVE_CACHE_CONTROL);
     // Negative-cache genuine misses, but skip 5xx/429 so a transient USGS
