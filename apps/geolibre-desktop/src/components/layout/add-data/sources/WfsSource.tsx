@@ -5,12 +5,12 @@ import { useTranslation } from "react-i18next";
 import { fetchWfsGeoJson } from "../../../../lib/layer-refresh";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
 import {
-  createBaseLayer,
   fetchWfsFeatureTypes,
   serviceRequestErrorMessage,
   stripOgcOperationParams,
   type WfsFeatureTypeOption,
 } from "../helpers";
+import { buildWfsGeoJsonLayer } from "../apply-service";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldString,
@@ -215,29 +215,15 @@ export function WfsSource() {
       setWfsOutputFormat(resolvedOutputFormat);
     }
     source.addAndClose(
-      {
-        ...createBaseLayer(
-          name,
-          "geojson",
-          {
-            type: "geojson",
-            url: featureUrl,
-            service: "wfs",
-            typeName: wfsTypeName.trim(),
-            version: wfsVersion,
-            outputFormat: resolvedOutputFormat,
-            srsName: wfsSrsName.trim() || undefined,
-          },
-          {
-            featureCount: data.features.length,
-            service: "wfs",
-            sourceKind: "wfs-getfeature",
-            typeName: wfsTypeName.trim(),
-          },
-        ),
-        geojson: data,
-        sourcePath: featureUrl,
-      },
+      buildWfsGeoJsonLayer({
+        name,
+        featureUrl,
+        data,
+        typeName: wfsTypeName.trim(),
+        version: wfsVersion,
+        outputFormat: resolvedOutputFormat,
+        srsName: wfsSrsName.trim(),
+      }),
       { fit: true },
     );
   });

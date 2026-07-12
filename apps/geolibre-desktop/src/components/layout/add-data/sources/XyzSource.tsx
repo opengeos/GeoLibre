@@ -6,8 +6,8 @@ import {
   registerXyzTileProtocol,
   resolveXyzTileUrlTemplate,
 } from "../../../../lib/xyz-url";
+import { buildXyzLayer } from "../apply-service";
 import { DEFAULT_XYZ_URL } from "../constants";
-import { createBaseLayer } from "../helpers";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldBoolean,
@@ -43,21 +43,12 @@ export function XyzSource() {
       ? await resolveXyzTileUrlTemplate(xyzUrl)
       : createXyzTileUrlTemplate(xyzUrl);
     source.addAndClose(
-      createBaseLayer(
+      buildXyzLayer({
         name,
-        "xyz",
-        {
-          type: "raster",
-          tiles: [tileUrl.renderUrl],
-          tileSize: Number(xyzTileSize) || 256,
-          url: tileUrl.originalUrl,
-        },
-        {
-          originalUrl: xyzShortUrl ? tileUrl.originalUrl : undefined,
-          resolvedUrl: tileUrl.redirected ? tileUrl.url : undefined,
-          sourceKind: "xyz-url",
-        },
-      ),
+        tileUrl,
+        tileSize: xyzTileSize,
+        shortUrl: xyzShortUrl,
+      }),
     );
   });
 

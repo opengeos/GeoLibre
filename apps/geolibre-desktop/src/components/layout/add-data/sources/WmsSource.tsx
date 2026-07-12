@@ -9,16 +9,13 @@ import {
   GEBCO_WMS_LAYERS,
 } from "../constants";
 import {
-  attributionForTileUrl,
-  createBaseLayer,
-  createWmsTileUrl,
   fetchWmsCapabilities,
   normalizeWmsVersion,
   serviceRequestErrorMessage,
-  stripOgcOperationParams,
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
+import { buildWmsLayer } from "../apply-service";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldBoolean,
@@ -214,42 +211,20 @@ export function WmsSource() {
     if (!wmsLayers.trim()) {
       throw new Error(t("addData.wms.errorLayers"));
     }
-    const tileSize = Number(wmsTileSize) || 256;
-    // Strip any leftover operation params (a pasted GetCapabilities URL) so the
-    // GetMap request is not built with a conflicting duplicate REQUEST.
-    const endpoint = stripOgcOperationParams(wmsEndpoint.trim(), "WMS");
-    const version = normalizeWmsVersion(wmsVersion);
-    const tileUrl = createWmsTileUrl({
-      endpoint,
-      layers: wmsLayers.trim(),
-      styles: wmsStyles.trim(),
-      format: wmsFormat,
-      transparent: wmsTransparent,
-      tileSize,
-      version,
-    });
-    // Credit known keyless services (e.g. GEBCO) in the map's attribution
-    // control, whether the endpoint came from a sample preset or was pasted by
-    // hand. The GetMap template still carries the service host, so match on it.
-    const attribution = attributionForTileUrl(tileUrl);
+    // buildWmsLayer strips any leftover operation params (a pasted
+    // GetCapabilities URL), normalizes the version, and credits known keyless
+    // services (e.g. GEBCO) in the map's attribution control.
     source.addAndClose(
-      createBaseLayer(
+      buildWmsLayer({
         name,
-        "wms",
-        {
-          type: "raster",
-          tiles: [tileUrl],
-          tileSize,
-          url: endpoint,
-          layers: wmsLayers.trim(),
-          styles: wmsStyles.trim(),
-          format: wmsFormat,
-          transparent: wmsTransparent,
-          version,
-          ...(attribution ? { attribution } : {}),
-        },
-        { service: "wms" },
-      ),
+        endpoint: wmsEndpoint,
+        layers: wmsLayers,
+        styles: wmsStyles,
+        format: wmsFormat,
+        transparent: wmsTransparent,
+        tileSize: wmsTileSize,
+        version: wmsVersion,
+      }),
     );
   });
 
