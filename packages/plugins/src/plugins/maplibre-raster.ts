@@ -44,16 +44,27 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
   {
     label: "Land cover",
     url: "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif",
+    attribution: "U.S. Geological Survey (USGS)",
   },
   {
     label: "Elevation (DEM)",
     url: "https://data.source.coop/giswqs/opengeos/dem.tif",
+    attribution: "U.S. Geological Survey (USGS)",
+  },
+  {
+    // Global ocean/land bathymetry: a single-band DEM good for the colormap
+    // and hillshade modes. Attribution feeds the map's attribution control
+    // while the layer is visible (upstream RasterSampleDataset.attribution).
+    label: "Bathymetry (GEBCO)",
+    url: "https://data.source.coop/giswqs/gebco-bathymetry/gebco_2026/gebco_2026.tif",
+    attribution: "GEBCO Compilation Group (2026)",
   },
   {
     // A multiband Sentinel-2 L2A scene: good for RGB composites and the
     // normalized-difference index mode (NDVI and friends).
     label: "Sentinel-2 (multiband)",
     url: "https://data.source.coop/opengeos/geoai/S2C-MSIL2A-20250920T162001-subset.tif",
+    attribution: "Copernicus Sentinel data (ESA)",
   },
 ];
 
