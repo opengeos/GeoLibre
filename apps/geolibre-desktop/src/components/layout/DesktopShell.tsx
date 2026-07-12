@@ -1819,11 +1819,9 @@ export function DesktopShell({
             label="Browser panel"
             onClose={() => setBrowserPanelOpen(false)}
           >
-            <div className="h-full w-full shrink-0 md:w-72">
-              <Suspense fallback={null}>
-                <BrowserPanel mapControllerRef={mapControllerRef} />
-              </Suspense>
-            </div>
+            <Suspense fallback={null}>
+              <BrowserPanel mapControllerRef={mapControllerRef} />
+            </Suspense>
           </SectionErrorBoundary>
         ) : null}
         {replaceLayersPanelId ? (

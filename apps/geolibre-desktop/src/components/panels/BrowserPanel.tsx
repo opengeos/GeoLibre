@@ -90,9 +90,11 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
       try {
         await applyServiceEntry(entry, { addLayer, mapControllerRef });
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : t("browser.addFailed"),
-        );
+        // applyServiceEntry's thrown messages are developer-facing fallbacks
+        // (see its JSDoc), so show the translated generic message to the user
+        // and keep the detail in the console for debugging.
+        console.error("Failed to add service", err);
+        setError(t("browser.addFailed"));
       } finally {
         setBusyId(null);
       }
@@ -114,7 +116,12 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
   return (
     <section
       aria-label={t("browser.title")}
-      className="flex h-full w-full flex-col overflow-hidden border-r bg-card"
+      // A fixed-width left rail on desktop; below the md breakpoint (where the
+      // workspace row is a column and the Layers/Style panels already overlay at
+      // z-30) it becomes a full-workspace sheet at z-40 with its own close
+      // button, so it neither pushes the map off-screen nor overlaps the Layers
+      // overlay — the user dismisses it to return to the map.
+      className="relative flex w-full shrink-0 flex-col overflow-hidden bg-card max-md:absolute max-md:inset-0 max-md:z-40 md:w-72 md:border-r"
     >
       <div className="flex items-center gap-2 border-b px-3 py-1.5">
         <FolderTree className="h-4 w-4 text-muted-foreground" />
