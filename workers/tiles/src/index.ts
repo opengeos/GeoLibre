@@ -363,8 +363,17 @@ async function handleWmsTile(
       WMS_TILE_SIZE,
       0,
     );
-  } catch {
-    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  } catch (err) {
+    // A 2xx response we can't decode/warp (e.g. a misconfigured dataset or an
+    // unexpected upstream format/size) is a persistent failure, so degrade to a
+    // negative-cached transparent tile — matching the upstream-status branch
+    // above — instead of re-running this CPU-bound path on every request forever.
+    console.warn(
+      `WMS reproject decode failure: dataset=${dataset} error=${String(err)}`,
+    );
+    const resp = pngResponse(transparentTile(), NEGATIVE_CACHE_CONTROL);
+    ctx.waitUntil(cache.put(request, resp.clone()));
+    return resp;
   }
 
   const resp = pngResponse(out, CACHE_CONTROL);
