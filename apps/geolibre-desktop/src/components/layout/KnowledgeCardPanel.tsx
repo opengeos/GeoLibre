@@ -124,8 +124,18 @@ export function KnowledgeCardPanel({
       onFlyTo?.(item.lat, item.lon);
       void (async () => {
         try {
+          // Re-centre the nearby list on the opened article too, so hopping to
+          // a neighbour updates the whole card (list and re-clickability), not
+          // just the summary. The list stays secondary, so its failures don't
+          // sink the summary.
+          const nearbyPromise = fetchNearbyPlaces(item.lat, item.lon, {
+            lang,
+            signal,
+          }).catch(() => [] as WikiNearbyPlace[]);
           const main = await fetchArticleSummary(item.title, { lang, signal });
+          const places = await nearbyPromise;
           if (signal.aborted) return;
+          setNearby(places);
           setSummary(main);
           setStatus(main ? "ready" : "empty");
         } catch {

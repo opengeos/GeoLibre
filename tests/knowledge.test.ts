@@ -5,6 +5,7 @@ import {
   buildSummaryUrl,
   fetchArticleSummary,
   isValidLatLon,
+  normalizeLon,
   parseGeosearch,
   parseSummary,
   wikipediaLang,
@@ -39,7 +40,26 @@ describe("isValidLatLon", () => {
   });
 });
 
+describe("normalizeLon", () => {
+  it("leaves an in-range longitude unchanged", () => {
+    assert.equal(normalizeLon(2.2945), 2.2945);
+    assert.equal(normalizeLon(-179), -179);
+  });
+  it("wraps longitudes past the antimeridian into [-180, 180]", () => {
+    assert.equal(normalizeLon(190), -170);
+    assert.equal(normalizeLon(-370), -10);
+    assert.equal(normalizeLon(200), -160);
+  });
+  it("passes non-finite values through untouched", () => {
+    assert.ok(Number.isNaN(normalizeLon(Number.NaN)));
+  });
+});
+
 describe("buildGeosearchUrl", () => {
+  it("wraps an unwrapped longitude into range for gscoord", () => {
+    const url = new URL(buildGeosearchUrl(10, 190));
+    assert.equal(url.searchParams.get("gscoord"), "10|-170");
+  });
   it("targets the language edition host with an anonymous CORS origin", () => {
     const url = new URL(buildGeosearchUrl(48.8584, 2.2945, { lang: "fr" }));
     assert.equal(url.hostname, "fr.wikipedia.org");

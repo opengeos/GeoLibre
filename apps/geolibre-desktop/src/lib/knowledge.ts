@@ -83,6 +83,19 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * Wrap a longitude into [-180, 180]. MapLibre reports unwrapped longitudes once
+ * the map has been panned across the antimeridian (e.g. `190` or `-370`), which
+ * the Wikipedia API would reject; normalising keeps those real clicks valid.
+ */
+export function normalizeLon(lon: number): number {
+  if (!Number.isFinite(lon)) return lon;
+  // Leave in-range values exactly as given; only wrap when out of range, so
+  // ordinary longitudes are never perturbed by the modulo's floating-point drift.
+  if (lon >= -180 && lon <= 180) return lon;
+  return ((((lon + 180) % 360) + 360) % 360) - 180;
+}
+
 /** Whether a coordinate pair is finite and within valid lat/lon bounds. */
 export function isValidLatLon(lat: number, lon: number): boolean {
   return (
@@ -110,7 +123,7 @@ export function buildGeosearchUrl(
     action: "query",
     format: "json",
     list: "geosearch",
-    gscoord: `${lat}|${lon}`,
+    gscoord: `${lat}|${normalizeLon(lon)}`,
     gsradius: String(Math.round(clamp(radiusM, MIN_RADIUS_M, MAX_RADIUS_M))),
     gslimit: String(Math.round(clamp(limit, 1, MAX_LIMIT))),
     // Anonymous cross-origin access; returns permissive CORS headers.
@@ -233,8 +246,14 @@ export async function fetchNearbyPlaces(
   lon: number,
   options: NearbyOptions = {},
 ): Promise<WikiNearbyPlace[]> {
-  if (!isValidLatLon(lat, lon)) return [];
-  const json = await getJson(buildGeosearchUrl(lat, lon, options), options.signal);
+  // Wrap the longitude first: a click past the antimeridian arrives unwrapped
+  // (e.g. 190) and would otherwise fail the bounds check and return nothing.
+  const wrappedLon = normalizeLon(lon);
+  if (!isValidLatLon(lat, wrappedLon)) return [];
+  const json = await getJson(
+    buildGeosearchUrl(lat, wrappedLon, options),
+    options.signal,
+  );
   return parseGeosearch(json);
 }
 
