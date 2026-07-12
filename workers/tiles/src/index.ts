@@ -34,7 +34,7 @@
 // request reaches the Worker, so the Worker treats <z>/<x>/<y> as opaque and
 // forwards them unchanged. The reprojected WMS tiles are standard XYZ.
 
-import UPNG from "upng-js";
+import * as UPNG from "upng-js";
 import {
   remapRowsToMercator,
   tileGeoBounds,
