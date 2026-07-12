@@ -79,6 +79,10 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
     // cannot run twice and duplicate the layer.
     if (busyId != null) return;
     setError(null);
+    // Also clear any prior recent-open failure: handleOpenRecent sets
+    // projectFiles.actionError but this panel owns an isolated hook instance
+    // with no other reset path, so a stale banner would otherwise persist.
+    projectFiles.setActionError(null);
     if (node.kind === "service" && node.serviceId) {
       const entry = serviceById(node.serviceId);
       if (!entry) return;
@@ -153,6 +157,7 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
                 node={section}
                 depth={0}
                 expanded={effectiveExpanded}
+                busyId={busyId}
                 onToggle={toggle}
                 onActivate={activate}
               />

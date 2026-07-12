@@ -6,6 +6,7 @@ import {
   Folder,
   FolderOpen,
   Globe2,
+  Loader2,
   type LucideIcon,
 } from "lucide-react";
 import type { BrowserNode } from "../../lib/browser-tree";
@@ -16,6 +17,8 @@ interface BrowserTreeNodeProps {
   depth: number;
   /** Ids of the currently expanded group nodes. */
   expanded: ReadonlySet<string>;
+  /** Id of the leaf whose activation is in flight, or null when idle. */
+  busyId: string | null;
   /** Toggle a group node's expanded state. */
   onToggle: (id: string) => void;
   /** Activate a leaf (add a service layer, or open a recent project). */
@@ -43,12 +46,18 @@ export function BrowserTreeNode({
   node,
   depth,
   expanded,
+  busyId,
   onToggle,
   onActivate,
 }: BrowserTreeNodeProps) {
   const isGroup = Boolean(node.children);
   const isExpanded = expanded.has(node.id);
   const Icon = nodeIcon(node, isExpanded);
+  const isBusy = busyId === node.id;
+  // A leaf is disabled while any activation is in flight (matching the guard in
+  // BrowserPanel.activate), so a click on a busy panel gives visible feedback
+  // rather than being silently swallowed.
+  const isDisabled = !isGroup && busyId != null;
   // Indent by depth; groups reserve room for the chevron, leaves align to it.
   const paddingLeft = 8 + depth * 14;
 
@@ -56,13 +65,16 @@ export function BrowserTreeNode({
     <li>
       <button
         type="button"
+        disabled={isDisabled}
         className={cn(
           "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm",
           "hover:bg-accent hover:text-accent-foreground",
+          "disabled:pointer-events-none disabled:opacity-50",
           node.kind === "section" && "font-semibold",
         )}
         style={{ paddingLeft }}
         aria-expanded={isGroup ? isExpanded : undefined}
+        aria-busy={isBusy || undefined}
         onClick={() => (isGroup ? onToggle(node.id) : onActivate(node))}
       >
         {isGroup ? (
@@ -74,7 +86,11 @@ export function BrowserTreeNode({
         ) : (
           <span className="w-3.5 shrink-0" />
         )}
-        <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        {isBusy ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+        ) : (
+          <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        )}
         <span className="truncate">{node.label}</span>
         {typeof node.count === "number" && node.count > 0 ? (
           <span className="ml-auto shrink-0 text-xs text-muted-foreground">
@@ -90,6 +106,7 @@ export function BrowserTreeNode({
               node={child}
               depth={depth + 1}
               expanded={expanded}
+              busyId={busyId}
               onToggle={onToggle}
               onActivate={onActivate}
             />
