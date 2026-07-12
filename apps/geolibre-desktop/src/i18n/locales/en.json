@@ -249,6 +249,7 @@
     "wms": {
       "defaultName": "WMS Layer",
       "sampleLabel": "USGS NAIP imagery",
+      "sampleLabelGebco": "GEBCO ocean bathymetry",
       "errorUrl": "Enter a WMS service URL.",
       "errorLayers": "Enter one or more WMS layer names.",
       "urlPlaceholder": "https://example.com/geoserver/wms",

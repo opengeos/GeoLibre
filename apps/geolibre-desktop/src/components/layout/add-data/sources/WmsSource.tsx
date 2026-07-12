@@ -2,8 +2,14 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DEFAULT_WMS_ENDPOINT, DEFAULT_WMS_LAYERS } from "../constants";
 import {
+  DEFAULT_WMS_ENDPOINT,
+  DEFAULT_WMS_LAYERS,
+  GEBCO_WMS_ENDPOINT,
+  GEBCO_WMS_LAYERS,
+} from "../constants";
+import {
+  attributionForTileUrl,
   createBaseLayer,
   createWmsTileUrl,
   fetchWmsCapabilities,
@@ -222,6 +228,10 @@ export function WmsSource() {
       tileSize,
       version,
     });
+    // Credit known keyless services (e.g. GEBCO) in the map's attribution
+    // control, whether the endpoint came from a sample preset or was pasted by
+    // hand. The GetMap template still carries the service host, so match on it.
+    const attribution = attributionForTileUrl(tileUrl);
     source.addAndClose(
       createBaseLayer(
         name,
@@ -236,6 +246,7 @@ export function WmsSource() {
           format: wmsFormat,
           transparent: wmsTransparent,
           version,
+          ...(attribution ? { attribution } : {}),
         },
         { service: "wms" },
       ),
@@ -428,6 +439,14 @@ export function WmsSource() {
             {
               label: t("addData.wms.sampleLabel"),
               value: { endpoint: DEFAULT_WMS_ENDPOINT, layers: DEFAULT_WMS_LAYERS },
+            },
+            {
+              label: t("addData.wms.sampleLabelGebco"),
+              value: {
+                endpoint: GEBCO_WMS_ENDPOINT,
+                layers: GEBCO_WMS_LAYERS,
+                version: "1.3.0",
+              },
             },
           ]}
           onSelect={applyFields}

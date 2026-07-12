@@ -11,6 +11,7 @@ import { isTauri } from "../../../lib/is-tauri";
 import {
   DELIMITED_TEXT_DELIMITERS,
   EOX_S2CLOUDLESS_ATTRIBUTION,
+  GEBCO_ATTRIBUTION,
   GPX_PROXY_PATH,
   WFS_PROXY_PATH,
   WMS_PROXY_PATH,
@@ -51,10 +52,12 @@ export function createBaseLayer(
 
 /**
  * Attribution required for known keyless tile hosts whose license mandates a
- * credit (currently EOX Sentinel-2 cloudless, CC BY 4.0). Returns the
- * attribution string for a recognized host so the tile layer credits its source
- * in MapLibre's attribution control, or `undefined` for unrecognized/invalid
- * URLs.
+ * credit (EOX Sentinel-2 cloudless under CC BY 4.0; GEBCO bathymetry). Returns
+ * the attribution string for a recognized host so the tile layer credits its
+ * source in MapLibre's attribution control, or `undefined` for
+ * unrecognized/invalid URLs. Keying off the host (not an exact URL) means the
+ * credit attaches however the layer was added — a sample preset or a
+ * hand-pasted service URL, including the WMS GetMap template built from it.
  */
 export function attributionForTileUrl(url: string): string | undefined {
   try {
@@ -66,6 +69,14 @@ export function attributionForTileUrl(url: string): string | undefined {
     const isEoxHost = hostname === "eox.at" || hostname.endsWith(".eox.at");
     if (isEoxHost && href.includes("s2cloudless")) {
       return EOX_S2CLOUDLESS_ATTRIBUTION;
+    }
+    // Any GEBCO WMS host (the `.gebco.net` suffix, with the bare-domain case)
+    // carries the required GEBCO credit; the suffix check avoids lookalikes like
+    // `evil-gebco.net`.
+    const isGebcoHost =
+      hostname === "gebco.net" || hostname.endsWith(".gebco.net");
+    if (isGebcoHost) {
+      return GEBCO_ATTRIBUTION;
     }
   } catch {
     // Relative or malformed URL — no known attribution to attach.
