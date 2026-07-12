@@ -8,6 +8,9 @@ import {
   searchOpenAerialMap,
 } from "../packages/plugins/src/plugins/openaerialmap-api";
 
+const CUSTOM_ENDPOINT_PATTERN = /^https:\/\/proxy\.example\.com\/oam\/meta\?/;
+const SERVICE_UNAVAILABLE_PATTERN = /503/;
+
 /** A raw `/meta` result record, close to the real API shape. */
 function rawResult(overrides: Record<string, unknown> = {}) {
   return {
@@ -61,7 +64,7 @@ describe("buildSearchUrl", () => {
   it("honors a custom endpoint and strips a trailing slash", () => {
     assert.match(
       buildSearchUrl({ endpoint: "https://proxy.example.com/oam/" }),
-      /^https:\/\/proxy\.example\.com\/oam\/meta\?/,
+      CUSTOM_ENDPOINT_PATTERN,
     );
   });
 });
@@ -147,7 +150,7 @@ describe("searchOpenAerialMap", () => {
     const { fetchImpl } = stubFetch({}, { ok: false, status: 503 });
     await assert.rejects(
       () => searchOpenAerialMap({}, fetchImpl),
-      /503/,
+      SERVICE_UNAVAILABLE_PATTERN,
     );
   });
 

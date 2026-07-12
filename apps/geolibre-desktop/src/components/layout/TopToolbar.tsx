@@ -26,6 +26,7 @@ import {
   setBasemapControlLabels,
   setGraticuleLabels,
   setMapillaryLabels,
+  setOpenAerialMapLabels,
   setReverseGeocodeLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
@@ -219,6 +220,24 @@ export function TopToolbar({
       loadError: t("mapillary.loadError"),
       coverageLines: t("mapillary.coverageLines"),
       coveragePoints: t("mapillary.coveragePoints"),
+    });
+    setOpenAerialMapLabels({
+      hint: t("openAerialMap.hint"),
+      search: t("openAerialMap.search"),
+      loadMore: t("openAerialMap.loadMore"),
+      searching: t("openAerialMap.searching"),
+      loadingMore: t("openAerialMap.loadingMore"),
+      noResults: t("openAerialMap.noResults"),
+      showing: (shown, total) => t("openAerialMap.showing", { shown, total }),
+      searchError: (message) => t("openAerialMap.searchError", { message }),
+      add: t("openAerialMap.add"),
+      remove: t("openAerialMap.remove"),
+      zoom: t("openAerialMap.zoom"),
+      download: t("openAerialMap.download"),
+      addTitle: t("openAerialMap.addTitle"),
+      addUnavailableTitle: t("openAerialMap.addUnavailableTitle"),
+      zoomTitle: t("openAerialMap.zoomTitle"),
+      downloadTitle: t("openAerialMap.downloadTitle"),
     });
     setGraticuleLabels({
       title: t("graticule.title"),

@@ -331,8 +331,11 @@ export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
 export {
+  DEFAULT_OPENAERIALMAP_LABELS,
   maplibreOpenAerialMapPlugin,
   OPENAERIALMAP_PLUGIN_ID,
+  setOpenAerialMapLabels,
+  type OpenAerialMapLabels,
 } from "./plugins/maplibre-openaerialmap";
 export {
   buildSearchUrl,

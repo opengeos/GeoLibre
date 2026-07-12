@@ -22,6 +22,54 @@ const OAM_SEARCH_PROXY_ENDPOINT = "https://tiles.geolibre.app/oam";
 const ATTRIBUTION =
   '<a href="https://openaerialmap.org/" target="_blank" rel="noopener">OpenAerialMap</a>';
 
+/**
+ * User-facing strings for the panel. This package is framework-agnostic and
+ * cannot call `t()`, so the host (`TopToolbar`) pushes localized copies via
+ * {@link setOpenAerialMapLabels} on activation and every language change, the
+ * same pattern the graticule / mapillary plugins use.
+ */
+export interface OpenAerialMapLabels {
+  hint: string;
+  search: string;
+  loadMore: string;
+  searching: string;
+  loadingMore: string;
+  noResults: string;
+  showing: (shown: number, total: number) => string;
+  searchError: (message: string) => string;
+  add: string;
+  remove: string;
+  zoom: string;
+  download: string;
+  addTitle: string;
+  addUnavailableTitle: string;
+  zoomTitle: string;
+  downloadTitle: string;
+}
+
+/** English defaults, used until the host injects translations. */
+export const DEFAULT_OPENAERIALMAP_LABELS: OpenAerialMapLabels = {
+  hint: "Search the current map view for OpenAerialMap imagery.",
+  search: "Search this view",
+  loadMore: "Load more",
+  searching: "Searching…",
+  loadingMore: "Loading more…",
+  noResults: "No imagery found in this view.",
+  showing: (shown, total) => `Showing ${shown} of ${total} images.`,
+  searchError: (message) =>
+    `Could not reach OpenAerialMap: ${message}. The catalog API may be blocked by CORS in this environment.`,
+  add: "Add",
+  remove: "Remove",
+  zoom: "Zoom",
+  download: "Download",
+  addTitle: "Add this image to the map",
+  addUnavailableTitle: "No tile service available for this image",
+  zoomTitle: "Zoom to this image",
+  downloadTitle: "Download the source GeoTIFF",
+};
+
+let labels: OpenAerialMapLabels = { ...DEFAULT_OPENAERIALMAP_LABELS };
+
 // The theme tokens are HSL channel triplets (shadcn convention), so they must be
 // wrapped in hsl(); using them bare yields an invalid value that drops the rule.
 const CSS = {
@@ -62,22 +110,30 @@ const CSS = {
 
 let appRef: GeoLibreAppAPI | null = null;
 let unregisterPanel: (() => void) | null = null;
-// Visualized images: OAM image id -> store layer id. Persists across the panel
-// being closed/reopened so the Add/Remove state survives.
-const addedLayers = new Map<string, string>();
+// The mounted panel container and its teardown, tracked so a language change can
+// rebuild the panel in place (see setOpenAerialMapLabels).
+let panelContainer: HTMLElement | null = null;
+let disposePanel: (() => void) | null = null;
 
-/** Whether an image's layer is currently present in the store. */
+/**
+ * Finds the store layer visualizing an image, matched by its tile-template URL.
+ * The store (not an in-memory map) is the source of truth, so this stays correct
+ * across a project reload, a fresh session, and layers removed from the Layers
+ * panel — the tile URL is deterministic from the image's COG and persists on the
+ * layer's source.
+ */
+function findAddedLayerId(image: OamImage): string | undefined {
+  if (!image.tileUrl) return undefined;
+  const layer = useAppStore.getState().layers.find((candidate) => {
+    const tiles = (candidate.source as { tiles?: unknown }).tiles;
+    return Array.isArray(tiles) && tiles.includes(image.tileUrl);
+  });
+  return layer?.id;
+}
+
+/** Whether an image is currently visualized on the map. */
 function isAdded(image: OamImage): boolean {
-  const layerId = addedLayers.get(image.id);
-  if (!layerId) return false;
-  const exists = useAppStore
-    .getState()
-    .layers.some((layer) => layer.id === layerId);
-  if (!exists) {
-    addedLayers.delete(image.id);
-    return false;
-  }
-  return true;
+  return findAddedLayerId(image) !== undefined;
 }
 
 /** Reads the current map view as a clamped [w, s, e, n] bbox. */
@@ -97,8 +153,8 @@ function currentBbox(): [number, number, number, number] | null {
 
 /**
  * Fetches a page of results. On desktop this routes through the host's native
- * (CORS-bypassing) fetch; otherwise it falls back to a direct request, which
- * the OAM metadata API's origin-locked CORS may block on the web build.
+ * (CORS-bypassing) fetch; otherwise it routes through the tiles Worker, which
+ * re-emits the CORS-locked OAM metadata API with CORS.
  */
 async function fetchPage(
   bbox: [number, number, number, number],
@@ -125,21 +181,18 @@ async function fetchPage(
 
 /** Adds an image to the map as a native raster tile layer and zooms to it. */
 function addToMap(image: OamImage): void {
-  if (!image.tileUrl || !appRef?.addTileLayer) return;
-  const layerId = appRef.addTileLayer(image.title || "OpenAerialMap image", image.tileUrl, {
+  if (!image.tileUrl || !appRef?.addTileLayer || isAdded(image)) return;
+  appRef.addTileLayer(image.title || "OpenAerialMap image", image.tileUrl, {
     attribution: ATTRIBUTION,
     ...(image.bbox ? { bounds: image.bbox } : {}),
   });
-  addedLayers.set(image.id, layerId);
   if (image.bbox) appRef.fitBounds?.(image.bbox);
 }
 
-/** Removes an image's layer from the store. */
+/** Removes an image's layer from the store, if present. */
 function removeFromMap(image: OamImage): void {
-  const layerId = addedLayers.get(image.id);
-  if (!layerId) return;
-  useAppStore.getState().removeLayer(layerId);
-  addedLayers.delete(image.id);
+  const layerId = findAddedLayerId(image);
+  if (layerId) useAppStore.getState().removeLayer(layerId);
 }
 
 /** Triggers a browser download of the source GeoTIFF. */
@@ -147,7 +200,12 @@ function downloadCog(image: OamImage): void {
   if (!image.cogUrl) return;
   const link = document.createElement("a");
   link.href = image.cogUrl;
-  link.download = image.cogUrl.split("/").pop() ?? "openaerialmap.tif";
+  // Drop any query string (e.g. on a signed S3 URL) from the suggested filename.
+  const fileName = image.cogUrl.split("/").pop()?.split("?")[0];
+  link.download = fileName || "openaerialmap.tif";
+  // A cross-origin `download` hint may be ignored (Content-Disposition wins), so
+  // target=_blank keeps a fallback navigation in a new tab rather than replacing
+  // the app; the browser downloads the .tif since it cannot render it.
   link.target = "_blank";
   link.rel = "noopener";
   link.style.display = "none";
@@ -173,8 +231,8 @@ function subtitle(image: OamImage): string {
 }
 
 /**
- * Builds the search panel DOM. Returns a cleanup function that the host calls
- * when the panel closes.
+ * Builds the search panel DOM. Returns a teardown that invalidates in-flight
+ * searches and drops the store subscription.
  */
 function buildPanel(container: HTMLElement): () => void {
   container.innerHTML = "";
@@ -182,19 +240,19 @@ function buildPanel(container: HTMLElement): () => void {
 
   const searchButton = document.createElement("button");
   searchButton.type = "button";
-  searchButton.textContent = "Search this view";
+  searchButton.textContent = labels.search;
   searchButton.style.cssText = CSS.primaryButton;
 
   const status = document.createElement("div");
   status.style.cssText = CSS.status;
-  status.textContent = "Search the current map view for OpenAerialMap imagery.";
+  status.textContent = labels.hint;
 
   const results = document.createElement("div");
   results.style.cssText = CSS.results;
 
   const moreButton = document.createElement("button");
   moreButton.type = "button";
-  moreButton.textContent = "Load more";
+  moreButton.textContent = labels.loadMore;
   moreButton.style.cssText = CSS.primaryButton;
   moreButton.hidden = true;
 
@@ -207,6 +265,9 @@ function buildPanel(container: HTMLElement): () => void {
   let bbox: [number, number, number, number] | null = null;
   // Generation counter to ignore results from a superseded search.
   let generation = 0;
+  // Signature of which listed images are currently on the map; lets the store
+  // subscription skip re-rendering when an unrelated part of the store changes.
+  let addedSignature = "";
 
   const setStatus = (text: string, isError = false): void => {
     status.textContent = text;
@@ -215,11 +276,27 @@ function buildPanel(container: HTMLElement): () => void {
       : "hsl(var(--muted-foreground))";
   };
 
+  const computeAddedSignature = (): string =>
+    images
+      .filter((image) => isAdded(image))
+      .map((image) => image.id)
+      .join(",");
+
   const renderResults = (): void => {
     results.innerHTML = "";
-    for (const image of images) results.appendChild(buildCard(image, renderResults));
+    for (const image of images) {
+      results.appendChild(buildCard(image, renderResults));
+    }
     moreButton.hidden = images.length >= found;
+    addedSignature = computeAddedSignature();
   };
+
+  // Keep the Add/Remove state in sync when layers change elsewhere (e.g. the
+  // user deletes an OAM layer from the Layers panel).
+  const unsubscribe = useAppStore.subscribe(() => {
+    if (images.length === 0) return;
+    if (computeAddedSignature() !== addedSignature) renderResults();
+  });
 
   const runSearch = async (reset: boolean): Promise<void> => {
     if (reset) {
@@ -233,31 +310,32 @@ function buildPanel(container: HTMLElement): () => void {
     const current = ++generation;
     searchButton.disabled = true;
     moreButton.disabled = true;
-    setStatus(reset ? "Searching…" : "Loading more…");
+    setStatus(reset ? labels.searching : labels.loadingMore);
 
     try {
       const result = await fetchPage(bbox, page);
       if (current !== generation) return; // superseded
-      images = images.concat(result.images);
+      images = [...images, ...result.images];
       found = result.found;
       page += 1;
       if (images.length === 0) {
-        setStatus("No imagery found in this view.");
+        setStatus(labels.noResults);
         results.innerHTML = "";
         moreButton.hidden = true;
       } else {
-        setStatus(`Showing ${images.length} of ${found} images.`);
+        setStatus(labels.showing(images.length, found));
         renderResults();
       }
     } catch (error) {
       if (current !== generation) return;
       const message = error instanceof Error ? error.message : "Search failed";
-      setStatus(
-        `Could not reach OpenAerialMap: ${message}. The catalog API may be blocked by CORS in this environment.`,
-        true,
-      );
-      results.innerHTML = "";
-      moreButton.hidden = true;
+      setStatus(labels.searchError(message), true);
+      // Keep any already-loaded results on screen: a failed "Load more" should
+      // not wipe a successful initial search or hide the retry button.
+      if (images.length === 0) {
+        results.innerHTML = "";
+        moreButton.hidden = true;
+      }
     } finally {
       if (current === generation) {
         searchButton.disabled = false;
@@ -272,6 +350,7 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     // Invalidate any in-flight search so a late result cannot touch detached DOM.
     generation += 1;
+    unsubscribe();
   };
 }
 
@@ -311,12 +390,10 @@ function buildCard(image: OamImage, rerender: () => void): HTMLElement {
   const added = isAdded(image);
   const addButton = document.createElement("button");
   addButton.type = "button";
-  addButton.textContent = added ? "Remove" : "Add";
+  addButton.textContent = added ? labels.remove : labels.add;
   addButton.style.cssText = added ? CSS.actionActive : CSS.action;
   addButton.disabled = !image.tileUrl;
-  addButton.title = image.tileUrl
-    ? "Add this image to the map"
-    : "No tile service available for this image";
+  addButton.title = image.tileUrl ? labels.addTitle : labels.addUnavailableTitle;
   addButton.addEventListener("click", () => {
     if (isAdded(image)) removeFromMap(image);
     else addToMap(image);
@@ -325,20 +402,20 @@ function buildCard(image: OamImage, rerender: () => void): HTMLElement {
 
   const zoomButton = document.createElement("button");
   zoomButton.type = "button";
-  zoomButton.textContent = "Zoom";
+  zoomButton.textContent = labels.zoom;
   zoomButton.style.cssText = CSS.action;
   zoomButton.disabled = !image.bbox;
-  zoomButton.title = "Zoom to this image";
+  zoomButton.title = labels.zoomTitle;
   zoomButton.addEventListener("click", () => {
     if (image.bbox) appRef?.fitBounds?.(image.bbox);
   });
 
   const downloadButton = document.createElement("button");
   downloadButton.type = "button";
-  downloadButton.textContent = "Download";
+  downloadButton.textContent = labels.download;
   downloadButton.style.cssText = CSS.action;
   downloadButton.disabled = !image.cogUrl;
-  downloadButton.title = "Download the source GeoTIFF";
+  downloadButton.title = labels.downloadTitle;
   downloadButton.addEventListener("click", () => downloadCog(image));
 
   actions.append(addButton, zoomButton, downloadButton);
@@ -349,6 +426,23 @@ function buildCard(image: OamImage, rerender: () => void): HTMLElement {
 
   card.append(thumb, body);
   return card;
+}
+
+/** Mounts (or remounts) the panel into a container, replacing any prior build. */
+function mountPanel(container: HTMLElement): void {
+  disposePanel?.();
+  panelContainer = container;
+  disposePanel = buildPanel(container);
+}
+
+/**
+ * Replaces the panel's user-facing strings. The host calls this with
+ * translations on activation and every language change; if the panel is open it
+ * is rebuilt so the new strings take effect immediately.
+ */
+export function setOpenAerialMapLabels(next: Partial<OpenAerialMapLabels>): void {
+  labels = { ...labels, ...next };
+  if (panelContainer) mountPanel(panelContainer);
 }
 
 /**
@@ -368,7 +462,14 @@ export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
         title: "OpenAerialMap",
         dock: "right-of-style",
         defaultWidth: 340,
-        render: (container) => buildPanel(container),
+        render: (container) => {
+          mountPanel(container);
+          return () => {
+            disposePanel?.();
+            disposePanel = null;
+            if (panelContainer === container) panelContainer = null;
+          };
+        },
       }) ?? null;
     app.openRightPanel?.(PANEL_ID);
   },

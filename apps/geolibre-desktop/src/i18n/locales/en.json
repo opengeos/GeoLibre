@@ -2136,6 +2136,24 @@
     "coverageLines": "Mapillary Sequences",
     "coveragePoints": "Mapillary Images"
   },
+  "openAerialMap": {
+    "hint": "Search the current map view for OpenAerialMap imagery.",
+    "search": "Search this view",
+    "loadMore": "Load more",
+    "searching": "Searching…",
+    "loadingMore": "Loading more…",
+    "noResults": "No imagery found in this view.",
+    "showing": "Showing {{shown}} of {{total}} images.",
+    "searchError": "Could not reach OpenAerialMap: {{message}}. The catalog API may be blocked by CORS in this environment.",
+    "add": "Add",
+    "remove": "Remove",
+    "zoom": "Zoom",
+    "download": "Download",
+    "addTitle": "Add this image to the map",
+    "addUnavailableTitle": "No tile service available for this image",
+    "zoomTitle": "Zoom to this image",
+    "downloadTitle": "Download the source GeoTIFF"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",
     "confirmStyleReplace_other": "Switching to \"{{name}}\" replaces the whole map style and will remove the {{count}} stacked basemaps you added. Continue?"

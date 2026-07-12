@@ -135,7 +135,12 @@ export default {
         "content-type",
         originResponse.headers.get("content-type") ?? "application/json",
       );
-      headers.set("cache-control", OAM_CACHE_CONTROL);
+      // Only cache successful searches; a transient upstream error/throttle must
+      // not be pinned in the browser for the OAM cache TTL.
+      headers.set(
+        "cache-control",
+        originResponse.ok ? OAM_CACHE_CONTROL : "no-store",
+      );
       return new Response(originResponse.body, {
         status: originResponse.status,
         headers,

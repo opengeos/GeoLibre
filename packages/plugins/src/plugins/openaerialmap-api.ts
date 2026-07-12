@@ -89,6 +89,9 @@ export type OamFetch = (
   url: string,
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
+/** Strips a single trailing slash from an endpoint base. */
+const TRAILING_SLASH_RE = /\/$/;
+
 /**
  * Builds a web-mercator XYZ tile template that renders a COG through OAM's
  * tiler. The `{z}/{x}/{y}` tokens are filled in by MapLibre.
@@ -110,7 +113,10 @@ export function buildTitilerTemplate(cogUrl: string | null): string | null {
  * @returns The fully-formed `/meta` URL
  */
 export function buildSearchUrl(options: OpenAerialMapSearchOptions = {}): string {
-  const endpoint = (options.endpoint ?? OAM_DEFAULT_ENDPOINT).replace(/\/$/, "");
+  const endpoint = (options.endpoint ?? OAM_DEFAULT_ENDPOINT).replace(
+    TRAILING_SLASH_RE,
+    "",
+  );
   const params = new URLSearchParams({
     limit: String(options.limit ?? 20),
     page: String(options.page ?? 1),
