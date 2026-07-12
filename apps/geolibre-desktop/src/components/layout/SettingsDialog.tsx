@@ -10,6 +10,7 @@ import {
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
+import { closeRightPanel, openRightPanel } from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -45,6 +46,7 @@ import {
   Eye,
   EyeOff,
   FolderCog,
+  FolderTree,
   Languages,
   Locate,
   MapPinned,
@@ -80,6 +82,8 @@ import {
   type UpdateSettings,
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
+import { BROWSER_PANEL_ID } from "../../hooks/useRegisterBrowserPanel";
+import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
 import {
@@ -390,6 +394,10 @@ export function SettingsDialog({
     isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  // The Browser is a dockable right panel (open/close via the registry), not a
+  // persisted layout preference, so its Layout toggle acts on the live registry
+  // state directly rather than through the draft settings.
+  const browserPanelOpen = useRightPanelState().activeId === BROWSER_PANEL_ID;
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(
@@ -1216,6 +1224,17 @@ export function SettingsDialog({
               >
                 {t("settings.layout.showStylePanel")}
               </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={browserPanelOpen}
+                onCheckedChange={(checked: boolean) =>
+                  checked === true
+                    ? openRightPanel(BROWSER_PANEL_ID)
+                    : closeRightPanel(BROWSER_PANEL_ID)
+                }
+                onSelect={(event: Event) => event.preventDefault()}
+              >
+                {t("settings.layout.showBrowserPanel")}
+              </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
@@ -1677,6 +1696,20 @@ export function SettingsDialog({
                       />
                       <PanelRight className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showStylePanel")}</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={browserPanelOpen}
+                        onChange={(event) =>
+                          event.target.checked
+                            ? openRightPanel(BROWSER_PANEL_ID)
+                            : closeRightPanel(BROWSER_PANEL_ID)
+                        }
+                      />
+                      <FolderTree className="h-4 w-4 text-muted-foreground" />
+                      <span>{t("settings.layout.showBrowserPanel")}</span>
                     </label>
                   </div>
                   {showsAdvancedNotices(desktopSettings.uiProfile) ? (

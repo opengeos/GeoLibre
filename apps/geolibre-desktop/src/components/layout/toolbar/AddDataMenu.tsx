@@ -7,11 +7,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import { openRightPanel } from "@geolibre/plugins";
-import { Database, FolderTree } from "lucide-react";
+import { Database } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { BROWSER_PANEL_ID } from "../../../hooks/useRegisterBrowserPanel";
 import type { AddDataKind } from "../AddDataDialog";
 import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
@@ -121,11 +119,6 @@ export function AddDataMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>{t("toolbar.menu.addData")}</DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => openRightPanel(BROWSER_PANEL_ID)}>
-          <FolderTree className="mr-2 h-3.5 w-3.5 shrink-0" />
-          {t("browser.openMenuItem")}
-        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {sections.map((group, index) => (
           <Fragment key={group.section}>

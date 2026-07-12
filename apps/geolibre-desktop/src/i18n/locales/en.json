@@ -1,7 +1,6 @@
 {
   "browser": {
     "title": "Browser",
-    "openMenuItem": "Browser",
     "searchPlaceholder": "Search data sources",
     "empty": "No saved services or recent projects yet.",
     "emptyGroup": "Empty",
@@ -1301,6 +1300,7 @@
       "showProjectInfoToolbar": "Show project info in the toolbar",
       "showLayersPanel": "Show Layers panel",
       "showStylePanel": "Show Style panel",
+      "showBrowserPanel": "Show Browser panel",
       "showAttributePanel": "Show Attribute panel",
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
     },
