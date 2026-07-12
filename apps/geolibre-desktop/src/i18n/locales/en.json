@@ -1,4 +1,13 @@
 {
+  "browser": {
+    "title": "Browser",
+    "openMenuItem": "Browser",
+    "close": "Close browser",
+    "searchPlaceholder": "Search data sources",
+    "empty": "No saved services or recent projects yet.",
+    "noMatches": "No matches.",
+    "addFailed": "Could not add this data source."
+  },
   "about": {
     "trigger": "About",
     "title": "About GeoLibre",

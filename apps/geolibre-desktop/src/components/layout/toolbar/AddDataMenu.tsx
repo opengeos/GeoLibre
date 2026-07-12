@@ -7,7 +7,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import { Database } from "lucide-react";
+import { useAppStore } from "@geolibre/core";
+import { Database, FolderTree } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../AddDataDialog";
@@ -45,6 +46,7 @@ export function AddDataMenu({
   onOpenOsmPbfDialog,
 }: AddDataMenuProps) {
   const { t } = useTranslation();
+  const setBrowserPanelOpen = useAppStore((s) => s.setBrowserPanelOpen);
   const uiProfile = useDesktopSettingsStore(
     (state) => state.desktopSettings.uiProfile,
   );
@@ -119,6 +121,11 @@ export function AddDataMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>{t("toolbar.menu.addData")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setBrowserPanelOpen(true)}>
+          <FolderTree className="mr-2 h-3.5 w-3.5 shrink-0" />
+          {t("browser.openMenuItem")}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         {sections.map((group, index) => (
           <Fragment key={group.section}>
