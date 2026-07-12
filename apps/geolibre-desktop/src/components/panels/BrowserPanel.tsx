@@ -100,7 +100,14 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
     projectFiles.setActionError(null);
     if (node.kind === "service" && node.serviceId) {
       const entry = serviceById(node.serviceId);
-      if (!entry) return;
+      if (!entry) {
+        // The saved-service list is read when the panel opens, so an entry can
+        // vanish (removed via the Add Data dialog, or in another tab) between
+        // the tree being built and this click; surface it rather than silently
+        // doing nothing.
+        setError(t("browser.addFailed"));
+        return;
+      }
       beginBusy(node.id);
       try {
         await applyServiceEntry(entry, { addLayer, mapControllerRef });

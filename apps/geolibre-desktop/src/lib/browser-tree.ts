@@ -21,13 +21,13 @@ import type { RecentProjectEntry } from "@geolibre/core";
 /** The kind of node, which determines its icon and click behavior. */
 export type BrowserNodeKind =
   | "section" // a static top-level group (Services, Recent)
-  | "category" // a service category grouping (Imagery, Basemaps, …)
+  | "category" // a service-kind grouping (XYZ, WMS, WFS, WMTS, ArcGIS)
   | "service" // a saved-service leaf that adds a layer when activated
   | "recent-project"; // a recent project that opens when activated
 
 /** One node in the Browser tree. */
 export interface BrowserNode {
-  /** Stable, unique id (e.g. `service:<entryId>`, `category:Imagery`). */
+  /** Stable, unique id (e.g. `service:<entryId>`, `kind:wms`). */
   id: string;
   kind: BrowserNodeKind;
   /** User-facing label. */

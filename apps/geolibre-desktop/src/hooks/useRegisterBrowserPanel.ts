@@ -14,10 +14,12 @@ export const BROWSER_PANEL_ID = "browser";
  * Open it with `openRightPanel(BROWSER_PANEL_ID)`.
  *
  * The panel body is a React component that needs the app's context (i18n, store,
- * the map controller ref), so it is not rendered here through the imperative
- * `render(container)` — instead DesktopShell portals `<BrowserPanel>` into the
- * shared content host while this panel is active. `render` therefore only leaves
- * the host empty for that portal to fill. Registered once for the shell's life.
+ * the map controller ref), so it is not rendered through the imperative
+ * `render(container)`. Instead DesktopShell portals `<BrowserPanel>` into a
+ * dedicated content host (separate from the shared plugin host, so the plugin
+ * host's imperative `replaceChildren` never wipes the portal's DOM) that the
+ * dock slots adopt while this panel is active. `render` therefore only leaves
+ * the host empty for that portal. Registered once for the shell's life.
  */
 export function useRegisterBrowserPanel(): void {
   useEffect(() => {

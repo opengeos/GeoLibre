@@ -106,19 +106,30 @@ export function BrowserTreeNode({
         ) : null}
       </button>
       {isGroup && isExpanded ? (
-        <ul>
-          {node.children?.map((child) => (
-            <BrowserTreeNode
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              expanded={expanded}
-              busyId={busyId}
-              onToggle={onToggle}
-              onActivate={onActivate}
-            />
-          ))}
-        </ul>
+        node.children && node.children.length > 0 ? (
+          <ul>
+            {node.children.map((child) => (
+              <BrowserTreeNode
+                key={child.id}
+                node={child}
+                depth={depth + 1}
+                expanded={expanded}
+                busyId={busyId}
+                onToggle={onToggle}
+                onActivate={onActivate}
+              />
+            ))}
+          </ul>
+        ) : (
+          // An expanded group with no children (e.g. Recent before any project
+          // is opened) shows a hint instead of a bare gap.
+          <p
+            className="truncate py-1 text-xs text-muted-foreground"
+            style={{ paddingLeft: paddingLeft + 14 }}
+          >
+            {t("browser.emptyGroup")}
+          </p>
+        )
       ) : null}
     </li>
   );

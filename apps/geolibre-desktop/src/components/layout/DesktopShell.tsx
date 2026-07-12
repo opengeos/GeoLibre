@@ -558,8 +558,8 @@ export function DesktopShell({
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
-  // Register the Browser as a movable/dockable right panel (its body is portaled
-  // into the shared content host below).
+  // Register the Browser as a movable/dockable right panel; its body is portaled
+  // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
@@ -586,8 +586,20 @@ export function DesktopShell({
     el.className = "contents";
     return el;
   });
+  // A second, dedicated host for the Browser panel's React portal (below). Kept
+  // separate from pluginContentEl so the imperative plugin-render effect's
+  // `replaceChildren` can never wipe the portal-managed DOM, and vice versa.
+  const [browserContentEl] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
   const activePanelId = useRightPanelState().activeId;
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
+  // The dock slots adopt whichever host owns the active panel's content: the
+  // Browser's dedicated portal host, or the shared imperative plugin host.
+  const dockContentEl =
+    activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
   // Render the active panel into the shared host once; re-run when its
   // registration is replaced (re-registration refresh) but not on dock/collapse
   // changes.
@@ -1807,13 +1819,13 @@ export function DesktopShell({
         data-workspace-row=""
         className="relative flex min-h-0 flex-1 flex-col md:flex-row"
       >
-        {/* The Browser panel body is portaled into the shared right-panel host
+        {/* The Browser panel body is portaled into its dedicated content host
             (which the dock slots relocate between positions), so it shares the
             app's React context and the shell owns its dock chrome. */}
         {activePanelId === BROWSER_PANEL_ID
           ? createPortal(
               <BrowserPanel mapControllerRef={mapControllerRef} />,
-              pluginContentEl,
+              browserContentEl,
             )
           : null}
         {replaceLayersPanelId ? (
@@ -1825,7 +1837,7 @@ export function DesktopShell({
               key={replaceLayersPanelId}
               side="layers"
               pluginId={replaceLayersPanelId}
-              pluginContentEl={pluginContentEl}
+              pluginContentEl={dockContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
               builtinVisible={layoutOptions.layerPanelVisible}
@@ -1858,7 +1870,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (left of Layers)">
               <PluginRightPanel
                 dock="left-of-layers"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
@@ -1885,7 +1897,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (right of Layers)">
               <PluginRightPanel
                 dock="right-of-layers"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
@@ -1986,7 +1998,7 @@ export function DesktopShell({
               key={replaceStylePanelId}
               side="style"
               pluginId={replaceStylePanelId}
-              pluginContentEl={pluginContentEl}
+              pluginContentEl={dockContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
               builtinVisible={layoutOptions.stylePanelVisible}
@@ -2013,7 +2025,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (left of Style)">
               <PluginRightPanel
                 dock="left-of-style"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
@@ -2038,7 +2050,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (right of Style)">
               <PluginRightPanel
                 dock="right-of-style"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
