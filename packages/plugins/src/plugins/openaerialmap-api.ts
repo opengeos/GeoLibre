@@ -138,9 +138,23 @@ function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+/** Matches an absolute http(s) URL. */
+const HTTP_URL_RE = /^https?:\/\//i;
+
+/**
+ * Reads an http(s) URL from an unknown value, else null. Guards against a
+ * `javascript:`/`data:` value reaching an `<a href>` (used for the download link).
+ */
+function asHttpUrl(value: unknown): string | null {
+  const url = asString(value);
+  return url && HTTP_URL_RE.test(url) ? url : null;
+}
+
 /** Reads a [w, s, e, n] tuple of finite numbers, else null. */
 function asBbox(value: unknown): [number, number, number, number] | null {
-  if (!Array.isArray(value) || value.length < 4) return null;
+  // Require exactly 4 elements: a 6-element (3D) GeoJSON bbox would otherwise be
+  // misread as [minx, miny, minz, maxx] and produce a garbage box.
+  if (!Array.isArray(value) || value.length !== 4) return null;
   const [w, s, e, n] = value;
   if (
     typeof w === "number" &&
@@ -164,7 +178,9 @@ function normalizeImage(raw: unknown): OamImage | null {
   const id = asString(record._id) ?? asString(record.uuid);
   if (!id) return null;
 
-  const cogUrl = asString(record.uuid);
+  // Guarded to http(s): cogUrl becomes a clicked `<a href>` (download) and the
+  // input to the tile-template URL.
+  const cogUrl = asHttpUrl(record.uuid);
 
   return {
     id,
@@ -174,7 +190,7 @@ function normalizeImage(raw: unknown): OamImage | null {
     gsd: asNumber(record.gsd) ?? asNumber(props.gsd),
     acquisitionStart: asString(record.acquisition_start),
     acquisitionEnd: asString(record.acquisition_end),
-    thumbnailUrl: asString(props.thumbnail),
+    thumbnailUrl: asHttpUrl(props.thumbnail),
     tileUrl: buildTitilerTemplate(cogUrl),
     cogUrl,
     bbox: asBbox(record.bbox) ?? asBbox(geojson.bbox),

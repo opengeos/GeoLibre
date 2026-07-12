@@ -136,19 +136,31 @@ function isAdded(image: OamImage): boolean {
   return findAddedLayerId(image) !== undefined;
 }
 
-/** Reads the current map view as a clamped [w, s, e, n] bbox. */
+/** Normalizes a longitude into [-180, 180]. */
+function normalizeLon(lon: number): number {
+  const wrapped = ((((lon + 180) % 360) + 360) % 360) - 180;
+  return wrapped;
+}
+
+/** Reads the current map view as a valid [w, s, e, n] bbox. */
 function currentBbox(): [number, number, number, number] | null {
   const map = appRef?.getMap?.();
   if (!map) return null;
   const bounds = map.getBounds();
-  const clampLon = (n: number): number => Math.max(-180, Math.min(180, n));
   const clampLat = (n: number): number => Math.max(-90, Math.min(90, n));
-  return [
-    clampLon(bounds.getWest()),
-    clampLat(bounds.getSouth()),
-    clampLon(bounds.getEast()),
-    clampLat(bounds.getNorth()),
-  ];
+  const rawWest = bounds.getWest();
+  const rawEast = bounds.getEast();
+  let west = normalizeLon(rawWest);
+  let east = normalizeLon(rawEast);
+  // A view that wraps the globe or crosses the antimeridian cannot be expressed
+  // as a single non-inverted [-180, 180] bbox (MapLibre reports east < west, or
+  // a >=360 span). Search the full longitude range instead of sending the OAM
+  // API an inverted/invalid box that would silently return nothing.
+  if (rawEast - rawWest >= 360 || west > east) {
+    west = -180;
+    east = 180;
+  }
+  return [west, clampLat(bounds.getSouth()), east, clampLat(bounds.getNorth())];
 }
 
 /**

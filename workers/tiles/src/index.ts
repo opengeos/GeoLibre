@@ -63,6 +63,8 @@ const OAM_META_PARAMS = new Set([
 ]);
 // Searches change as imagery is added, so cache only briefly at the edge.
 const OAM_CACHE_CONTROL = "public, max-age=120";
+// Upper bound on the forwarded `limit` (OAM's own page-size ceiling).
+const OAM_MAX_LIMIT = 100;
 
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
@@ -116,13 +118,25 @@ export default {
     if (url.pathname === OAM_META_PATH) {
       const upstream = new URL(OAM_META_UPSTREAM);
       for (const [key, value] of url.searchParams) {
-        if (OAM_META_PARAMS.has(key)) upstream.searchParams.append(key, value);
+        if (!OAM_META_PARAMS.has(key)) continue;
+        if (key === "limit") {
+          // Clamp so this named proxy can't be driven to request huge pages.
+          const n = Number(value);
+          const limit = Number.isFinite(n)
+            ? Math.min(Math.max(Math.trunc(n), 1), OAM_MAX_LIMIT)
+            : OAM_MAX_LIMIT;
+          upstream.searchParams.set("limit", String(limit));
+        } else {
+          upstream.searchParams.append(key, value);
+        }
       }
       let originResponse: Response;
       try {
         originResponse = await fetch(upstream.toString(), {
           headers: { accept: "application/json" },
-          cf: { cacheTtl: 120 },
+          // cacheEverything is required for Cloudflare to edge-cache a URL with
+          // no static file extension (cacheTtl alone does not).
+          cf: { cacheEverything: true, cacheTtl: 120 },
         });
       } catch {
         return new Response("Bad Gateway", {
