@@ -1176,11 +1176,23 @@
   "mapContextMenu": {
     "copyCoordinatesHint": "Copy coordinates to clipboard",
     "quickActions": "Quick actions",
+    "whatsHere": "What's here?",
     "copyGeoJson": "Copy as GeoJSON",
     "centerHere": "Center map here",
     "zoomInHere": "Zoom in here",
     "viewInGoogleMaps": "View in Google Maps",
     "viewInGoogleEarth": "View in Google Earth"
+  },
+  "knowledgeCard": {
+    "title": "Place info",
+    "loading": "Looking up this place…",
+    "empty": "No Wikipedia articles found near this place.",
+    "error": "Could not load place info. Please try again.",
+    "readMore": "Read more on Wikipedia",
+    "nearby": "Nearby places",
+    "attribution": "Content from Wikipedia, licensed CC BY-SA.",
+    "noticeTitle": "Knowledge cards use Wikipedia",
+    "noticeDesc": "Opening a knowledge card sends the coordinates of the place you clicked (and the title of any nearby article you open) to Wikipedia's public API to fetch a summary and photo — your coordinates leave your device for those requests."
   },
   "onboarding": {
     "title": "Welcome to GeoLibre",

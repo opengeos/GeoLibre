@@ -8,7 +8,15 @@ import {
   DropdownMenuTrigger,
 } from "@geolibre/ui";
 import type maplibregl from "maplibre-gl";
-import { Braces, Crosshair, Earth, MapIcon, MapPin, ZoomIn } from "lucide-react";
+import {
+  BookOpen,
+  Braces,
+  Crosshair,
+  Earth,
+  MapIcon,
+  MapPin,
+  ZoomIn,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { googleEarthUrl, googleMapsUrl } from "../../lib/external-map-links";
@@ -74,9 +82,12 @@ async function copyText(value: string): Promise<void> {
 export function MapContextMenu({
   mapControllerRef,
   mapReadyGeneration,
+  onExplorePlace,
 }: {
   mapControllerRef: RefObject<MapController | null>;
   mapReadyGeneration: number;
+  /** Open a Wikipedia knowledge card for the clicked coordinate. */
+  onExplorePlace?: (lat: number, lng: number) => void;
 }) {
   const { t } = useTranslation();
   // `menu` keeps the last anchor/coordinate even while closing, so the exit
@@ -139,6 +150,13 @@ export function MapContextMenu({
     });
   }, [menu, mapControllerRef]);
 
+  // Open a Wikipedia knowledge card for the clicked point (Google Earth-style
+  // "what's here"). The consent gate lives in the shell handler.
+  const explorePlace = useCallback(() => {
+    if (!menu) return;
+    onExplorePlace?.(menu.lat, menu.lng);
+  }, [menu, onExplorePlace]);
+
   // Read the live zoom so the external site opens at the on-screen scale; if
   // the map was torn down between right-click and selection, fall back to a
   // city-level view rather than dropping the action.
@@ -193,6 +211,12 @@ export function MapContextMenu({
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           {t("mapContextMenu.quickActions")}
         </DropdownMenuLabel>
+        {onExplorePlace ? (
+          <DropdownMenuItem onSelect={explorePlace} className="gap-2">
+            <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {t("mapContextMenu.whatsHere")}
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onSelect={copyGeoJson} className="gap-2">
           <Braces className="h-4 w-4 shrink-0 text-muted-foreground" />
           {t("mapContextMenu.copyGeoJson")}
