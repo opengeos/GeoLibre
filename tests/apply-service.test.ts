@@ -56,6 +56,24 @@ describe("buildXyzLayer", () => {
     assert.equal(metadata.resolvedUrl, undefined);
   });
 
+  it("falls back to tile size 256 for a negative or non-numeric value", () => {
+    const negative = buildXyzLayer({
+      name: "Neg",
+      tileUrl: {
+        originalUrl: "https://x",
+        renderUrl: "https://x",
+        url: "https://x",
+        redirected: false,
+      },
+      tileSize: "-256",
+      shortUrl: false,
+    });
+    assert.equal(
+      (negative.source as Record<string, unknown>).tileSize,
+      256,
+    );
+  });
+
   it("records the original and resolved URLs for a redirected short URL", () => {
     const layer = buildXyzLayer({
       name: "Short",
@@ -339,6 +357,31 @@ describe("applyServiceEntry", () => {
     await assert.rejects(
       () => applyServiceEntry(entry("wfs", { endpoint: "" }), deps),
       /no URL/i,
+    );
+    // WFS mirrors WfsSource's output-format and numeric max-features guards.
+    await assert.rejects(
+      () =>
+        applyServiceEntry(
+          entry("wfs", {
+            endpoint: "https://e/wfs",
+            typeName: "t",
+            outputFormat: "",
+          }),
+          deps,
+        ),
+      /output format/i,
+    );
+    await assert.rejects(
+      () =>
+        applyServiceEntry(
+          entry("wfs", {
+            endpoint: "https://e/wfs",
+            typeName: "t",
+            maxFeatures: "abc",
+          }),
+          deps,
+        ),
+      /max features/i,
     );
     assert.equal(added.length, 0);
   });

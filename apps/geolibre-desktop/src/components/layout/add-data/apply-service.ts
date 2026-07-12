@@ -42,9 +42,14 @@ import {
   type ServiceLibraryEntry,
 } from "./service-library";
 
-/** Parses a tile-size field, falling back to the MapLibre default of 256. */
+/**
+ * Parses a tile-size field, falling back to the MapLibre default of 256 for a
+ * non-numeric, zero, or negative value (a negative size would otherwise reach
+ * the raster source unchecked, since `Number("-256")` is truthy).
+ */
 function toTileSize(value: string): number {
-  return Number(value) || 256;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 256;
 }
 
 // --- XYZ -------------------------------------------------------------------
@@ -351,9 +356,16 @@ export interface ApplyServiceDeps {
  * saved service in one click; the Add Data dialog keeps its own form-driven
  * submit but shares the pure builders above.
  *
+ * The validation guards below throw plain English messages rather than `t()`
+ * strings so this module stays React/i18n-free and importable under Node for
+ * the unit tests. That is a deliberate boundary: the UI caller (the Browser
+ * panel) owns translation — it surfaces these by catching and remapping on the
+ * error's kind, or by validating the entry with `t()` before calling. The
+ * messages are developer-facing fallbacks, not the user-visible copy.
+ *
  * @param entry - The saved service to load.
  * @param deps - The store add action, map controller ref, and insert position.
- * @throws If the entry is missing a required field (e.g. an XYZ URL).
+ * @throws If the entry is missing or has an invalid required field.
  */
 export async function applyServiceEntry(
   entry: ServiceLibraryEntry,
@@ -419,6 +431,15 @@ export async function applyServiceEntry(
       const request = wfsFieldsToRequest(entry);
       if (!request.endpoint) throw new Error("This service has no URL.");
       if (!request.typeName) throw new Error("This service has no feature type.");
+      // Mirror WfsSource.handleSubmit's remaining guards: the save path
+      // (ServiceLibrarySection) only validates the entry name, so a saved WFS
+      // entry can carry an empty output format or a non-numeric max features.
+      if (!request.outputFormat) {
+        throw new Error("This service has no output format.");
+      }
+      if (request.maxFeatures && !Number.isFinite(Number(request.maxFeatures))) {
+        throw new Error("This service's max features value is not numeric.");
+      }
       const { fetchWfsGeoJson } = await import("../../../lib/layer-refresh");
       const { data, url, outputFormat } = await fetchWfsGeoJson(
         {
