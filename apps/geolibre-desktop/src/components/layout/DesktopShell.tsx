@@ -1834,8 +1834,6 @@ export function DesktopShell({
               <BrowserPanel
                 mapControllerRef={mapControllerRef}
                 onOpenRecentProject={projectFiles.handleOpenRecent}
-                recentActionError={projectFiles.actionError}
-                onClearRecentError={() => projectFiles.setActionError(null)}
               />,
               browserContentEl,
             )

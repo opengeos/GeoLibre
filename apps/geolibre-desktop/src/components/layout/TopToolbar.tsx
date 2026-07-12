@@ -974,7 +974,11 @@ export function TopToolbar({
           onOpenFromFile={() => void projectFiles.handleOpenFromFile()}
           onOpenFromUrl={() => projectFiles.setProjectUrlDialogOpen(true)}
           onOpenGallery={() => setGalleryDialogOpen(true)}
-          onOpenRecent={(path) => void projectFiles.handleOpenRecent(path)}
+          onOpenRecent={(path) => {
+            void projectFiles.handleOpenRecent(path).then((error) => {
+              if (error) projectFiles.setActionError(error);
+            });
+          }}
           onSave={() => void projectFiles.handleSave()}
           onSaveAs={() => void projectFiles.handleSaveAs()}
           onShare={() => setShareDialogOpen(true)}

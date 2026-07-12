@@ -11,12 +11,11 @@ import { BrowserTreeNode } from "./BrowserTreeNode";
 
 interface BrowserPanelProps {
   mapControllerRef: RefObject<MapController | null>;
-  /** Open a recent project by path (shared with the toolbar's instance). */
-  onOpenRecentProject: (path: string) => Promise<void> | void;
-  /** The shared open-recent failure message, or null. */
-  recentActionError: string | null;
-  /** Clear the shared open-recent failure before a new activation. */
-  onClearRecentError: () => void;
+  /**
+   * Open a recent project by path (shared with the toolbar's instance).
+   * Resolves to an error message to show inline, or null on success.
+   */
+  onOpenRecentProject: (path: string) => Promise<string | null>;
 }
 
 /** The section nodes are expanded by default so their contents are visible. */
@@ -47,8 +46,6 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
 export function BrowserPanel({
   mapControllerRef,
   onOpenRecentProject,
-  recentActionError,
-  onClearRecentError,
 }: BrowserPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((s) => s.addLayer);
@@ -103,9 +100,6 @@ export function BrowserPanel({
     // cannot run twice and duplicate the layer.
     if (busyRef.current != null) return;
     setError(null);
-    // Also clear any prior recent-open failure from the shared project-file
-    // actions, so a stale banner does not persist across activations.
-    onClearRecentError();
     if (node.kind === "service" && node.serviceId) {
       const entry = serviceById(node.serviceId);
       if (!entry) {
@@ -129,12 +123,13 @@ export function BrowserPanel({
         endBusy();
       }
     } else if (node.kind === "recent-project" && node.projectPath) {
-      // Keep the panel open until the open settles: the shared handler never
-      // throws (it records a failure in recentActionError, surfaced below), so
-      // closing early would hide that error from the user.
+      // Keep the panel open until the open settles: the handler resolves to an
+      // error message (or null) rather than throwing, so surface it inline here
+      // instead of closing the panel and hiding it.
       beginBusy(node.id);
       try {
-        await onOpenRecentProject(node.projectPath);
+        const openError = await onOpenRecentProject(node.projectPath);
+        if (openError) setError(openError);
       } finally {
         endBusy();
       }
@@ -158,10 +153,8 @@ export function BrowserPanel({
         />
       </div>
 
-      {error ?? recentActionError ? (
-        <p className="border-b px-3 py-2 text-xs text-destructive">
-          {error ?? recentActionError}
-        </p>
+      {error ? (
+        <p className="border-b px-3 py-2 text-xs text-destructive">{error}</p>
       ) : null}
 
       <ScrollArea className="min-h-0 flex-1">

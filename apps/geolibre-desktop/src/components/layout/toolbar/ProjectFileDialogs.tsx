@@ -10,10 +10,10 @@ import {
 } from "@geolibre/ui";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { useProjectFileActions } from "../../../hooks/useProjectFileActions";
+import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
 
 interface ProjectFileDialogsProps {
-  projectFiles: ReturnType<typeof useProjectFileActions>;
+  projectFiles: ProjectFileActions;
 }
 
 /** The project-file dialogs: Open-from-URL, the error dialog, the save-name prompt, and the env-var strip prompt. */

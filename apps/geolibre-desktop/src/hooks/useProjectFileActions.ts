@@ -262,7 +262,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
-  const handleOpenRecent = async (path: string) => {
+  // Returns an error message to surface, or null on success/abort. It does not
+  // set the shared `actionError` itself, so each caller can route the failure to
+  // its own surface (the toolbar's modal vs. the Browser panel's inline banner)
+  // now that a single instance is shared across both.
+  const handleOpenRecent = async (path: string): Promise<string | null> => {
     // Cancel any previous in-flight open so rapid clicks cannot race and let a
     // stale fetch win by resolving last.
     recentAbortRef.current?.abort();
@@ -274,19 +278,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       result = await openRecentProjectFile(path, controller.signal);
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       // Only drop the entry when the project is permanently gone; preserve it
       // for transient failures (network timeout, 5xx, momentary IO error).
       if (error instanceof RecentProjectGoneError) {
         forgetRecentProject(path);
       }
       console.error("Failed to open recent project", error);
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : t("toolbar.error.couldNotOpenRecentProject"),
-      );
-      return;
+      return error instanceof Error
+        ? error.message
+        : t("toolbar.error.couldNotOpenRecentProject");
     }
 
     try {
@@ -294,16 +295,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         result.project,
         controller.signal,
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       loadProject(project, result.path);
+      return null;
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       console.error("Failed to load recent project", error);
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : t("toolbar.error.couldNotLoadRecentProject"),
-      );
+      return error instanceof Error
+        ? error.message
+        : t("toolbar.error.couldNotLoadRecentProject");
     } finally {
       if (recentAbortRef.current === controller) {
         recentAbortRef.current = null;
