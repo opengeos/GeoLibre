@@ -16,14 +16,16 @@ import {
   type ServiceLibraryEntry,
   type ServiceLibraryKind,
 } from "../components/layout/add-data/service-library";
+import type { AddDataKind } from "../components/layout/add-data/types";
 import type { RecentProjectEntry } from "@geolibre/core";
 
 /** The kind of node, which determines its icon and click behavior. */
 export type BrowserNodeKind =
-  | "section" // a static top-level group (Services, Recent)
+  | "section" // a static top-level group (Services, Recent, Databases)
   | "category" // a service-kind grouping (XYZ, WMS, WFS, WMTS, ArcGIS)
   | "service" // a saved-service leaf that adds a layer when activated
-  | "recent-project"; // a recent project that opens when activated
+  | "recent-project" // a recent project that opens when activated
+  | "connection"; // a saved database connection that opens the DB add flow
 
 /** One node in the Browser tree. */
 export interface BrowserNode {
@@ -40,6 +42,14 @@ export interface BrowserNode {
   serviceId?: string;
   /** The saved-service kind, for the icon and the applier (kind `service`). */
   serviceKind?: ServiceLibraryKind;
+  /**
+   * The Add Data source this node's "New connection" (＋) action opens — set on
+   * service-kind category groups (their kind) and the Databases section
+   * ("postgres"). Absent means the node shows no ＋.
+   */
+  newConnectionKind?: AddDataKind;
+  /** The saved database connection string a `connection` node opens. */
+  connectionString?: string;
   /** True for a built-in preset service (read-only), for badge display. */
   builtin?: boolean;
   /** The project path a recent node opens (kind `recent-project`). */
@@ -55,10 +65,17 @@ export interface BrowserTreeInput {
   /** The recent-projects list from the store, most-recent first. */
   recentProjects: readonly RecentProjectEntry[];
   /**
-   * Translated labels for the two top-level sections. Optional so the pure
-   * module (and its tests) default to English; the app passes `t()` values.
+   * Saved database (PostGIS) connections to list under the Databases section.
+   * Omitted (undefined) hides the section entirely — the app passes it only on
+   * platforms where PostgreSQL layers are available (not mobile). An empty
+   * array still renders the section (with its "New connection" action).
    */
-  sectionLabels?: { services: string; recent: string };
+  databaseConnections?: readonly { connectionString: string; label: string }[];
+  /**
+   * Translated labels for the top-level sections. Optional so the pure module
+   * (and its tests) default to English; the app passes `t()` values.
+   */
+  sectionLabels?: { services: string; recent: string; databases: string };
 }
 
 /** Locale-aware, case-insensitive compare for stable label sorting. */
@@ -108,9 +125,8 @@ function buildServiceKinds(
       kind: "category" as const,
       label: KIND_LABEL[kind],
       addable: false,
-      // Carried so the panel's "New connection" action knows which Add Data
-      // source to open for this group.
-      serviceKind: kind,
+      // The panel's "New connection" (＋) action opens this Add Data source.
+      newConnectionKind: kind,
       count: entries.length,
       children: entries.map(
         (entry): BrowserNode => ({
@@ -131,11 +147,16 @@ function buildServiceKinds(
  * Builds the full Browser tree. Sections with no children are still returned so
  * the panel can render an empty-state hint under them.
  *
- * @param input - The services to list and the recent-projects list.
- * @returns The top-level section nodes (Services, then Recent).
+ * @param input - The services, recent projects, and database connections.
+ * @returns The top-level section nodes (Services, Recent, and Databases when
+ *   `databaseConnections` is provided).
  */
 export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
-  const labels = input.sectionLabels ?? { services: "Services", recent: "Recent" };
+  const labels = input.sectionLabels ?? {
+    services: "Services",
+    recent: "Recent",
+    databases: "Databases",
+  };
   const kinds = buildServiceKinds(input.services);
   const servicesSection: BrowserNode = {
     id: "section:services",
@@ -164,7 +185,32 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
     children: recentChildren,
   };
 
-  return [servicesSection, recentSection];
+  const sections = [servicesSection, recentSection];
+
+  // The Databases section is only included where PostgreSQL layers are
+  // available (the app omits `databaseConnections` otherwise). It always shows
+  // its "New connection" (＋) action, even with no connections yet.
+  if (input.databaseConnections) {
+    sections.push({
+      id: "section:databases",
+      kind: "section",
+      label: labels.databases,
+      addable: false,
+      newConnectionKind: "postgres",
+      count: input.databaseConnections.length,
+      children: input.databaseConnections.map(
+        (connection): BrowserNode => ({
+          id: `connection:${connection.connectionString}`,
+          kind: "connection",
+          label: connection.label,
+          addable: true,
+          connectionString: connection.connectionString,
+        }),
+      ),
+    });
+  }
+
+  return sections;
 }
 
 /**

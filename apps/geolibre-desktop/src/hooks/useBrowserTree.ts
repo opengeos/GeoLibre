@@ -6,6 +6,11 @@ import {
   readUserServices,
   type ServiceLibraryEntry,
 } from "../components/layout/add-data/service-library";
+import {
+  readSavedPostgresConnections,
+  savedPostgresConnectionLabel,
+} from "../lib/saved-postgres-connections";
+import { isMobile } from "../lib/is-mobile";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
 export interface BrowserTreeState {
@@ -33,17 +38,33 @@ export function useBrowserTree(): BrowserTreeState {
   const recentProjects = useAppStore((s) => s.recentProjects);
   const servicesLabel = t("browser.services");
   const recentLabel = t("browser.recent");
+  const databasesLabel = t("browser.databases");
+  // PostgreSQL layers rely on the desktop Martin process, which has no mobile
+  // build, so the Databases section is hidden on mobile (mirroring the Add Data
+  // PostgreSQL source). Evaluated once — the user agent is stable per session.
+  const showDatabases = useMemo(() => !isMobile(), []);
 
   return useMemo(() => {
     const services = [...BUILTIN_SERVICES, ...readUserServices()];
     const byId = new Map(services.map((entry) => [entry.id, entry]));
+    const databaseConnections = showDatabases
+      ? readSavedPostgresConnections().map((connectionString) => ({
+          connectionString,
+          label: savedPostgresConnectionLabel(connectionString),
+        }))
+      : undefined;
     return {
       tree: buildBrowserTree({
         services,
         recentProjects,
-        sectionLabels: { services: servicesLabel, recent: recentLabel },
+        databaseConnections,
+        sectionLabels: {
+          services: servicesLabel,
+          recent: recentLabel,
+          databases: databasesLabel,
+        },
       }),
       serviceById: (id: string) => byId.get(id),
     };
-  }, [recentProjects, servicesLabel, recentLabel]);
+  }, [recentProjects, servicesLabel, recentLabel, databasesLabel, showDatabases]);
 }

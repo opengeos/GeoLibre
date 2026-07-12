@@ -7,8 +7,8 @@ import { useTranslation } from "react-i18next";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import { filterBrowserTree, type BrowserNode } from "../../lib/browser-tree";
 import { applyServiceEntry } from "../layout/add-data/apply-service";
+import type { AddDataKind } from "../layout/AddDataDialog";
 import { openAddData } from "../layout/add-data/open-add-data";
-import type { ServiceLibraryKind } from "../layout/add-data/service-library";
 import { BrowserTreeNode } from "./BrowserTreeNode";
 
 interface BrowserPanelProps {
@@ -21,7 +21,11 @@ interface BrowserPanelProps {
 }
 
 /** The section nodes are expanded by default so their contents are visible. */
-const DEFAULT_EXPANDED = new Set(["section:services", "section:recent"]);
+const DEFAULT_EXPANDED = new Set([
+  "section:services",
+  "section:recent",
+  "section:databases",
+]);
 
 /** Collects every group node id in a tree (used to expand-all while searching). */
 function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void {
@@ -135,13 +139,16 @@ export function BrowserPanel({
       } finally {
         endBusy();
       }
+    } else if (node.kind === "connection") {
+      // Open the PostgreSQL Add Data dialog to connect, browse tables, and add
+      // layers; the saved connection is preselected in the dialog's list.
+      openAddData("postgres");
     }
   };
 
-  // "New connection" on a service-kind group opens the Add Data dialog at that
-  // source; saving there adds it to the library, which shows up in this tree.
-  // ServiceLibraryKind is a subset of AddDataKind, so no cast is needed.
-  const newConnection = (kind: ServiceLibraryKind) => openAddData(kind);
+  // A group's "New connection" (＋) opens the Add Data dialog at that source;
+  // saving there adds it to the library/connections, which show up in this tree.
+  const newConnection = (kind: AddDataKind) => openAddData(kind);
 
   const hasContent = filtered.some((section) => section.children?.length);
 

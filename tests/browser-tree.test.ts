@@ -77,10 +77,10 @@ describe("buildBrowserTree", () => {
       ["kind:xyz", "kind:wms", "kind:arcgis"],
     );
     assert.equal(services.count, 3);
-    // Each kind group carries its kind so the panel's "New connection" action
-    // can open the matching Add Data source.
-    assert.equal(find(tree, "kind:wms")?.serviceKind, "wms");
-    assert.equal(find(tree, "kind:arcgis")?.serviceKind, "arcgis");
+    // Each kind group carries the Add Data source its "New connection" action
+    // opens.
+    assert.equal(find(tree, "kind:wms")?.newConnectionKind, "wms");
+    assert.equal(find(tree, "kind:arcgis")?.newConnectionKind, "arcgis");
   });
 
   it("sorts services within a kind by name", () => {
@@ -126,6 +126,34 @@ describe("buildBrowserTree", () => {
     });
     assert.equal(find(tree, "section:services")?.label, "Servicios");
     assert.equal(find(tree, "section:recent")?.label, "Recientes");
+  });
+
+  it("omits the Databases section unless connections are provided", () => {
+    const tree = buildBrowserTree({ services: [], recentProjects: [] });
+    assert.equal(find(tree, "section:databases"), undefined);
+    assert.deepEqual(
+      tree.map((n) => n.id),
+      ["section:services", "section:recent"],
+    );
+  });
+
+  it("adds a Databases section with connection leaves + a postgres ＋", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      databaseConnections: [
+        { connectionString: "postgres://u@h/db", label: "db @ h" },
+      ],
+    });
+    const db = find(tree, "section:databases");
+    assert.equal(db?.kind, "section");
+    // The section's ＋ opens the Add Data PostgreSQL source.
+    assert.equal(db?.newConnectionKind, "postgres");
+    assert.equal(db?.count, 1);
+    const conn = find(tree, "connection:postgres://u@h/db");
+    assert.equal(conn?.kind, "connection");
+    assert.equal(conn?.connectionString, "postgres://u@h/db");
+    assert.equal(conn?.label, "db @ h");
   });
 
   it("lists recent projects in the given order with their paths", () => {

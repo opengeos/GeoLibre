@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Database,
   Folder,
   FolderOpen,
   Globe2,
@@ -11,7 +12,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { ServiceLibraryKind } from "../layout/add-data/service-library";
+import type { AddDataKind } from "../layout/AddDataDialog";
 import type { BrowserNode } from "../../lib/browser-tree";
 
 interface BrowserTreeNodeProps {
@@ -26,8 +27,8 @@ interface BrowserTreeNodeProps {
   onToggle: (id: string) => void;
   /** Activate a leaf (add a service layer, or open a recent project). */
   onActivate: (node: BrowserNode) => void;
-  /** Add a new connection for a service-kind group (opens Add Data at it). */
-  onNewConnection: (kind: ServiceLibraryKind) => void;
+  /** Open Add Data at `kind` for a group's "New connection" (＋) action. */
+  onNewConnection: (kind: AddDataKind) => void;
 }
 
 /** The leading icon for a node, chosen by kind (and expanded state for groups). */
@@ -37,6 +38,8 @@ function nodeIcon(node: BrowserNode, isExpanded: boolean): LucideIcon {
       return Clock;
     case "service":
       return Globe2;
+    case "connection":
+      return Database;
     default:
       return isExpanded ? FolderOpen : Folder;
   }
@@ -67,12 +70,17 @@ export function BrowserTreeNode({
   const isDisabled = !isGroup && busyId != null;
   // Indent by depth; groups reserve room for the chevron, leaves align to it.
   const paddingLeft = 8 + depth * 14;
-  // The kind group's service kind (or undefined). Captured as a const so its
-  // non-undefined narrowing survives into the button's onClick closure — a
-  // property access (node.serviceKind) would not, which is why a cast would
-  // otherwise be needed there.
-  const categoryKind =
-    node.kind === "category" ? node.serviceKind : undefined;
+  // The Add Data source this node's ＋ opens (or undefined). Captured as a const
+  // so its non-undefined narrowing survives into the onClick closure — a
+  // property access (node.newConnectionKind) would not, forcing a cast.
+  const newConnectionKind = node.newConnectionKind;
+  // The Databases section's ＋ reads "New database connection"; a service-kind
+  // group's reads e.g. "New WMS connection" (distinguishable per group for
+  // screen-reader users).
+  const newConnectionLabel =
+    node.kind === "section"
+      ? t("browser.newDatabaseConnection")
+      : t("browser.newConnection", { kind: node.label });
 
   return (
     <li>
@@ -117,13 +125,13 @@ export function BrowserTreeNode({
             </span>
           ) : null}
         </button>
-        {categoryKind ? (
+        {newConnectionKind ? (
           <button
             type="button"
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            title={t("browser.newConnection", { kind: node.label })}
-            aria-label={t("browser.newConnection", { kind: node.label })}
-            onClick={() => onNewConnection(categoryKind)}
+            title={newConnectionLabel}
+            aria-label={newConnectionLabel}
+            onClick={() => onNewConnection(newConnectionKind)}
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
