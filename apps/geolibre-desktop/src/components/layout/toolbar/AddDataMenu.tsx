@@ -7,10 +7,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@geolibre/ui";
-import { useAppStore } from "@geolibre/core";
+import { openRightPanel } from "@geolibre/plugins";
 import { Database, FolderTree } from "lucide-react";
 import { Fragment, useMemo } from "react";
 import { useTranslation } from "react-i18next";
+import { BROWSER_PANEL_ID } from "../../../hooks/useRegisterBrowserPanel";
 import type { AddDataKind } from "../AddDataDialog";
 import { isMobile } from "../../../lib/is-mobile";
 import { useDesktopSettingsStore } from "../../../hooks/useDesktopSettings";
@@ -46,7 +47,6 @@ export function AddDataMenu({
   onOpenOsmPbfDialog,
 }: AddDataMenuProps) {
   const { t } = useTranslation();
-  const setBrowserPanelOpen = useAppStore((s) => s.setBrowserPanelOpen);
   const uiProfile = useDesktopSettingsStore(
     (state) => state.desktopSettings.uiProfile,
   );
@@ -122,7 +122,7 @@ export function AddDataMenu({
       <DropdownMenuContent align="start" className="w-64">
         <DropdownMenuLabel>{t("toolbar.menu.addData")}</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setBrowserPanelOpen(true)}>
+        <DropdownMenuItem onSelect={() => openRightPanel(BROWSER_PANEL_ID)}>
           <FolderTree className="mr-2 h-3.5 w-3.5 shrink-0" />
           {t("browser.openMenuItem")}
         </DropdownMenuItem>

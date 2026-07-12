@@ -45,6 +45,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
+import {
+  BROWSER_PANEL_ID,
+  useRegisterBrowserPanel,
+} from "../../hooks/useRegisterBrowserPanel";
 import {
   isTauri,
   loadDroppedPhotoFiles,
@@ -127,6 +132,7 @@ import {
   SilentErrorBoundary,
 } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
+import { BrowserPanel } from "../panels/BrowserPanel";
 import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
 import { SunPanel } from "../panels/SunPanel";
@@ -297,20 +303,6 @@ const SegmentationDialog = lazy(() =>
       console.error("Failed to load SegmentationDialog", error);
       const Fallback = (() =>
         null) as unknown as typeof import("../processing/SegmentationDialog").SegmentationDialog;
-      return { default: Fallback };
-    }),
-);
-
-const BrowserPanel = lazy(() =>
-  import("../panels/BrowserPanel")
-    .then((module) => ({
-      default: module.BrowserPanel,
-    }))
-    .catch((error) => {
-      // Same chunk-load fallback rationale as ProcessingDialog above.
-      console.error("Failed to load BrowserPanel", error);
-      const Fallback = (() =>
-        null) as unknown as typeof import("../panels/BrowserPanel").BrowserPanel;
       return { default: Fallback };
     }),
 );
@@ -566,8 +558,9 @@ export function DesktopShell({
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
-  const browserPanelOpen = useAppStore((s) => s.ui.browserPanelOpen);
-  const setBrowserPanelOpen = useAppStore((s) => s.setBrowserPanelOpen);
+  // Register the Browser as a movable/dockable right panel (its body is portaled
+  // into the shared content host below).
+  useRegisterBrowserPanel();
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style
@@ -1814,16 +1807,15 @@ export function DesktopShell({
         data-workspace-row=""
         className="relative flex min-h-0 flex-1 flex-col md:flex-row"
       >
-        {browserPanelOpen ? (
-          <SectionErrorBoundary
-            label="Browser panel"
-            onClose={() => setBrowserPanelOpen(false)}
-          >
-            <Suspense fallback={null}>
-              <BrowserPanel mapControllerRef={mapControllerRef} />
-            </Suspense>
-          </SectionErrorBoundary>
-        ) : null}
+        {/* The Browser panel body is portaled into the shared right-panel host
+            (which the dock slots relocate between positions), so it shares the
+            app's React context and the shell owns its dock chrome. */}
+        {activePanelId === BROWSER_PANEL_ID
+          ? createPortal(
+              <BrowserPanel mapControllerRef={mapControllerRef} />,
+              pluginContentEl,
+            )
+          : null}
         {replaceLayersPanelId ? (
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
           // the Layers sidebar surface, so a single rail lists both the workbench

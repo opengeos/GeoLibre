@@ -1,7 +1,7 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { Button, Input, ScrollArea } from "@geolibre/ui";
-import { FolderTree, Search, X } from "lucide-react";
+import { Input, ScrollArea } from "@geolibre/ui";
+import { Search } from "lucide-react";
 import { useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
@@ -34,12 +34,13 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
  * service adds it to the map via {@link applyServiceEntry}, and clicking a
  * recent project opens it.
  *
- * Docked in the left rail by {@link DesktopShell}; it reads its own open flag
- * from the store, so closing it flips `browserPanelOpen`.
+ * Registered as a first-class dockable right panel (see useRegisterBrowserPanel),
+ * so the shell owns the panel chrome — title, move/merge/collapse/close buttons,
+ * and the left/right dock (defaulting to the shared Layers rail). This component
+ * renders only the panel body (search + tree).
  */
 export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
   const { t } = useTranslation();
-  const setBrowserPanelOpen = useAppStore((s) => s.setBrowserPanelOpen);
   const addLayer = useAppStore((s) => s.addLayer);
   const { tree, serviceById } = useBrowserTree();
   const projectFiles = useProjectFileActions(mapControllerRef);
@@ -128,30 +129,9 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
   const hasContent = filtered.some((section) => section.children?.length);
 
   return (
-    <section
-      aria-label={t("browser.title")}
-      // A fixed-width left rail on desktop; below the md breakpoint (where the
-      // workspace row is a column and the Layers/Style panels already overlay at
-      // z-30) it becomes a full-workspace sheet at z-40 with its own close
-      // button, so it neither pushes the map off-screen nor overlaps the Layers
-      // overlay — the user dismisses it to return to the map.
-      className="relative flex w-full shrink-0 flex-col overflow-hidden bg-card max-md:absolute max-md:inset-0 max-md:z-40 md:w-72 md:border-r"
-    >
-      <div className="flex items-center gap-2 border-b px-3 py-1.5">
-        <FolderTree className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-semibold">{t("browser.title")}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="ml-auto h-8 w-8"
-          title={t("browser.close")}
-          aria-label={t("browser.close")}
-          onClick={() => setBrowserPanelOpen(false)}
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-
+    // Body only: the shell (PluginRightPanel / SharedSidebar) renders the header,
+    // move/merge/collapse/close controls, and the dock rail around this.
+    <div className="flex h-full min-h-0 flex-col">
       <div className="relative border-b px-2 py-2">
         <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -192,6 +172,6 @@ export function BrowserPanel({ mapControllerRef }: BrowserPanelProps) {
           </p>
         )}
       </ScrollArea>
-    </section>
+    </div>
   );
 }
