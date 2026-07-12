@@ -581,7 +581,7 @@ export const PLANET_SWITCHER_OPTIONS = [
   { ellipsoidId: "mercury", basemapId: "mercury-messenger-color" },
   { ellipsoidId: "pluto", basemapId: "pluto-mosaic" },
   { ellipsoidId: "titan", basemapId: "titan-cassini" },
-  { ellipsoidId: "venus", basemapId: "venus-magellan" },
+  { ellipsoidId: "venus", basemapId: "venus-magellan-color" },
 ] as const satisfies readonly {
   ellipsoidId: EllipsoidId;
   basemapId: string;
