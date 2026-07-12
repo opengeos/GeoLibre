@@ -20,6 +20,8 @@ import {
   DEFAULT_WMS_LAYERS,
   DEFAULT_WMTS_URL,
   DEFAULT_XYZ_URL,
+  GEBCO_WMS_ENDPOINT,
+  GEBCO_WMS_LAYERS,
   MAX_SAVED_SERVICES,
   SERVICE_LIBRARY_STORAGE_KEY,
 } from "./constants";
@@ -313,6 +315,24 @@ export const BUILTIN_SERVICES: readonly ServiceLibraryEntry[] = [
       format: "image/png",
       transparent: true,
       tileSize: "256",
+    },
+  },
+  {
+    id: "builtin-wms-gebco",
+    name: "GEBCO Ocean Bathymetry",
+    category: "Imagery",
+    kind: "wms",
+    builtin: true,
+    fields: {
+      endpoint: GEBCO_WMS_ENDPOINT,
+      layers: GEBCO_WMS_LAYERS,
+      styles: "",
+      format: "image/png",
+      transparent: true,
+      tileSize: "256",
+      // GEBCO serves the latest grid over WMS 1.3.0; pin it so the saved
+      // service does not fall back to 1.1.1's flipped-axis GetMap.
+      version: "1.3.0",
     },
   },
   {
