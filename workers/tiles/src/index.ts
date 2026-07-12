@@ -205,7 +205,7 @@ export default {
     // Look up own properties only — a bare object literal inherits keys like
     // "constructor" from Object.prototype (and `[a-z0-9-]+` matches it), which
     // would otherwise resolve to a truthy function and slip past the 404 below.
-    const base = Object.prototype.hasOwnProperty.call(DATASETS, dataset)
+    const base = Object.hasOwn(DATASETS, dataset)
       ? DATASETS[dataset]
       : undefined;
     if (!base) {
@@ -281,7 +281,7 @@ async function handleWmsTile(
   const [, dataset, zs, xs, ys] = match;
   // Own-property lookup only, for the same Object.prototype reason as the OPM
   // path above (a slug like "constructor" must 404, not resolve to a function).
-  const ds = Object.prototype.hasOwnProperty.call(WMS_DATASETS, dataset)
+  const ds = Object.hasOwn(WMS_DATASETS, dataset)
     ? WMS_DATASETS[dataset]
     : undefined;
   if (!ds) {
