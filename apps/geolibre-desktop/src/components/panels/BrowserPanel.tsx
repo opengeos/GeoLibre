@@ -6,7 +6,6 @@ import { useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import { filterBrowserTree, type BrowserNode } from "../../lib/browser-tree";
-import type { AddDataKind } from "../layout/AddDataDialog";
 import { applyServiceEntry } from "../layout/add-data/apply-service";
 import { openAddData } from "../layout/add-data/open-add-data";
 import type { ServiceLibraryKind } from "../layout/add-data/service-library";
@@ -141,9 +140,8 @@ export function BrowserPanel({
 
   // "New connection" on a service-kind group opens the Add Data dialog at that
   // source; saving there adds it to the library, which shows up in this tree.
-  // The five ServiceLibraryKind values are all valid AddDataKind values.
-  const newConnection = (kind: ServiceLibraryKind) =>
-    openAddData(kind as AddDataKind);
+  // ServiceLibraryKind is a subset of AddDataKind, so no cast is needed.
+  const newConnection = (kind: ServiceLibraryKind) => openAddData(kind);
 
   const hasContent = filtered.some((section) => section.children?.length);
 

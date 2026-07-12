@@ -115,8 +115,8 @@ export function BrowserTreeNode({
           <button
             type="button"
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            title={t("browser.newConnection")}
-            aria-label={t("browser.newConnection")}
+            title={t("browser.newConnection", { kind: node.label })}
+            aria-label={t("browser.newConnection", { kind: node.label })}
             onClick={() =>
               onNewConnection(node.serviceKind as ServiceLibraryKind)
             }

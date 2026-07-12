@@ -9,7 +9,7 @@
     "noMatches": "No matches.",
     "addFailed": "Could not add this data source.",
     "builtinBadge": "built-in",
-    "newConnection": "New connection"
+    "newConnection": "New {{kind}} connection"
   },
   "about": {
     "trigger": "About",
