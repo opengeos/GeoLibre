@@ -93,7 +93,13 @@ export function KnowledgeCardPanel({
         const places = await nearbyPromise;
         if (signal.aborted) return;
         if (!main && places.length > 0) {
-          main = await fetchArticleSummary(places[0].title, { lang, signal });
+          // A failed fallback summary (e.g. a transient 5xx) must not discard
+          // the nearby list we already have: degrade to no summary so the card
+          // still shows the neighbours rather than dropping to the error state.
+          main = await fetchArticleSummary(places[0].title, {
+            lang,
+            signal,
+          }).catch(() => null);
         }
         if (signal.aborted) return;
         setNearby(places);
@@ -139,7 +145,11 @@ export function KnowledgeCardPanel({
   const otherNearby = nearby.filter((n) => n.title !== summary?.title);
 
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-3 z-20 flex max-h-[calc(100%-6rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl">
+    // Bottom-left, but lifted to `bottom-12` (matching BoundsRestrictionIndicator)
+    // so it clears MapLibre's bottom-left scale/attribution control. As a large
+    // z-20 panel it overlays the small bottom-left badges while open; see the
+    // stacking notes in BoundsRestrictionIndicator and CollaborationStatusBadge.
+    <div className="pointer-events-auto absolute bottom-12 left-2 z-20 flex max-h-[calc(100%-7.5rem)] w-[min(22rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -167,16 +177,12 @@ export function KnowledgeCardPanel({
           <div className="px-3 py-6 text-xs text-destructive">
             {t("knowledgeCard.error")}
           </div>
-        ) : status === "empty" ? (
-          <div className="px-3 py-6 text-xs text-muted-foreground">
-            {t("knowledgeCard.empty")}
-          </div>
         ) : summary ? (
           <div className="flex flex-col gap-2 px-3 py-3">
             {summary.thumbnailUrl ? (
               <img
                 src={summary.thumbnailUrl}
-                alt=""
+                alt={summary.title}
                 loading="lazy"
                 className="max-h-40 w-full rounded-md object-cover"
               />
@@ -198,6 +204,13 @@ export function KnowledgeCardPanel({
               <ExternalLink className="h-3.5 w-3.5" />
               {t("knowledgeCard.readMore")}
             </Button>
+          </div>
+        ) : nearby.length === 0 ? (
+          // Only truly empty when there is neither a summary nor any neighbour;
+          // if the primary summary failed but nearby places loaded, fall through
+          // to the list below instead of a contradictory "nothing found".
+          <div className="px-3 py-6 text-xs text-muted-foreground">
+            {t("knowledgeCard.empty")}
           </div>
         ) : null}
 

@@ -6,9 +6,11 @@
  * and a plain-language summary + thumbnail for a chosen article (the REST
  * summary endpoint). Both are anonymous cross-origin GETs — Wikimedia serves
  * `Access-Control-Allow-Origin: *` for `origin=*` API calls and for the REST
- * summary route — so no proxy, key, or custom header (which would force a CORS
- * preflight) is needed, and the calls work in both the desktop and web builds
- * under their existing `connect-src https:` CSP.
+ * summary route — so no proxy or API key is needed. We send only
+ * `Accept: application/json`, a CORS-safelisted header that triggers no
+ * preflight; adding any non-safelisted header would, so keep requests to
+ * safelisted headers. The calls work in both the desktop and web builds under
+ * their existing `connect-src https:` CSP.
  *
  * All network functions send the queried coordinate/title to Wikimedia, so the
  * caller gates the first use behind a one-time consent notice (see
