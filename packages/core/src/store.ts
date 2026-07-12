@@ -206,6 +206,8 @@ export interface AppState {
     segmentationOpen: boolean;
     geocodeOpen: boolean;
     sqlWorkspaceOpen: boolean;
+    /** Whether the Browser (Data Source Manager) panel is docked open. */
+    browserPanelOpen: boolean;
     loadEditorFeaturesOpen: boolean;
     // Store layer preselected in the "Load Features into Editor" dialog when it
     // is opened from a layer's context menu, or null when opened without a target.
@@ -322,6 +324,7 @@ export interface AppState {
   setSegmentationOpen: (open: boolean) => void;
   setGeocodeOpen: (open: boolean) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
+  setBrowserPanelOpen: (open: boolean) => void;
   setLoadEditorFeaturesOpen: (open: boolean, layerId?: string | null) => void;
   setPythonConsoleOpen: (open: boolean) => void;
   setNotebookOpen: (open: boolean) => void;
@@ -661,6 +664,7 @@ export const useAppStore = create<AppState>()(
         segmentationOpen: false,
         geocodeOpen: false,
         sqlWorkspaceOpen: false,
+        browserPanelOpen: false,
         loadEditorFeaturesOpen: false,
         loadEditorFeaturesLayerId: null,
         pythonConsoleOpen: false,
@@ -914,6 +918,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, geocodeOpen: open } })),
       setSqlWorkspaceOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
+      setBrowserPanelOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, browserPanelOpen: open } })),
       setLoadEditorFeaturesOpen: (open, layerId) =>
         set((s) => ({
           ui: {
