@@ -69,7 +69,7 @@ export const GEBCO_WMS_LAYERS = "GEBCO_LATEST";
 // (helpers) attaches this to any GEBCO WMS layer, however it was added (the sample
 // below or a hand-pasted wms.gebco.net URL).
 export const GEBCO_ATTRIBUTION =
-  'Imagery reproduced from the GEBCO Compilation Group (2024) GEBCO Grid, <a href="https://www.gebco.net" target="_blank" rel="noreferrer">GEBCO</a>';
+  'Imagery reproduced from the GEBCO Compilation Group (2026) GEBCO Grid, <a href="https://www.gebco.net" target="_blank" rel="noreferrer">GEBCO</a>';
 export const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";
 export const DEFAULT_WFS_TYPE_NAME = "topp:states";
 // EOX "Sentinel-2 cloudless" — a global, keyless RESTful WMTS imagery layer
