@@ -61,6 +61,11 @@ interface NearbyOptions {
   signal?: AbortSignal;
 }
 
+/** Split a locale on its region separator, e.g. `pt-BR` / `zh_Hans`. */
+const LOCALE_SEPARATOR_RE = /[-_]/;
+/** A bare 2-3 letter language code, the shape of a Wikipedia edition subdomain. */
+const LANGUAGE_CODE_RE = /^[a-z]{2,3}$/;
+
 /**
  * Normalise a UI locale to a Wikipedia language edition subdomain. Wikipedia
  * editions are keyed by the base language code (`pt`, not `pt-BR`), lowercase
@@ -68,8 +73,8 @@ interface NearbyOptions {
  * request against a non-existent subdomain.
  */
 export function wikipediaLang(locale: string | undefined | null): string {
-  const base = (locale ?? "").split(/[-_]/)[0]?.toLowerCase() ?? "";
-  return /^[a-z]{2,3}$/.test(base) ? base : "en";
+  const base = (locale ?? "").split(LOCALE_SEPARATOR_RE)[0]?.toLowerCase() ?? "";
+  return LANGUAGE_CODE_RE.test(base) ? base : "en";
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -187,8 +192,33 @@ export function parseSummary(json: unknown, lang: string): WikiSummary | null {
   };
 }
 
+/** Abort a Wikipedia request after this long if nothing else cancels it (ms). */
+const REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * `fetch` with a default timeout combined with the caller's abort signal, so a
+ * stalled network can never hang a request — and the card stuck in "loading" —
+ * indefinitely. Either the caller aborting or the timeout firing cancels it.
+ */
+async function fetchWithTimeout(
+  url: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  signal?.addEventListener("abort", () => controller.abort(), { once: true });
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: "application/json" },
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetch(url, { signal, headers: { Accept: "application/json" } });
+  const response = await fetchWithTimeout(url, signal);
   if (!response.ok) {
     throw new Error(`Wikipedia request failed: ${response.status}`);
   }
@@ -217,10 +247,10 @@ export async function fetchArticleSummary(
   options: { lang?: string; signal?: AbortSignal } = {},
 ): Promise<WikiSummary | null> {
   const lang = wikipediaLang(options.lang);
-  const response = await fetch(buildSummaryUrl(title, lang), {
-    signal: options.signal,
-    headers: { Accept: "application/json" },
-  });
+  const response = await fetchWithTimeout(
+    buildSummaryUrl(title, lang),
+    options.signal,
+  );
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`Wikipedia request failed: ${response.status}`);
