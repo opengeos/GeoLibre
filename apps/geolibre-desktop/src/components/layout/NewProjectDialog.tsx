@@ -344,7 +344,15 @@ export function NewProjectDialog({
                   );
                   // Collapse the long "other bodies" section; keep Moon/Mars open.
                   return group.id === "other" ? (
-                    <CollapsibleSection key={group.id} title={heading}>
+                    <CollapsibleSection
+                      key={group.id}
+                      title={heading}
+                      // Collapsed by default, but auto-expanded when the selected
+                      // basemap is one of these, so the selection stays visible.
+                      defaultOpen={group.basemaps.some(
+                        (b) => b.id === selectedBasemapId,
+                      )}
+                    >
                       {grid}
                     </CollapsibleSection>
                   ) : (

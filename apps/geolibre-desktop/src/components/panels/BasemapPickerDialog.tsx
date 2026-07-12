@@ -239,7 +239,13 @@ export function BasemapPickerDialog({
             // The "other bodies" section holds many entries, so collapse it to
             // keep the panel short; the Moon/Mars sections stay always-visible.
             return group.id === "other" ? (
-              <CollapsibleSection key={group.id} title={heading}>
+              <CollapsibleSection
+                key={group.id}
+                title={heading}
+                // Collapsed by default, but auto-expanded when the active basemap
+                // is one of these, so the current selection isn't hidden.
+                defaultOpen={group.basemaps.some((b) => b.id === activeChoice)}
+              >
                 {grid}
               </CollapsibleSection>
             ) : (
