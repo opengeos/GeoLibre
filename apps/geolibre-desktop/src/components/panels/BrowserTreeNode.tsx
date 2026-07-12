@@ -7,9 +7,11 @@ import {
   FolderOpen,
   Globe2,
   Loader2,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import type { ServiceLibraryKind } from "../layout/add-data/service-library";
 import type { BrowserNode } from "../../lib/browser-tree";
 
 interface BrowserTreeNodeProps {
@@ -24,6 +26,8 @@ interface BrowserTreeNodeProps {
   onToggle: (id: string) => void;
   /** Activate a leaf (add a service layer, or open a recent project). */
   onActivate: (node: BrowserNode) => void;
+  /** Add a new connection for a service-kind group (opens Add Data at it). */
+  onNewConnection: (kind: ServiceLibraryKind) => void;
 }
 
 /** The leading icon for a node, chosen by kind (and expanded state for groups). */
@@ -50,6 +54,7 @@ export function BrowserTreeNode({
   busyId,
   onToggle,
   onActivate,
+  onNewConnection,
 }: BrowserTreeNodeProps) {
   const { t } = useTranslation();
   const isGroup = Boolean(node.children);
@@ -65,11 +70,12 @@ export function BrowserTreeNode({
 
   return (
     <li>
+      <div className="flex items-center">
       <button
         type="button"
         disabled={isDisabled}
         className={cn(
-          "flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-sm",
+          "flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left text-sm",
           "hover:bg-accent hover:text-accent-foreground",
           "disabled:pointer-events-none disabled:opacity-50",
           node.kind === "section" && "font-semibold",
@@ -105,6 +111,18 @@ export function BrowserTreeNode({
           </span>
         ) : null}
       </button>
+      {node.kind === "category" && node.serviceKind ? (
+        <button
+          type="button"
+          className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          title={t("browser.newConnection")}
+          aria-label={t("browser.newConnection")}
+          onClick={() => onNewConnection(node.serviceKind as ServiceLibraryKind)}
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+      </div>
       {isGroup && isExpanded ? (
         node.children && node.children.length > 0 ? (
           <ul>
@@ -117,6 +135,7 @@ export function BrowserTreeNode({
                 busyId={busyId}
                 onToggle={onToggle}
                 onActivate={onActivate}
+                onNewConnection={onNewConnection}
               />
             ))}
           </ul>

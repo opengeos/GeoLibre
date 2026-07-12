@@ -96,6 +96,7 @@ import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
+import { OPEN_ADD_DATA_EVENT } from "./add-data/open-add-data";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -347,6 +348,17 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  // Let any panel (e.g. the Browser panel's "New connection" action) open the
+  // Add Data dialog at a given kind without prop-drilling, mirroring
+  // openSettingsSection. This toolbar owns the dialog + its kind state.
+  useEffect(() => {
+    const onOpenAddData = (event: Event) => {
+      const kind = (event as CustomEvent<{ kind: AddDataKind }>).detail?.kind;
+      if (kind) setAddDataKind(kind);
+    };
+    window.addEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
+    return () => window.removeEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
+  }, []);
   // Deck.gl Layer kind the Add Data dialog opens on (e.g. the 3D-model entry
   // jumps straight to the scenegraph layer type).
   const [addDataDeckVizKind, setAddDataDeckVizKind] = useState<

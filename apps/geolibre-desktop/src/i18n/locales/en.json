@@ -8,7 +8,8 @@
     "emptyGroup": "Empty",
     "noMatches": "No matches.",
     "addFailed": "Could not add this data source.",
-    "builtinBadge": "built-in"
+    "builtinBadge": "built-in",
+    "newConnection": "New connection"
   },
   "about": {
     "trigger": "About",

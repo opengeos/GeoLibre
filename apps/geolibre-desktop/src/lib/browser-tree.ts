@@ -108,6 +108,9 @@ function buildServiceKinds(
       kind: "category" as const,
       label: KIND_LABEL[kind],
       addable: false,
+      // Carried so the panel's "New connection" action knows which Add Data
+      // source to open for this group.
+      serviceKind: kind,
       count: entries.length,
       children: entries.map(
         (entry): BrowserNode => ({

@@ -77,6 +77,10 @@ describe("buildBrowserTree", () => {
       ["kind:xyz", "kind:wms", "kind:arcgis"],
     );
     assert.equal(services.count, 3);
+    // Each kind group carries its kind so the panel's "New connection" action
+    // can open the matching Add Data source.
+    assert.equal(find(tree, "kind:wms")?.serviceKind, "wms");
+    assert.equal(find(tree, "kind:arcgis")?.serviceKind, "arcgis");
   });
 
   it("sorts services within a kind by name", () => {
