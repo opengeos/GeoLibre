@@ -137,6 +137,13 @@ const WMS_PATH = /^\/wms\/([a-z0-9-]+)\/(\d{1,2})\/(\d{1,7})\/(\d{1,7})\.png$/;
 // Edge length of a reprojected tile. Matches MapLibre's default `tileSize`.
 const WMS_TILE_SIZE = 256;
 
+// Highest zoom the reprojection endpoint will serve. The mosaics top out around
+// native zoom 7, so this leaves a little overzoom headroom while capping abuse:
+// beyond it the `x`/`y < 2**z` check is useless (2**z dwarfs the regex's 7-digit
+// ceiling), so a client could hammer USGS + the PNG codec with unlimited
+// distinct high-z cache keys.
+const MAX_WMS_ZOOM = 10;
+
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, OPTIONS",
@@ -287,9 +294,10 @@ async function handleWmsTile(
   const z = Number(zs);
   const x = Number(xs);
   const y = Number(ys);
-  // Reject coordinates outside the pyramid before touching the USGS server.
+  // Reject over-deep zooms and coordinates outside the pyramid before touching
+  // the USGS server (see MAX_WMS_ZOOM — the x/y bound alone doesn't limit z).
   const dim = 2 ** z;
-  if (x >= dim || y >= dim) {
+  if (z > MAX_WMS_ZOOM || x >= dim || y >= dim) {
     return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
   }
 
@@ -319,10 +327,15 @@ async function handleWmsTile(
   if (!origin.ok || !contentType.startsWith("image/")) {
     // A WMS ServiceException is XML, not an image — don't feed it to the PNG
     // decoder. Answer with a transparent tile so the black-space backdrop shows
-    // through, and negative-cache it. Draining the body frees the connection.
+    // through. Draining the body frees the connection.
     await origin.arrayBuffer().catch(() => undefined);
     const resp = pngResponse(transparentTile(), NEGATIVE_CACHE_CONTROL);
-    ctx.waitUntil(cache.put(request, resp.clone()));
+    // Negative-cache genuine misses, but skip 5xx/429 so a transient USGS
+    // outage or throttle isn't pinned as a blank tile for the negative TTL
+    // (mirrors the OPM passthrough path above).
+    if (origin.status < 500 && origin.status !== 429) {
+      ctx.waitUntil(cache.put(request, resp.clone()));
+    }
     return resp;
   }
 
