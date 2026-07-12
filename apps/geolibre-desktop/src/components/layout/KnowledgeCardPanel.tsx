@@ -134,7 +134,12 @@ export function KnowledgeCardPanel({
       const controller = new AbortController();
       abortRef.current = controller;
       const { signal } = controller;
+      // Clear the previous article's content before fetching, mirroring the
+      // main load, so the header doesn't keep showing the old title while the
+      // hop is loading.
       setStatus("loading");
+      setSummary(null);
+      setNearby([]);
       onFlyTo?.(item.lat, item.lon);
       void (async () => {
         try {
