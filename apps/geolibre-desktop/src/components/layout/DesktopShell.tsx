@@ -1937,7 +1937,13 @@ export function DesktopShell({
           </SectionErrorBoundary>
           <KnowledgeCardConsentDialog
             open={knowledgeNoticeOpen}
-            onOpenChange={setKnowledgeNoticeOpen}
+            onOpenChange={(open) => {
+              setKnowledgeNoticeOpen(open);
+              // Clear the paired pending place when the notice is dismissed
+              // (Cancel/Escape/overlay), mirroring dismissRoutingNotice so no
+              // stale target lingers. Confirm sets the place before this runs.
+              if (!open) setPendingKnowledgePlace(null);
+            }}
             onConfirm={confirmKnowledgeConsent}
           />
           {/* Rendered here (not in TopToolbar) so the dialog the status badge

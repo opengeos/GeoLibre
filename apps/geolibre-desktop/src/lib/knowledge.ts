@@ -108,6 +108,18 @@ export function isValidLatLon(lat: number, lon: number): boolean {
   );
 }
 
+/** Decimals used when formatting a coordinate for the `gscoord` parameter. */
+const COORD_DECIMALS = 6;
+
+/**
+ * Format a coordinate for `gscoord` with fixed decimals. A raw template
+ * interpolation would emit exponential notation for a near-zero value (e.g.
+ * `5e-8` near the equator/prime meridian), which the API does not parse.
+ */
+function formatCoord(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(COORD_DECIMALS) : String(value);
+}
+
 /** Build the geosearch API URL for articles near a point. */
 export function buildGeosearchUrl(
   lat: number,
@@ -123,7 +135,7 @@ export function buildGeosearchUrl(
     action: "query",
     format: "json",
     list: "geosearch",
-    gscoord: `${lat}|${normalizeLon(lon)}`,
+    gscoord: `${formatCoord(lat)}|${formatCoord(normalizeLon(lon))}`,
     gsradius: String(Math.round(clamp(radiusM, MIN_RADIUS_M, MAX_RADIUS_M))),
     gslimit: String(Math.round(clamp(limit, 1, MAX_LIMIT))),
     // Anonymous cross-origin access; returns permissive CORS headers.

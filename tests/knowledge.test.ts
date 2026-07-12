@@ -58,14 +58,19 @@ describe("normalizeLon", () => {
 describe("buildGeosearchUrl", () => {
   it("wraps an unwrapped longitude into range for gscoord", () => {
     const url = new URL(buildGeosearchUrl(10, 190));
-    assert.equal(url.searchParams.get("gscoord"), "10|-170");
+    assert.equal(url.searchParams.get("gscoord"), "10.000000|-170.000000");
+  });
+
+  it("formats near-zero coordinates as decimals, not exponential", () => {
+    const url = new URL(buildGeosearchUrl(5e-8, 5e-8));
+    assert.equal(url.searchParams.get("gscoord"), "0.000000|0.000000");
   });
   it("targets the language edition host with an anonymous CORS origin", () => {
     const url = new URL(buildGeosearchUrl(48.8584, 2.2945, { lang: "fr" }));
     assert.equal(url.hostname, "fr.wikipedia.org");
     assert.equal(url.pathname, "/w/api.php");
     assert.equal(url.searchParams.get("list"), "geosearch");
-    assert.equal(url.searchParams.get("gscoord"), "48.8584|2.2945");
+    assert.equal(url.searchParams.get("gscoord"), "48.858400|2.294500");
     assert.equal(url.searchParams.get("origin"), "*");
   });
   it("clamps radius and limit to the API maxima", () => {

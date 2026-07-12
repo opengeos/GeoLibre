@@ -78,14 +78,17 @@ export function KnowledgeCardPanel({
 
     void (async () => {
       try {
-        // The nearby list is secondary content: swallow its failures to an
-        // empty list so a transient error there (rate limit, network blip)
-        // can never discard an already-fetched primary summary and drop the
-        // whole card to the error state.
-        const nearbyPromise = fetchNearbyPlaces(place.lat, place.lng, {
-          lang,
-          signal,
-        }).catch(() => [] as WikiNearbyPlace[]);
+        // With a title the summary is the primary content, so the nearby list
+        // is secondary: swallow its failures to an empty list so a transient
+        // error there can't discard an already-fetched summary. On a map click
+        // the nearby list IS the primary content (it picks the main article),
+        // so let its failure surface as an error rather than a misleading
+        // "nothing found here".
+        const nearbyPromise = place.title
+          ? fetchNearbyPlaces(place.lat, place.lng, { lang, signal }).catch(
+              () => [] as WikiNearbyPlace[],
+            )
+          : fetchNearbyPlaces(place.lat, place.lng, { lang, signal });
         let main: WikiSummary | null = null;
         if (place.title) {
           main = await fetchArticleSummary(place.title, { lang, signal });
