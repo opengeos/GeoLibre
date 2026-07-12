@@ -2,6 +2,7 @@ import { Button, Input, Label, Select } from "@geolibre/ui";
 import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { buildWmsLayer } from "../apply-service";
 import {
   DEFAULT_WMS_ENDPOINT,
   DEFAULT_WMS_LAYERS,
@@ -15,7 +16,6 @@ import {
   wmsVersionFromEndpoint,
   type WmsLayerOption,
 } from "../helpers";
-import { buildWmsLayer } from "../apply-service";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldBoolean,

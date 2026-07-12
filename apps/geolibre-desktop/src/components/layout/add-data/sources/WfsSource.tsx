@@ -3,6 +3,7 @@ import { ListTree, Loader2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchWfsGeoJson } from "../../../../lib/layer-refresh";
+import { buildWfsGeoJsonLayer } from "../apply-service";
 import { DEFAULT_WFS_ENDPOINT, DEFAULT_WFS_TYPE_NAME } from "../constants";
 import {
   fetchWfsFeatureTypes,
@@ -10,7 +11,6 @@ import {
   stripOgcOperationParams,
   type WfsFeatureTypeOption,
 } from "../helpers";
-import { buildWfsGeoJsonLayer } from "../apply-service";
 import { ServiceLibrarySection } from "../ServiceLibrarySection";
 import {
   serviceFieldString,
