@@ -68,6 +68,10 @@ export const GEBCO_WMS_LAYERS = "GEBCO_LATEST";
 // GEBCO's license requires its imagery credit the source. `attributionForTileUrl`
 // (helpers) attaches this to any GEBCO WMS layer, however it was added (the sample
 // below or a hand-pasted wms.gebco.net URL).
+// NOTE: the `GEBCO_LATEST` layer always resolves to GEBCO's newest annual grid,
+// but the year below is not derived from anything — unlike the EOX credit above,
+// whose year lives in the tile URL. Bump this year by hand when GEBCO ships a new
+// annual release (e.g. GEBCO_2027) so the citation does not drift from the data.
 export const GEBCO_ATTRIBUTION =
   'Imagery reproduced from the GEBCO Compilation Group (2026) GEBCO Grid, <a href="https://www.gebco.net" target="_blank" rel="noreferrer">GEBCO</a>';
 export const DEFAULT_WFS_ENDPOINT = "https://ahocevar.com/geoserver/wfs";

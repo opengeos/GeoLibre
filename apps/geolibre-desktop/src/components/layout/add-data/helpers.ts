@@ -72,7 +72,9 @@ export function attributionForTileUrl(url: string): string | undefined {
     }
     // Any GEBCO WMS host (the `.gebco.net` suffix, with the bare-domain case)
     // carries the required GEBCO credit; the suffix check avoids lookalikes like
-    // `evil-gebco.net`.
+    // `evil-gebco.net`. Unlike the EOX branch this matches on host alone (no
+    // LAYERS check) because wms.gebco.net serves only the bathymetry grid today;
+    // if GEBCO ever hosts a differently-licensed product here, gate on the layer.
     const isGebcoHost =
       hostname === "gebco.net" || hostname.endsWith(".gebco.net");
     if (isGebcoHost) {

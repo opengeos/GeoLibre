@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { FeatureCollection } from "geojson";
-import { EOX_S2CLOUDLESS_ATTRIBUTION } from "../apps/geolibre-desktop/src/components/layout/add-data/constants";
+import {
+  EOX_S2CLOUDLESS_ATTRIBUTION,
+  GEBCO_ATTRIBUTION,
+} from "../apps/geolibre-desktop/src/components/layout/add-data/constants";
 import {
   appendQuery,
   attributionForTileUrl,
@@ -430,6 +433,21 @@ describe("attributionForTileUrl", () => {
     );
   });
 
+  it("credits GEBCO bathymetry on the WMS host and its subdomains", () => {
+    // The GetMap template built from the sample endpoint carries the host.
+    assert.equal(
+      attributionForTileUrl(
+        "https://wms.gebco.net/mapserv?SERVICE=WMS&REQUEST=GetMap&LAYERS=GEBCO_LATEST&BBOX={bbox-epsg-3857}",
+      ),
+      GEBCO_ATTRIBUTION,
+    );
+    // Bare-domain case also matches the `.gebco.net` suffix rule.
+    assert.equal(
+      attributionForTileUrl("https://gebco.net/mapserv?LAYERS=GEBCO_LATEST"),
+      GEBCO_ATTRIBUTION,
+    );
+  });
+
   it("returns undefined for other hosts, lookalikes, and malformed URLs", () => {
     assert.equal(
       attributionForTileUrl("https://tile.openstreetmap.org/{z}/{x}/{y}.png"),
@@ -443,6 +461,11 @@ describe("attributionForTileUrl", () => {
     // Lookalike host must not match the `.eox.at` suffix check.
     assert.equal(
       attributionForTileUrl("https://evil-eox.at/s2cloudless/{z}/{y}/{x}.jpg"),
+      undefined,
+    );
+    // Lookalike host must not match the `.gebco.net` suffix check.
+    assert.equal(
+      attributionForTileUrl("https://evil-gebco.net/mapserv?LAYERS=GEBCO_LATEST"),
       undefined,
     );
     assert.equal(attributionForTileUrl("not a url"), undefined);
