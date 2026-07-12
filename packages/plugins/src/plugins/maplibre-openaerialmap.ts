@@ -21,6 +21,8 @@ const PAGE_SIZE = 20;
 const OAM_SEARCH_PROXY_ENDPOINT = "https://tiles.geolibre.app/oam";
 const ATTRIBUTION =
   '<a href="https://openaerialmap.org/" target="_blank" rel="noopener">OpenAerialMap</a>';
+/** Matches an absolute http(s) URL. */
+const HTTP_URL_RE = /^https?:\/\//i;
 
 /**
  * User-facing strings for the panel. This package is framework-agnostic and
@@ -171,9 +173,12 @@ function currentBbox(): [number, number, number, number] | null {
 async function fetchPage(
   bbox: [number, number, number, number],
   page: number,
+  signal?: AbortSignal,
 ): Promise<OamSearchResult> {
   // Desktop (Tauri): fetch the OAM API directly through the host's native
-  // HTTP, which bypasses browser CORS and keeps the query on-device.
+  // HTTP, which bypasses browser CORS and keeps the query on-device. (The
+  // native fetch has no abort hook; a superseded result is ignored by the
+  // caller's generation guard.)
   const isTauri =
     typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   if (isTauri && appRef?.fetchArrayBuffer) {
@@ -188,6 +193,7 @@ async function fetchPage(
     page,
     limit: PAGE_SIZE,
     endpoint: OAM_SEARCH_PROXY_ENDPOINT,
+    signal,
   });
 }
 
@@ -209,7 +215,9 @@ function removeFromMap(image: OamImage): void {
 
 /** Triggers a browser download of the source GeoTIFF. */
 function downloadCog(image: OamImage): void {
-  if (!image.cogUrl) return;
+  // cogUrl is already http(s)-guarded at normalization; re-check at the point it
+  // becomes a clicked href so this security-sensitive line is self-contained.
+  if (!image.cogUrl || !HTTP_URL_RE.test(image.cogUrl)) return;
   const link = document.createElement("a");
   link.href = image.cogUrl;
   // Drop any query string (e.g. on a signed S3 URL) from the suggested filename.
@@ -277,6 +285,8 @@ function buildPanel(container: HTMLElement): () => void {
   let bbox: [number, number, number, number] | null = null;
   // Generation counter to ignore results from a superseded search.
   let generation = 0;
+  // Aborts the in-flight request when a newer search supersedes it.
+  let inflight: AbortController | null = null;
   // Signature of which listed images are currently on the map; lets the store
   // subscription skip re-rendering when an unrelated part of the store changes.
   let addedSignature = "";
@@ -319,13 +329,19 @@ function buildPanel(container: HTMLElement): () => void {
     }
     if (!bbox) return;
 
+    // Cancel any earlier request still in flight so it doesn't run to completion
+    // against the OAM API / Worker.
+    inflight?.abort();
+    const controller = new AbortController();
+    inflight = controller;
+
     const current = ++generation;
     searchButton.disabled = true;
     moreButton.disabled = true;
     setStatus(reset ? labels.searching : labels.loadingMore);
 
     try {
-      const result = await fetchPage(bbox, page);
+      const result = await fetchPage(bbox, page, controller.signal);
       if (current !== generation) return; // superseded
       images = [...images, ...result.images];
       found = result.found;
@@ -352,6 +368,7 @@ function buildPanel(container: HTMLElement): () => void {
       if (current === generation) {
         searchButton.disabled = false;
         moreButton.disabled = false;
+        inflight = null;
       }
     }
   };
@@ -362,6 +379,8 @@ function buildPanel(container: HTMLElement): () => void {
   return () => {
     // Invalidate any in-flight search so a late result cannot touch detached DOM.
     generation += 1;
+    inflight?.abort();
+    inflight = null;
     unsubscribe();
   };
 }

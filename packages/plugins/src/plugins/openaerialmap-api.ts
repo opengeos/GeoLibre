@@ -82,12 +82,19 @@ export interface OpenAerialMapSearchOptions {
   page?: number;
   /** Overrides the API base URL. @default {@link OAM_DEFAULT_ENDPOINT} */
   endpoint?: string;
+  /** Aborts the request (e.g. when a newer search supersedes this one). */
+  signal?: AbortSignal;
 }
 
 /** Minimal fetch shape so tests can stub without a DOM. */
 export type OamFetch = (
   url: string,
+  signal?: AbortSignal,
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+/** Default fetch, forwarding an optional abort signal. */
+const defaultFetch: OamFetch = (url, signal) =>
+  fetch(url, signal ? { signal } : undefined);
 
 /** Strips a single trailing slash from an endpoint base. */
 const TRAILING_SLASH_RE = /\/$/;
@@ -131,6 +138,15 @@ export function buildSearchUrl(options: OpenAerialMapSearchOptions = {}): string
 /** Reads a finite number from an unknown value, else null. */
 function asNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Reads a count from a number or a numeric string (some APIs stringify it). */
+function asCount(value: unknown): number | null {
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return asNumber(value);
 }
 
 /** Reads a non-empty string from an unknown value, else null. */
@@ -220,7 +236,7 @@ export function parseSearchResponse(
     .filter((image): image is OamImage => image !== null);
   return {
     images,
-    found: asNumber(parsed.meta?.found) ?? images.length,
+    found: asCount(parsed.meta?.found) ?? images.length,
     page,
     limit,
   };
@@ -236,11 +252,14 @@ export function parseSearchResponse(
  */
 export async function searchOpenAerialMap(
   options: OpenAerialMapSearchOptions = {},
-  fetchImpl: OamFetch = fetch,
+  fetchImpl: OamFetch = defaultFetch,
 ): Promise<OamSearchResult> {
   const limit = options.limit ?? 20;
   const page = options.page ?? 1;
-  const response = await fetchImpl(buildSearchUrl({ ...options, limit, page }));
+  const response = await fetchImpl(
+    buildSearchUrl({ ...options, limit, page }),
+    options.signal,
+  );
   if (!response.ok) {
     throw new Error(`OpenAerialMap request failed (${response.status})`);
   }

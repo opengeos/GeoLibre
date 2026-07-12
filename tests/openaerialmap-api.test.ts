@@ -35,17 +35,19 @@ function rawResult(overrides: Record<string, unknown> = {}) {
 function stubFetch(
   body: unknown,
   init: { ok?: boolean; status?: number } = {},
-): { fetchImpl: OamFetch; calls: string[] } {
+): { fetchImpl: OamFetch; calls: string[]; signals: (AbortSignal | undefined)[] } {
   const calls: string[] = [];
-  const fetchImpl: OamFetch = async (url) => {
+  const signals: (AbortSignal | undefined)[] = [];
+  const fetchImpl: OamFetch = async (url, signal) => {
     calls.push(url);
+    signals.push(signal);
     return {
       ok: init.ok ?? true,
       status: init.status ?? 200,
       json: async () => body,
     };
   };
-  return { fetchImpl, calls };
+  return { fetchImpl, calls, signals };
 }
 
 describe("buildSearchUrl", () => {
@@ -144,6 +146,22 @@ describe("searchOpenAerialMap", () => {
     const { fetchImpl } = stubFetch({ results: [rawResult()] });
     const { found } = await searchOpenAerialMap({}, fetchImpl);
     assert.equal(found, 1);
+  });
+
+  it("coerces a numeric-string found into a number", async () => {
+    const { fetchImpl } = stubFetch({
+      meta: { found: "42" },
+      results: [rawResult()],
+    });
+    const { found } = await searchOpenAerialMap({}, fetchImpl);
+    assert.equal(found, 42);
+  });
+
+  it("forwards the abort signal to the fetch impl", async () => {
+    const { fetchImpl, signals } = stubFetch({ meta: { found: 0 }, results: [] });
+    const controller = new AbortController();
+    await searchOpenAerialMap({ signal: controller.signal }, fetchImpl);
+    assert.equal(signals[0], controller.signal);
   });
 
   it("throws a descriptive error on a non-OK response", async () => {
