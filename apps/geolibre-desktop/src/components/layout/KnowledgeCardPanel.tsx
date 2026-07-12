@@ -236,7 +236,11 @@ export function KnowledgeCardPanel({
           </div>
         ) : null}
 
-        {otherNearby.length > 0 ? (
+        {/* Only show the list once the content has settled: while a hop is
+            loading (or after it errors) the summary/nearby state still holds the
+            previous article, so gating on status avoids flashing a stale list
+            below the spinner or error message. */}
+        {status !== "loading" && status !== "error" && otherNearby.length > 0 ? (
           <div className="border-t px-3 py-2">
             <div className="mb-1 text-xs font-medium text-muted-foreground">
               {t("knowledgeCard.nearby")}
