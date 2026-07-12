@@ -1843,6 +1843,11 @@ export function DesktopShell({
               builtinVisible={layoutOptions.layerPanelVisible}
               builtinTitle={t("sharedRail.layers")}
               builtinIcon={<Layers className="h-4 w-4" />}
+              // The Browser docks here on by default but must not bury Layers:
+              // start with Layers expanded and Browser a collapsed rail entry.
+              initialBuiltinExpanded={
+                replaceLayersPanelId === BROWSER_PANEL_ID
+              }
               // The story-map presentation is the only standalone Layers
               // autoCollapse trigger (the notebook collapses Style, not Layers).
               forceBuiltinCollapsed={storymapPresenting}
