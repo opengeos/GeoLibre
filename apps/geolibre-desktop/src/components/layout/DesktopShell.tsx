@@ -50,6 +50,7 @@ import {
   BROWSER_PANEL_ID,
   useRegisterBrowserPanel,
 } from "../../hooks/useRegisterBrowserPanel";
+import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import {
   isTauri,
   loadDroppedPhotoFiles,
@@ -1845,8 +1846,11 @@ export function DesktopShell({
               builtinIcon={<Layers className="h-4 w-4" />}
               // The Browser docks here on by default but must not bury Layers:
               // start with Layers expanded and Browser a collapsed rail entry.
+              // On a phone-width viewport both start collapsed (panels overlay
+              // there), matching the mobile "panels default collapsed" behavior.
               initialBuiltinExpanded={
-                replaceLayersPanelId === BROWSER_PANEL_ID
+                replaceLayersPanelId === BROWSER_PANEL_ID &&
+                !getIsMobileViewport()
               }
               // The story-map presentation is the only standalone Layers
               // autoCollapse trigger (the notebook collapses Style, not Layers).
