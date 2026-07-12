@@ -10,7 +10,11 @@ import {
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
-import { closeRightPanel, openRightPanel } from "@geolibre/plugins";
+import {
+  closeRightPanel,
+  collapseRightPanel,
+  openRightPanel,
+} from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -398,6 +402,17 @@ export function SettingsDialog({
   // persisted layout preference, so its Layout toggle acts on the live registry
   // state directly rather than through the draft settings.
   const browserPanelOpen = useRightPanelState().activeId === BROWSER_PANEL_ID;
+  // Show it collapsed on the shared Layers rail, matching its default state, so
+  // re-enabling from Settings doesn't jump to an expanded panel that buries the
+  // Layers panel.
+  const toggleBrowserPanel = (show: boolean) => {
+    if (show) {
+      openRightPanel(BROWSER_PANEL_ID);
+      collapseRightPanel(BROWSER_PANEL_ID);
+    } else {
+      closeRightPanel(BROWSER_PANEL_ID);
+    }
+  };
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(
@@ -1227,9 +1242,7 @@ export function SettingsDialog({
               <DropdownMenuCheckboxItem
                 checked={browserPanelOpen}
                 onCheckedChange={(checked: boolean) =>
-                  checked === true
-                    ? openRightPanel(BROWSER_PANEL_ID)
-                    : closeRightPanel(BROWSER_PANEL_ID)
+                  toggleBrowserPanel(checked === true)
                 }
                 onSelect={(event: Event) => event.preventDefault()}
               >
@@ -1703,9 +1716,7 @@ export function SettingsDialog({
                         type="checkbox"
                         checked={browserPanelOpen}
                         onChange={(event) =>
-                          event.target.checked
-                            ? openRightPanel(BROWSER_PANEL_ID)
-                            : closeRightPanel(BROWSER_PANEL_ID)
+                          toggleBrowserPanel(event.target.checked)
                         }
                       />
                       <FolderTree className="h-4 w-4 text-muted-foreground" />

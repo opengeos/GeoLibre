@@ -1,6 +1,8 @@
 {
   "browser": {
     "title": "Browser",
+    "services": "Services",
+    "recent": "Recent",
     "searchPlaceholder": "Search data sources",
     "empty": "No saved services or recent projects yet.",
     "emptyGroup": "Empty",
