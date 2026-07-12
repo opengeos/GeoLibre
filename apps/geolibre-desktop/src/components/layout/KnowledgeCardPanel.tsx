@@ -37,8 +37,12 @@ type CardStatus = "loading" | "ready" | "empty" | "error";
 
 /** Round a metre distance to a compact "120 m" / "3.4 km" label. */
 function formatDistance(distanceM: number): string {
-  if (distanceM < 1000) return `${Math.round(distanceM)} m`;
-  return `${(distanceM / 1000).toFixed(distanceM < 10_000 ? 1 : 0)} km`;
+  // Round before the unit check so a value just under a boundary (e.g. 999.6)
+  // doesn't render past it ("1000 m" instead of "1.0 km").
+  const rounded = Math.round(distanceM);
+  if (rounded < 1000) return `${rounded} m`;
+  const km = rounded / 1000;
+  return `${km.toFixed(km < 10 ? 1 : 0)} km`;
 }
 
 /**
@@ -91,7 +95,12 @@ export function KnowledgeCardPanel({
           : fetchNearbyPlaces(place.lat, place.lng, { lang, signal });
         let main: WikiSummary | null = null;
         if (place.title) {
-          main = await fetchArticleSummary(place.title, { lang, signal });
+          // Degrade a failed title lookup to null (like the fallback below) so
+          // a transient 5xx doesn't discard an already-resolved nearby list;
+          // execution then falls through to the nearest-article fallback.
+          main = await fetchArticleSummary(place.title, { lang, signal }).catch(
+            () => null,
+          );
         }
         const places = await nearbyPromise;
         if (signal.aborted) return;

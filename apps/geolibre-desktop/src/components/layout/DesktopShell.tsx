@@ -511,6 +511,14 @@ export function DesktopShell({
     setKnowledgePlace(pendingKnowledgePlace);
     setPendingKnowledgePlace(null);
   }, [pendingKnowledgePlace]);
+  // Stable identity (mapControllerRef is a ref) so the card's openNearby
+  // useCallback, which depends on this, keeps its memoization across renders.
+  const handleKnowledgeFlyTo = useCallback((lat: number, lon: number) => {
+    mapControllerRef.current?.flyTo({
+      center: [lon, lat],
+      zoom: Math.max(mapControllerRef.current?.getMap()?.getZoom() ?? 12, 14),
+    });
+  }, []);
   // The COG/WMS/XYZ layer whose bounding-box subset is being extracted in the
   // floating Extract Subset panel, or null when that panel is closed.
   const [rasterSubsetLayer, setRasterSubsetLayer] =
@@ -1895,15 +1903,7 @@ export function DesktopShell({
                 place={knowledgePlace}
                 lang={wikipediaLang(i18n.language)}
                 onClose={() => setKnowledgePlace(null)}
-                onFlyTo={(lat, lon) =>
-                  mapControllerRef.current?.flyTo({
-                    center: [lon, lat],
-                    zoom: Math.max(
-                      mapControllerRef.current?.getMap()?.getZoom() ?? 12,
-                      14,
-                    ),
-                  })
-                }
+                onFlyTo={handleKnowledgeFlyTo}
               />
               <BoundsRestrictionIndicator />
               {/* Isolate the collaboration badge in its own boundary: it renders
