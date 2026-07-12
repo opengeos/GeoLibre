@@ -753,3 +753,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleExportHtml,
   };
 }
+
+/**
+ * The handlers and state returned by {@link useProjectFileActions}. Exported so
+ * a single hoisted instance can be shared as a prop across the toolbar and the
+ * Browser panel (two instances don't coordinate their in-flight open aborts).
+ */
+export type ProjectFileActions = ReturnType<typeof useProjectFileActions>;

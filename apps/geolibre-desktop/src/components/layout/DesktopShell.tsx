@@ -51,6 +51,7 @@ import {
   useRegisterBrowserPanel,
 } from "../../hooks/useRegisterBrowserPanel";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import {
   isTauri,
   loadDroppedPhotoFiles,
@@ -562,6 +563,10 @@ export function DesktopShell({
   // Register the Browser as a movable/dockable right panel; its body is portaled
   // into a dedicated content host (below) that the dock slots adopt.
   useRegisterBrowserPanel();
+  // One shared project-file-actions instance for both the toolbar and the
+  // Browser panel, so their "open recent" calls coordinate their aborts (two
+  // instances would race). Lifted here for the same reason as `collaboration`.
+  const projectFiles = useProjectFileActions(mapControllerRef);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style
@@ -1811,6 +1816,7 @@ export function DesktopShell({
             showProjectInfo={layoutOptions.showProjectInfo}
             themeMode={themeMode}
             collaboration={collaboration}
+            projectFiles={projectFiles}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
             onToggleThemeMode={onToggleThemeMode}
           />
@@ -1825,7 +1831,12 @@ export function DesktopShell({
             app's React context and the shell owns its dock chrome. */}
         {activePanelId === BROWSER_PANEL_ID
           ? createPortal(
-              <BrowserPanel mapControllerRef={mapControllerRef} />,
+              <BrowserPanel
+                mapControllerRef={mapControllerRef}
+                onOpenRecentProject={projectFiles.handleOpenRecent}
+                recentActionError={projectFiles.actionError}
+                onClearRecentError={() => projectFiles.setActionError(null)}
+              />,
               browserContentEl,
             )
           : null}

@@ -79,7 +79,7 @@ import {
 } from "../../hooks/usePlugins";
 import { useConsentGatedActions } from "../../hooks/useConsentGatedActions";
 import { useOsmPbfLoader } from "../../hooks/useOsmPbfLoader";
-import { useProjectFileActions } from "../../hooks/useProjectFileActions";
+import type { ProjectFileActions } from "../../hooks/useProjectFileActions";
 import { useToolbarPanels } from "../../hooks/useToolbarPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/tauri-io";
@@ -155,6 +155,9 @@ interface TopToolbarProps {
   // Lifted to DesktopShell so the on-canvas status badge can share one live
   // session (calling useCollaboration twice would open two sockets).
   collaboration: CollaborationApi;
+  // Lifted to DesktopShell so the toolbar and the Browser panel share one
+  // instance — two would not coordinate their in-flight "open recent" aborts.
+  projectFiles: ProjectFileActions;
   onOpenDiagnostics: () => void;
   onToggleThemeMode: () => void;
 }
@@ -168,6 +171,7 @@ export function TopToolbar({
   showProjectInfo = true,
   themeMode,
   collaboration,
+  projectFiles,
   onOpenDiagnostics,
   onToggleThemeMode,
 }: TopToolbarProps) {
@@ -319,7 +323,6 @@ export function TopToolbar({
   const appApi = useMemo(() => createAppAPI(mapControllerRef), [mapControllerRef]);
 
   const panels = useToolbarPanels(appApi);
-  const projectFiles = useProjectFileActions(mapControllerRef);
   const osmPbf = useOsmPbfLoader(appApi, projectFiles.setActionError);
   const consent = useConsentGatedActions({ appApi, isActive, toggle });
   const viewportHistory = useViewportHistory(
