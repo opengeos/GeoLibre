@@ -6,19 +6,22 @@ import {
   filterBrowserTree,
   type BrowserNode,
 } from "../apps/geolibre-desktop/src/lib/browser-tree";
-import type { ServiceLibraryEntry } from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
+import type {
+  ServiceLibraryEntry,
+  ServiceLibraryKind,
+} from "../apps/geolibre-desktop/src/components/layout/add-data/service-library";
 
 function service(
   id: string,
   name: string,
-  category: string,
+  kind: ServiceLibraryKind = "xyz",
   extra: Partial<ServiceLibraryEntry> = {},
 ): ServiceLibraryEntry {
   return {
     id,
     name,
-    category,
-    kind: "xyz",
+    category: "",
+    kind,
     fields: { url: `https://example.com/${id}` },
     ...extra,
   };
@@ -54,44 +57,47 @@ describe("buildBrowserTree", () => {
     assert.equal(tree[1].children?.length, 0);
   });
 
-  it("groups services by category and sorts categories + entries by label", () => {
+  it("groups services by kind, ordered like the Add Data sources", () => {
     const tree = buildBrowserTree({
       services: [
-        service("s1", "Zebra", "Imagery"),
-        service("s2", "Alpha", "Imagery"),
-        service("s3", "Basemap one", "Basemaps"),
+        service("s1", "A feature layer", "arcgis"),
+        service("s2", "A basemap", "xyz"),
+        service("s3", "A map service", "wms"),
       ],
       recentProjects: [],
     });
     const services = tree[0];
-    // Categories sorted: Basemaps before Imagery.
+    // Kind order mirrors Add Data: XYZ, then WMS, ..., then ArcGIS.
     assert.deepEqual(
       services.children?.map((c) => c.label),
-      ["Basemaps", "Imagery"],
+      ["XYZ", "WMS", "ArcGIS"],
     );
-    const imagery = find(tree, "category:Imagery");
-    // Entries within a category sorted by name: Alpha before Zebra.
     assert.deepEqual(
-      imagery?.children?.map((c) => c.label),
-      ["Alpha", "Zebra"],
+      services.children?.map((c) => c.id),
+      ["kind:xyz", "kind:wms", "kind:arcgis"],
     );
-    assert.equal(imagery?.count, 2);
     assert.equal(services.count, 3);
   });
 
-  it("buckets a blank category under Uncategorized", () => {
+  it("sorts services within a kind by name", () => {
     const tree = buildBrowserTree({
-      services: [service("s1", "Loose", "")],
+      services: [
+        service("s1", "Zebra tiles", "xyz"),
+        service("s2", "Alpha tiles", "xyz"),
+      ],
       recentProjects: [],
     });
-    assert.ok(find(tree, "category:Uncategorized"));
+    const xyz = find(tree, "kind:xyz");
+    assert.deepEqual(
+      xyz?.children?.map((c) => c.label),
+      ["Alpha tiles", "Zebra tiles"],
+    );
+    assert.equal(xyz?.count, 2);
   });
 
   it("carries the service id, kind, and builtin flag onto leaf nodes", () => {
     const tree = buildBrowserTree({
-      services: [
-        service("s1", "WMS one", "Web", { kind: "wms", builtin: true }),
-      ],
+      services: [service("s1", "WMS one", "wms", { builtin: true })],
       recentProjects: [],
     });
     const leaf = find(tree, "service:s1");
@@ -119,8 +125,8 @@ describe("buildBrowserTree", () => {
 describe("filterBrowserTree", () => {
   const tree = buildBrowserTree({
     services: [
-      service("s1", "Landsat imagery", "Imagery"),
-      service("s2", "OpenStreetMap", "Basemaps"),
+      service("s1", "Landsat imagery", "xyz"),
+      service("s2", "US States", "wms"),
     ],
     recentProjects: RECENT,
   });
@@ -140,10 +146,10 @@ describe("filterBrowserTree", () => {
       out.map((n) => n.id),
       ["section:services"],
     );
-    // Only the Imagery category (with Landsat) survives under Services.
+    // Only the XYZ kind (with Landsat) survives under Services.
     assert.deepEqual(
-      out[0].children?.map((c) => c.label),
-      ["Imagery"],
+      out[0].children?.map((c) => c.id),
+      ["kind:xyz"],
     );
     assert.equal(find(out, "service:s1")?.label, "Landsat imagery");
     assert.equal(find(out, "service:s2"), undefined);
@@ -159,28 +165,29 @@ describe("filterBrowserTree", () => {
     assert.equal(out[0].children?.[0].label, "Two");
   });
 
-  it("keeps all children when a group label itself matches", () => {
-    const out = filterBrowserTree(tree, "imagery");
-    // "Imagery" category matches by its own label, so its child is retained.
-    const imagery = find(out, "category:Imagery");
-    assert.equal(imagery?.children?.length, 1);
+  it("matches a kind group by its header label", () => {
+    const out = filterBrowserTree(tree, "wms");
+    // "WMS" group label matches, so its child is retained.
+    const wms = find(out, "kind:wms");
+    assert.equal(wms?.children?.length, 1);
+    assert.equal(wms?.children?.[0].label, "US States");
   });
 
   it("counts total matching leaves, not surviving subgroups, on a section", () => {
-    // Two services under one category, so a match on the category label keeps
-    // both leaves but leaves the section with a single surviving child.
-    const twoInImagery = buildBrowserTree({
+    // Two services of one kind, so a match on the kind label keeps both leaves
+    // but leaves the section with a single surviving child.
+    const twoWms = buildBrowserTree({
       services: [
-        service("a", "Aerial", "Imagery"),
-        service("b", "Satellite", "Imagery"),
+        service("a", "Aerial", "wms"),
+        service("b", "Satellite", "wms"),
       ],
       recentProjects: [],
     });
-    const out = filterBrowserTree(twoInImagery, "imagery");
+    const out = filterBrowserTree(twoWms, "wms");
     // The Services badge must report 2 (both visible leaves), not 1 (one
-    // surviving category).
+    // surviving kind group).
     assert.equal(find(out, "section:services")?.count, 2);
-    assert.equal(find(out, "category:Imagery")?.count, 2);
+    assert.equal(find(out, "kind:wms")?.count, 2);
   });
 
   it("does not mutate the input tree", () => {

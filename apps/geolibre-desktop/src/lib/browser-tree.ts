@@ -6,13 +6,13 @@
  * store dependencies, so it unit-tests in isolation. The `useBrowserTree` hook
  * feeds it live data and the `BrowserPanel` renders the result.
  *
- * The MVP covers two top-level sections — **Services** (grouped by category) and
+ * The MVP covers two top-level sections — **Services** (grouped by service kind,
+ * mirroring the Add Data web-service sources: XYZ, WMS, WFS, WMTS, ArcGIS) and
  * **Recent** (recently opened projects). Local-file and connection sections come
  * in a later phase.
  */
 
 import {
-  UNCATEGORIZED_LABEL,
   type ServiceLibraryEntry,
   type ServiceLibraryKind,
 } from "../components/layout/add-data/service-library";
@@ -61,46 +61,62 @@ function byLabel(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
+/** Group headers for each service kind, matching the Add Data source names. */
+const KIND_LABEL: Record<ServiceLibraryKind, string> = {
+  xyz: "XYZ",
+  wms: "WMS",
+  wfs: "WFS",
+  wmts: "WMTS",
+  arcgis: "ArcGIS",
+};
+
+/** Kind grouping order under Services, mirroring the Add Data source order. */
+const KIND_ORDER: readonly ServiceLibraryKind[] = [
+  "xyz",
+  "wms",
+  "wfs",
+  "wmts",
+  "arcgis",
+];
+
 /**
- * Groups services by category (empty category → "Uncategorized"), sorting
- * categories and the services within each by label. Built-in presets and user
- * entries are interleaved by name so the list reads as one catalog.
+ * Groups services by kind (XYZ / WMS / WFS / WMTS / ArcGIS) so the tree mirrors
+ * the Add Data web-service sources, ordering the groups by {@link KIND_ORDER}
+ * and the services within each by name. Built-in presets and user entries are
+ * interleaved so each kind reads as one catalog.
  */
-function buildServiceCategories(
+function buildServiceKinds(
   services: readonly ServiceLibraryEntry[],
 ): BrowserNode[] {
-  const byCategory = new Map<string, ServiceLibraryEntry[]>();
+  const byKind = new Map<ServiceLibraryKind, ServiceLibraryEntry[]>();
   for (const entry of services) {
-    const category = entry.category.trim() || UNCATEGORIZED_LABEL;
-    const bucket = byCategory.get(category);
+    const bucket = byKind.get(entry.kind);
     if (bucket) bucket.push(entry);
-    else byCategory.set(category, [entry]);
+    else byKind.set(entry.kind, [entry]);
   }
-  return Array.from(byCategory.keys())
-    .sort(byLabel)
-    .map((category) => {
-      const entries = [...(byCategory.get(category) ?? [])].sort((a, b) =>
-        byLabel(a.name, b.name),
-      );
-      return {
-        id: `category:${category}`,
-        kind: "category" as const,
-        label: category,
-        addable: false,
-        count: entries.length,
-        children: entries.map(
-          (entry): BrowserNode => ({
-            id: `service:${entry.id}`,
-            kind: "service",
-            label: entry.name,
-            addable: true,
-            serviceId: entry.id,
-            serviceKind: entry.kind,
-            builtin: entry.builtin,
-          }),
-        ),
-      };
-    });
+  return KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => {
+    const entries = [...(byKind.get(kind) ?? [])].sort((a, b) =>
+      byLabel(a.name, b.name),
+    );
+    return {
+      id: `kind:${kind}`,
+      kind: "category" as const,
+      label: KIND_LABEL[kind],
+      addable: false,
+      count: entries.length,
+      children: entries.map(
+        (entry): BrowserNode => ({
+          id: `service:${entry.id}`,
+          kind: "service",
+          label: entry.name,
+          addable: true,
+          serviceId: entry.id,
+          serviceKind: entry.kind,
+          builtin: entry.builtin,
+        }),
+      ),
+    };
+  });
 }
 
 /**
@@ -111,14 +127,14 @@ function buildServiceCategories(
  * @returns The top-level section nodes (Services, then Recent).
  */
 export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
-  const categories = buildServiceCategories(input.services);
+  const kinds = buildServiceKinds(input.services);
   const servicesSection: BrowserNode = {
     id: "section:services",
     kind: "section",
     label: "Services",
     addable: false,
     count: input.services.length,
-    children: categories,
+    children: kinds,
   };
 
   const recentChildren = input.recentProjects.map(
