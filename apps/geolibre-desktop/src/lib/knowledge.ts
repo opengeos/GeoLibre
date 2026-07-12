@@ -175,7 +175,10 @@ export function parseGeosearch(json: unknown): WikiNearbyPlace[] {
       title: r.title,
       lat,
       lon,
-      distanceM: Number.isFinite(Number(r.dist)) ? Number(r.dist) : 0,
+      // Unknown distance sorts last (Infinity), never as the nearest article.
+      distanceM: Number.isFinite(Number(r.dist))
+        ? Number(r.dist)
+        : Number.POSITIVE_INFINITY,
     });
   }
   // The API returns nearest-first, but sort defensively so the card can always
@@ -233,7 +236,10 @@ async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-  signal?.addEventListener("abort", () => controller.abort(), { once: true });
+  // `abort` only fires on a future transition, so honour a signal that is
+  // already aborted by cancelling up front rather than starting the fetch.
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener("abort", () => controller.abort(), { once: true });
   try {
     return await fetch(url, {
       signal: controller.signal,

@@ -120,6 +120,19 @@ describe("parseGeosearch", () => {
     assert.deepEqual(parseGeosearch(null), []);
     assert.deepEqual(parseGeosearch({ query: {} }), []);
   });
+  it("sorts a row with unknown distance last, not first", () => {
+    const places = parseGeosearch({
+      query: {
+        geosearch: [
+          { pageid: 5, title: "Unknown distance", lat: 0.2, lon: 0.2 },
+          { pageid: 6, title: "Close", lat: 0.1, lon: 0.1, dist: 50 },
+        ],
+      },
+    });
+    assert.equal(places[0].title, "Close");
+    assert.equal(places[1].title, "Unknown distance");
+    assert.equal(places[1].distanceM, Number.POSITIVE_INFINITY);
+  });
 });
 
 describe("parseSummary", () => {
