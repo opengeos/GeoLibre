@@ -338,6 +338,57 @@ describe("applyServiceEntry", () => {
     assert.equal(added[0].beforeLayerId, null);
   });
 
+  it("fetches WFS GeoJSON, adds the layer, and fits the map to it", async () => {
+    const added: { layer: GeoLibreLayer; beforeLayerId: string | null }[] = [];
+    const fitted: GeoLibreLayer[] = [];
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [1, 2] },
+          properties: { id: 1 },
+        },
+      ],
+    };
+    const realFetch = globalThis.fetch;
+    // Stub the network so the wfs branch drives its real dynamic import +
+    // fetchWfsGeoJson + buildWfsGeoJsonLayer + addLayer/fitLayer wiring.
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(fc), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof globalThis.fetch;
+    try {
+      await applyServiceEntry(
+        entry(
+          "wfs",
+          { endpoint: "https://e/wfs", typeName: "topp:states" },
+          "States",
+        ),
+        {
+          addLayer: (layer, beforeLayerId = null) => {
+            added.push({ layer, beforeLayerId });
+          },
+          mapControllerRef: {
+            current: { fitLayer: (layer: GeoLibreLayer) => fitted.push(layer) },
+          } as unknown as Parameters<
+            typeof applyServiceEntry
+          >[1]["mapControllerRef"],
+        },
+      );
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    assert.equal(added.length, 1);
+    assert.equal(added[0].layer.type, "geojson");
+    assert.equal(added[0].layer.name, "States");
+    assert.equal(added[0].layer.geojson?.features.length, 1);
+    // The map is fit to the freshly added WFS layer (the same object).
+    assert.equal(fitted.length, 1);
+    assert.equal(fitted[0], added[0].layer);
+  });
+
   it("throws (before any layer is added) when required fields are missing", async () => {
     const { added, deps } = stubDeps();
     await assert.rejects(
