@@ -1,5 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import {
   BUILTIN_SERVICES,
   readUserServices,
@@ -28,14 +29,21 @@ export interface BrowserTreeState {
  * @returns The tree plus a by-id service lookup for one-click add.
  */
 export function useBrowserTree(): BrowserTreeState {
+  const { t } = useTranslation();
   const recentProjects = useAppStore((s) => s.recentProjects);
+  const servicesLabel = t("browser.services");
+  const recentLabel = t("browser.recent");
 
   return useMemo(() => {
     const services = [...BUILTIN_SERVICES, ...readUserServices()];
     const byId = new Map(services.map((entry) => [entry.id, entry]));
     return {
-      tree: buildBrowserTree({ services, recentProjects }),
+      tree: buildBrowserTree({
+        services,
+        recentProjects,
+        sectionLabels: { services: servicesLabel, recent: recentLabel },
+      }),
       serviceById: (id: string) => byId.get(id),
     };
-  }, [recentProjects]);
+  }, [recentProjects, servicesLabel, recentLabel]);
 }

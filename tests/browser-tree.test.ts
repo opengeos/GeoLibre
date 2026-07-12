@@ -108,6 +108,22 @@ describe("buildBrowserTree", () => {
     assert.equal(leaf?.builtin, true);
   });
 
+  it("defaults the section labels to English when none are given", () => {
+    const tree = buildBrowserTree({ services: [], recentProjects: [] });
+    assert.equal(find(tree, "section:services")?.label, "Services");
+    assert.equal(find(tree, "section:recent")?.label, "Recent");
+  });
+
+  it("applies translated section labels when provided", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      sectionLabels: { services: "Servicios", recent: "Recientes" },
+    });
+    assert.equal(find(tree, "section:services")?.label, "Servicios");
+    assert.equal(find(tree, "section:recent")?.label, "Recientes");
+  });
+
   it("lists recent projects in the given order with their paths", () => {
     const tree = buildBrowserTree({ services: [], recentProjects: RECENT });
     const recent = tree[1];

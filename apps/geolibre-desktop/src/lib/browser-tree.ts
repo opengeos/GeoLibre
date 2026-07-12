@@ -54,6 +54,11 @@ export interface BrowserTreeInput {
   services: readonly ServiceLibraryEntry[];
   /** The recent-projects list from the store, most-recent first. */
   recentProjects: readonly RecentProjectEntry[];
+  /**
+   * Translated labels for the two top-level sections. Optional so the pure
+   * module (and its tests) default to English; the app passes `t()` values.
+   */
+  sectionLabels?: { services: string; recent: string };
 }
 
 /** Locale-aware, case-insensitive compare for stable label sorting. */
@@ -127,11 +132,12 @@ function buildServiceKinds(
  * @returns The top-level section nodes (Services, then Recent).
  */
 export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
+  const labels = input.sectionLabels ?? { services: "Services", recent: "Recent" };
   const kinds = buildServiceKinds(input.services);
   const servicesSection: BrowserNode = {
     id: "section:services",
     kind: "section",
-    label: "Services",
+    label: labels.services,
     addable: false,
     count: input.services.length,
     children: kinds,
@@ -149,7 +155,7 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
   const recentSection: BrowserNode = {
     id: "section:recent",
     kind: "section",
-    label: "Recent",
+    label: labels.recent,
     addable: false,
     count: recentChildren.length,
     children: recentChildren,
