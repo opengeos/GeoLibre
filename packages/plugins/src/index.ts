@@ -330,6 +330,20 @@ export {
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
+export {
+  maplibreOpenAerialMapPlugin,
+  OPENAERIALMAP_PLUGIN_ID,
+} from "./plugins/maplibre-openaerialmap";
+export {
+  buildSearchUrl,
+  buildTitilerTemplate,
+  OAM_DEFAULT_ENDPOINT,
+  parseSearchResponse,
+  searchOpenAerialMap,
+  type OamImage,
+  type OamSearchResult,
+  type OpenAerialMapSearchOptions,
+} from "./plugins/openaerialmap-api";
 export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
