@@ -81,6 +81,49 @@ const CACHE_CONTROL = "public, max-age=3600, s-maxage=86400";
 // buckets every time.
 const NEGATIVE_CACHE_CONTROL = "public, max-age=300";
 
+/**
+ * Whether an `Origin` header may use the OpenAerialMap search proxy. Allowed:
+ *
+ *   - the production web app on `*.geolibre.app` (any subdomain, plus the apex)
+ *   - Cloudflare Pages deploy previews (project `geolibre-preview`) and
+ *     `*.workers.dev` preview deployments
+ *   - local dev on `localhost` / `127.0.0.1`
+ *
+ * Everything else gets a 403 so the route can't be driven as an open proxy from
+ * an arbitrary third-party site. This route is only reached by the web, dev, and
+ * embed builds; the desktop app fetches OAM through native (CORS-bypassing) HTTP
+ * and never hits the Worker. The Jupyter embed runs on arbitrary origins, so its
+ * OAM search is intentionally not proxied here (planetary tiles are unaffected —
+ * only this `/oam/meta` route is origin-gated).
+ *
+ * `.geolibre.app` etc. are matched with a leading dot so a look-alike apex like
+ * `evilgeolibre.app` cannot pass as a subdomain.
+ */
+function isAllowedOamOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  let hostname: string;
+  let protocol: string;
+  try {
+    ({ hostname, protocol } = new URL(origin));
+  } catch {
+    return false;
+  }
+  if (protocol === "https:") {
+    if (hostname === "geolibre.app" || hostname.endsWith(".geolibre.app")) {
+      return true;
+    }
+    if (hostname.endsWith(".geolibre-preview.pages.dev")) return true;
+    if (hostname.endsWith(".workers.dev")) return true;
+  }
+  if (
+    (protocol === "http:" || protocol === "https:") &&
+    (hostname === "localhost" || hostname === "127.0.0.1")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 interface Env {}
 
 export default {
@@ -116,6 +159,15 @@ export default {
     // OpenAerialMap metadata search: forward the allowlisted query params to the
     // fixed upstream and re-emit the JSON with CORS (see OAM_META_PATH above).
     if (url.pathname === OAM_META_PATH) {
+      // Abuse guard: this is a wildcard-CORS proxy to a fixed upstream, so
+      // restrict it to GeoLibre's own origins (see isAllowedOamOrigin) — every
+      // cross-origin `fetch()` from the app carries an Origin header. This stops
+      // a third-party site from driving arbitrary OAM queries through the
+      // Worker. It is not a rate limiter — per-client throttling belongs in a
+      // Cloudflare rate-limiting rule in front of tiles.geolibre.app.
+      if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+        return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+      }
       const upstream = new URL(OAM_META_UPSTREAM);
       for (const [key, value] of url.searchParams) {
         if (!OAM_META_PARAMS.has(key)) continue;
