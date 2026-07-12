@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   buildGeosearchUrl,
   buildSummaryUrl,
+  fetchArticleSummary,
   isValidLatLon,
   parseGeosearch,
   parseSummary,
@@ -129,19 +130,50 @@ describe("parseSummary", () => {
     assert.equal(summary.thumbnailUrl, undefined);
     assert.equal(summary.lat, undefined);
   });
-  it("returns null for disambiguation, not-found, and empty documents", () => {
+  it("returns null for disambiguation, null, and titleless documents", () => {
     assert.equal(parseSummary({ title: "X", type: "disambiguation" }, "en"), null);
-    assert.equal(
-      parseSummary(
-        {
-          title: "X",
-          type: "https://mediawiki.org/wiki/HyperSwitch/errors/not_found",
-        },
-        "en",
-      ),
-      null,
-    );
     assert.equal(parseSummary(null, "en"), null);
     assert.equal(parseSummary({ extract: "no title" }, "en"), null);
+  });
+});
+
+describe("fetchArticleSummary", () => {
+  function withFetch<T>(
+    stub: () => Promise<unknown>,
+    run: () => Promise<T>,
+  ): Promise<T> {
+    const original = globalThis.fetch;
+    globalThis.fetch = stub as typeof globalThis.fetch;
+    return run().finally(() => {
+      globalThis.fetch = original;
+    });
+  }
+
+  it("resolves a 404 (missing or renamed title) to null instead of throwing", async () => {
+    const result = await withFetch(
+      async () => ({ status: 404, ok: false, json: async () => ({}) }),
+      () => fetchArticleSummary("No Such Article", { lang: "en" }),
+    );
+    assert.equal(result, null);
+  });
+
+  it("throws on other non-OK responses", async () => {
+    await withFetch(
+      async () => ({ status: 500, ok: false, json: async () => ({}) }),
+      () => assert.rejects(fetchArticleSummary("Whatever", { lang: "en" })),
+    );
+  });
+
+  it("parses a 200 summary body", async () => {
+    const result = await withFetch(
+      async () => ({
+        status: 200,
+        ok: true,
+        json: async () => ({ title: "Paris", extract: "Capital." }),
+      }),
+      () => fetchArticleSummary("Paris", { lang: "en" }),
+    );
+    assert.equal(result?.title, "Paris");
+    assert.equal(result?.extract, "Capital.");
   });
 });

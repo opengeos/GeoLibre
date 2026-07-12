@@ -155,10 +155,10 @@ export function parseGeosearch(json: unknown): WikiNearbyPlace[] {
 export function parseSummary(json: unknown, lang: string): WikiSummary | null {
   const r = json as Record<string, unknown> | null | undefined;
   if (!r || typeof r.title !== "string") return null;
-  // Disambiguation and "not found" documents carry no useful card content.
-  if (r.type === "disambiguation" || r.type === "https://mediawiki.org/wiki/HyperSwitch/errors/not_found") {
-    return null;
-  }
+  // Disambiguation pages return HTTP 200 but carry no single-place content, so
+  // they reach this parser; a missing article ("not found") is a 404 handled by
+  // fetchArticleSummary before the body is ever parsed here.
+  if (r.type === "disambiguation") return null;
   const extract = typeof r.extract === "string" ? r.extract : "";
   const thumbnail = r.thumbnail as { source?: unknown } | undefined;
   const contentUrls = r.content_urls as
@@ -206,12 +206,24 @@ export async function fetchNearbyPlaces(
   return parseGeosearch(json);
 }
 
-/** Fetch the summary + thumbnail for a single article title, or null. */
+/**
+ * Fetch the summary + thumbnail for a single article title, or null when there
+ * is no usable article. A 404 (a missing or renamed title) resolves to null so
+ * the card shows the friendly empty state instead of a generic error; other
+ * non-OK responses still throw and surface as an error.
+ */
 export async function fetchArticleSummary(
   title: string,
   options: { lang?: string; signal?: AbortSignal } = {},
 ): Promise<WikiSummary | null> {
   const lang = wikipediaLang(options.lang);
-  const json = await getJson(buildSummaryUrl(title, lang), options.signal);
-  return parseSummary(json, lang);
+  const response = await fetch(buildSummaryUrl(title, lang), {
+    signal: options.signal,
+    headers: { Accept: "application/json" },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Wikipedia request failed: ${response.status}`);
+  }
+  return parseSummary(await response.json(), lang);
 }
