@@ -97,13 +97,23 @@
     "applyCustom": "Terapkan",
     "invalidUrl": "Masukkan URL gaya HTTP atau HTTPS yang valid.",
     "sectionMoon": "Bulan",
-    "sectionMars": "Mars"
+    "sectionMars": "Mars",
+    "sectionOther": "Benda langit lainnya"
   },
   "planetSwitcher": {
     "label": "Benda langit",
     "earth": "Bumi",
     "moon": "Bulan",
-    "mars": "Mars"
+    "mars": "Mars",
+    "mercury": "Merkurius",
+    "venus": "Venus",
+    "io": "Io",
+    "europa": "Europa",
+    "ganymede": "Ganimede",
+    "callisto": "Callisto",
+    "titan": "Titan",
+    "pluto": "Pluto",
+    "charon": "Charon"
   },
   "common": {
     "pickColorFromScreen": "Pilih warna dari layar",

@@ -13,7 +13,11 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
-import { planetaryBodySectionKey } from "../../lib/planetary-sections";
+import {
+  planetaryBasemapLabel,
+  planetaryBasemapSectionKey,
+} from "../../lib/planetary-sections";
+import { CollapsibleSection } from "../CollapsibleSection";
 import {
   Button,
   cn,
@@ -70,7 +74,7 @@ function BasemapButton({ id, name, selected, onSelect }: BasemapButtonProps) {
       type="button"
       aria-pressed={selected}
       className={cn(
-        "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
+        "flex min-h-10 items-center justify-center rounded-md border px-3 py-1.5 text-center text-sm font-medium leading-tight transition-colors",
         "hover:bg-accent hover:text-accent-foreground",
         selected
           ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
@@ -323,24 +327,43 @@ export function NewProjectDialog({
                   </div>
                 ) : null}
 
-                {PLANETARY_BASEMAP_GROUPS.map((group) => (
-                  <div key={group.ellipsoidId} className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground">
-                      {t(planetaryBodySectionKey(group.ellipsoidId))}
-                    </p>
+                {PLANETARY_BASEMAP_GROUPS.map((group) => {
+                  const heading = t(planetaryBasemapSectionKey(group.id));
+                  const grid = (
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                       {group.basemaps.map((basemap) => (
                         <BasemapButton
                           key={basemap.id}
                           id={basemap.id}
-                          name={basemap.name}
+                          name={planetaryBasemapLabel(basemap, group.id)}
                           selected={selectedBasemapId === basemap.id}
                           onSelect={setSelectedBasemapId}
                         />
                       ))}
                     </div>
-                  </div>
-                ))}
+                  );
+                  // Collapse the long "other bodies" section; keep Moon/Mars open.
+                  return group.id === "other" ? (
+                    <CollapsibleSection
+                      key={group.id}
+                      title={heading}
+                      // Collapsed by default, but auto-expanded when the selected
+                      // basemap is one of these, so the selection stays visible.
+                      defaultOpen={group.basemaps.some(
+                        (b) => b.id === selectedBasemapId,
+                      )}
+                    >
+                      {grid}
+                    </CollapsibleSection>
+                  ) : (
+                    <div key={group.id} className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {heading}
+                      </p>
+                      {grid}
+                    </div>
+                  );
+                })}
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">

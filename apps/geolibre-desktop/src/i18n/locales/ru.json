@@ -100,13 +100,23 @@
     "applyCustom": "Применить",
     "invalidUrl": "Введите корректный URL стиля (HTTP или HTTPS).",
     "sectionMoon": "Луна",
-    "sectionMars": "Марс"
+    "sectionMars": "Марс",
+    "sectionOther": "Другие небесные тела"
   },
   "planetSwitcher": {
     "label": "Небесное тело",
     "earth": "Земля",
     "moon": "Луна",
-    "mars": "Марс"
+    "mars": "Марс",
+    "mercury": "Меркурий",
+    "venus": "Венера",
+    "io": "Ио",
+    "europa": "Европа",
+    "ganymede": "Ганимед",
+    "callisto": "Каллисто",
+    "titan": "Титан",
+    "pluto": "Плутон",
+    "charon": "Харон"
   },
   "common": {
     "pickColorFromScreen": "Выбрать цвет с экрана",
