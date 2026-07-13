@@ -181,18 +181,10 @@ function isDataInputParameter(param: WhiteboxToolParameter): boolean {
   );
 }
 
-/**
- * Whether a parameter is the geographic bounding box of a tool that also takes a
- * companion CRS (`bbox` + `bbox_crs`), so the field can offer a "Use map extent"
- * shortcut that fills both from the current map view (GeoLibre#1213). This covers
- * the COG/WMS/XYZ subset extractors and any future WASM tool with the same pair,
- * without hard-coding tool ids. The `bbox` string is a comma-joined
- * `minX,minY,maxX,maxY`, matching what those tools parse.
- *
- * @param tool - The tool whose parameters are being rendered.
- * @param param - The parameter under consideration.
- * @returns True when `param` is the map-extent bbox field for `tool`.
- */
+// A `bbox` string param paired with a `bbox_crs` param is the geographic extent
+// of a subset tool, so the field can offer a "Use map extent" shortcut that
+// fills both from the current map view (GeoLibre#1213). Matching on the pair
+// covers every COG/WMS/XYZ (and future) extractor without hard-coding tool ids.
 function isMapExtentParameter(
   tool: WhiteboxTool,
   param: WhiteboxToolParameter,
@@ -836,7 +828,10 @@ export function ProcessingDialog({
   // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
   const handleUseMapExtent = () => {
     const bounds = mapControllerRef.current?.readView().bbox;
-    if (!bounds) return;
+    if (!bounds) {
+      setError(t("processing.whitebox.mapExtentUnavailable"));
+      return;
+    }
     const fmt = (value: number) => Number(value.toFixed(6)).toString();
     updateValue("bbox", bounds.map(fmt).join(","));
     updateValue("bbox_crs", 4326);
