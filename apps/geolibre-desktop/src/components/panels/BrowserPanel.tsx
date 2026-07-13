@@ -378,7 +378,12 @@ export function BrowserPanel({
         }
         break;
       case "ArrowLeft":
-        if (row.isGroup && row.isExpanded) {
+        // Collapse only a genuinely-expanded group. During a search,
+        // effectiveExpanded force-expands matching groups that aren't in the
+        // raw `expanded` set, and toggling those would just re-add them (no
+        // visible collapse) — so for a search-only-expanded group, fall through
+        // to moving to the parent instead of silently doing nothing.
+        if (row.isGroup && row.isExpanded && expanded.has(row.id)) {
           event.preventDefault();
           toggle(row.id); // collapse in place
           return;

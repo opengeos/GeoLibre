@@ -166,7 +166,14 @@ export function BrowserTreeNode({
           tabIndex={node.id === activeRowId ? 0 : -1}
           data-browser-row={node.id}
           onFocus={() => onRowFocus(node.id)}
-          onClick={() => (isGroup ? onToggle(node.id) : onActivate(node))}
+          onClick={() => {
+            // Also sync from onClick: some browsers (WebKit) don't focus a
+            // button on mouse click, so onFocus alone would leave the roving
+            // active row stale after a click.
+            onRowFocus(node.id);
+            if (isGroup) onToggle(node.id);
+            else onActivate(node);
+          }}
         >
           {isGroup ? (
             isExpanded ? (
@@ -215,6 +222,7 @@ export function BrowserTreeNode({
                 : t("browser.favorite", { name: node.label })
             }
             aria-pressed={favorited}
+            tabIndex={node.id === activeRowId ? 0 : -1}
             onClick={() => onToggleFavorite(node)}
           >
             <Star
@@ -228,6 +236,7 @@ export function BrowserTreeNode({
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             title={t("browser.unpinFolder", { name: node.label })}
             aria-label={t("browser.unpinFolder", { name: node.label })}
+            tabIndex={node.id === activeRowId ? 0 : -1}
             onClick={() => onRemoveFolder(removePath)}
           >
             <X className="h-3.5 w-3.5" />
@@ -239,6 +248,7 @@ export function BrowserTreeNode({
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             title={plusAction.label}
             aria-label={plusAction.label}
+            tabIndex={node.id === activeRowId ? 0 : -1}
             onClick={plusAction.run}
           >
             <Plus className="h-3.5 w-3.5" />
