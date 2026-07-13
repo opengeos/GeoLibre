@@ -509,6 +509,16 @@ fn is_safe_absolute_path(path: &str) -> bool {
 /// [`read_shapefile_siblings`]. Filtering to loadable file types is left to the
 /// JS side. An unreadable directory is returned as an error the panel surfaces
 /// inline.
+///
+/// SECURITY: unlike the file-content read commands, this has no extension
+/// allowlist (it lists directories), so any caller reaching this from the
+/// webview can enumerate entry *names* in any directory the process can read.
+/// That is a deliberate trade-off: the enumeration is name-only (no content),
+/// bounded to the same trust surface as the existing `read_local_file`
+/// content-read primitive, and needed so Project Home / pinned folders work
+/// without a runtime fs-scope grant. If tighter bounding is wanted later, track
+/// the granted roots (pinned folders + project dir) in Tauri state and reject
+/// paths outside them here.
 #[tauri::command]
 fn list_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
     if !is_safe_absolute_path(&path) {
@@ -527,11 +537,21 @@ fn list_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
         ) else {
             continue;
         };
-        // `file_type()` avoids an extra stat where the OS already knows the kind;
-        // fall back to `is_dir()` (which follows symlinks) when it is unavailable.
+        // `file_type()` avoids an extra stat where the OS already knows the kind,
+        // but it does NOT follow symlinks (a symlink reports its own type, not the
+        // target's), so resolve symlinks — and the unknown case — via `is_dir()`,
+        // which follows them. Otherwise a symlinked directory (common for mounted
+        // data dirs) would be classified as neither folder nor loadable file and
+        // vanish from the tree.
         let is_directory = entry
             .file_type()
-            .map(|file_type| file_type.is_dir())
+            .map(|file_type| {
+                if file_type.is_symlink() {
+                    entry_path.is_dir()
+                } else {
+                    file_type.is_dir()
+                }
+            })
             .unwrap_or_else(|_| entry_path.is_dir());
         result.push(DirectoryEntry {
             name: name.to_string(),
@@ -2937,7 +2957,7 @@ fn configure_linux_webkit() {}
 mod tests {
     use super::{
         ensure_fetchable_url, find_zip_manifest_path, is_allowed_local_vector_path,
-        is_allowed_project_path, is_disallowed_ip, plugin_archive_file_name,
+        is_allowed_project_path, is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
     };
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
@@ -3117,5 +3137,30 @@ mod tests {
         assert_eq!(plugin_archive_file_name("..hidden"), "hidden.zip");
         // A name that sanitizes away entirely falls back to a fixed stem.
         assert_eq!(plugin_archive_file_name("..."), "plugin.zip");
+    }
+
+    #[test]
+    fn is_safe_absolute_path_accepts_absolute_local_dirs() {
+        assert!(is_safe_absolute_path("/home/user/data"));
+        assert!(is_safe_absolute_path("/data"));
+        assert!(is_safe_absolute_path("C:\\Users\\me\\gis"));
+        assert!(is_safe_absolute_path("C:/Users/me/gis"));
+        // A ".." inside a name (not a traversal segment) is fine.
+        assert!(is_safe_absolute_path("/home/user/v1..2"));
+    }
+
+    #[test]
+    fn is_safe_absolute_path_rejects_unc_traversal_and_relative() {
+        // UNC shares (both forms) can auto-authenticate against a remote host.
+        assert!(!is_safe_absolute_path("\\\\server\\share"));
+        assert!(!is_safe_absolute_path("//server/share"));
+        // `..` traversal segments.
+        assert!(!is_safe_absolute_path("/home/user/../etc"));
+        assert!(!is_safe_absolute_path("C:\\a\\..\\b"));
+        // Relative / non-absolute and empty input.
+        assert!(!is_safe_absolute_path("home/user"));
+        assert!(!is_safe_absolute_path("./data"));
+        assert!(!is_safe_absolute_path(""));
+        assert!(!is_safe_absolute_path("C:")); // drive letter without a separator
     }
 }

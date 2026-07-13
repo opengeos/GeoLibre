@@ -263,6 +263,9 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
       });
     }
     for (const folder of input.files.folders) {
+      // Skip a pin that duplicates Project Home, or the two would share the id
+      // `folder:${path}` (and the panel's per-path load/expand state).
+      if (folder.path === input.files.projectHome?.path) continue;
       folderChildren.push({
         id: `folder:${folder.path}`,
         kind: "folder",

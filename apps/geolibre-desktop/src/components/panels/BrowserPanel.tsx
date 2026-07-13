@@ -358,8 +358,18 @@ export function BrowserPanel({
     }
   };
 
-  // A pinned root folder's (×) unpins it from the Files section.
-  const removeFolder = (path: string) => unpinFolder(path);
+  // A pinned root folder's (×) unpins it from the Files section. Also drop its
+  // cached listing so re-pinning the same path later re-reads it from disk
+  // rather than showing a stale listing (the panel stays mounted while hidden).
+  const removeFolder = (path: string) => {
+    folderFetchedRef.current.delete(path);
+    setFolderLoads((prev) => {
+      if (!(path in prev)) return prev;
+      const { [path]: _removed, ...rest } = prev;
+      return rest;
+    });
+    unpinFolder(path);
+  };
 
   // A section counts as content if it has children *or* an always-on ＋ action
   // (Databases' "New connection" and Files' "Add folder" show even with zero

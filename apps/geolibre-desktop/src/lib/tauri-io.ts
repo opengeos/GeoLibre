@@ -202,7 +202,13 @@ export function isLoadableFilePath(name: string): boolean {
 export function parentDirectory(path: string): string {
   const trimmed = path.replace(/[/\\]+$/, "");
   const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  if (index > 0) return trimmed.slice(0, index);
+  if (index > 0) {
+    const parent = trimmed.slice(0, index);
+    // Restore the separator on a Windows drive root ("C:" -> "C:\"), matching
+    // the POSIX-root case below so the result stays an absolute path the Rust
+    // `is_safe_absolute_path` guard accepts.
+    return /^[a-zA-Z]:$/.test(parent) ? `${parent}\\` : parent;
+  }
   return index === 0 ? "/" : trimmed;
 }
 

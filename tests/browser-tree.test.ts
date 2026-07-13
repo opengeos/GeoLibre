@@ -258,6 +258,27 @@ describe("buildBrowserTree — Files section", () => {
     assert.equal(find(tree, "folder:/data/gis")?.removable, true);
   });
 
+  it("skips a pinned folder that duplicates Project Home", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      files: {
+        projectHome: { path: "/home/u/proj", label: "proj" },
+        folders: [
+          { path: "/home/u/proj", label: "proj" }, // same as Project Home
+          { path: "/data/gis", label: "gis" },
+        ],
+      },
+    });
+    const files = find(tree, "section:files");
+    // Only Project Home + the distinct pin — no duplicate folder:/home/u/proj.
+    assert.deepEqual(
+      files?.children?.map((c) => c.path),
+      ["/home/u/proj", "/data/gis"],
+    );
+    assert.equal(files?.count, 2);
+  });
+
   it("renders the Files section with only the Add-folder action when empty", () => {
     const tree = buildBrowserTree({
       services: [],
