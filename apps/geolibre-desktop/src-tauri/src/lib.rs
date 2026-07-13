@@ -2158,8 +2158,11 @@ fn sidecar_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// then a few `_up_` depths so the lookup keeps working if the number of `..`
 /// segments in the resource path ever changes.
 fn resolve_sidecar_in_resource_dir(resource_dir: &std::path::Path) -> Option<PathBuf> {
+    // Plain resource root plus a few `_up_` levels of margin over the observed
+    // 3-level bundle depth, so the lookup survives a change in Tauri's bundling.
+    const MAX_UP_DEPTH: usize = 4;
     let mut prefix = resource_dir.to_path_buf();
-    for _ in 0..=4 {
+    for _ in 0..=MAX_UP_DEPTH {
         if let Ok(path) =
             validate_sidecar_project_dir(prefix.join("backend").join("geolibre_server"))
         {
@@ -2901,13 +2904,29 @@ mod tests {
     use std::net::IpAddr;
     use std::path::PathBuf;
 
-    // Build a throwaway directory tree under the system temp dir. Uses the
-    // process id (no rand dependency) and removes any leftover from a prior run.
-    fn scratch_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("geolibre-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    // A throwaway directory tree under the system temp dir that removes itself
+    // on drop, so scratch dirs are cleaned up even when an assertion panics.
+    // Uses the process id (no rand dependency) and clears any leftover from a
+    // prior run at construction.
+    struct ScratchDir(PathBuf);
+
+    impl ScratchDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("geolibre-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for ScratchDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
     }
 
     // Regression for issue #1223: installed builds place the bundled sidecar at
@@ -2915,8 +2934,9 @@ mod tests {
     // must follow the `_up_` chain rather than only checking the resource root.
     #[test]
     fn resolves_bundled_sidecar_under_up_prefix() {
-        let root = scratch_dir("sidecar-up");
+        let root = ScratchDir::new("sidecar-up");
         let project = root
+            .path()
             .join("_up_")
             .join("_up_")
             .join("_up_")
@@ -2925,16 +2945,14 @@ mod tests {
         std::fs::create_dir_all(&project).unwrap();
         std::fs::write(project.join("pyproject.toml"), "[project]\n").unwrap();
 
-        let resolved = resolve_sidecar_in_resource_dir(&root).expect("sidecar should be found");
+        let resolved =
+            resolve_sidecar_in_resource_dir(root.path()).expect("sidecar should be found");
         assert_eq!(resolved, project.canonicalize().unwrap());
 
         // A resource dir without the project (and without a pyproject marker)
         // resolves to nothing rather than a false positive.
-        let empty = scratch_dir("sidecar-empty");
-        assert!(resolve_sidecar_in_resource_dir(&empty).is_none());
-
-        let _ = std::fs::remove_dir_all(&root);
-        let _ = std::fs::remove_dir_all(&empty);
+        let empty = ScratchDir::new("sidecar-empty");
+        assert!(resolve_sidecar_in_resource_dir(empty.path()).is_none());
     }
 
     #[test]
