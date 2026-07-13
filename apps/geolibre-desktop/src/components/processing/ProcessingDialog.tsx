@@ -827,14 +827,28 @@ export function ProcessingDialog({
   // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
   // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
   const handleUseMapExtent = () => {
+    // Clear any stale banner (e.g. a prior "map not ready") so a later success
+    // doesn't leave it lingering, mirroring RasterSubsetPanel.handleUseView.
+    setError(null);
     const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
+    const [west, south, east, north] = bounds;
+    // getBounds() is not normalized across the antimeridian: a view wrapping
+    // 180° (common for Pacific extents) yields west >= east, which the subset
+    // extractors read as an inverted/empty box. Block it rather than filling a
+    // silently wrong bbox, matching RasterSubsetPanel's antimeridian handling.
+    if (!(west < east) || !(south < north)) {
+      setError(t("processing.whitebox.mapExtentAntimeridian"));
+      return;
+    }
     const fmt = (value: number) => Number(value.toFixed(6)).toString();
     updateValue("bbox", bounds.map(fmt).join(","));
-    updateValue("bbox_crs", 4326);
+    // Store as a string to match the file's convention that every int/double
+    // field value is a string (NumberStepperInput always emits one).
+    updateValue("bbox_crs", String(4326));
   };
 
   const handleRunLocalChange = (nextRunLocal: boolean) => {
@@ -1506,6 +1520,32 @@ function ParameterField({
             </option>
           ))}
         </Select>
+      ) : onUseMapExtent ? (
+        // Checked before the path/data-input branches: once isMapExtentParameter
+        // has identified this bbox field, the "Use map extent" affordance should
+        // always win, even if the param's description happens to contain a word
+        // (path/file/…) that isPathParameter's heuristic would otherwise match.
+        <div className="grid gap-1.5">
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            placeholder={t("processing.whitebox.mapExtentPlaceholder")}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              onChange(event.target.value)
+            }
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="justify-self-start"
+            onClick={onUseMapExtent}
+          >
+            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("processing.whitebox.useMapExtent")}
+          </Button>
+        </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
           id={`whitebox-${param.name}`}
@@ -1561,28 +1601,6 @@ function ParameterField({
           value={valueText}
           onChange={onChange}
         />
-      ) : onUseMapExtent ? (
-        <div className="grid gap-1.5">
-          <Input
-            id={`whitebox-${param.name}`}
-            type="text"
-            value={valueText}
-            placeholder={t("processing.whitebox.mapExtentPlaceholder")}
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              onChange(event.target.value)
-            }
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="justify-self-start"
-            onClick={onUseMapExtent}
-          >
-            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("processing.whitebox.useMapExtent")}
-          </Button>
-        </div>
       ) : (
         <Input
           id={`whitebox-${param.name}`}

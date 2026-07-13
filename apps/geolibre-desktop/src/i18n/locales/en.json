@@ -2550,7 +2550,8 @@
       "whiteboxTools": "Whitebox tools",
       "useMapExtent": "Use map extent",
       "mapExtentPlaceholder": "minX,minY,maxX,maxY",
-      "mapExtentUnavailable": "The map view is not available yet. Wait for the map to load, then try again."
+      "mapExtentUnavailable": "The map view is not available yet. Wait for the map to load, then try again.",
+      "mapExtentAntimeridian": "The current map view wraps the 180° meridian, so it can't be used as a bounding box. Pan so the view no longer crosses the antimeridian, then try again."
     },
     "sidecar": {
       "unavailableTitle": "The processing server isn't available.",

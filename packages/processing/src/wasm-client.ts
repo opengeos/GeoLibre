@@ -645,6 +645,10 @@ export async function runWhiteboxToolWasm(
   // unaffected.
   if (outputs.length === 0) {
     for (const [file, bytes] of Object.entries(files)) {
+      // Skip files we supplied as inputs (e.g. a local `input` raster written to
+      // /work before the run) so an unchanged input isn't re-added as a spurious
+      // second layer alongside the real result.
+      if (file in input) continue;
       out[file.replace(/\.[^.]+$/, "")] = bytes;
     }
   }
