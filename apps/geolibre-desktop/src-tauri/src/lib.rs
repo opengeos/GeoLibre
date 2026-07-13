@@ -2949,6 +2949,16 @@ mod tests {
             resolve_sidecar_in_resource_dir(root.path()).expect("sidecar should be found");
         assert_eq!(resolved, project.canonicalize().unwrap());
 
+        // The plain (0-level) layout used by portable builds, where the sidecar
+        // sits at `backend/geolibre_server` directly under the resource dir.
+        let plain_root = ScratchDir::new("sidecar-plain");
+        let plain_project = plain_root.path().join("backend").join("geolibre_server");
+        std::fs::create_dir_all(&plain_project).unwrap();
+        std::fs::write(plain_project.join("pyproject.toml"), "[project]\n").unwrap();
+        let plain_resolved = resolve_sidecar_in_resource_dir(plain_root.path())
+            .expect("plain sidecar should be found");
+        assert_eq!(plain_resolved, plain_project.canonicalize().unwrap());
+
         // A resource dir without the project (and without a pyproject marker)
         // resolves to nothing rather than a false positive.
         let empty = ScratchDir::new("sidecar-empty");
