@@ -19,6 +19,9 @@ jobs:
   deploy:
     name: Deploy planetary tile proxy to Cloudflare Workers
     runs-on: ubuntu-latest
+    # workflow_dispatch can target any branch; only ever deploy main to
+    # production so a manual run can't publish unmerged code.
+    if: github.ref == 'refs/heads/main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
