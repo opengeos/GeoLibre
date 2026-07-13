@@ -2149,7 +2149,48 @@ body,
   max-width: 100vw;
   max-height: 100vh;
   object-fit: contain;
-  cursor: zoom-out;
+  /* Honor the source's EXIF orientation when showing the original bytes so a
+     portrait photo isn't displayed sideways. */
+  image-orientation: from-image;
+  transform-origin: center center;
+  cursor: zoom-in;
+  /* Wheel/double-click zoom animates; panning drags update transform live. */
+  transition: transform 0.12s ease-out;
+  touch-action: none;
+  will-change: transform;
+}
+
+/* Once magnified past the fit, the cursor invites panning. */
+.geolibre-photo-fullscreen-img.is-zoomed {
+  cursor: grab;
+  /* Panning should track the pointer with no lag, so drop the zoom transition. */
+  transition: none;
+}
+
+.geolibre-photo-fullscreen-img.is-zoomed:active {
+  cursor: grabbing;
+}
+
+/* Badge reporting the current zoom as a percentage of native resolution plus
+   the source pixel dimensions. */
+.geolibre-photo-fullscreen-badge {
+  position: fixed;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+
+.geolibre-photo-fullscreen-badge:empty {
+  display: none;
 }
 
 .geolibre-photo-fullscreen-close {

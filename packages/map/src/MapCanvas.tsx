@@ -152,6 +152,24 @@ function createIdentifyMessagePopupElement(
 /** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
 const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
 
+// Feature-property keys for geotagged/field-collection photos. Kept in sync with
+// PHOTO_PROPERTY / PHOTO_FULL_PROPERTY in the app's field-collection module (this
+// package can't import from the app): the popup shows the light thumbnail while
+// the fullscreen viewer and "Save image" use the embedded full-resolution image.
+const PHOTO_THUMBNAIL_KEY = "photo";
+const PHOTO_FULL_KEY = "photo_full";
+
+/** Return the value at `key` when it is an inline raster image data URL. */
+function imageDataUrlAt(
+  properties: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = properties[key];
+  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)
+    ? value
+    : null;
+}
+
 /**
  * Find the first feature property holding an inline raster image (a geotagged
  * photo or field-collection thumbnail), returning its data URL or null.
@@ -165,14 +183,22 @@ function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
   return null;
 }
 
+/** How far past native resolution the fullscreen viewer can magnify (400%). */
+const PHOTO_MAX_ZOOM_FRACTION = 4;
+/** Per-wheel-notch zoom step. */
+const PHOTO_ZOOM_STEP = 1.15;
+
 /**
  * Open a photo in a fullscreen lightbox: a backdrop overlay with the image
- * centered (scaled to fit). Uses the native Fullscreen API so it fills the whole
- * screen, falling back to a viewport-filling overlay where fullscreen is denied.
- * Closes on the × button, a backdrop click, Escape, a double-click on the image,
- * or the user leaving native fullscreen.
+ * centered and scaled to fit. The mouse wheel zooms in on the photo (up to 400%
+ * of its native resolution) and, once zoomed past the fit, dragging pans it; a
+ * badge reports the current zoom as a percentage of native resolution alongside
+ * the source pixel dimensions. Uses the native Fullscreen API so it fills the
+ * whole screen, falling back to a viewport-filling overlay where fullscreen is
+ * denied. Closes on the × button, a backdrop click, or Escape (double-click
+ * toggles zoom rather than closing), or when the user leaves native fullscreen.
  *
- * @param src - The image data URL or URL.
+ * @param src - The image data URL or URL (native resolution where available).
  * @param alt - Accessible label for the image.
  */
 function openPhotoFullscreen(src: string, alt: string): void {
@@ -188,6 +214,11 @@ function openPhotoFullscreen(src: string, alt: string): void {
   image.className = "geolibre-photo-fullscreen-img";
   overlay.appendChild(image);
 
+  const badge = document.createElement("div");
+  badge.className = "geolibre-photo-fullscreen-badge";
+  badge.setAttribute("aria-hidden", "true");
+  overlay.appendChild(badge);
+
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "geolibre-photo-fullscreen-close";
@@ -199,6 +230,94 @@ function openPhotoFullscreen(src: string, alt: string): void {
   // Move focus into the lightbox so keyboard and screen-reader users land on a
   // control inside it (and Escape/Enter act on the close button by default).
   closeButton.focus();
+
+  // Zoom is a multiple of the fit-to-screen size (1 = fit). `tx`/`ty` translate
+  // the image while panning a zoomed photo.
+  let zoom = 1;
+  let tx = 0;
+  let ty = 0;
+  // Set once the image loads: the fit-size-to-native ratio (so the badge can
+  // report zoom as a fraction of native), and the fit and max zoom multiples.
+  let fitToNative = 1;
+  let maxZoom = PHOTO_MAX_ZOOM_FRACTION;
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+
+  const applyTransform = () => {
+    image.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    image.classList.toggle("is-zoomed", zoom > 1.001);
+    const nativePercent = Math.round(fitToNative * zoom * 100);
+    badge.textContent =
+      image.naturalWidth > 0
+        ? `${nativePercent}% · ${image.naturalWidth} × ${image.naturalHeight}`
+        : "";
+  };
+
+  const measure = () => {
+    // clientWidth is the fit-rendered width (max-width/height:100%, aspect kept);
+    // dividing by naturalWidth gives how much of native the fit view shows.
+    fitToNative =
+      image.naturalWidth > 0 && image.clientWidth > 0
+        ? image.clientWidth / image.naturalWidth
+        : 1;
+    // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native, but always allow at
+    // least a little zoom for images that already fit within the viewport.
+    maxZoom = Math.max(1.5, PHOTO_MAX_ZOOM_FRACTION / fitToNative);
+    applyTransform();
+  };
+  if (image.complete && image.naturalWidth > 0) measure();
+  else image.addEventListener("load", measure, { once: true });
+
+  const setZoom = (next: number) => {
+    zoom = clamp(next, 1, maxZoom);
+    if (zoom <= 1.001) {
+      // Back at fit: recenter so a later zoom-in starts from the middle.
+      zoom = 1;
+      tx = 0;
+      ty = 0;
+    }
+    applyTransform();
+  };
+
+  overlay.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      setZoom(zoom * (event.deltaY < 0 ? PHOTO_ZOOM_STEP : 1 / PHOTO_ZOOM_STEP));
+    },
+    { passive: false },
+  );
+
+  // Drag to pan once zoomed in.
+  let dragging = false;
+  let lastX = 0;
+  let lastY = 0;
+  image.addEventListener("pointerdown", (event) => {
+    if (zoom <= 1) return;
+    dragging = true;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    image.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  });
+  image.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    tx += event.clientX - lastX;
+    ty += event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    applyTransform();
+  });
+  const endDrag = (event: PointerEvent) => {
+    if (!dragging) return;
+    dragging = false;
+    if (image.hasPointerCapture(event.pointerId)) {
+      image.releasePointerCapture(event.pointerId);
+    }
+  };
+  image.addEventListener("pointerup", endDrag);
+  image.addEventListener("pointercancel", endDrag);
 
   let closed = false;
   const close = () => {
@@ -224,7 +343,12 @@ function openPhotoFullscreen(src: string, alt: string): void {
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) close();
   });
-  image.addEventListener("dblclick", close);
+  // Double-click toggles between fit and 100% of native (or max, if native is
+  // beyond the cap), rather than closing, so the viewer stays a zoom surface.
+  image.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    setZoom(zoom > 1.001 ? 1 : Math.min(1 / fitToNative, maxZoom));
+  });
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("fullscreenchange", onFullscreenChange);
 
@@ -249,19 +373,25 @@ function createPhotoPopupElement(
   const root = document.createElement("div");
   root.className = "geolibre-photo-popup";
 
-  const photo = findPhotoDataUrl(properties);
-  if (photo) {
+  // The popup shows the light thumbnail; the fullscreen viewer prefers the
+  // embedded full-resolution image (falling back to the thumbnail when the
+  // source was already native or its format can't be shown at full size).
+  const thumbnail =
+    imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ??
+    findPhotoDataUrl(properties);
+  const fullResolution = imageDataUrlAt(properties, PHOTO_FULL_KEY) ?? thumbnail;
+  if (thumbnail) {
     const image = document.createElement("img");
-    image.src = photo;
+    image.src = thumbnail;
     image.alt = typeof properties.name === "string" ? properties.name : "Photo";
     image.className = "geolibre-photo-popup-img";
-    image.title = "Double-click to view fullscreen";
+    image.title = "Double-click to view at full resolution";
     // Double-click (not single, so it never fights the resize drag) opens the
     // photo fullscreen. The image is popup DOM, not the map canvas, so this does
     // not trigger MapLibre's double-click zoom.
     image.addEventListener("dblclick", (event) => {
       event.stopPropagation();
-      openPhotoFullscreen(photo, image.alt);
+      openPhotoFullscreen(fullResolution ?? thumbnail, image.alt);
     });
     root.appendChild(image);
   } else {

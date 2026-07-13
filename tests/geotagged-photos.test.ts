@@ -11,7 +11,10 @@ import {
   PHOTO_IMAGE_EXTENSIONS,
   relocatePhotoFeatures,
 } from "../apps/geolibre-desktop/src/lib/geotagged-photos";
-import { PHOTO_PROPERTY } from "../apps/geolibre-desktop/src/lib/field-collection";
+import {
+  PHOTO_FULL_PROPERTY,
+  PHOTO_PROPERTY,
+} from "../apps/geolibre-desktop/src/lib/field-collection";
 
 describe("isPhotoFileName", () => {
   it("accepts the supported image extensions, case-insensitively", () => {
@@ -85,10 +88,32 @@ describe("buildPhotoProperties", () => {
     const props = buildPhotoProperties("a.heic", { latitude: 1, longitude: 2 }, null);
     assert.equal(props.name, "a.heic");
     assert.ok(!(PHOTO_PROPERTY in props));
+    assert.ok(!(PHOTO_FULL_PROPERTY in props));
     assert.ok(!("timestamp" in props));
     assert.ok(!("altitude" in props));
     assert.ok(!("direction" in props));
     assert.ok(!("camera" in props));
+  });
+
+  it("stores the full-resolution image under its own key when provided", () => {
+    const props = buildPhotoProperties(
+      "big.jpg",
+      { latitude: 1, longitude: 2 },
+      "data:image/jpeg;base64,THUMB",
+      "data:image/jpeg;base64,ORIGINAL",
+    );
+    assert.equal(props[PHOTO_PROPERTY], "data:image/jpeg;base64,THUMB");
+    assert.equal(props[PHOTO_FULL_PROPERTY], "data:image/jpeg;base64,ORIGINAL");
+  });
+
+  it("omits the full-resolution key when only a thumbnail is given", () => {
+    const props = buildPhotoProperties(
+      "small.jpg",
+      { latitude: 1, longitude: 2 },
+      "data:image/jpeg;base64,THUMB",
+    );
+    assert.equal(props[PHOTO_PROPERTY], "data:image/jpeg;base64,THUMB");
+    assert.ok(!(PHOTO_FULL_PROPERTY in props));
   });
 
   it("falls back to CreateDate and trims a make-only camera", () => {

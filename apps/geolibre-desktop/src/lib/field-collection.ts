@@ -51,8 +51,22 @@ export const COLLECTION_GEOMETRY_KEY = "collectionGeometry";
 /** Property key under which a captured photo (data URL) is stored. */
 export const PHOTO_PROPERTY = "photo";
 
+/**
+ * Property key under which a geotagged photo's full-resolution image (a data
+ * URL of the original, un-re-encoded bytes) is stored. {@link PHOTO_PROPERTY}
+ * holds the small thumbnail shown on the map marker/popup; this holds the
+ * native-resolution original used by the enlarged/fullscreen viewer and a
+ * "Save image" so magnifying and saving keep the source detail. Absent when the
+ * source is already at or below the thumbnail cap, or a format a browser cannot
+ * display at native size (TIFF/HEIC).
+ */
+export const PHOTO_FULL_PROPERTY = "photo_full";
+
 /** Property keys the tool manages itself; user fields must not reuse them. */
-export const RESERVED_PROPERTY_KEYS: readonly string[] = [PHOTO_PROPERTY];
+export const RESERVED_PROPERTY_KEYS: readonly string[] = [
+  PHOTO_PROPERTY,
+  PHOTO_FULL_PROPERTY,
+];
 
 /**
  * Cap embedded photos so a capture session can't bloat the project JSON without
