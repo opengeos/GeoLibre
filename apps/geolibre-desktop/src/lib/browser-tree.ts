@@ -6,10 +6,11 @@
  * store dependencies, so it unit-tests in isolation. The `useBrowserTree` hook
  * feeds it live data and the `BrowserPanel` renders the result.
  *
- * The MVP covers two top-level sections — **Services** (grouped by service kind,
- * mirroring the Add Data web-service sources: XYZ, WMS, WFS, WMTS, ArcGIS) and
- * **Recent** (recently opened projects). Local-file and connection sections come
- * in a later phase.
+ * It covers three top-level sections — **Services** (grouped by service kind,
+ * mirroring the Add Data web-service sources: XYZ, WMS, WFS, WMTS, ArcGIS),
+ * **Recent** (recently opened projects), and **Databases** (saved PostGIS
+ * connections that expand to their schemas and spatial tables). Local-file
+ * sections come in a later phase.
  */
 
 import {
@@ -25,7 +26,10 @@ export type BrowserNodeKind =
   | "category" // a service-kind grouping (XYZ, WMS, WFS, WMTS, ArcGIS)
   | "service" // a saved-service leaf that adds a layer when activated
   | "recent-project" // a recent project that opens when activated
-  | "connection"; // a saved database connection that opens the DB add flow
+  | "connection" // a saved database connection; expands to its schemas/tables
+  | "schema" // a database schema grouping under a connection
+  | "table" // a database table leaf that opens the add flow for it
+  | "info"; // a non-interactive status row (loading / error)
 
 /** One node in the Browser tree. */
 export interface BrowserNode {
@@ -48,8 +52,12 @@ export interface BrowserNode {
    * ("postgres"). Absent means the node shows no ＋.
    */
   newConnectionKind?: AddDataKind;
-  /** The saved database connection string a `connection` node opens. */
+  /** The saved database connection string a `connection`/`table` node belongs to. */
   connectionString?: string;
+  /** The schema of a `table` node. */
+  tableSchema?: string;
+  /** The table name of a `table` node. */
+  tableName?: string;
   /** True for a built-in preset service (read-only), for badge display. */
   builtin?: boolean;
   /** The project path a recent node opens (kind `recent-project`). */
@@ -66,9 +74,9 @@ export interface BrowserTreeInput {
   recentProjects: readonly RecentProjectEntry[];
   /**
    * Saved database (PostGIS) connections to list under the Databases section.
-   * Omitted (undefined) hides the section entirely — the app passes it only on
-   * platforms where PostgreSQL layers are available (not mobile). An empty
-   * array still renders the section (with its "New connection" action).
+   * Omitted (undefined) hides the section entirely; an empty array still renders
+   * it (with its "New connection" action). The app always passes it — the
+   * PostgreSQL add flow itself reports when it needs GeoLibre Desktop.
    */
   databaseConnections?: readonly { connectionString: string; label: string }[];
   /**
@@ -187,9 +195,9 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
 
   const sections = [servicesSection, recentSection];
 
-  // The Databases section is only included where PostgreSQL layers are
-  // available (the app omits `databaseConnections` otherwise). It always shows
-  // its "New connection" (＋) action, even with no connections yet.
+  // The Databases section is included whenever `databaseConnections` is
+  // provided (the app always provides it). It always shows its "New connection"
+  // (＋) action, even with no connections yet.
   if (input.databaseConnections) {
     sections.push({
       id: "section:databases",
@@ -203,14 +211,67 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
           id: `connection:${connection.connectionString}`,
           kind: "connection",
           label: connection.label,
-          addable: true,
+          addable: false,
           connectionString: connection.connectionString,
+          // An empty child list marks it as an expandable group; the panel
+          // lazily fills it with schema/table nodes on first expand.
+          children: [],
         }),
       ),
     });
   }
 
   return sections;
+}
+
+/** A spatial table discovered under a database connection. */
+export interface PostgisTableRef {
+  schema: string;
+  table: string;
+}
+
+/**
+ * Groups a connection's spatial tables into `schema` → `table` nodes, sorted by
+ * name, for the panel to inject as a lazily-expanded connection's children.
+ * Pure so it unit-tests without the sidecar that produces the table list.
+ *
+ * @param connectionString - The owning connection (embedded in node ids + carried
+ *   on table nodes for the add flow).
+ * @param tables - The spatial tables discovered for that connection.
+ * @returns One `schema` group per distinct schema, each with its `table` leaves.
+ */
+export function buildPostgisTableNodes(
+  connectionString: string,
+  tables: readonly PostgisTableRef[],
+): BrowserNode[] {
+  const bySchema = new Map<string, PostgisTableRef[]>();
+  for (const entry of tables) {
+    const bucket = bySchema.get(entry.schema);
+    if (bucket) bucket.push(entry);
+    else bySchema.set(entry.schema, [entry]);
+  }
+  return Array.from(bySchema.keys())
+    .sort(byLabel)
+    .map((schema) => ({
+      id: `schema:${connectionString}:${schema}`,
+      kind: "schema" as const,
+      label: schema,
+      addable: false,
+      count: bySchema.get(schema)?.length ?? 0,
+      children: [...(bySchema.get(schema) ?? [])]
+        .sort((a, b) => byLabel(a.table, b.table))
+        .map(
+          (entry): BrowserNode => ({
+            id: `table:${connectionString}:${schema}.${entry.table}`,
+            kind: "table",
+            label: entry.table,
+            addable: true,
+            connectionString,
+            tableSchema: schema,
+            tableName: entry.table,
+          }),
+        ),
+    }));
 }
 
 /**

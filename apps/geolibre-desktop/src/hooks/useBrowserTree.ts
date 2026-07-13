@@ -10,7 +10,6 @@ import {
   readSavedPostgresConnections,
   savedPostgresConnectionLabel,
 } from "../lib/saved-postgres-connections";
-import { isMobile } from "../lib/is-mobile";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
 export interface BrowserTreeState {
@@ -39,20 +38,18 @@ export function useBrowserTree(): BrowserTreeState {
   const servicesLabel = t("browser.services");
   const recentLabel = t("browser.recent");
   const databasesLabel = t("browser.databases");
-  // PostgreSQL layers rely on the desktop Martin process, which has no mobile
-  // build, so the Databases section is hidden on mobile (mirroring the Add Data
-  // PostgreSQL source). Evaluated once — the user agent is stable per session.
-  const showDatabases = useMemo(() => !isMobile(), []);
 
   return useMemo(() => {
     const services = [...BUILTIN_SERVICES, ...readUserServices()];
     const byId = new Map(services.map((entry) => [entry.id, entry]));
-    const databaseConnections = showDatabases
-      ? readSavedPostgresConnections().map((connectionString) => ({
-          connectionString,
-          label: savedPostgresConnectionLabel(connectionString),
-        }))
-      : undefined;
+    // Shown on every platform for discovery; the PostgreSQL add flow itself
+    // reports when it needs GeoLibre Desktop (Martin has no mobile build).
+    const databaseConnections = readSavedPostgresConnections().map(
+      (connectionString) => ({
+        connectionString,
+        label: savedPostgresConnectionLabel(connectionString),
+      }),
+    );
     return {
       tree: buildBrowserTree({
         services,
@@ -66,5 +63,5 @@ export function useBrowserTree(): BrowserTreeState {
       }),
       serviceById: (id: string) => byId.get(id),
     };
-  }, [recentProjects, servicesLabel, recentLabel, databasesLabel, showDatabases]);
+  }, [recentProjects, servicesLabel, recentLabel, databasesLabel]);
 }

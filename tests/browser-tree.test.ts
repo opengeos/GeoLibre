@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { RecentProjectEntry } from "@geolibre/core";
 import {
   buildBrowserTree,
+  buildPostgisTableNodes,
   filterBrowserTree,
   type BrowserNode,
 } from "../apps/geolibre-desktop/src/lib/browser-tree";
@@ -154,6 +155,10 @@ describe("buildBrowserTree", () => {
     assert.equal(conn?.kind, "connection");
     assert.equal(conn?.connectionString, "postgres://u@h/db");
     assert.equal(conn?.label, "db @ h");
+    // A connection is an expandable group (empty children until introspected),
+    // not an addable leaf.
+    assert.equal(conn?.addable, false);
+    assert.deepEqual(conn?.children, []);
   });
 
   it("lists recent projects in the given order with their paths", () => {
@@ -167,6 +172,51 @@ describe("buildBrowserTree", () => {
     assert.equal(one?.kind, "recent-project");
     assert.equal(one?.projectPath, "/a/one.geolibre.json");
     assert.equal(one?.addable, true);
+  });
+});
+
+describe("buildPostgisTableNodes", () => {
+  const CONN = "postgresql://u@h/db";
+
+  it("groups tables into schema → table nodes, sorted by name", () => {
+    const nodes = buildPostgisTableNodes(CONN, [
+      { schema: "public", table: "roads" },
+      { schema: "public", table: "buildings" },
+      { schema: "census", table: "tracts" },
+    ]);
+    // Schemas sorted alphabetically.
+    assert.deepEqual(
+      nodes.map((n) => n.label),
+      ["census", "public"],
+    );
+    assert.equal(nodes[0].kind, "schema");
+    assert.equal(nodes[0].id, `schema:${CONN}:census`);
+    assert.equal(nodes[0].count, 1);
+    // Tables within a schema sorted alphabetically.
+    const publicSchema = nodes[1];
+    assert.equal(publicSchema.count, 2);
+    assert.deepEqual(
+      publicSchema.children?.map((c) => c.label),
+      ["buildings", "roads"],
+    );
+  });
+
+  it("carries the connection, schema, and table onto each table node", () => {
+    const nodes = buildPostgisTableNodes(CONN, [
+      { schema: "public", table: "roads" },
+    ]);
+    const table = nodes[0].children?.[0];
+    assert.equal(table?.kind, "table");
+    assert.equal(table?.id, `table:${CONN}:public.roads`);
+    assert.equal(table?.label, "roads");
+    assert.equal(table?.addable, true);
+    assert.equal(table?.connectionString, CONN);
+    assert.equal(table?.tableSchema, "public");
+    assert.equal(table?.tableName, "roads");
+  });
+
+  it("returns an empty array for no tables", () => {
+    assert.deepEqual(buildPostgisTableNodes(CONN, []), []);
   });
 });
 

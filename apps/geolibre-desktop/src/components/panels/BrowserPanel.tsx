@@ -1,15 +1,29 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
+import { listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
-import { useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
-import { filterBrowserTree, type BrowserNode } from "../../lib/browser-tree";
+import {
+  buildPostgisTableNodes,
+  filterBrowserTree,
+  type BrowserNode,
+} from "../../lib/browser-tree";
 import { applyServiceEntry } from "../layout/add-data/apply-service";
 import type { AddDataKind } from "../layout/AddDataDialog";
 import { openAddData } from "../layout/add-data/open-add-data";
 import { BrowserTreeNode } from "./BrowserTreeNode";
+
+/** Async load state for one connection's spatial-table introspection. */
+type ConnectionLoad =
+  | { status: "loading" }
+  | { status: "loaded"; tables: { schema: string; table: string }[] }
+  | { status: "error"; message: string };
+
+/** The `connection:` id prefix a connection node carries (id = prefix + connString). */
+const CONNECTION_ID_PREFIX = "connection:";
 
 interface BrowserPanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -35,6 +49,48 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
       collectGroupIds(node.children, into);
     }
   }
+}
+
+/**
+ * Returns a copy of the tree with each `connection` node's children replaced by
+ * the current lazy-load state: a status row while loading or on error, or the
+ * schema→table nodes once loaded. Connections with no load entry keep their
+ * empty child list (still expandable; expanding triggers the fetch).
+ *
+ * @param nodes - The base tree from {@link useBrowserTree}.
+ * @param loads - Per-connection introspection state keyed by connection string.
+ * @param loadingLabel - Translated label for the "loading tables" status row.
+ */
+function augmentConnections(
+  nodes: readonly BrowserNode[],
+  loads: Record<string, ConnectionLoad>,
+  loadingLabel: string,
+): BrowserNode[] {
+  return nodes.map((node) => {
+    if (node.kind === "connection" && node.connectionString) {
+      const load = loads[node.connectionString];
+      let children: BrowserNode[] = [];
+      if (load?.status === "loading") {
+        children = [
+          { id: `${node.id}:loading`, kind: "info", label: loadingLabel, addable: false },
+        ];
+      } else if (load?.status === "error") {
+        children = [
+          { id: `${node.id}:error`, kind: "info", label: load.message, addable: false },
+        ];
+      } else if (load?.status === "loaded") {
+        children = buildPostgisTableNodes(node.connectionString, load.tables);
+      }
+      return { ...node, children };
+    }
+    if (node.children) {
+      return {
+        ...node,
+        children: augmentConnections(node.children, loads, loadingLabel),
+      };
+    }
+    return node;
+  });
 }
 
 /**
@@ -78,9 +134,57 @@ export function BrowserPanel({
     setBusyId(null);
   };
 
+  // Lazy PostGIS introspection: keyed by connection string, populated the first
+  // time a connection node is expanded so we never hit the sidecar for a
+  // connection the user hasn't opened.
+  const [connLoads, setConnLoads] = useState<Record<string, ConnectionLoad>>(
+    {},
+  );
+  // Tracks in-flight/settled fetches so a re-expand (or the expand-all a search
+  // triggers) doesn't refetch. Cleared for a connection only via the row's
+  // refresh action.
+  const connFetchedRef = useRef<Set<string>>(new Set());
+
+  const fetchConnectionTables = useCallback((connectionString: string) => {
+    if (connFetchedRef.current.has(connectionString)) return;
+    connFetchedRef.current.add(connectionString);
+    setConnLoads((prev) => ({
+      ...prev,
+      [connectionString]: { status: "loading" },
+    }));
+    listPostgisTables(connectionString)
+      .then((tables) => {
+        setConnLoads((prev) => ({
+          ...prev,
+          [connectionString]: {
+            status: "loaded",
+            tables: tables.map((t) => ({ schema: t.schema, table: t.table })),
+          },
+        }));
+      })
+      .catch((err: unknown) => {
+        setConnLoads((prev) => ({
+          ...prev,
+          [connectionString]: {
+            status: "error",
+            message: err instanceof Error ? err.message : String(err),
+          },
+        }));
+      });
+  }, []);
+
+  // Inject each connection node's lazily-loaded children (loading/error status
+  // rows, or schema→table nodes) before filtering, so search reaches the tables
+  // too. Connections that were never expanded keep their empty child list.
+  const loadingLabel = t("browser.loadingTables");
+  const augmented = useMemo(
+    () => augmentConnections(tree, connLoads, loadingLabel),
+    [tree, connLoads, loadingLabel],
+  );
+
   const filtered = useMemo(
-    () => filterBrowserTree(tree, query),
-    [tree, query],
+    () => filterBrowserTree(augmented, query),
+    [augmented, query],
   );
 
   // While searching, expand every group so matches deep in the tree are
@@ -92,13 +196,18 @@ export function BrowserPanel({
     return all;
   }, [query, expanded, filtered]);
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    // Kick off introspection the first time a connection is expanded.
+    if (id.startsWith(CONNECTION_ID_PREFIX) && !expanded.has(id)) {
+      fetchConnectionTables(id.slice(CONNECTION_ID_PREFIX.length));
+    }
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
 
   const activate = async (node: BrowserNode) => {
     // Ignore a second activation while one is still resolving (a fast
@@ -139,10 +248,17 @@ export function BrowserPanel({
       } finally {
         endBusy();
       }
-    } else if (node.kind === "connection") {
-      // Open the PostgreSQL Add Data dialog to connect, browse tables, and add
-      // layers; the saved connection is preselected in the dialog's list.
-      openAddData("postgres");
+    } else if (node.kind === "table" && node.connectionString) {
+      // Reuse the proven PostgreSQL Add Data flow (desktop Martin lifecycle) to
+      // add the table as a layer, opening it prefilled with this connection and
+      // table so the user only confirms.
+      openAddData("postgres", {
+        postgres: {
+          connection: node.connectionString,
+          schema: node.tableSchema,
+          table: node.tableName,
+        },
+      });
     }
   };
 

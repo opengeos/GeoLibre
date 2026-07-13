@@ -9,6 +9,7 @@ import {
   Globe2,
   Loader2,
   Plus,
+  Table,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -40,6 +41,8 @@ function nodeIcon(node: BrowserNode, isExpanded: boolean): LucideIcon {
       return Globe2;
     case "connection":
       return Database;
+    case "table":
+      return Table;
     default:
       return isExpanded ? FolderOpen : Folder;
   }
@@ -60,6 +63,20 @@ export function BrowserTreeNode({
   onNewConnection,
 }: BrowserTreeNodeProps) {
   const { t } = useTranslation();
+  // A status row (loading / error) is non-interactive text, not a tree control.
+  if (node.kind === "info") {
+    return (
+      <li>
+        <p
+          className="truncate py-1 text-xs text-muted-foreground"
+          style={{ paddingLeft: 8 + depth * 14 + 14 }}
+          title={node.label}
+        >
+          {node.label}
+        </p>
+      </li>
+    );
+  }
   const isGroup = Boolean(node.children);
   const isExpanded = expanded.has(node.id);
   const Icon = nodeIcon(node, isExpanded);

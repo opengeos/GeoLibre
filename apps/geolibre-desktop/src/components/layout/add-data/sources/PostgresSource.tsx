@@ -29,6 +29,7 @@ import {
   savedPostgresConnectionLabel,
 } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
+import type { OpenAddDataPostgres } from "../open-add-data";
 
 type PostgresLoadMode = "tiles" | "editable";
 
@@ -36,12 +37,40 @@ function postgisTableKey(table: PostgisTableInfo): string {
   return `${table.schema}.${table.table}`;
 }
 
-export function PostgresSource() {
+/**
+ * Whether a Martin source (auto-published one-per-table) is the given schema +
+ * table. Martin names public-schema sources by the bare table and others by
+ * `schema.table`, so both forms are accepted.
+ */
+function martinSourceMatchesTable(
+  sourceId: string,
+  schema: string | undefined,
+  table: string,
+): boolean {
+  if (sourceId === table) return true;
+  if (schema && sourceId === `${schema}.${table}`) return true;
+  return false;
+}
+
+interface PostgresSourceProps {
+  /** Prefill from the Browser panel (saved connection / clicked table). */
+  initialPostgres?: OpenAddDataPostgres;
+}
+
+export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   const { t } = useTranslation();
   const source = useAddDataSource(t("addData.postgres.defaultName"));
   const { martin } = source.shell;
   const [postgresConnectionString, setPostgresConnectionString] = useState(
-    () => readSavedPostgresConnections()[0] ?? "",
+    () => initialPostgres?.connection ?? readSavedPostgresConnections()[0] ?? "",
+  );
+  // A table clicked in the Browser panel to auto-select once a Connect
+  // populates the source/table list (the user still triggers the desktop-only
+  // Connect; this just spares them re-picking the table they came in for).
+  const desiredTableRef = useRef(
+    initialPostgres?.table
+      ? { schema: initialPostgres.schema, table: initialPostgres.table }
+      : null,
   );
   const [savedPostgresConnections, setSavedPostgresConnections] = useState(() =>
     readSavedPostgresConnections(),
@@ -131,10 +160,20 @@ export function PostgresSource() {
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       setPostgisConnection(connectionString);
       setPostgisTables(tables);
-      // Default to the first writable table (single-column primary key);
-      // read-only tables are listed but disabled, so with no writable table
-      // nothing is preselected and the submit stays disabled.
-      const defaultTable = tables.find((table) => table.primary_key);
+      // Prefer the table the user clicked in the Browser panel (when writable),
+      // else the first writable table (single-column primary key); read-only
+      // tables are listed but disabled, so with no writable table nothing is
+      // preselected and the submit stays disabled.
+      const desired = desiredTableRef.current;
+      const desiredTable = desired
+        ? tables.find(
+            (table) =>
+              table.primary_key &&
+              table.table === desired.table &&
+              (!desired.schema || table.schema === desired.schema),
+          )
+        : undefined;
+      const defaultTable = desiredTable ?? tables.find((table) => table.primary_key);
       setSelectedTableKey(defaultTable ? postgisTableKey(defaultTable) : "");
       setPostgisStatus(
         tables.length > 0
@@ -186,7 +225,15 @@ export function PostgresSource() {
 
       const sources = await fetchMartinCatalog(server);
       martin.setSources(sources);
-      martin.setSelectedSourceId(sources[0]?.id ?? "");
+      // Preselect the table the user clicked in the Browser panel, if Martin
+      // published it; otherwise fall back to the first source.
+      const desired = desiredTableRef.current;
+      const match = desired
+        ? sources.find((s) =>
+            martinSourceMatchesTable(s.id, desired.schema, desired.table),
+          )
+        : undefined;
+      martin.setSelectedSourceId(match?.id ?? sources[0]?.id ?? "");
       martin.setStatus(
         sources.length > 0
           ? t("addData.postgres.statusFound", { count: sources.length })

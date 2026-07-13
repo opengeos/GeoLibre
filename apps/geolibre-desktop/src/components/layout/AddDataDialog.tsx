@@ -28,6 +28,7 @@ import { WmsSource } from "./add-data/sources/WmsSource";
 import { WmtsSource } from "./add-data/sources/WmtsSource";
 import { XyzSource } from "./add-data/sources/XyzSource";
 import type { AddDataKind } from "./add-data/types";
+import type { OpenAddDataPostgres } from "./add-data/open-add-data";
 import { useMartinConnection } from "./add-data/useMartinConnection";
 
 export type { AddDataKind } from "./add-data/types";
@@ -41,6 +42,12 @@ interface AddDataDialogProps {
    * (e.g. a "3D model" menu entry opens it on the scenegraph layer type).
    */
   initialDeckVizKind?: string;
+  /**
+   * Connection (and optional table) to pre-select when the dialog opens as
+   * `postgres` — set when the Browser panel opens a saved connection or a
+   * clicked PostGIS table.
+   */
+  initialPostgres?: OpenAddDataPostgres;
 }
 
 /**
@@ -51,6 +58,7 @@ interface AddDataDialogProps {
 function renderSource(
   kind: AddDataKind,
   initialDeckVizKind: string | undefined,
+  initialPostgres: OpenAddDataPostgres | undefined,
 ) {
   switch (kind) {
     case "xyz":
@@ -78,7 +86,7 @@ function renderSource(
     case "arcgis":
       return <ArcGISSource />;
     case "postgres":
-      return <PostgresSource />;
+      return <PostgresSource initialPostgres={initialPostgres} />;
     case "video":
       return <VideoSource />;
     case "deckgl-viz":
@@ -98,6 +106,7 @@ export function AddDataDialog({
   mapControllerRef,
   onOpenChange,
   initialDeckVizKind,
+  initialPostgres,
 }: AddDataDialogProps) {
   const { t } = useTranslation();
   const open = kind !== null;
@@ -153,7 +162,7 @@ export function AddDataDialog({
 
         {kind ? (
           <AddDataShellProvider value={contextValue}>
-            {renderSource(kind, initialDeckVizKind)}
+            {renderSource(kind, initialDeckVizKind, initialPostgres)}
           </AddDataShellProvider>
         ) : null}
       </DialogContent>

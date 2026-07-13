@@ -11,7 +11,8 @@
     "noMatches": "No matches.",
     "addFailed": "Could not add this data source.",
     "builtinBadge": "built-in",
-    "newConnection": "New {{kind}} connection"
+    "newConnection": "New {{kind}} connection",
+    "loadingTables": "Loading tables…"
   },
   "about": {
     "trigger": "About",

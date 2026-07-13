@@ -96,7 +96,11 @@ import { useViewportHistory } from "../../hooks/useViewportHistory";
 import type { Command } from "../../lib/commands";
 import { IS_STORE_BUILD } from "../../lib/updates";
 import { AddDataDialog, type AddDataKind } from "./AddDataDialog";
-import { OPEN_ADD_DATA_EVENT } from "./add-data/open-add-data";
+import {
+  OPEN_ADD_DATA_EVENT,
+  type OpenAddDataDetail,
+  type OpenAddDataPostgres,
+} from "./add-data/open-add-data";
 import { AddNetcdfDialog } from "./AddNetcdfDialog";
 import { AboutDialog } from "./AboutDialog";
 import { NewProjectDialog } from "./NewProjectDialog";
@@ -348,13 +352,20 @@ export function TopToolbar({
     ),
   );
   const [addDataKind, setAddDataKind] = useState<AddDataKind | null>(null);
+  // PostgreSQL prefill (saved connection / clicked table) from the Browser panel.
+  const [addDataPostgres, setAddDataPostgres] = useState<
+    OpenAddDataPostgres | undefined
+  >(undefined);
   // Let any panel (e.g. the Browser panel's "New connection" action) open the
   // Add Data dialog at a given kind without prop-drilling, mirroring
   // openSettingsSection. This toolbar owns the dialog + its kind state.
   useEffect(() => {
     const onOpenAddData = (event: Event) => {
-      const kind = (event as CustomEvent<{ kind: AddDataKind }>).detail?.kind;
-      if (kind) setAddDataKind(kind);
+      const detail = (event as CustomEvent<OpenAddDataDetail>).detail;
+      if (detail?.kind) {
+        setAddDataPostgres(detail.postgres);
+        setAddDataKind(detail.kind);
+      }
     };
     window.addEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
     return () => window.removeEventListener(OPEN_ADD_DATA_EVENT, onOpenAddData);
@@ -1223,10 +1234,12 @@ export function TopToolbar({
         kind={addDataKind}
         mapControllerRef={mapControllerRef}
         initialDeckVizKind={addDataDeckVizKind}
+        initialPostgres={addDataPostgres}
         onOpenChange={(open: boolean) => {
           if (!open) {
             setAddDataKind(null);
             setAddDataDeckVizKind(undefined);
+            setAddDataPostgres(undefined);
           }
         }}
       />
