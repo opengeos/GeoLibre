@@ -23,7 +23,8 @@
     "folderTruncated": "Showing first {{shown}} of {{total}}",
     "favorites": "Favorites",
     "favorite": "Add “{{name}}” to favorites",
-    "unfavorite": "Remove “{{name}}” from favorites"
+    "unfavorite": "Remove “{{name}}” from favorites",
+    "favoriteMissing": "That data source no longer exists — removed from Favorites."
   },
   "about": {
     "trigger": "About",

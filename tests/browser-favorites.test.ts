@@ -100,21 +100,45 @@ describe("favorites persistence", () => {
     assert.ok(events.some((e) => (e as Event).type === FAVORITES_CHANGED_EVENT));
   });
 
-  it("drops malformed persisted entries", () => {
+  it("drops malformed and kind-incomplete persisted entries", () => {
     (
       globalThis as unknown as { window: { localStorage: MemoryStorage } }
     ).window.localStorage.setItem(
       "geolibre.browser.favorites",
       JSON.stringify([
-        { id: "service:a", kind: "service", label: "a" },
+        { id: "service:a", kind: "service", label: "a", serviceId: "a" },
         { id: "x", kind: "recent-project", label: "bad" }, // not favoritable
         { kind: "service", label: "no id" }, // missing id
+        { id: "service:b", kind: "service", label: "no serviceId" }, // missing serviceId
+        { id: "folder:/x", kind: "folder", label: "no path" }, // missing path
         "nonsense",
       ]),
     );
+    // Only the fully-formed service survives.
     assert.deepEqual(
       readBrowserFavorites().map((f) => f.id),
       ["service:a"],
     );
+  });
+
+  it("caps an oversized persisted list on read", () => {
+    const many = Array.from({ length: MAX_FAVORITES + 10 }, (_u, i) => ({
+      id: `service:s${i}`,
+      kind: "service",
+      label: `s${i}`,
+      serviceId: `s${i}`,
+    }));
+    (
+      globalThis as unknown as { window: { localStorage: MemoryStorage } }
+    ).window.localStorage.setItem(
+      "geolibre.browser.favorites",
+      JSON.stringify(many),
+    );
+    assert.equal(readBrowserFavorites().length, MAX_FAVORITES);
+  });
+
+  it("round-trips the builtin flag for a favorited preset service", () => {
+    addFavorite({ ...svc("osm"), builtin: true });
+    assert.equal(readBrowserFavorites()[0].builtin, true);
   });
 });

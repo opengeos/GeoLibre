@@ -30,6 +30,8 @@ export interface BrowserFavorite {
   /** Service identity (kind `service`). */
   serviceId?: string;
   serviceKind?: ServiceLibraryKind;
+  /** Whether the favorited service is a built-in preset, for the badge. */
+  builtin?: boolean;
   /** Connection string (kind `connection`). */
   connectionString?: string;
   /** Absolute path (kind `folder`/`file`). */
@@ -49,12 +51,26 @@ export function isFavoritableKind(kind: string): kind is FavoriteKind {
 function isValidFavorite(value: unknown): value is BrowserFavorite {
   if (!value || typeof value !== "object") return false;
   const fav = value as Record<string, unknown>;
-  return (
-    typeof fav.id === "string" &&
-    typeof fav.label === "string" &&
-    typeof fav.kind === "string" &&
-    isFavoritableKind(fav.kind)
-  );
+  if (
+    typeof fav.id !== "string" ||
+    typeof fav.label !== "string" ||
+    typeof fav.kind !== "string" ||
+    !isFavoritableKind(fav.kind)
+  ) {
+    return false;
+  }
+  // Require the kind-specific field each rebuild path needs, so a corrupted
+  // entry (e.g. a folder with no path) is dropped rather than rendering as a
+  // permanently-empty, non-expanding node.
+  switch (fav.kind) {
+    case "service":
+      return typeof fav.serviceId === "string";
+    case "connection":
+      return typeof fav.connectionString === "string";
+    case "folder":
+    case "file":
+      return typeof fav.path === "string";
+  }
 }
 
 /** Dedupe favorites by id, keeping the first occurrence (most-recent). */
@@ -75,8 +91,10 @@ export function readBrowserFavorites(): BrowserFavorite[] {
     const value = window.localStorage.getItem(FAVORITES_STORAGE_KEY);
     if (!value) return [];
     const parsed = JSON.parse(value);
+    // Cap on read too (not just write), so a hand-edited/corrupted store can't
+    // feed an unbounded list into the tree.
     return Array.isArray(parsed)
-      ? uniqueById(parsed.filter(isValidFavorite))
+      ? uniqueById(parsed.filter(isValidFavorite)).slice(0, MAX_FAVORITES)
       : [];
   } catch {
     return [];

@@ -305,9 +305,16 @@ export function BrowserPanel({
       if (!entry) {
         // The saved-service list is read when the panel opens, so an entry can
         // vanish (removed via the Add Data dialog, or in another tab) between
-        // the tree being built and this click; surface it rather than silently
-        // doing nothing.
-        setError(t("browser.addFailed"));
+        // the tree being built and this click.
+        if (favoriteIds.has(node.id)) {
+          // A favorite can outlive its saved service (removed anywhere, with no
+          // change event to prune it). Self-heal: drop the dead favorite so it
+          // stops erroring on every click, and say why.
+          removeFavorite(node.id);
+          setError(t("browser.favoriteMissing"));
+        } else {
+          setError(t("browser.addFailed"));
+        }
         return;
       }
       beginBusy(node.id);
@@ -449,6 +456,7 @@ export function BrowserPanel({
       label: node.label,
       serviceId: node.serviceId,
       serviceKind: node.serviceKind,
+      builtin: node.builtin,
       connectionString: node.connectionString,
       path: node.path,
     });
