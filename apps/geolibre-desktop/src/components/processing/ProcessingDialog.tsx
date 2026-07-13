@@ -836,12 +836,20 @@ export function ProcessingDialog({
       return;
     }
     const [west, south, east, north] = bounds;
-    // getBounds() is not normalized across the antimeridian: a view wrapping
-    // 180° (common for Pacific extents) yields west >= east, which the subset
-    // extractors read as an inverted/empty box. Block it rather than filling a
-    // silently wrong bbox, matching RasterSubsetPanel's antimeridian handling.
-    if (!(west < east) || !(south < north)) {
-      setError(t("processing.whitebox.mapExtentAntimeridian"));
+    // getBounds() is not normalized: a view wrapping 180° yields west >= east,
+    // and at low zoom (multiple world copies) the corners can fall outside
+    // ±180°/±90° while still ordered. Either produces a box the subset
+    // extractors mis-clip or reject, so block it rather than filling a silently
+    // wrong bbox, matching RasterSubsetPanel.parseBbox's ordering + range checks.
+    if (
+      !(west < east) ||
+      !(south < north) ||
+      west < -180 ||
+      east > 180 ||
+      south < -90 ||
+      north > 90
+    ) {
+      setError(t("processing.whitebox.mapExtentInvalid"));
       return;
     }
     const fmt = (value: number) => Number(value.toFixed(6)).toString();
