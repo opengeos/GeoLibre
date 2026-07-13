@@ -55,14 +55,16 @@ const PHOTO_DROP_EXTENSIONS = new Set([
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
 
 /**
- * Longest edge (px) of the inline JPEG generated for each photo. The original
- * file is not retained after import, so this is the only resolution available
- * later: it is sized so the resizable photo popup stays sharp when enlarged
- * (the popup display caps near 900px, doubled here for high-DPI screens) while
- * keeping the inline data URL a few hundred KB rather than the multi-MB source.
- * Budget ~250-500 KB per photo at this size/quality; since the data URL is held
- * in the store and serialized into the project file, raising it further trades
- * sharpness for project size on photo-heavy imports.
+ * Longest edge (px) of the inline JPEG thumbnail generated for each photo. This
+ * thumbnail is what the map marker/popup shows; for JPEG/PNG/WebP sources larger
+ * than the cap the original is also retained (see {@link PHOTO_FULL_PROPERTY})
+ * for the enlarged view, but the thumbnail stays this small so the marker/popup
+ * render fast. It is sized so the resizable photo popup stays sharp when
+ * enlarged (the popup display caps near 900px, doubled here for high-DPI
+ * screens) while keeping the inline data URL a few hundred KB rather than the
+ * multi-MB source. Budget ~250-500 KB per photo at this size/quality; since the
+ * data URL is held in the store and serialized into the project file, raising it
+ * further trades sharpness for project size on photo-heavy imports.
  */
 const PHOTO_MAX_DIMENSION = 1600;
 /** JPEG quality for the generated photo image. */

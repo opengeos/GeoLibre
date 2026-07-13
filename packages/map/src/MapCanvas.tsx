@@ -136,7 +136,13 @@ function createIdentifyPopupElement(
     empty.textContent = "No attributes";
     rows.appendChild(empty);
   } else {
-    for (const [key, value] of entries) appendRow(key, value);
+    for (const [key, value] of entries) {
+      // The full-resolution image is an internal companion to the thumbnail;
+      // skip it so Identify doesn't decode a multi-megapixel data URL just to
+      // show a second copy of the same photo in the same small thumbnail box.
+      if (key === PHOTO_FULL_KEY) continue;
+      appendRow(key, value);
+    }
   }
 
   return root;
@@ -264,6 +270,14 @@ function openPhotoFullscreen(src: string, alt: string): void {
     // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native, but always allow at
     // least a little zoom for images that already fit within the viewport.
     maxZoom = Math.max(1.5, PHOTO_MAX_ZOOM_FRACTION / fitToNative);
+    // A resize (or entering fullscreen) can grow the fit ratio and shrink
+    // maxZoom below the current zoom; reclamp so the 400%-of-native cap holds
+    // instead of rendering (and reporting) a now-out-of-range zoom.
+    zoom = clamp(zoom, 1, maxZoom);
+    if (zoom === 1) {
+      tx = 0;
+      ty = 0;
+    }
     applyTransform();
   };
   if (image.complete && image.naturalWidth > 0) measure();
