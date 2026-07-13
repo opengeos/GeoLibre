@@ -336,6 +336,15 @@ export function BrowserPanel({
   };
 
   const onTreeKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    // Only navigate when a treeitem row is focused. A row's secondary buttons
+    // (star/×/＋) are Tab-reachable; an Arrow key fired from one of those must
+    // not hijack nav and yank focus to another row.
+    if (
+      !(event.target instanceof HTMLElement) ||
+      !event.target.hasAttribute("data-browser-row")
+    ) {
+      return;
+    }
     if (!currentRowId) return;
     const index = visibleRows.findIndex((row) => row.id === currentRowId);
     if (index === -1) return;

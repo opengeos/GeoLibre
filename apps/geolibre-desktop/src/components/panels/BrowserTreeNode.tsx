@@ -90,7 +90,8 @@ export function BrowserTreeNode({
   // A status row (loading / error) is non-interactive text, not a tree control.
   if (node.kind === "info") {
     return (
-      <li>
+      // role="none" so the status row isn't an extra listitem in the tree.
+      <li role="none">
         <p
           className="truncate py-1 text-xs text-muted-foreground"
           style={{ paddingLeft: 8 + depth * 14 }}
@@ -142,7 +143,9 @@ export function BrowserTreeNode({
   const favorited = favoritable && favoriteIds.has(node.id);
 
   return (
-    <li>
+    // role="none": the treeitem role lives on the inner button, so the <li>
+    // must not add a listitem role to the tree/group.
+    <li role="none">
       <div className="group flex items-center">
         <button
           type="button"
