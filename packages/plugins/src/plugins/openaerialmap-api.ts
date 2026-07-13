@@ -24,6 +24,8 @@
  * (CORS-bypassing) fetch; on the web build a proxy is required.
  */
 
+import type { Feature, MultiPolygon, Polygon } from "geojson";
+
 /** Default OpenAerialMap metadata API base URL. */
 export const OAM_DEFAULT_ENDPOINT = "https://api.openaerialmap.org";
 
@@ -58,6 +60,28 @@ export interface OamImage {
   cogUrl: string | null;
   /** WGS84 bounds [west, south, east, north], when available. */
   bbox: [number, number, number, number] | null;
+  /**
+   * Exact footprint polygon (from the record's `geojson` geometry), when the
+   * API provides one. Preferred over {@link bbox} for the on-map footprint so a
+   * non-rectangular scene traces its true outline rather than its bounding box.
+   */
+  geometry: Polygon | MultiPolygon | null;
+  /**
+   * The raw `/meta` record this image was normalized from, kept verbatim so the
+   * panel's Metadata view can surface every field the API returns (not just the
+   * ones normalized above).
+   */
+  raw: unknown;
+}
+
+/** Properties carried on a footprint feature so a map click maps back to a result. */
+export interface OamFootprintProps {
+  /** The {@link OamImage.id} this footprint belongs to. */
+  id: string;
+  /** The image title (used for a hover/click label). */
+  title: string;
+  /** Whether the image can be visualized (has a tile template). */
+  hasTile: boolean;
 }
 
 /** A page of OpenAerialMap search results. */
@@ -184,6 +208,23 @@ function asBbox(value: unknown): [number, number, number, number] | null {
   return null;
 }
 
+/**
+ * Reads a GeoJSON Polygon/MultiPolygon geometry from an unknown value, else
+ * null. The OAM record's `geojson` is the scene footprint geometry; only these
+ * two area types are accepted (a Point/LineString could never be a footprint).
+ */
+function asPolygonGeometry(value: unknown): Polygon | MultiPolygon | null {
+  if (!value || typeof value !== "object") return null;
+  const geom = value as { type?: unknown; coordinates?: unknown };
+  if (
+    (geom.type === "Polygon" || geom.type === "MultiPolygon") &&
+    Array.isArray(geom.coordinates)
+  ) {
+    return geom as Polygon | MultiPolygon;
+  }
+  return null;
+}
+
 /** Normalizes one raw `/meta` result record into an {@link OamImage}. */
 function normalizeImage(raw: unknown): OamImage | null {
   if (!raw || typeof raw !== "object") return null;
@@ -210,7 +251,51 @@ function normalizeImage(raw: unknown): OamImage | null {
     tileUrl: buildTitilerTemplate(cogUrl),
     cogUrl,
     bbox: asBbox(record.bbox) ?? asBbox(geojson.bbox),
+    geometry: asPolygonGeometry(record.geojson),
+    raw,
   };
+}
+
+/**
+ * Builds a GeoJSON footprint feature for an image, used to draw the result
+ * outline on the map. Prefers the exact {@link OamImage.geometry}; falls back to
+ * a rectangle traced from {@link OamImage.bbox}. Returns null when the image has
+ * neither (it cannot be located on the map).
+ *
+ * @param image - A normalized image
+ * @returns A footprint feature carrying the image id, or null
+ */
+export function footprintFeature(
+  image: OamImage,
+): Feature<Polygon | MultiPolygon, OamFootprintProps> | null {
+  const properties: OamFootprintProps = {
+    id: image.id,
+    title: image.title,
+    hasTile: image.tileUrl != null,
+  };
+  if (image.geometry) {
+    return { type: "Feature", geometry: image.geometry, properties };
+  }
+  if (image.bbox) {
+    const [w, s, e, n] = image.bbox;
+    return {
+      type: "Feature",
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [w, s],
+            [e, s],
+            [e, n],
+            [w, n],
+            [w, s],
+          ],
+        ],
+      },
+      properties,
+    };
+  }
+  return null;
 }
 
 /**

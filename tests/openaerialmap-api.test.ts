@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   buildSearchUrl,
   buildTitilerTemplate,
+  footprintFeature,
   type OamFetch,
+  type OamImage,
   OAM_DEFAULT_ENDPOINT,
   searchOpenAerialMap,
 } from "../packages/plugins/src/plugins/openaerialmap-api";
@@ -178,5 +180,96 @@ describe("searchOpenAerialMap", () => {
     const url = new URL(calls[0]);
     assert.equal(url.searchParams.get("bbox"), "10,20,30,40");
     assert.equal(url.searchParams.get("page"), "3");
+  });
+
+  it("keeps the raw record and a footprint polygon geometry", async () => {
+    const { fetchImpl } = stubFetch({
+      meta: { found: 1 },
+      results: [
+        rawResult({
+          geojson: {
+            type: "Polygon",
+            coordinates: [
+              [
+                [-84.5, 33.6],
+                [-84.2, 33.6],
+                [-84.2, 33.9],
+                [-84.5, 33.9],
+                [-84.5, 33.6],
+              ],
+            ],
+          },
+        }),
+      ],
+    });
+    const { images } = await searchOpenAerialMap({}, fetchImpl);
+    assert.equal(images[0].geometry?.type, "Polygon");
+    assert.equal(
+      (images[0].raw as { title?: string }).title,
+      "Sample scene",
+    );
+  });
+});
+
+/** Minimal normalized image for footprint tests. */
+function image(overrides: Partial<OamImage> = {}): OamImage {
+  return {
+    id: "img1",
+    title: "Scene",
+    provider: "Provider",
+    platform: "",
+    gsd: null,
+    acquisitionStart: null,
+    acquisitionEnd: null,
+    thumbnailUrl: null,
+    tileUrl: "https://tiler/{z}/{x}/{y}",
+    cogUrl: "https://oin.example.com/img1.tif",
+    bbox: [-1, -2, 3, 4],
+    geometry: null,
+    raw: null,
+    ...overrides,
+  };
+}
+
+describe("footprintFeature", () => {
+  it("uses the exact polygon geometry when present", () => {
+    const geometry = {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    };
+    const feature = footprintFeature(image({ geometry }));
+    assert.equal(feature?.geometry, geometry);
+    assert.equal(feature?.properties.id, "img1");
+    assert.equal(feature?.properties.hasTile, true);
+  });
+
+  it("traces a rectangle from the bbox when there is no geometry", () => {
+    const feature = footprintFeature(image({ bbox: [-1, -2, 3, 4] }));
+    assert.equal(feature?.geometry.type, "Polygon");
+    assert.deepEqual((feature?.geometry as { coordinates: unknown }).coordinates, [
+      [
+        [-1, -2],
+        [3, -2],
+        [3, 4],
+        [-1, 4],
+        [-1, -2],
+      ],
+    ]);
+  });
+
+  it("marks images without a tile url as not visualizable", () => {
+    const feature = footprintFeature(image({ tileUrl: null }));
+    assert.equal(feature?.properties.hasTile, false);
+  });
+
+  it("returns null when the image has neither geometry nor bbox", () => {
+    assert.equal(footprintFeature(image({ bbox: null, geometry: null })), null);
   });
 });
