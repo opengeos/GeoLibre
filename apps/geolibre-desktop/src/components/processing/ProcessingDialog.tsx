@@ -44,6 +44,7 @@ import {
   Play,
   RefreshCw,
   Save,
+  Scan,
   Search,
   Server,
   ServerOff,
@@ -177,6 +178,29 @@ function downloadBytes(bytes: Uint8Array, filename: string): void {
 function isDataInputParameter(param: WhiteboxToolParameter): boolean {
   return ["raster_in", "vector_in", "lidar_in", "file_in"].includes(
     parameterKind(param),
+  );
+}
+
+/**
+ * Whether a parameter is the geographic bounding box of a tool that also takes a
+ * companion CRS (`bbox` + `bbox_crs`), so the field can offer a "Use map extent"
+ * shortcut that fills both from the current map view (GeoLibre#1213). This covers
+ * the COG/WMS/XYZ subset extractors and any future WASM tool with the same pair,
+ * without hard-coding tool ids. The `bbox` string is a comma-joined
+ * `minX,minY,maxX,maxY`, matching what those tools parse.
+ *
+ * @param tool - The tool whose parameters are being rendered.
+ * @param param - The parameter under consideration.
+ * @returns True when `param` is the map-extent bbox field for `tool`.
+ */
+function isMapExtentParameter(
+  tool: WhiteboxTool,
+  param: WhiteboxToolParameter,
+): boolean {
+  return (
+    param.name === "bbox" &&
+    parameterKind(param) === "string" &&
+    Boolean(tool.params?.some((other) => other.name === "bbox_crs"))
   );
 }
 
@@ -806,6 +830,18 @@ export function ProcessingDialog({
     setValues((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Fill a subset tool's `bbox` (and companion `bbox_crs`) from the current map
+  // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
+  // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
+  // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
+  const handleUseMapExtent = () => {
+    const bounds = mapControllerRef.current?.readView().bbox;
+    if (!bounds) return;
+    const fmt = (value: number) => Number(value.toFixed(6)).toString();
+    updateValue("bbox", bounds.map(fmt).join(","));
+    updateValue("bbox_crs", 4326);
+  };
+
   const handleRunLocalChange = (nextRunLocal: boolean) => {
     setRunLocal(nextRunLocal);
     // A `vector_out` param holds an output-format string in WASM mode but a
@@ -1326,6 +1362,11 @@ export function ProcessingDialog({
                       onPickFile={(fileName, bytes) =>
                         handlePickInputFile(param.name, fileName, bytes)
                       }
+                      onUseMapExtent={
+                        isMapExtentParameter(selectedTool, param)
+                          ? handleUseMapExtent
+                          : undefined
+                      }
                     />
                   ))
                 )}
@@ -1411,6 +1452,9 @@ interface ParameterFieldProps {
   layers: GeoLibreLayer[];
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
+  /** When set, renders a "Use map extent" button that fills this bbox field
+   * (and its companion CRS) from the current map view. */
+  onUseMapExtent?: () => void;
   toolId: string;
   runLocal: boolean;
   value: unknown;
@@ -1421,6 +1465,7 @@ function ParameterField({
   layers,
   onChange,
   onPickFile,
+  onUseMapExtent,
   toolId,
   runLocal,
   value,
@@ -1521,6 +1566,28 @@ function ParameterField({
           value={valueText}
           onChange={onChange}
         />
+      ) : onUseMapExtent ? (
+        <div className="grid gap-1.5">
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            placeholder={t("processing.whitebox.mapExtentPlaceholder")}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              onChange(event.target.value)
+            }
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="justify-self-start"
+            onClick={onUseMapExtent}
+          >
+            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("processing.whitebox.useMapExtent")}
+          </Button>
+        </div>
       ) : (
         <Input
           id={`whitebox-${param.name}`}

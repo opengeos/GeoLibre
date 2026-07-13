@@ -2547,7 +2547,9 @@
       "filterBySource": "Filter by source",
       "allSources": "All sources",
       "geolibreTools": "GeoLibre tools",
-      "whiteboxTools": "Whitebox tools"
+      "whiteboxTools": "Whitebox tools",
+      "useMapExtent": "Use map extent",
+      "mapExtentPlaceholder": "minX,minY,maxX,maxY"
     },
     "sidecar": {
       "unavailableTitle": "The processing server isn't available.",
