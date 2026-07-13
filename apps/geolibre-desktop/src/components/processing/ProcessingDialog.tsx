@@ -44,6 +44,7 @@ import {
   Search,
   Server,
   ServerOff,
+  SquareDashed,
   X,
 } from "lucide-react";
 import {
@@ -63,6 +64,7 @@ import {
   type FileDialogFilter,
 } from "../../lib/tauri-io";
 import { fetchableUrl } from "../../lib/url-utils";
+import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
@@ -475,6 +477,9 @@ export function ProcessingDialog({
     left: number;
     top: number;
   } | null>(null);
+  // True while a "Draw on map" rubber-band is in progress.
+  const [drawing, setDrawing] = useState(false);
+  const drawAbortRef = useRef<AbortController | null>(null);
 
   const onDragStart = (event: React.PointerEvent) => {
     // Never begin a drag from an interactive control: the pointer capture would
@@ -556,17 +561,19 @@ export function ProcessingDialog({
   };
 
   // Escape closes the panel, preserving the affordance the Radix modal provided.
-  // Guarded on `open` so it doesn't intercept Escape for the rest of the app.
+  // Guarded on `open` so it doesn't intercept Escape for the rest of the app, and
+  // suppressed while drawing so Escape cancels the in-progress rubber-band (the
+  // draw helper's own Escape handler) instead of closing the whole panel.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) {
+      if (event.key === "Escape" && !event.defaultPrevented && !drawing) {
         setProcessingOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, setProcessingOpen]);
+  }, [open, drawing, setProcessingOpen]);
 
   // Re-clamp an explicit size and dragged position when the viewport shrinks, so
   // a resized/moved panel can't be left oversized or partly off-screen after a
@@ -1001,21 +1008,21 @@ export function ProcessingDialog({
   // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
   // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
   // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
-  const handleUseMapExtent = () => {
-    // Clear any stale banner (e.g. a prior "map not ready") so a later success
-    // doesn't leave it lingering, mirroring RasterSubsetPanel.handleUseView.
+  // Validate a WGS84 box and write it into the `bbox`/`bbox_crs` fields. Shared
+  // by "Use map extent" (current view) and "Draw on map" (rubber-band). Rejects
+  // an unnormalized box - a view/box wrapping 180° yields west >= east, and at
+  // low zoom (multiple world copies) getBounds() corners can fall outside
+  // ±180°/±90° while still ordered - which the subset extractors mis-clip or
+  // reject, matching RasterSubsetPanel.parseBbox's ordering + range checks.
+  const applyBboxExtent = (
+    bounds: [number, number, number, number] | undefined,
+  ): void => {
     setError(null);
-    const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
     const [west, south, east, north] = bounds;
-    // getBounds() is not normalized: a view wrapping 180° yields west >= east,
-    // and at low zoom (multiple world copies) the corners can fall outside
-    // ±180°/±90° while still ordered. Either produces a box the subset
-    // extractors mis-clip or reject, so block it rather than filling a silently
-    // wrong bbox, matching RasterSubsetPanel.parseBbox's ordering + range checks.
     if (
       !(west < east) ||
       !(south < north) ||
@@ -1033,6 +1040,49 @@ export function ProcessingDialog({
     // field value is a string (NumberStepperInput always emits one).
     updateValue("bbox_crs", String(4326));
   };
+
+  const handleUseMapExtent = () => {
+    applyBboxExtent(mapControllerRef.current?.readView().bbox);
+  };
+
+  // Rubber-band a box on the map to fill the bbox (only workable because the
+  // panel is now non-modal). Reuses the print-extent draw helper, which suspends
+  // pan/zoom during the drag, previews the box, and handles Escape/blur. Toggling
+  // the button (or closing the panel) aborts an in-flight draw.
+  const handleDrawBbox = async () => {
+    const map = mapControllerRef.current?.getMap();
+    if (!map) {
+      setError(t("processing.whitebox.mapExtentUnavailable"));
+      return;
+    }
+    if (drawing) {
+      drawAbortRef.current?.abort();
+      return;
+    }
+    setError(null);
+    const controller = new AbortController();
+    drawAbortRef.current = controller;
+    setDrawing(true);
+    try {
+      const extent = await drawPrintExtent(map, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (extent) applyBboxExtent(extent);
+    } finally {
+      clearPrintExtent(map);
+      if (drawAbortRef.current === controller) {
+        drawAbortRef.current = null;
+        setDrawing(false);
+      }
+    }
+  };
+
+  // Abort an in-flight draw when the panel closes or the component unmounts, so
+  // the map isn't left in draw mode after the panel is gone.
+  useEffect(() => {
+    if (open) return;
+    drawAbortRef.current?.abort();
+  }, [open]);
+  useEffect(() => () => drawAbortRef.current?.abort(), []);
 
   const handleRunLocalChange = (nextRunLocal: boolean) => {
     setRunLocal(nextRunLocal);
@@ -1605,6 +1655,12 @@ export function ProcessingDialog({
                         ? handleUseMapExtent
                         : undefined
                     }
+                    onDrawMapExtent={
+                      isMapExtentParameter(selectedTool, param)
+                        ? handleDrawBbox
+                        : undefined
+                    }
+                    drawingMapExtent={drawing}
                   />
                 ))
               )}
@@ -1717,6 +1773,11 @@ interface ParameterFieldProps {
   /** When set, renders a "Use map extent" button that fills this bbox field
    * (and its companion CRS) from the current map view. */
   onUseMapExtent?: () => void;
+  /** When set, renders a "Draw on map" button that fills this bbox field by
+   * rubber-banding a box on the map. */
+  onDrawMapExtent?: () => void;
+  /** Whether a draw is currently in progress (toggles the button's label/state). */
+  drawingMapExtent?: boolean;
   toolId: string;
   runLocal: boolean;
   value: unknown;
@@ -1728,6 +1789,8 @@ function ParameterField({
   onChange,
   onPickFile,
   onUseMapExtent,
+  onDrawMapExtent,
+  drawingMapExtent,
   toolId,
   runLocal,
   value,
@@ -1788,16 +1851,36 @@ function ParameterField({
               onChange(event.target.value)
             }
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="justify-self-start"
-            onClick={onUseMapExtent}
-          >
-            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("processing.whitebox.useMapExtent")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onUseMapExtent}
+            >
+              <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("processing.whitebox.useMapExtent")}
+            </Button>
+            {onDrawMapExtent ? (
+              <Button
+                type="button"
+                variant={drawingMapExtent ? "secondary" : "outline"}
+                size="sm"
+                aria-pressed={drawingMapExtent}
+                onClick={onDrawMapExtent}
+              >
+                <SquareDashed className="h-3.5 w-3.5" aria-hidden="true" />
+                {drawingMapExtent
+                  ? t("processing.whitebox.drawingBbox")
+                  : t("processing.whitebox.drawBbox")}
+              </Button>
+            ) : null}
+          </div>
+          {drawingMapExtent ? (
+            <p className="text-xs text-muted-foreground">
+              {t("processing.whitebox.drawBboxHint")}
+            </p>
+          ) : null}
         </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
