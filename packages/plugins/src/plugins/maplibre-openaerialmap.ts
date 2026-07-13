@@ -41,21 +41,25 @@ const ATTRIBUTION =
 /** How a search bbox is chosen: the current view, a drawn box, or typed bounds. */
 type SearchMode = "view" | "draw" | "bbox";
 
-// Plugin-owned map overlay ids. These layers are added to the map directly (not
-// through the store) because they are an ephemeral search preview, not project
-// layers — they must not appear in the Layers panel or persist with the project.
+// Plugin-owned map overlay ids. The footprint fill/line are surfaced in the
+// Layers panel as one entry via registerExternalNativeLayer (so the user can
+// hide/reorder/restyle/remove them), while the selection outline and the drawn
+// search box stay plugin-private overlays that never enter the store.
 const FOOTPRINT_SOURCE_ID = "geolibre-oam-footprints";
 const FOOTPRINT_FILL_LAYER_ID = "geolibre-oam-footprints-fill";
 const FOOTPRINT_LINE_LAYER_ID = "geolibre-oam-footprints-line";
-const FOOTPRINT_HIGHLIGHT_LAYER_ID = "geolibre-oam-footprints-highlight";
+// The Layers-panel entry id (distinct from the map source/layer ids above).
+const FOOTPRINT_STORE_LAYER_ID = "geolibre-oam-footprints-layer";
+// The selection outline lives in its own source so removing the footprints
+// store layer (which drops FOOTPRINT_SOURCE_ID) never leaves a layer pointing at
+// a deleted source — MapLibre throws on that.
+const SELECT_SOURCE_ID = "geolibre-oam-selected";
+const SELECT_LINE_LAYER_ID = "geolibre-oam-selected-line";
 const DRAW_SOURCE_ID = "geolibre-oam-draw";
 const DRAW_FILL_LAYER_ID = "geolibre-oam-draw-fill";
 const DRAW_LINE_LAYER_ID = "geolibre-oam-draw-line";
 const FOOTPRINT_COLOR = "#2f6feb";
 const HIGHLIGHT_COLOR = "#f5a623";
-// Sentinel id the highlight layer filters to when nothing is selected (no real
-// OAM id equals it), so the highlight outline renders nothing.
-const NO_SELECTION = "__none__";
 
 /**
  * User-facing strings for the panel. This package is framework-agnostic and
@@ -98,6 +102,7 @@ export interface OpenAerialMapLabels {
   coordSearch: string;
   bboxInvalid: string;
   // Footprint interaction + metadata dialog.
+  footprintsLayer: string;
   footprintUnavailable: string;
   metadataHeading: string;
   close: string;
@@ -147,6 +152,7 @@ export const DEFAULT_OPENAERIALMAP_LABELS: OpenAerialMapLabels = {
   coordSearch: "Search this box",
   bboxInvalid:
     "Enter four valid coordinates with west < east and south < north.",
+  footprintsLayer: "OpenAerialMap footprints",
   footprintUnavailable: "No tile service available for this image.",
   metadataHeading: "Image metadata",
   close: "Close",
@@ -233,6 +239,16 @@ let disposePanel: (() => void) | null = null;
 // The panel's handler for a footprint click on the map, set while a panel is
 // mounted so the once-bound map listeners can reach the current search state.
 let onFootprintSelect: ((id: string) => void) | null = null;
+// Whether the footprints Layers-panel entry is currently registered in the
+// store. Registration happens once per result set (re-registering would reset
+// the user's opacity/colour edits, since a registration owns the keys it sends).
+let footprintsRegistered = false;
+// Footprint feature per image id, so the selection outline can be redrawn from
+// an id without re-querying the results.
+const footprintById = new Map<
+  string,
+  Feature<Polygon | MultiPolygon, OamFootprintProps>
+>();
 // Teardown for an open metadata dialog, so the panel/plugin can close it.
 let closeMetadataDialog: (() => void) | null = null;
 
@@ -409,7 +425,7 @@ function onFootprintLeave(event: MapLayerMouseEvent): void {
   event.target.getCanvas().style.cursor = "";
 }
 
-/** Adds the footprint source + fill/outline/highlight layers once. */
+/** Adds the footprint fill/outline layers + the selection outline once. */
 function ensureFootprintLayers(map: MapLibreMap): void {
   if (!styleReady(map)) return;
   if (!map.getSource(FOOTPRINT_SOURCE_ID)) {
@@ -424,6 +440,8 @@ function ensureFootprintLayers(map: MapLibreMap): void {
       type: "fill",
       source: FOOTPRINT_SOURCE_ID,
       // Very faint so the fill is clickable without hiding the imagery beneath.
+      // The store (via the Layers-panel entry) owns the paint after this, so the
+      // user's opacity/colour edits take over — these are just the initial look.
       paint: { "fill-color": FOOTPRINT_COLOR, "fill-opacity": 0.08 },
     });
   }
@@ -439,12 +457,17 @@ function ensureFootprintLayers(map: MapLibreMap): void {
       },
     });
   }
-  if (!map.getLayer(FOOTPRINT_HIGHLIGHT_LAYER_ID)) {
+  // Selection outline: its own source so it survives the footprints store layer
+  // being removed (which drops FOOTPRINT_SOURCE_ID). Plugin-private, never in the
+  // store, so the store's paint sync never touches it.
+  if (!map.getSource(SELECT_SOURCE_ID)) {
+    map.addSource(SELECT_SOURCE_ID, { type: "geojson", data: emptyCollection() });
+  }
+  if (!map.getLayer(SELECT_LINE_LAYER_ID)) {
     map.addLayer({
-      id: FOOTPRINT_HIGHLIGHT_LAYER_ID,
+      id: SELECT_LINE_LAYER_ID,
       type: "line",
-      source: FOOTPRINT_SOURCE_ID,
-      filter: ["==", ["get", "id"], NO_SELECTION],
+      source: SELECT_SOURCE_ID,
       paint: {
         "line-color": HIGHLIGHT_COLOR,
         "line-width": 3,
@@ -460,31 +483,70 @@ function ensureFootprintLayers(map: MapLibreMap): void {
   }
 }
 
+/** Registers the footprints as a first-class Layers-panel entry (once). */
+function registerFootprintLayer(): void {
+  if (footprintsRegistered) return;
+  appRef?.registerExternalNativeLayer?.({
+    id: FOOTPRINT_STORE_LAYER_ID,
+    name: labels.footprintsLayer,
+    type: "geojson",
+    nativeLayerIds: [FOOTPRINT_FILL_LAYER_ID, FOOTPRINT_LINE_LAYER_ID],
+    sourceIds: [FOOTPRINT_SOURCE_ID],
+    opacity: 1,
+    // Seed the store paint to the faint fill + hairline outline. The Layers/Style
+    // panel drives it from here on (opacity slider, colour pickers all apply).
+    style: {
+      fillColor: FOOTPRINT_COLOR,
+      fillOpacity: 0.08,
+      strokeColor: FOOTPRINT_COLOR,
+      strokeWidth: 1.5,
+    },
+  });
+  footprintsRegistered = true;
+}
+
+/** Removes the footprints Layers-panel entry (dropping its fill/line + source). */
+function unregisterFootprintLayer(): void {
+  if (!footprintsRegistered) return;
+  footprintsRegistered = false;
+  appRef?.unregisterExternalNativeLayer?.(FOOTPRINT_STORE_LAYER_ID);
+}
+
 /** Renders the footprints for the current result set. */
 function setFootprints(map: MapLibreMap, images: OamImage[]): void {
   ensureFootprintLayers(map);
   const source = map.getSource(FOOTPRINT_SOURCE_ID) as GeoJSONSource | undefined;
   if (!source) return;
-  const features = images
-    .map(footprintFeature)
-    .filter(
-      (feature): feature is Feature<Polygon | MultiPolygon, OamFootprintProps> =>
-        feature !== null,
-    );
+  footprintById.clear();
+  const features: Feature<Polygon | MultiPolygon, OamFootprintProps>[] = [];
+  for (const image of images) {
+    const feature = footprintFeature(image);
+    if (feature) {
+      features.push(feature);
+      footprintById.set(image.id, feature);
+    }
+  }
   source.setData({ type: "FeatureCollection", features });
+  if (features.length > 0) registerFootprintLayer();
+  else unregisterFootprintLayer();
 }
 
-/** Highlights one footprint (or clears the highlight when id is null). */
+/** Draws the selection outline around one footprint (or clears it when null). */
 function setSelectedFootprint(map: MapLibreMap, id: string | null): void {
-  if (!map.getLayer(FOOTPRINT_HIGHLIGHT_LAYER_ID)) return;
-  map.setFilter(FOOTPRINT_HIGHLIGHT_LAYER_ID, [
-    "==",
-    ["get", "id"],
-    id ?? NO_SELECTION,
-  ]);
+  const source = map.getSource(SELECT_SOURCE_ID) as GeoJSONSource | undefined;
+  if (!source) return;
+  const feature = id ? footprintById.get(id) : undefined;
+  source.setData(
+    feature
+      ? { type: "FeatureCollection", features: [feature] }
+      : emptyCollection(),
+  );
 }
 
-/** Removes the footprint overlay and its interaction handlers. */
+/**
+ * Removes the footprint overlay: the Layers-panel entry (and its fill/line +
+ * source), the selection outline, and the interaction handlers.
+ */
 function removeFootprintLayers(map: MapLibreMap): void {
   if (footprintHandlersBound) {
     footprintHandlersBound = false;
@@ -492,14 +554,21 @@ function removeFootprintLayers(map: MapLibreMap): void {
     map.off("mouseenter", FOOTPRINT_FILL_LAYER_ID, onFootprintEnter);
     map.off("mouseleave", FOOTPRINT_FILL_LAYER_ID, onFootprintLeave);
   }
+  // Drop the Layers-panel entry; the host removes fill/line + FOOTPRINT_SOURCE_ID
+  // on the next sync. Also remove them directly so teardown is immediate and safe
+  // even if that sync has not run yet (guarded by getLayer/getSource).
+  unregisterFootprintLayer();
   for (const layerId of [
-    FOOTPRINT_HIGHLIGHT_LAYER_ID,
+    SELECT_LINE_LAYER_ID,
     FOOTPRINT_LINE_LAYER_ID,
     FOOTPRINT_FILL_LAYER_ID,
   ]) {
     if (map.getLayer(layerId)) map.removeLayer(layerId);
   }
-  if (map.getSource(FOOTPRINT_SOURCE_ID)) map.removeSource(FOOTPRINT_SOURCE_ID);
+  for (const sourceId of [SELECT_SOURCE_ID, FOOTPRINT_SOURCE_ID]) {
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+  }
+  footprintById.clear();
 }
 
 /** Builds a rectangle FeatureCollection from a bbox, or empty when null. */
@@ -926,8 +995,28 @@ function buildPanel(container: HTMLElement): () => void {
   };
 
   // Keep the Add/Remove state in sync when layers change elsewhere (e.g. the
-  // user deletes an OAM layer from the Layers panel).
+  // user deletes an OAM layer from the Layers panel), and tear down our private
+  // overlays if the user deletes the footprints layer from the Layers panel.
   const unsubscribe = useAppStore.subscribe(() => {
+    if (
+      footprintsRegistered &&
+      !useAppStore
+        .getState()
+        .layers.some((layer) => layer.id === FOOTPRINT_STORE_LAYER_ID)
+    ) {
+      // The host already dropped the footprint fill/line + source; clear the
+      // selection outline we own and reset selection so a later search re-adds a
+      // clean layer.
+      footprintsRegistered = false;
+      footprintById.clear();
+      selectedId = null;
+      const map = appRef?.getMap?.();
+      if (map) {
+        if (map.getLayer(SELECT_LINE_LAYER_ID))
+          map.removeLayer(SELECT_LINE_LAYER_ID);
+        if (map.getSource(SELECT_SOURCE_ID)) map.removeSource(SELECT_SOURCE_ID);
+      }
+    }
     if (images.length === 0) return;
     if (computeAddedSignature() !== addedSignature) renderResults();
   });
@@ -1309,6 +1398,13 @@ export const maplibreOpenAerialMapPlugin: GeoLibrePlugin = {
     app.closeRightPanel?.(PANEL_ID);
     unregisterPanel?.();
     unregisterPanel = null;
+    // Safety net: drop the footprints Layers-panel entry and map overlays even
+    // if the panel's own cleanup did not run (or ran after appRef was cleared).
+    const map = app.getMap?.();
+    if (map) {
+      removeFootprintLayers(map);
+      removeDrawLayers(map);
+    }
     appRef = null;
   },
 };

@@ -2195,6 +2195,7 @@
     "coordNorth": "North",
     "coordSearch": "Search this box",
     "bboxInvalid": "Enter four valid coordinates with west < east and south < north.",
+    "footprintsLayer": "OpenAerialMap footprints",
     "footprintUnavailable": "No tile service available for this image.",
     "metadataHeading": "Image metadata",
     "close": "Close",

@@ -263,6 +263,7 @@ export function TopToolbar({
       coordNorth: t("openAerialMap.coordNorth"),
       coordSearch: t("openAerialMap.coordSearch"),
       bboxInvalid: t("openAerialMap.bboxInvalid"),
+      footprintsLayer: t("openAerialMap.footprintsLayer"),
       footprintUnavailable: t("openAerialMap.footprintUnavailable"),
       metadataHeading: t("openAerialMap.metadataHeading"),
       close: t("openAerialMap.close"),
