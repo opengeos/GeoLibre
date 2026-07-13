@@ -30,6 +30,8 @@ interface BrowserTreeNodeProps {
   busyId: string | null;
   /** Id of the row that is the tree's single tab stop (roving tabindex). */
   activeRowId: string | null;
+  /** Sync the active row when a row receives focus (mouse click or Tab). */
+  onRowFocus: (id: string) => void;
   /** Toggle a group node's expanded state. */
   onToggle: (id: string) => void;
   /** Activate a leaf (add a service/file layer, or open a recent project). */
@@ -75,6 +77,7 @@ export function BrowserTreeNode({
   expanded,
   busyId,
   activeRowId,
+  onRowFocus,
   onToggle,
   onActivate,
   onNewConnection,
@@ -159,6 +162,7 @@ export function BrowserTreeNode({
           // Arrow-key handler moves the active row and focuses it.
           tabIndex={node.id === activeRowId ? 0 : -1}
           data-browser-row={node.id}
+          onFocus={() => onRowFocus(node.id)}
           onClick={() => (isGroup ? onToggle(node.id) : onActivate(node))}
         >
           {isGroup ? (
@@ -249,6 +253,7 @@ export function BrowserTreeNode({
                 expanded={expanded}
                 busyId={busyId}
                 activeRowId={activeRowId}
+                onRowFocus={onRowFocus}
                 onToggle={onToggle}
                 onActivate={onActivate}
                 onNewConnection={onNewConnection}

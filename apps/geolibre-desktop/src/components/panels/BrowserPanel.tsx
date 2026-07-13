@@ -360,8 +360,13 @@ export function BrowserPanel({
           toggle(row.id); // expand in place
           return;
         }
-        // An expanded group's first child is the next visible row.
-        if (row.isGroup && row.isExpanded) targetId = visibleRows[index + 1]?.id;
+        // Move to the group's first navigable child. Found by parentId rather
+        // than positional adjacency, since the group's only children may be
+        // non-navigable info rows (a connection/folder still loading or errored)
+        // or it may be an empty group — in which case Right Arrow is a no-op.
+        if (row.isGroup && row.isExpanded) {
+          targetId = visibleRows.find((candidate) => candidate.parentId === row.id)?.id;
+        }
         break;
       case "ArrowLeft":
         if (row.isGroup && row.isExpanded) {
@@ -594,6 +599,7 @@ export function BrowserPanel({
                 expanded={effectiveExpanded}
                 busyId={busyId}
                 activeRowId={currentRowId}
+                onRowFocus={setActiveRowId}
                 onToggle={toggle}
                 onActivate={activate}
                 onNewConnection={newConnection}
