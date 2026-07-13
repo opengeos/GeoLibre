@@ -29,30 +29,13 @@ import {
   savedPostgresConnectionLabel,
 } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
+import { martinSourceMatchesTable } from "../martin-source-match";
 import type { OpenAddDataPostgres } from "../open-add-data";
 
 type PostgresLoadMode = "tiles" | "editable";
 
 function postgisTableKey(table: PostgisTableInfo): string {
   return `${table.schema}.${table.table}`;
-}
-
-/**
- * Whether a Martin source (auto-published one-per-table) is the given schema +
- * table. Martin names public-schema sources by the bare table and others by
- * `schema.table`. The bare form is only matched for the public (or unknown)
- * schema, so a `public.roads` source can't be mis-selected for a clicked
- * `other_schema.roads` when two schemas reuse a table name.
- */
-function martinSourceMatchesTable(
-  sourceId: string,
-  schema: string | undefined,
-  table: string,
-): boolean {
-  if (schema && schema !== "public") {
-    return sourceId === `${schema}.${table}`;
-  }
-  return sourceId === table || sourceId === `public.${table}`;
 }
 
 interface PostgresSourceProps {
@@ -450,6 +433,11 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                   setSelectedTableKey("");
                   setPostgisConnection("");
                   setPostgisStatus(null);
+                  // The Browser-panel table preselect belongs to the connection
+                  // it was opened for; once the user switches connections it no
+                  // longer applies and must not preselect a same-named table in
+                  // a different database.
+                  desiredTableRef.current = null;
                 }
               }}
             >
@@ -485,6 +473,9 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                 setSelectedTableKey("");
                 setPostgisConnection("");
                 setPostgisStatus(null);
+                // See the saved-connection handler: a connection change voids
+                // the Browser-panel table preselect.
+                desiredTableRef.current = null;
               }
             }}
           />

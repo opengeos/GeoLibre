@@ -69,7 +69,7 @@ export function BrowserTreeNode({
       <li>
         <p
           className="truncate py-1 text-xs text-muted-foreground"
-          style={{ paddingLeft: 8 + depth * 14 + 14 }}
+          style={{ paddingLeft: 8 + depth * 14 }}
           title={node.label}
         >
           {node.label}
