@@ -470,15 +470,15 @@ function createPhotoPopupElement(
   root.className = "geolibre-photo-popup";
 
   // The popup shows the light thumbnail; the fullscreen viewer prefers the
-  // embedded full-resolution image (falling back to the thumbnail when the
-  // source was already native or its format can't be shown at full size).
+  // embedded full-resolution image (falling back to the thumbnail when no
+  // original was embedded, e.g. a format that can't be shown at full size).
   const thumbnail =
     imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ??
     findPhotoDataUrl(properties);
   if (thumbnail) {
     // Prefer the embedded full-resolution image, falling back to the thumbnail
-    // when the source was already native or its format can't be shown at full
-    // size; `thumbnail` is non-null here, so this is always a string.
+    // when no original was embedded (TIFF/HEIC, mislabeled bytes, or an original
+    // over the size ceiling); `thumbnail` is non-null here, so this is a string.
     const fullImage = imageDataUrlAt(properties, PHOTO_FULL_KEY);
     const fullResolution = fullImage ?? thumbnail;
     const image = document.createElement("img");

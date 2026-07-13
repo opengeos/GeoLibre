@@ -99,8 +99,9 @@ export const MAX_FULL_RESOLUTION_BYTES = 64 * 1024 * 1024;
 /**
  * Detect an image's MIME type from its leading magic bytes, so a mislabeled
  * file (e.g. a `.png` that is actually JPEG data) still gets a data URL a
- * browser can decode. Returns null when the signature is unrecognized, letting
- * the caller fall back to the extension.
+ * browser can decode. Returns null when the signature is not one of the
+ * natively displayable formats (JPEG/PNG/WebP); the caller then skips embedding
+ * the original, since trusting the extension could yield an undecodable data URL.
  */
 function sniffImageMime(bytes: Uint8Array): string | null {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
@@ -362,10 +363,12 @@ export async function createFullResolutionDataUrl(
 
 /**
  * Generate the thumbnail (a downscaled JPEG capped at {@link PHOTO_MAX_DIMENSION}
- * on its longest edge) and, when the source is larger than that cap and its
- * format can be shown natively, the full-resolution image. Returns both as null
- * for HEIC/HEIF (no canvas decoder) and for any image the browser fails to
- * decode, so the caller still places the point without an inline image.
+ * on its longest edge) and, for formats a browser can show natively, the
+ * full-resolution image (the original bytes, regardless of the source's size).
+ * Returns both as null for HEIC/HEIF (no canvas decoder) and for any image the
+ * browser fails to decode, so the caller still places the point without an
+ * inline image; the full-resolution image alone is null when the format can't be
+ * shown natively, the bytes are mislabeled, or the original is over the ceiling.
  */
 async function createPhotoImages(
   file: Blob,
