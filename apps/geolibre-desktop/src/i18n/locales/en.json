@@ -20,7 +20,10 @@
     "loadFolderFailed": "Could not read this folder.",
     "unpinFolder": "Remove “{{name}}” from the list",
     "loadingFolder": "Loading…",
-    "folderTruncated": "Showing first {{shown}} of {{total}}"
+    "folderTruncated": "Showing first {{shown}} of {{total}}",
+    "favorites": "Favorites",
+    "favorite": "Add “{{name}}” to favorites",
+    "unfavorite": "Remove “{{name}}” from favorites"
   },
   "about": {
     "trigger": "About",

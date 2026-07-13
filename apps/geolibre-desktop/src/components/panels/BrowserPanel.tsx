@@ -13,6 +13,11 @@ import {
   pickLocalDirectory,
 } from "../../lib/tauri-io";
 import { pinFolder, unpinFolder } from "../../lib/browser-folders";
+import {
+  addFavorite,
+  isFavoritableKind,
+  removeFavorite,
+} from "../../lib/browser-favorites";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
   augmentConnections,
@@ -50,6 +55,7 @@ interface BrowserPanelProps {
 
 /** The section nodes are expanded by default so their contents are visible. */
 const DEFAULT_EXPANDED = new Set([
+  "section:favorites",
   "section:services",
   "section:recent",
   "section:databases",
@@ -85,7 +91,7 @@ export function BrowserPanel({
 }: BrowserPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((s) => s.addLayer);
-  const { tree, serviceById } = useBrowserTree();
+  const { tree, serviceById, favoriteIds } = useBrowserTree();
 
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(
@@ -421,6 +427,27 @@ export function BrowserPanel({
     unpinFolder(path);
   };
 
+  // Toggle a node's presence in the Favorites section; the favorites change
+  // event refreshes the tree via useBrowserTree. The descriptor carries enough
+  // to rebuild + activate the favorited node without the live original.
+  const toggleFavorite = (node: BrowserNode) => {
+    if (favoriteIds.has(node.id)) {
+      removeFavorite(node.id);
+      return;
+    }
+    const kind = node.kind;
+    if (!isFavoritableKind(kind)) return;
+    addFavorite({
+      id: node.id,
+      kind,
+      label: node.label,
+      serviceId: node.serviceId,
+      serviceKind: node.serviceKind,
+      connectionString: node.connectionString,
+      path: node.path,
+    });
+  };
+
   // A section counts as content if it has children *or* an always-on ＋ action
   // (Databases' "New connection" and Files' "Add folder" show even with zero
   // entries, so a first-run user isn't stuck on the empty-state message).
@@ -465,6 +492,8 @@ export function BrowserPanel({
                 onNewConnection={newConnection}
                 onAddFolder={addFolder}
                 onRemoveFolder={removeFolder}
+                favoriteIds={favoriteIds}
+                onToggleFavorite={toggleFavorite}
               />
             ))}
           </ul>

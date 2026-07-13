@@ -10,12 +10,14 @@ import {
   Globe2,
   Loader2,
   Plus,
+  Star,
   Table,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { AddDataKind } from "../layout/AddDataDialog";
+import { isFavoritableKind } from "../../lib/browser-favorites";
 import type { BrowserNode } from "../../lib/browser-tree";
 
 interface BrowserTreeNodeProps {
@@ -36,6 +38,10 @@ interface BrowserTreeNodeProps {
   onAddFolder: () => void;
   /** Unpin a pinned root folder (its ×), by path. */
   onRemoveFolder: (path: string) => void;
+  /** Ids of currently-favorited nodes, for the star fill state. */
+  favoriteIds: ReadonlySet<string>;
+  /** Toggle a favoritable node's favorite state (its ☆/★). */
+  onToggleFavorite: (node: BrowserNode) => void;
 }
 
 /** The leading icon for a node, chosen by kind (and expanded state for groups). */
@@ -71,6 +77,8 @@ export function BrowserTreeNode({
   onNewConnection,
   onAddFolder,
   onRemoveFolder,
+  favoriteIds,
+  onToggleFavorite,
 }: BrowserTreeNodeProps) {
   const { t } = useTranslation();
   // A status row (loading / error) is non-interactive text, not a tree control.
@@ -122,10 +130,14 @@ export function BrowserTreeNode({
       : null;
   // Pinned root folders show a × to unpin them from the Files section.
   const removePath = node.removable ? node.path : undefined;
+  // Favoritable nodes (services, connections, folders, files) show a star to
+  // pin/unpin them to the Favorites section.
+  const favoritable = isFavoritableKind(node.kind);
+  const favorited = favoritable && favoriteIds.has(node.id);
 
   return (
     <li>
-      <div className="flex items-center">
+      <div className="group flex items-center">
         <button
           type="button"
           disabled={isDisabled}
@@ -166,6 +178,34 @@ export function BrowserTreeNode({
             </span>
           ) : null}
         </button>
+        {favoritable ? (
+          <button
+            type="button"
+            className={cn(
+              "mr-1 shrink-0 rounded p-1 hover:bg-accent hover:text-accent-foreground",
+              favorited
+                ? "text-amber-500"
+                : // Unpinned: reveal on row hover / keyboard focus to reduce clutter.
+                  "text-muted-foreground opacity-0 focus:opacity-100 group-hover:opacity-100",
+            )}
+            title={
+              favorited
+                ? t("browser.unfavorite", { name: node.label })
+                : t("browser.favorite", { name: node.label })
+            }
+            aria-label={
+              favorited
+                ? t("browser.unfavorite", { name: node.label })
+                : t("browser.favorite", { name: node.label })
+            }
+            aria-pressed={favorited}
+            onClick={() => onToggleFavorite(node)}
+          >
+            <Star
+              className={cn("h-3.5 w-3.5", favorited && "fill-current")}
+            />
+          </button>
+        ) : null}
         {removePath ? (
           <button
             type="button"
@@ -204,6 +244,8 @@ export function BrowserTreeNode({
                 onNewConnection={onNewConnection}
                 onAddFolder={onAddFolder}
                 onRemoveFolder={onRemoveFolder}
+                favoriteIds={favoriteIds}
+                onToggleFavorite={onToggleFavorite}
               />
             ))}
           </ul>

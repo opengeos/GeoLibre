@@ -97,6 +97,12 @@ export interface BrowserTreeInput {
     folders: readonly { path: string; label: string }[];
   };
   /**
+   * The user's favorited nodes (services / connections / folders / files) to
+   * list in a quick-access Favorites section at the top. Omitted or empty hides
+   * the section. {@link FavoriteNodeInput} matches `BrowserFavorite`.
+   */
+  favorites?: readonly FavoriteNodeInput[];
+  /**
    * Translated labels for the top-level sections. Optional so the pure module
    * (and its tests) default to English; the app passes `t()` values.
    */
@@ -105,6 +111,7 @@ export interface BrowserTreeInput {
     recent: string;
     databases: string;
     files?: string;
+    favorites?: string;
   };
 }
 
@@ -187,6 +194,7 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
     recent: "Recent",
     databases: "Databases",
     files: "Files",
+    favorites: "Favorites",
   };
   const kinds = buildServiceKinds(input.services);
   const servicesSection: BrowserNode = {
@@ -216,7 +224,21 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
     children: recentChildren,
   };
 
-  const sections = [servicesSection, recentSection];
+  const sections: BrowserNode[] = [];
+
+  // Favorites lead the tree when the user has pinned anything, for quick access.
+  if (input.favorites && input.favorites.length > 0) {
+    sections.push({
+      id: "section:favorites",
+      kind: "section",
+      label: labels.favorites ?? "Favorites",
+      addable: false,
+      count: input.favorites.length,
+      children: buildFavoriteNodes(input.favorites),
+    });
+  }
+
+  sections.push(servicesSection, recentSection);
 
   // The Databases section is included whenever `databaseConnections` is
   // provided (the app always provides it). It always shows its "New connection"
@@ -328,6 +350,71 @@ export function buildDirectoryNodes(
       }),
     );
   return [...folders, ...files];
+}
+
+/** A favorited node descriptor (structural subset of `BrowserFavorite`). */
+export interface FavoriteNodeInput {
+  id: string;
+  kind: "service" | "connection" | "folder" | "file";
+  label: string;
+  serviceId?: string;
+  serviceKind?: ServiceLibraryKind;
+  connectionString?: string;
+  path?: string;
+}
+
+/**
+ * Rebuilds each favorite descriptor into the tree node it represents, so the
+ * Favorites section renders and activates its entries the same way as the
+ * originals — reusing the same node ids, so the panel's expand/introspect state
+ * (keyed by id / connection string / path) is shared with the original node.
+ * Pure so it unit-tests without the store or filesystem.
+ *
+ * @param favorites - The user's favorited node descriptors.
+ * @returns One node per favorite (service/connection/folder/file).
+ */
+export function buildFavoriteNodes(
+  favorites: readonly FavoriteNodeInput[],
+): BrowserNode[] {
+  return favorites.map((fav): BrowserNode => {
+    switch (fav.kind) {
+      case "service":
+        return {
+          id: fav.id,
+          kind: "service",
+          label: fav.label,
+          addable: true,
+          serviceId: fav.serviceId,
+          serviceKind: fav.serviceKind,
+        };
+      case "connection":
+        return {
+          id: fav.id,
+          kind: "connection",
+          label: fav.label,
+          addable: false,
+          connectionString: fav.connectionString,
+          children: [],
+        };
+      case "folder":
+        return {
+          id: fav.id,
+          kind: "folder",
+          label: fav.label,
+          addable: false,
+          path: fav.path,
+          children: [],
+        };
+      case "file":
+        return {
+          id: fav.id,
+          kind: "file",
+          label: fav.label,
+          addable: true,
+          path: fav.path,
+        };
+    }
+  });
 }
 
 /** A spatial table discovered under a database connection. */

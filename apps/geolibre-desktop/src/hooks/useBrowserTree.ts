@@ -16,6 +16,10 @@ import {
   PINNED_FOLDERS_CHANGED_EVENT,
   readPinnedFolders,
 } from "../lib/browser-folders";
+import {
+  FAVORITES_CHANGED_EVENT,
+  readBrowserFavorites,
+} from "../lib/browser-favorites";
 import { isTauri } from "../lib/tauri-io";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
@@ -24,6 +28,8 @@ export interface BrowserTreeState {
   tree: BrowserNode[];
   /** Looks a saved-service entry up by id, for the applier. */
   serviceById: (id: string) => ServiceLibraryEntry | undefined;
+  /** Ids of currently-favorited nodes, for the star fill state. */
+  favoriteIds: Set<string>;
 }
 
 /**
@@ -46,6 +52,7 @@ export function useBrowserTree(): BrowserTreeState {
   const recentLabel = t("browser.recent");
   const databasesLabel = t("browser.databases");
   const filesLabel = t("browser.files");
+  const favoritesLabel = t("browser.favorites");
 
   // Saved connections live in localStorage (no reactive store), so re-read them
   // when one is added/removed — otherwise a connection saved from the Add Data
@@ -53,17 +60,21 @@ export function useBrowserTree(): BrowserTreeState {
   // pinned folders are the same story (see the Files section below).
   const [connectionsRevision, setConnectionsRevision] = useState(0);
   const [foldersRevision, setFoldersRevision] = useState(0);
+  const [favoritesRevision, setFavoritesRevision] = useState(0);
   useEffect(() => {
     const bumpConnections = () => setConnectionsRevision((n) => n + 1);
     const bumpFolders = () => setFoldersRevision((n) => n + 1);
+    const bumpFavorites = () => setFavoritesRevision((n) => n + 1);
     window.addEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bumpConnections);
     window.addEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
+    window.addEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
     return () => {
       window.removeEventListener(
         POSTGRES_CONNECTIONS_CHANGED_EVENT,
         bumpConnections,
       );
       window.removeEventListener(PINNED_FOLDERS_CHANGED_EVENT, bumpFolders);
+      window.removeEventListener(FAVORITES_CHANGED_EVENT, bumpFavorites);
     };
   }, []);
 
@@ -92,20 +103,24 @@ export function useBrowserTree(): BrowserTreeState {
           })),
         }
       : undefined;
+    const favorites = readBrowserFavorites();
     return {
       tree: buildBrowserTree({
         services,
         recentProjects,
         databaseConnections,
         files,
+        favorites,
         sectionLabels: {
           services: servicesLabel,
           recent: recentLabel,
           databases: databasesLabel,
           files: filesLabel,
+          favorites: favoritesLabel,
         },
       }),
       serviceById: (id: string) => byId.get(id),
+      favoriteIds: new Set(favorites.map((fav) => fav.id)),
     };
   }, [
     recentProjects,
@@ -113,7 +128,9 @@ export function useBrowserTree(): BrowserTreeState {
     recentLabel,
     databasesLabel,
     filesLabel,
+    favoritesLabel,
     connectionsRevision,
     foldersRevision,
+    favoritesRevision,
   ]);
 }
