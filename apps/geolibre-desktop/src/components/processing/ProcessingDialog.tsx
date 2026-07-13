@@ -510,6 +510,56 @@ export function ProcessingDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setProcessingOpen]);
+
+  // Re-clamp a dragged position when the viewport shrinks, so a panel dragged to
+  // an edge can't be left partly off-screen after a window resize. Only touches a
+  // pinned `pos` (functional update reads the latest), so the listener isn't
+  // re-subscribed on every drag frame.
+  useEffect(() => {
+    if (!open) return;
+    const clamp = () => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      setPos((current) =>
+        current
+          ? {
+              x: Math.max(
+                0,
+                Math.min(current.x, window.innerWidth - panel.offsetWidth),
+              ),
+              y: Math.max(
+                0,
+                Math.min(current.y, window.innerHeight - panel.offsetHeight),
+              ),
+            }
+          : null,
+      );
+    };
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [open]);
+
+  // The non-modal panel no longer gets Radix's focus management, so move focus
+  // into it on open (it carries role="dialog", so a screen reader announces it),
+  // and best-effort restore focus to the opener on close. The focus is deferred
+  // two frames: the panel is opened from a Radix menu that restores focus to its
+  // trigger as it closes, so a single frame would be stolen back.
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => panelRef.current?.focus());
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+      // Only if the opener is still around; otherwise focus falls to the document.
+      const prev = previousFocusRef.current;
+      if (prev?.isConnected) prev.focus();
+    };
+  }, [open]);
   const importedJobIdRef = useRef<string | null>(null);
   // The selected tool's row in the left list, so a preselection arriving from the
   // Processing menu can be scrolled into view (it may sit far down the catalog).
@@ -1212,7 +1262,8 @@ export function ProcessingDialog({
     <div
       ref={panelRef}
       role="dialog"
-      aria-label="Whitebox toolbox"
+      tabIndex={-1}
+      aria-label={t("processing.whitebox.toolbox")}
       aria-modal={false}
       style={pos ? { left: pos.x, top: pos.y } : undefined}
       className={cn(
@@ -1236,14 +1287,18 @@ export function ProcessingDialog({
           />
           <div className="min-w-0">
             <h2 className="text-lg font-semibold leading-none tracking-tight">
-              Whitebox toolbox
+              {t("processing.whitebox.toolbox")}
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
               {runtimeAvailable === null
-                ? "Checking runtime."
+                ? t("processing.whitebox.checkingRuntime")
                 : runtimeAvailable
-                  ? runtimeMessage || `${tools.length} tools available.`
-                  : runtimeMessage || "Whitebox runtime is unavailable."}
+                  ? runtimeMessage ||
+                    t("processing.whitebox.toolsAvailable", {
+                      count: tools.length,
+                    })
+                  : runtimeMessage ||
+                    t("processing.whitebox.runtimeUnavailable")}
             </p>
           </div>
         </div>
@@ -1258,263 +1313,263 @@ export function ProcessingDialog({
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4 overflow-hidden p-5">
-          <div className="flex min-h-0 flex-col gap-3 border-r pr-4">
-            <div className="flex gap-2">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="pl-9"
-                  placeholder={t("processing.searchTools")}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={loadWhitebox}
-                disabled={serverBusy}
-                title={t("processing.refreshCatalog")}
-              >
-                <RefreshCw
-                  className={cn("h-4 w-4", loadingTools && "animate-spin")}
-                />
-              </Button>
+        <div className="flex min-h-0 flex-col gap-3 border-r pr-4">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="pl-9"
+                placeholder={t("processing.searchTools")}
+              />
             </div>
-
-            {/* The processing server is a local Python process that only the
-                desktop app can spawn or stop. In the browser these buttons
-                would always fail, and a same-origin sidecar (when deployed) is
-                auto-detected without them, so gate both on the desktop build. */}
-            {desktop && runtimeAvailable !== true && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={startServer}
-                disabled={serverBusy}
-              >
-                {startingServer ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Server className="h-4 w-4" />
-                )}
-                Start server
-              </Button>
-            )}
-
-            {desktop && runtimeAvailable === true && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={stopServer}
-                disabled={serverBusy || running}
-              >
-                {stoppingServer ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ServerOff className="h-4 w-4" />
-                )}
-                Stop server
-              </Button>
-            )}
-
-            <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {categories.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-
-            {hasGeolibreTools && (
-              <Select
-                value={source}
-                // Reset the category too: a category with no tools in the newly
-                // chosen source would otherwise leave the list empty.
-                onChange={(e) => {
-                  setSource(e.target.value);
-                  setCategory("All");
-                }}
-                aria-label={t("processing.whitebox.filterBySource")}
-              >
-                <option value="All">
-                  {t("processing.whitebox.allSources")} ({sourceCounts.all})
-                </option>
-                <option value="geolibre">
-                  {t("processing.whitebox.geolibreTools")} (
-                  {sourceCounts.geolibre})
-                </option>
-                <option value="whitebox">
-                  {t("processing.whitebox.whiteboxTools")} (
-                  {sourceCounts.whitebox})
-                </option>
-              </Select>
-            )}
-
-            <ScrollArea className="min-h-0 flex-1 rounded-md border">
-              <div className="divide-y">
-                {loadingTools ? (
-                  <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading
-                  </div>
-                ) : filteredTools.length === 0 ? (
-                  <div className="p-3 text-sm text-muted-foreground">
-                    No tools found.
-                  </div>
-                ) : (
-                  filteredTools.map((tool) => (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      ref={
-                        selectedTool?.id === tool.id
-                          ? selectedButtonRef
-                          : undefined
-                      }
-                      className={cn(
-                        "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
-                        selectedTool?.id === tool.id && "bg-accent",
-                        tool.locked && "opacity-60",
-                      )}
-                      onClick={() => setSelectedToolId(tool.id)}
-                    >
-                      <span className="block truncate font-medium">
-                        {tool.locked ? "[Locked] " : ""}
-                        {toolLabel(tool)}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {tool.category || "General"}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={loadWhitebox}
+              disabled={serverBusy}
+              title={t("processing.refreshCatalog")}
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", loadingTools && "animate-spin")}
+              />
+            </Button>
           </div>
 
-          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
-            <div className="min-w-0 border-b pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-base font-semibold">
-                    {selectedTool ? toolLabel(selectedTool) : "No tool selected"}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedTool?.id}
-                    {selectedTool?.license_tier
-                      ? ` | ${selectedTool.license_tier}`
-                      : ""}
-                  </p>
-                </div>
-                <label
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                  title={t("processing.whitebox.runLocalHint")}
-                >
-                  <input
-                    type="checkbox"
-                    data-testid="whitebox-run-local"
-                    checked={runLocal}
-                    onChange={(e) => handleRunLocalChange(e.target.checked)}
-                  />
-                  {t("processing.whitebox.runLocal")}
-                </label>
-                <Button
-                  type="button"
-                  onClick={runSelectedTool}
-                  disabled={
-                    !selectedTool ||
-                    selectedTool.locked ||
-                    running ||
-                    (!runLocal && runtimeAvailable !== true)
-                  }
-                >
-                  {running ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                  {running
-                    ? t("processing.whitebox.running")
-                    : t("processing.whitebox.run")}
-                </Button>
-              </div>
-              {selectedTool?.summary && (
-                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                  {selectedTool.summary}
-                </p>
-              )}
-              {selectedTool?.locked && (
-                <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {selectedTool.locked_reason || "This tool is locked."}
-                </p>
-              )}
-            </div>
-
-            <ScrollArea className="min-h-0">
-              <div className="grid gap-4 pb-2 pr-5">
-                {(selectedTool?.params ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    This tool has no parameters.
-                  </p>
-                ) : (
-                  selectedTool?.params?.map((param) => (
-                    <ParameterField
-                      key={param.name}
-                      param={param}
-                      layers={layers}
-                      toolId={selectedTool.id}
-                      runLocal={runLocal}
-                      value={values[param.name]}
-                      onChange={(value) => updateValue(param.name, value)}
-                      onPickFile={(fileName, bytes) =>
-                        handlePickInputFile(param.name, fileName, bytes)
-                      }
-                      onUseMapExtent={
-                        isMapExtentParameter(selectedTool, param)
-                          ? handleUseMapExtent
-                          : undefined
-                      }
-                    />
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-
-            <div className="grid gap-2 border-t pt-3">
-              {/* Sidecar mode but the server is unreachable: show interactive
-                  troubleshooting with a one-click switch to the WASM runner.
-                  Otherwise fall back to a plain error line (e.g. a parameter or
-                  tool-run error that has nothing to do with the sidecar). */}
-              {!runLocal && runtimeAvailable === false ? (
-                <SidecarHelpBanner
-                  isDesktop={desktop}
-                  error={error}
-                  onRunLocally={() => {
-                    // Clear the stale sidecar error in the same batch as the
-                    // mode switch, so it cannot flash as a plain error line on
-                    // the render before loadWhitebox resets it.
-                    setError(null);
-                    setRunLocal(true);
-                  }}
-                />
+          {/* The processing server is a local Python process that only the
+              desktop app can spawn or stop. In the browser these buttons
+              would always fail, and a same-origin sidecar (when deployed) is
+              auto-detected without them, so gate both on the desktop build. */}
+          {desktop && runtimeAvailable !== true && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={startServer}
+              disabled={serverBusy}
+            >
+              {startingServer ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                error && (
-                  <p className="flex items-center gap-2 text-sm text-destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    {error}
-                  </p>
-                )
+                <Server className="h-4 w-4" />
               )}
-              {job && (
-                <JobOutputPanel job={job} />
+              Start server
+            </Button>
+          )}
+
+          {desktop && runtimeAvailable === true && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={stopServer}
+              disabled={serverBusy || running}
+            >
+              {stoppingServer ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ServerOff className="h-4 w-4" />
+              )}
+              Stop server
+            </Button>
+          )}
+
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {categories.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </Select>
+
+          {hasGeolibreTools && (
+            <Select
+              value={source}
+              // Reset the category too: a category with no tools in the newly
+              // chosen source would otherwise leave the list empty.
+              onChange={(e) => {
+                setSource(e.target.value);
+                setCategory("All");
+              }}
+              aria-label={t("processing.whitebox.filterBySource")}
+            >
+              <option value="All">
+                {t("processing.whitebox.allSources")} ({sourceCounts.all})
+              </option>
+              <option value="geolibre">
+                {t("processing.whitebox.geolibreTools")} (
+                {sourceCounts.geolibre})
+              </option>
+              <option value="whitebox">
+                {t("processing.whitebox.whiteboxTools")} (
+                {sourceCounts.whitebox})
+              </option>
+            </Select>
+          )}
+
+          <ScrollArea className="min-h-0 flex-1 rounded-md border">
+            <div className="divide-y">
+              {loadingTools ? (
+                <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading
+                </div>
+              ) : filteredTools.length === 0 ? (
+                <div className="p-3 text-sm text-muted-foreground">
+                  No tools found.
+                </div>
+              ) : (
+                filteredTools.map((tool) => (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    ref={
+                      selectedTool?.id === tool.id
+                        ? selectedButtonRef
+                        : undefined
+                    }
+                    className={cn(
+                      "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                      selectedTool?.id === tool.id && "bg-accent",
+                      tool.locked && "opacity-60",
+                    )}
+                    onClick={() => setSelectedToolId(tool.id)}
+                  >
+                    <span className="block truncate font-medium">
+                      {tool.locked ? "[Locked] " : ""}
+                      {toolLabel(tool)}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {tool.category || "General"}
+                    </span>
+                  </button>
+                ))
               )}
             </div>
+          </ScrollArea>
+        </div>
+
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
+          <div className="min-w-0 border-b pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold">
+                  {selectedTool ? toolLabel(selectedTool) : "No tool selected"}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {selectedTool?.id}
+                  {selectedTool?.license_tier
+                    ? ` | ${selectedTool.license_tier}`
+                    : ""}
+                </p>
+              </div>
+              <label
+                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                title={t("processing.whitebox.runLocalHint")}
+              >
+                <input
+                  type="checkbox"
+                  data-testid="whitebox-run-local"
+                  checked={runLocal}
+                  onChange={(e) => handleRunLocalChange(e.target.checked)}
+                />
+                {t("processing.whitebox.runLocal")}
+              </label>
+              <Button
+                type="button"
+                onClick={runSelectedTool}
+                disabled={
+                  !selectedTool ||
+                  selectedTool.locked ||
+                  running ||
+                  (!runLocal && runtimeAvailable !== true)
+                }
+              >
+                {running ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {running
+                  ? t("processing.whitebox.running")
+                  : t("processing.whitebox.run")}
+              </Button>
+            </div>
+            {selectedTool?.summary && (
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                {selectedTool.summary}
+              </p>
+            )}
+            {selectedTool?.locked && (
+              <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                {selectedTool.locked_reason || "This tool is locked."}
+              </p>
+            )}
+          </div>
+
+          <ScrollArea className="min-h-0">
+            <div className="grid gap-4 pb-2 pr-5">
+              {(selectedTool?.params ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  This tool has no parameters.
+                </p>
+              ) : (
+                selectedTool?.params?.map((param) => (
+                  <ParameterField
+                    key={param.name}
+                    param={param}
+                    layers={layers}
+                    toolId={selectedTool.id}
+                    runLocal={runLocal}
+                    value={values[param.name]}
+                    onChange={(value) => updateValue(param.name, value)}
+                    onPickFile={(fileName, bytes) =>
+                      handlePickInputFile(param.name, fileName, bytes)
+                    }
+                    onUseMapExtent={
+                      isMapExtentParameter(selectedTool, param)
+                        ? handleUseMapExtent
+                        : undefined
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </ScrollArea>
+
+          <div className="grid gap-2 border-t pt-3">
+            {/* Sidecar mode but the server is unreachable: show interactive
+                troubleshooting with a one-click switch to the WASM runner.
+                Otherwise fall back to a plain error line (e.g. a parameter or
+                tool-run error that has nothing to do with the sidecar). */}
+            {!runLocal && runtimeAvailable === false ? (
+              <SidecarHelpBanner
+                isDesktop={desktop}
+                error={error}
+                onRunLocally={() => {
+                  // Clear the stale sidecar error in the same batch as the
+                  // mode switch, so it cannot flash as a plain error line on
+                  // the render before loadWhitebox resets it.
+                  setError(null);
+                  setRunLocal(true);
+                }}
+              />
+            ) : (
+              error && (
+                <p className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
+              )
+            )}
+            {job && (
+              <JobOutputPanel job={job} />
+            )}
           </div>
         </div>
       </div>
+    </div>
   );
 }
 
