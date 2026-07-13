@@ -28,6 +28,8 @@ interface BrowserTreeNodeProps {
   expanded: ReadonlySet<string>;
   /** Id of the leaf whose activation is in flight, or null when idle. */
   busyId: string | null;
+  /** Id of the row that is the tree's single tab stop (roving tabindex). */
+  activeRowId: string | null;
   /** Toggle a group node's expanded state. */
   onToggle: (id: string) => void;
   /** Activate a leaf (add a service/file layer, or open a recent project). */
@@ -72,6 +74,7 @@ export function BrowserTreeNode({
   depth,
   expanded,
   busyId,
+  activeRowId,
   onToggle,
   onActivate,
   onNewConnection,
@@ -148,8 +151,14 @@ export function BrowserTreeNode({
             node.kind === "section" && "font-semibold",
           )}
           style={{ paddingLeft }}
+          role="treeitem"
+          aria-level={depth + 1}
           aria-expanded={isGroup ? isExpanded : undefined}
           aria-busy={isBusy || undefined}
+          // Roving tabindex: only the active row is a tab stop; the panel's
+          // Arrow-key handler moves the active row and focuses it.
+          tabIndex={node.id === activeRowId ? 0 : -1}
+          data-browser-row={node.id}
           onClick={() => (isGroup ? onToggle(node.id) : onActivate(node))}
         >
           {isGroup ? (
@@ -231,7 +240,7 @@ export function BrowserTreeNode({
       </div>
       {isGroup && isExpanded ? (
         node.children && node.children.length > 0 ? (
-          <ul>
+          <ul role="group">
             {node.children.map((child) => (
               <BrowserTreeNode
                 key={child.id}
@@ -239,6 +248,7 @@ export function BrowserTreeNode({
                 depth={depth + 1}
                 expanded={expanded}
                 busyId={busyId}
+                activeRowId={activeRowId}
                 onToggle={onToggle}
                 onActivate={onActivate}
                 onNewConnection={onNewConnection}

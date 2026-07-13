@@ -615,6 +615,54 @@ export function augmentFolders(
   return recurse(nodes);
 }
 
+/** One visible row of the tree, flattened in render (top-to-bottom) order. */
+export interface VisibleRow {
+  id: string;
+  kind: BrowserNodeKind;
+  /** Nesting depth (0 for top-level sections). */
+  depth: number;
+  /** True when the node is a group (has a `children` array). */
+  isGroup: boolean;
+  /** True when the group is currently expanded. */
+  isExpanded: boolean;
+  /** The parent group's id, or null for a top-level row. */
+  parentId: string | null;
+}
+
+/**
+ * Flattens the tree into the rows currently visible on screen, in top-to-bottom
+ * order — i.e. descending into a group only when it is expanded. This is the
+ * model the panel's keyboard navigation moves through (Arrow Up/Down step
+ * between adjacent visible rows; Left/Right and parent/child use `parentId` /
+ * `isGroup` / `isExpanded`). Pure so it unit-tests without the DOM.
+ *
+ * @param nodes - The (already filtered) tree to flatten.
+ * @param expanded - Ids of the currently expanded groups.
+ * @returns The visible rows, in order.
+ */
+export function flattenVisibleTree(
+  nodes: readonly BrowserNode[],
+  expanded: ReadonlySet<string>,
+): VisibleRow[] {
+  const rows: VisibleRow[] = [];
+  const walk = (
+    list: readonly BrowserNode[],
+    depth: number,
+    parentId: string | null,
+  ): void => {
+    for (const node of list) {
+      const isGroup = Boolean(node.children);
+      const isExpanded = isGroup && expanded.has(node.id);
+      rows.push({ id: node.id, kind: node.kind, depth, isGroup, isExpanded, parentId });
+      if (isGroup && isExpanded && node.children) {
+        walk(node.children, depth + 1, node.id);
+      }
+    }
+  };
+  walk(nodes, 0, null);
+  return rows;
+}
+
 /**
  * Filters the tree to nodes whose label (or a descendant's label) matches the
  * query, case-insensitively. Returns the tree unchanged for an empty query.

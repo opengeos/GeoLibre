@@ -9,6 +9,7 @@ import {
   buildFavoriteNodes,
   buildPostgisTableNodes,
   filterBrowserTree,
+  flattenVisibleTree,
   MAX_DIRECTORY_ENTRIES,
   type BrowserNode,
   type ConnectionLoad,
@@ -513,6 +514,51 @@ describe("augmentConnections", () => {
     const tree = baseTree();
     augmentConnections(tree, { [CONN]: { status: "loading" } }, "Loading…");
     assert.deepEqual(find(tree, `connection:${CONN}`)?.children, []);
+  });
+});
+
+describe("flattenVisibleTree", () => {
+  const tree = buildBrowserTree({
+    services: [service("s1", "OSM", "xyz"), service("s2", "States", "wms")],
+    recentProjects: RECENT,
+  });
+
+  it("descends only into expanded groups, in top-to-bottom order", () => {
+    // Expand Services and the XYZ kind group, but not Recent or WMS.
+    const expanded = new Set(["section:services", "kind:xyz"]);
+    const rows = flattenVisibleTree(tree, expanded);
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      [
+        "section:services",
+        "kind:xyz",
+        "service:s1", // XYZ expanded → its service shows
+        "kind:wms", // WMS collapsed → its service hidden
+        "section:recent", // Recent collapsed → its projects hidden
+      ],
+    );
+  });
+
+  it("reports depth, group/expanded state, kind, and parentId", () => {
+    const rows = flattenVisibleTree(tree, new Set(["section:services"]));
+    const services = rows.find((r) => r.id === "section:services")!;
+    assert.equal(services.depth, 0);
+    assert.equal(services.kind, "section");
+    assert.equal(services.isGroup, true);
+    assert.equal(services.isExpanded, true);
+    assert.equal(services.parentId, null);
+    const xyz = rows.find((r) => r.id === "kind:xyz")!;
+    assert.equal(xyz.depth, 1);
+    assert.equal(xyz.isExpanded, false); // group, but not in the expanded set
+    assert.equal(xyz.parentId, "section:services");
+  });
+
+  it("returns only the top-level sections when nothing is expanded", () => {
+    const rows = flattenVisibleTree(tree, new Set());
+    assert.deepEqual(
+      rows.map((r) => r.id),
+      ["section:services", "section:recent"],
+    );
   });
 });
 

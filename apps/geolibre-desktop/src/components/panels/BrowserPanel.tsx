@@ -3,7 +3,14 @@ import type { MapController } from "@geolibre/map";
 import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
-import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
@@ -23,6 +30,7 @@ import {
   augmentConnections,
   augmentFolders,
   filterBrowserTree,
+  flattenVisibleTree,
   type BrowserNode,
   type ConnectionLoad,
   type FolderLoad,
@@ -294,6 +302,84 @@ export function BrowserPanel({
     });
   };
 
+  // Keyboard navigation (WAI-ARIA tree pattern). The visible rows, flattened
+  // top-to-bottom, are what Arrow Up/Down step through; Right/Left expand/
+  // collapse or move to child/parent. Roving tabindex: only `activeRowId` is
+  // tab-reachable, so the whole tree is one Tab stop and arrows move within it.
+  const treeRef = useRef<HTMLUListElement>(null);
+  const visibleRows = useMemo(
+    // "info" rows (loading/error status) are non-interactive text, not tree
+    // items, so they're excluded from keyboard navigation.
+    () =>
+      flattenVisibleTree(filtered, effectiveExpanded).filter(
+        (row) => row.kind !== "info",
+      ),
+    [filtered, effectiveExpanded],
+  );
+  const [activeRowId, setActiveRowId] = useState<string | null>(null);
+  // Fall back to the first row when nothing is active yet, or the active row
+  // scrolled out of existence (filtered away / its parent collapsed).
+  const currentRowId =
+    activeRowId && visibleRows.some((row) => row.id === activeRowId)
+      ? activeRowId
+      : (visibleRows[0]?.id ?? null);
+
+  const focusRow = (id: string) => {
+    setActiveRowId(id);
+    // The button already exists (only its tabIndex flips), so focus it now
+    // rather than waiting for the roving-tabindex re-render. Escape only `"`/`\`
+    // for the quoted attribute value — CSS.escape is for identifiers and would
+    // wrongly escape the `:`/`/` that ids like `section:services` contain.
+    const escaped = id.replace(/["\\]/g, "\\$&");
+    const selector = `[data-browser-row="${escaped}"]`;
+    treeRef.current?.querySelector<HTMLElement>(selector)?.focus();
+  };
+
+  const onTreeKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (!currentRowId) return;
+    const index = visibleRows.findIndex((row) => row.id === currentRowId);
+    if (index === -1) return;
+    const row = visibleRows[index];
+    let targetId: string | null | undefined;
+    switch (event.key) {
+      case "ArrowDown":
+        targetId = visibleRows[index + 1]?.id;
+        break;
+      case "ArrowUp":
+        targetId = visibleRows[index - 1]?.id;
+        break;
+      case "Home":
+        targetId = visibleRows[0]?.id;
+        break;
+      case "End":
+        targetId = visibleRows[visibleRows.length - 1]?.id;
+        break;
+      case "ArrowRight":
+        if (row.isGroup && !row.isExpanded) {
+          event.preventDefault();
+          toggle(row.id); // expand in place
+          return;
+        }
+        // An expanded group's first child is the next visible row.
+        if (row.isGroup && row.isExpanded) targetId = visibleRows[index + 1]?.id;
+        break;
+      case "ArrowLeft":
+        if (row.isGroup && row.isExpanded) {
+          event.preventDefault();
+          toggle(row.id); // collapse in place
+          return;
+        }
+        targetId = row.parentId; // move to parent
+        break;
+      default:
+        return; // let Enter/Space reach the focused button's onClick natively
+    }
+    if (targetId) {
+      event.preventDefault();
+      focusRow(targetId);
+    }
+  };
+
   const activate = async (node: BrowserNode) => {
     // Ignore a second activation while one is still resolving (a fast
     // double-click, or clicking another entry mid-fetch), so an async add
@@ -492,7 +578,14 @@ export function BrowserPanel({
 
       <ScrollArea className="min-h-0 flex-1">
         {hasContent ? (
-          <ul className="py-1" aria-busy={busyId != null}>
+          <ul
+            ref={treeRef}
+            className="py-1"
+            role="tree"
+            aria-label={t("browser.title")}
+            aria-busy={busyId != null}
+            onKeyDown={onTreeKeyDown}
+          >
             {filtered.map((section) => (
               <BrowserTreeNode
                 key={section.id}
@@ -500,6 +593,7 @@ export function BrowserPanel({
                 depth={0}
                 expanded={effectiveExpanded}
                 busyId={busyId}
+                activeRowId={currentRowId}
                 onToggle={toggle}
                 onActivate={activate}
                 onNewConnection={newConnection}
