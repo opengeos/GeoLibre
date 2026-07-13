@@ -312,7 +312,7 @@ function paramKind(p: WhiteboxToolParameter): string {
       ? (schema.dataset as Record<string, unknown>)
       : {};
   const dataKind = String(
-    p.data_kind ?? dataset.kind ?? p.type ?? "",
+    p.data_kind ?? schema.data_kind ?? dataset.kind ?? p.type ?? "",
   ).toLowerCase();
   const role = String(p.io_role ?? schema.kind ?? "").toLowerCase();
   if (role === "input") return datasetParameterKind(dataKind, "in");
