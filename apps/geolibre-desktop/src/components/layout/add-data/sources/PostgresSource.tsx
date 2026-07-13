@@ -40,16 +40,19 @@ function postgisTableKey(table: PostgisTableInfo): string {
 /**
  * Whether a Martin source (auto-published one-per-table) is the given schema +
  * table. Martin names public-schema sources by the bare table and others by
- * `schema.table`, so both forms are accepted.
+ * `schema.table`. The bare form is only matched for the public (or unknown)
+ * schema, so a `public.roads` source can't be mis-selected for a clicked
+ * `other_schema.roads` when two schemas reuse a table name.
  */
 function martinSourceMatchesTable(
   sourceId: string,
   schema: string | undefined,
   table: string,
 ): boolean {
-  if (sourceId === table) return true;
-  if (schema && sourceId === `${schema}.${table}`) return true;
-  return false;
+  if (schema && schema !== "public") {
+    return sourceId === `${schema}.${table}`;
+  }
+  return sourceId === table || sourceId === `public.${table}`;
 }
 
 interface PostgresSourceProps {

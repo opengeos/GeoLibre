@@ -91,11 +91,13 @@ export function BrowserTreeNode({
   // so its non-undefined narrowing survives into the onClick closure — a
   // property access (node.newConnectionKind) would not, forcing a cast.
   const newConnectionKind = node.newConnectionKind;
-  // The Databases section's ＋ reads "New database connection"; a service-kind
-  // group's reads e.g. "New WMS connection" (distinguishable per group for
-  // screen-reader users).
+  // The Databases section's ＋ (which opens the "postgres" source) reads "New
+  // database connection"; a service-kind group's reads e.g. "New WMS
+  // connection" (distinguishable per group for screen-reader users). Keyed off
+  // the source it opens rather than node.kind, so a future section with a
+  // different ＋ source gets the right label.
   const newConnectionLabel =
-    node.kind === "section"
+    newConnectionKind === "postgres"
       ? t("browser.newDatabaseConnection")
       : t("browser.newConnection", { kind: node.label });
 

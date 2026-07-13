@@ -44,6 +44,8 @@ export function useBrowserTree(): BrowserTreeState {
     const byId = new Map(services.map((entry) => [entry.id, entry]));
     // Shown on every platform for discovery; the PostgreSQL add flow itself
     // reports when it needs GeoLibre Desktop (Martin has no mobile build).
+    // Kept in the saved list's order (most-recently-used first), deliberately
+    // unlike the alphabetized Services list — this mirrors the Recent section.
     const databaseConnections = readSavedPostgresConnections().map(
       (connectionString) => ({
         connectionString,

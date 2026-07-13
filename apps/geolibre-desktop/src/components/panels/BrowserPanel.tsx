@@ -5,6 +5,7 @@ import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
   buildPostgisTableNodes,
@@ -141,8 +142,8 @@ export function BrowserPanel({
     {},
   );
   // Tracks in-flight/settled fetches so a re-expand (or the expand-all a search
-  // triggers) doesn't refetch. Cleared for a connection only via the row's
-  // refresh action.
+  // triggers) doesn't refetch. A failed fetch drops its entry so re-expanding
+  // the connection retries (there is no separate refresh affordance).
   const connFetchedRef = useRef<Set<string>>(new Set());
 
   const fetchConnectionTables = useCallback((connectionString: string) => {
@@ -152,7 +153,13 @@ export function BrowserPanel({
       ...prev,
       [connectionString]: { status: "loading" },
     }));
-    listPostgisTables(connectionString)
+    // The desktop sidecar is spawned on demand and only authenticated after
+    // startGeoLibreSidecar runs, so ensure it is up before hitting /postgis —
+    // best-effort, mirroring PostgresSource.handleConnectEditable (a failed
+    // start still lets the list call surface the real error).
+    void startGeoLibreSidecar()
+      .catch(() => {})
+      .then(() => listPostgisTables(connectionString))
       .then((tables) => {
         setConnLoads((prev) => ({
           ...prev,
@@ -163,6 +170,9 @@ export function BrowserPanel({
         }));
       })
       .catch((err: unknown) => {
+        // Allow a retry: drop the fetched marker so collapsing and re-expanding
+        // the connection re-runs introspection rather than sticking on the error.
+        connFetchedRef.current.delete(connectionString);
         setConnLoads((prev) => ({
           ...prev,
           [connectionString]: {
@@ -266,7 +276,12 @@ export function BrowserPanel({
   // saving there adds it to the library/connections, which show up in this tree.
   const newConnection = (kind: AddDataKind) => openAddData(kind);
 
-  const hasContent = filtered.some((section) => section.children?.length);
+  // A section counts as content if it has children *or* an always-on ＋ action
+  // (the Databases section shows its "New connection" ＋ even with zero saved
+  // connections, so a first-run user isn't stuck on the empty-state message).
+  const hasContent = filtered.some(
+    (section) => section.children?.length || section.newConnectionKind,
+  );
 
   return (
     // Body only: the shell (PluginRightPanel / SharedSidebar) renders the header,
