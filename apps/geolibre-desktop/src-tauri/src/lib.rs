@@ -777,7 +777,13 @@ fn extra_ca_certificates() -> Result<Vec<reqwest::Certificate>, String> {
 
 /// Load the mutual-TLS client identity named by [`HTTP_CLIENT_CERT_ENV`], if any.
 fn client_identity() -> Result<Option<ClientIdentity>, String> {
-    let password = env::var(HTTP_CLIENT_CERT_PASSWORD_ENV).ok();
+    // Treat an empty passphrase as unset: env interpolation in Docker/K8s/.env
+    // tooling (e.g. `PASSWORD=${SECRET:-}`) commonly yields "" rather than
+    // leaving the variable unset, which must not force the PKCS#12 path or trip
+    // the stray-passphrase error below.
+    let password = env::var(HTTP_CLIENT_CERT_PASSWORD_ENV)
+        .ok()
+        .filter(|value| !value.is_empty());
     let Some(path) = env::var_os(HTTP_CLIENT_CERT_ENV) else {
         if client_cert_password_without_path(false, password.is_some()) {
             return Err(format!(
