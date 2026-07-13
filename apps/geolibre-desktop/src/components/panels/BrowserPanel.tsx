@@ -6,13 +6,21 @@ import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
-import { isTauri } from "../../lib/tauri-io";
+import {
+  isLoadableFilePath,
+  isTauri,
+  listDirectory,
+  pickLocalPathWithFallback,
+} from "../../lib/tauri-io";
+import { pinFolder, unpinFolder } from "../../lib/browser-folders";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
   augmentConnections,
+  augmentFolders,
   filterBrowserTree,
   type BrowserNode,
   type ConnectionLoad,
+  type FolderLoad,
 } from "../../lib/browser-tree";
 import { applyServiceEntry } from "../layout/add-data/apply-service";
 import { errorMessage } from "../layout/add-data/helpers";
@@ -20,8 +28,9 @@ import type { AddDataKind } from "../layout/AddDataDialog";
 import { openAddData } from "../layout/add-data/open-add-data";
 import { BrowserTreeNode } from "./BrowserTreeNode";
 
-/** The `connection:` id prefix a connection node carries (id = prefix + connString). */
+/** The `connection:` / `folder:` id prefixes (id = prefix + connString/path). */
 const CONNECTION_ID_PREFIX = "connection:";
+const FOLDER_ID_PREFIX = "folder:";
 
 interface BrowserPanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -30,6 +39,13 @@ interface BrowserPanelProps {
    * Resolves to an error message to show inline, or null on success.
    */
   onOpenRecentProject: (path: string) => Promise<string | null>;
+  /**
+   * Add a local file (by absolute path) as a layer — vector/raster/MBTiles,
+   * dispatched by the shell which owns the store add-paths. Resolves to an error
+   * message to show inline, or null on success. Absent off-desktop (no Files
+   * section renders there).
+   */
+  onAddFilePath?: (path: string) => Promise<string | null>;
 }
 
 /** The section nodes are expanded by default so their contents are visible. */
@@ -37,6 +53,7 @@ const DEFAULT_EXPANDED = new Set([
   "section:services",
   "section:recent",
   "section:databases",
+  "section:files",
 ]);
 
 /** Collects every group node id in a tree (used to expand-all while searching). */
@@ -64,6 +81,7 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
 export function BrowserPanel({
   mapControllerRef,
   onOpenRecentProject,
+  onAddFilePath,
 }: BrowserPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((s) => s.addLayer);
@@ -176,15 +194,57 @@ export function BrowserPanel({
     [t],
   );
 
+  // Lazy directory listing for the Files section: keyed by absolute path,
+  // populated the first time a folder is expanded (same pattern as connections).
+  const [folderLoads, setFolderLoads] = useState<Record<string, FolderLoad>>(
+    {},
+  );
+  const folderFetchedRef = useRef<Set<string>>(new Set());
+
+  const fetchFolder = useCallback(
+    (path: string) => {
+      if (folderFetchedRef.current.has(path)) return;
+      folderFetchedRef.current.add(path);
+      setFolderLoads((prev) => ({ ...prev, [path]: { status: "loading" } }));
+      listDirectory(path)
+        .then((entries) => {
+          setFolderLoads((prev) => ({
+            ...prev,
+            [path]: { status: "loaded", entries },
+          }));
+        })
+        .catch((err: unknown) => {
+          // Drop the marker so a re-expand retries (a folder can also change on
+          // disk); surface the message inline via the status row.
+          folderFetchedRef.current.delete(path);
+          setFolderLoads((prev) => ({
+            ...prev,
+            [path]: {
+              status: "error",
+              message: err instanceof Error ? err.message : String(err),
+            },
+          }));
+        });
+    },
+    [],
+  );
+
   // Inject each connection node's lazily-loaded children (loading/error status
   // rows, or schema→table nodes) before filtering. Search therefore reaches the
   // tables of connections the user has already expanded; an unexpanded
   // connection keeps its empty child list, so its tables aren't searchable
-  // until it is first drilled into.
+  // until it is first drilled into. Folder listings are injected the same way.
   const loadingLabel = t("browser.loadingTables");
+  const foldersLoadingLabel = t("browser.loadingFolder");
   const augmented = useMemo(
-    () => augmentConnections(tree, connLoads, loadingLabel),
-    [tree, connLoads, loadingLabel],
+    () =>
+      augmentFolders(
+        augmentConnections(tree, connLoads, loadingLabel),
+        folderLoads,
+        foldersLoadingLabel,
+        isLoadableFilePath,
+      ),
+    [tree, connLoads, loadingLabel, folderLoads, foldersLoadingLabel],
   );
 
   const filtered = useMemo(
@@ -202,9 +262,12 @@ export function BrowserPanel({
   }, [query, expanded, filtered]);
 
   const toggle = (id: string) => {
-    // Kick off introspection the first time a connection is expanded.
+    // Kick off introspection/listing the first time a connection or folder is
+    // expanded.
     if (id.startsWith(CONNECTION_ID_PREFIX) && !expanded.has(id)) {
       fetchConnectionTables(id.slice(CONNECTION_ID_PREFIX.length));
+    } else if (id.startsWith(FOLDER_ID_PREFIX) && !expanded.has(id)) {
+      fetchFolder(id.slice(FOLDER_ID_PREFIX.length));
     }
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -264,6 +327,17 @@ export function BrowserPanel({
           table: node.tableName,
         },
       });
+    } else if (node.kind === "file" && node.path && onAddFilePath) {
+      // Add the clicked file as a layer via the shell's dispatcher (which owns
+      // the vector/raster/MBTiles store add-paths); it resolves to an error
+      // message or null, surfaced inline like the recent-project open.
+      beginBusy(node.id);
+      try {
+        const addError = await onAddFilePath(node.path);
+        if (addError) setError(addError);
+      } finally {
+        endBusy();
+      }
     }
   };
 
@@ -271,11 +345,30 @@ export function BrowserPanel({
   // saving there adds it to the library/connections, which show up in this tree.
   const newConnection = (kind: AddDataKind) => openAddData(kind);
 
+  // The Files section's ＋ picks a folder to pin (native directory dialog); the
+  // pinned-folders change event refreshes the tree via useBrowserTree.
+  const addFolder = async () => {
+    setError(null);
+    try {
+      const picked = await pickLocalPathWithFallback({ directory: true });
+      if (picked) pinFolder(picked);
+    } catch (err) {
+      console.error("Failed to add folder", err);
+      setError(t("browser.addFolderFailed"));
+    }
+  };
+
+  // A pinned root folder's (×) unpins it from the Files section.
+  const removeFolder = (path: string) => unpinFolder(path);
+
   // A section counts as content if it has children *or* an always-on ＋ action
-  // (the Databases section shows its "New connection" ＋ even with zero saved
-  // connections, so a first-run user isn't stuck on the empty-state message).
+  // (Databases' "New connection" and Files' "Add folder" show even with zero
+  // entries, so a first-run user isn't stuck on the empty-state message).
   const hasContent = filtered.some(
-    (section) => section.children?.length || section.newConnectionKind,
+    (section) =>
+      section.children?.length ||
+      section.newConnectionKind ||
+      section.addFolderAction,
   );
 
   return (
@@ -310,6 +403,8 @@ export function BrowserPanel({
                 onToggle={toggle}
                 onActivate={activate}
                 onNewConnection={newConnection}
+                onAddFolder={addFolder}
+                onRemoveFolder={removeFolder}
               />
             ))}
           </ul>

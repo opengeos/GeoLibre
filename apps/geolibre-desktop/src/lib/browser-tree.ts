@@ -29,6 +29,8 @@ export type BrowserNodeKind =
   | "connection" // a saved database connection; expands to its schemas/tables
   | "schema" // a database schema grouping under a connection
   | "table" // a database table leaf that opens the add flow for it
+  | "folder" // a filesystem directory; expands to its subfolders/loadable files
+  | "file" // a loadable file on disk that adds a layer when activated
   | "info"; // a non-interactive status row (loading / error)
 
 /** One node in the Browser tree. */
@@ -52,12 +54,18 @@ export interface BrowserNode {
    * ("postgres"). Absent means the node shows no ＋.
    */
   newConnectionKind?: AddDataKind;
+  /** True on the Files section, whose ＋ opens a folder picker (kind `section`). */
+  addFolderAction?: boolean;
   /** The saved database connection string a `connection`/`table` node belongs to. */
   connectionString?: string;
   /** The schema of a `table` node. */
   tableSchema?: string;
   /** The table name of a `table` node. */
   tableName?: string;
+  /** Absolute filesystem path of a `folder`/`file` node. */
+  path?: string;
+  /** True for a pinned root folder the user can unpin (kind `folder`). */
+  removable?: boolean;
   /** True for a built-in preset service (read-only), for badge display. */
   builtin?: boolean;
   /** The project path a recent node opens (kind `recent-project`). */
@@ -80,10 +88,26 @@ export interface BrowserTreeInput {
    */
   databaseConnections?: readonly { connectionString: string; label: string }[];
   /**
+   * Filesystem roots to list under the Files section: the current project's
+   * folder (Project Home) and the user's pinned folders. Omitted (undefined)
+   * hides the section — the app passes it only on desktop (`isTauri()`), where
+   * directory reading is available. An empty `folders` array still renders the
+   * section with its "Add folder" (＋) action.
+   */
+  files?: {
+    projectHome?: { path: string; label: string } | null;
+    folders: readonly { path: string; label: string }[];
+  };
+  /**
    * Translated labels for the top-level sections. Optional so the pure module
    * (and its tests) default to English; the app passes `t()` values.
    */
-  sectionLabels?: { services: string; recent: string; databases: string };
+  sectionLabels?: {
+    services: string;
+    recent: string;
+    databases: string;
+    files?: string;
+  };
 }
 
 /** Locale-aware, case-insensitive compare for stable label sorting. */
@@ -164,6 +188,7 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
     services: "Services",
     recent: "Recent",
     databases: "Databases",
+    files: "Files",
   };
   const kinds = buildServiceKinds(input.services);
   const servicesSection: BrowserNode = {
@@ -221,7 +246,98 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
     });
   }
 
+  // The Files section is included only on desktop (the app passes `files` when
+  // `isTauri()`). It always shows its "Add folder" (＋) action; Project Home
+  // (when a project file is open) comes first, then the user's pinned folders.
+  if (input.files) {
+    const folderChildren: BrowserNode[] = [];
+    if (input.files.projectHome) {
+      folderChildren.push({
+        id: `folder:${input.files.projectHome.path}`,
+        kind: "folder",
+        label: input.files.projectHome.label,
+        addable: false,
+        path: input.files.projectHome.path,
+        // Expandable group, lazily filled with subfolders/files on first expand.
+        children: [],
+      });
+    }
+    for (const folder of input.files.folders) {
+      folderChildren.push({
+        id: `folder:${folder.path}`,
+        kind: "folder",
+        label: folder.label,
+        addable: false,
+        path: folder.path,
+        // Pinned roots can be unpinned; subfolders (added on expand) cannot.
+        removable: true,
+        children: [],
+      });
+    }
+    sections.push({
+      id: "section:files",
+      kind: "section",
+      label: labels.files ?? "Files",
+      addable: false,
+      addFolderAction: true,
+      count: folderChildren.length,
+      children: folderChildren,
+    });
+  }
+
   return sections;
+}
+
+/** One entry of a directory listing (from the sidecar-free `list_directory`). */
+export interface DirectoryEntry {
+  name: string;
+  /** Absolute path of the entry. */
+  path: string;
+  isDirectory: boolean;
+}
+
+/**
+ * Turns a directory listing into `folder` → (lazily expandable) and `file`
+ * (addable) nodes: subdirectories first, then loadable files, each group sorted
+ * by name; hidden dotfiles are skipped. Pure so it unit-tests without the
+ * filesystem — the caller supplies the "is this file loadable" predicate (the
+ * app passes the tauri-io format check).
+ *
+ * @param entries - The directory's entries.
+ * @param isLoadable - Whether a file name is a loadable geospatial format.
+ * @returns Folder nodes (expandable) followed by loadable-file nodes.
+ */
+export function buildDirectoryNodes(
+  entries: readonly DirectoryEntry[],
+  isLoadable: (name: string) => boolean,
+): BrowserNode[] {
+  const visible = entries.filter((entry) => !entry.name.startsWith("."));
+  const folders = visible
+    .filter((entry) => entry.isDirectory)
+    .sort((a, b) => byLabel(a.name, b.name))
+    .map(
+      (entry): BrowserNode => ({
+        id: `folder:${entry.path}`,
+        kind: "folder",
+        label: entry.name,
+        addable: false,
+        path: entry.path,
+        children: [],
+      }),
+    );
+  const files = visible
+    .filter((entry) => !entry.isDirectory && isLoadable(entry.name))
+    .sort((a, b) => byLabel(a.name, b.name))
+    .map(
+      (entry): BrowserNode => ({
+        id: `file:${entry.path}`,
+        kind: "file",
+        label: entry.name,
+        addable: true,
+        path: entry.path,
+      }),
+    );
+  return [...folders, ...files];
 }
 
 /** A spatial table discovered under a database connection. */
@@ -333,6 +449,68 @@ export function augmentConnections(
     }
     return node;
   });
+}
+
+/** Async load state for one folder's directory listing. */
+export type FolderLoad =
+  | { status: "loading" }
+  | { status: "loaded"; entries: readonly DirectoryEntry[] }
+  | { status: "error"; message: string };
+
+/**
+ * Returns a copy of the tree with each `folder` node's children replaced by its
+ * lazy-load state: a status row while loading or on error, or the subfolder/file
+ * nodes once loaded. Unlike {@link augmentConnections}, folders nest, so a loaded
+ * folder's built children are themselves augmented — an expanded subfolder deep
+ * in the tree gets its own listing. Pure (the filesystem read happens elsewhere).
+ *
+ * @param nodes - The tree (typically already run through augmentConnections).
+ * @param loads - Per-folder listing state keyed by absolute path.
+ * @param loadingLabel - Translated label for the "loading" status row.
+ * @param isLoadable - Whether a file name is a loadable geospatial format.
+ * @returns A new tree; folder nodes get their status/subfolder/file children.
+ */
+export function augmentFolders(
+  nodes: readonly BrowserNode[],
+  loads: Record<string, FolderLoad>,
+  loadingLabel: string,
+  isLoadable: (name: string) => boolean,
+): BrowserNode[] {
+  const recurse = (list: readonly BrowserNode[]): BrowserNode[] =>
+    list.map((node) => {
+      if (node.kind === "folder" && node.path) {
+        const load = loads[node.path];
+        let children: BrowserNode[] = [];
+        if (load?.status === "loading") {
+          children = [
+            {
+              id: `${node.id}:loading`,
+              kind: "info",
+              label: loadingLabel,
+              addable: false,
+            },
+          ];
+        } else if (load?.status === "error") {
+          children = [
+            {
+              id: `${node.id}:error`,
+              kind: "info",
+              label: load.message,
+              addable: false,
+            },
+          ];
+        } else if (load?.status === "loaded") {
+          // Recurse so an already-expanded subfolder also gets its listing.
+          children = recurse(buildDirectoryNodes(load.entries, isLoadable));
+        }
+        return { ...node, children };
+      }
+      if (node.children) {
+        return { ...node, children: recurse(node.children) };
+      }
+      return node;
+    });
+  return recurse(nodes);
 }
 
 /**

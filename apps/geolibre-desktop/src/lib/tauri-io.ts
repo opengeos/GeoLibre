@@ -177,6 +177,58 @@ export function isRestorableVectorPath(path: string): boolean {
   return RESTORABLE_VECTOR_PATH.test(path);
 }
 
+/**
+ * Whether a file name is a geospatial format the Browser panel's Files tree can
+ * add with one click — vectors and GeoTIFF/COG rasters. Deliberately stricter
+ * than the lenient drop-path filter (which accepts anything explicitly dropped).
+ * MBTiles are excluded for now: vector MBTiles need source-layer selection, so
+ * they go through the Add Data dialog rather than a one-click tree add.
+ *
+ * @param name - The file name (or path) to test.
+ * @returns True when the extension is a one-click-loadable geospatial format.
+ */
+export function isLoadableFilePath(name: string): boolean {
+  return isRestorableVectorPath(name) || isRasterFileName(name);
+}
+
+/**
+ * The parent directory of an absolute path (the text before its last path
+ * separator), used to derive the Browser panel's "Project Home" from the open
+ * project file's path.
+ *
+ * @param path - An absolute file path.
+ * @returns The containing directory (or the filesystem root for a top-level file).
+ */
+export function parentDirectory(path: string): string {
+  const trimmed = path.replace(/[/\\]+$/, "");
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (index > 0) return trimmed.slice(0, index);
+  return index === 0 ? "/" : trimmed;
+}
+
+/** One entry of a local directory listing (see the Rust `list_directory`). */
+export interface LocalDirectoryEntry {
+  name: string;
+  /** Absolute path of the entry. */
+  path: string;
+  isDirectory: boolean;
+}
+
+/**
+ * List a local directory's immediate entries via the Tauri `list_directory`
+ * command (desktop only; resolves to `[]` off-desktop). Filtering to loadable
+ * file types is the caller's job.
+ *
+ * @param path - Absolute directory path to list.
+ * @returns The directory's entries (folders and files).
+ */
+export async function listDirectory(
+  path: string,
+): Promise<LocalDirectoryEntry[]> {
+  if (!isTauri()) return [];
+  return invoke<LocalDirectoryEntry[]>("list_directory", { path });
+}
+
 // Built at call time so the filter-group label shown in the native file dialog
 // is translated (a module-level constant would freeze the English string).
 function vectorFileDialogFilters(): FileDialogFilter[] {

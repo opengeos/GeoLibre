@@ -12,7 +12,13 @@
     "addFailed": "Could not add this data source.",
     "builtinBadge": "built-in",
     "newConnection": "New {{kind}} connection",
-    "loadingTables": "Loading tables…"
+    "loadingTables": "Loading tables…",
+    "files": "Files",
+    "addFolder": "Add folder",
+    "addFolderFailed": "Could not add this folder.",
+    "addFileFailed": "Could not add this file.",
+    "unpinFolder": "Remove folder",
+    "loadingFolder": "Loading…"
   },
   "about": {
     "trigger": "About",

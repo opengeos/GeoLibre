@@ -209,6 +209,7 @@ pub fn run() {
             read_local_file,
             read_project_file,
             read_shapefile_siblings,
+            list_directory,
             resolve_url_redirect,
             read_mbtiles_metadata,
             read_mbtiles_tile,
@@ -464,6 +465,81 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
         }
     }
     Ok(siblings)
+}
+
+/// One entry of a directory listing returned by [`list_directory`].
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectoryEntry {
+    name: String,
+    /// Absolute path of the entry.
+    path: String,
+    is_directory: bool,
+}
+
+/// Whether `path` is a safe absolute local path to list: an absolute POSIX
+/// (`/...`) or Windows drive-letter (`C:\...`) path, never a UNC (`\\host\share`)
+/// share, and free of `..` traversal segments. Mirrors the path guards in
+/// [`is_allowed_local_vector_path`] minus the file-extension check (this lists
+/// directories, not vector files).
+fn is_safe_absolute_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
+    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
+        return false;
+    }
+    let is_posix_absolute = bytes.first() == Some(&b'/');
+    let is_windows_drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && is_separator(bytes[2]);
+    if !is_posix_absolute && !is_windows_drive {
+        return false;
+    }
+    !path.split(['/', '\\']).any(|segment| segment == "..")
+}
+
+/// List a local directory's immediate entries (non-recursive) for the Browser
+/// panel's Files tree.
+///
+/// The JS `fs` plugin can only read paths the user explicitly picked or dropped,
+/// so it cannot lazily browse arbitrary subfolders or the current project's
+/// folder; this reads the directory directly, guarded by [`is_safe_absolute_path`]
+/// (absolute, non-UNC, no `..` traversal) — mirroring [`read_local_file`] /
+/// [`read_shapefile_siblings`]. Filtering to loadable file types is left to the
+/// JS side. An unreadable directory is returned as an error the panel surfaces
+/// inline.
+#[tauri::command]
+fn list_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
+    if !is_safe_absolute_path(&path) {
+        return Err(format!(
+            "Refusing to list \"{path}\": not a safe absolute local path"
+        ));
+    }
+    let entries =
+        fs::read_dir(&path).map_err(|error| format!("Could not read directory: {error}"))?;
+    let mut result = Vec::new();
+    for entry in entries.flatten() {
+        let entry_path = entry.path();
+        let (Some(name), Some(path_str)) = (
+            entry_path.file_name().and_then(|name| name.to_str()),
+            entry_path.to_str(),
+        ) else {
+            continue;
+        };
+        // `file_type()` avoids an extra stat where the OS already knows the kind;
+        // fall back to `is_dir()` (which follows symlinks) when it is unavailable.
+        let is_directory = entry
+            .file_type()
+            .map(|file_type| file_type.is_dir())
+            .unwrap_or_else(|_| entry_path.is_dir());
+        result.push(DirectoryEntry {
+            name: name.to_string(),
+            path: path_str.to_string(),
+            is_directory,
+        });
+    }
+    Ok(result)
 }
 
 /// Read the optional admin UI-profile file (`<app_config_dir>/admin-profile.json`).

@@ -4,12 +4,14 @@ import {
   ChevronRight,
   Clock,
   Database,
+  File,
   Folder,
   FolderOpen,
   Globe2,
   Loader2,
   Plus,
   Table,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -26,10 +28,14 @@ interface BrowserTreeNodeProps {
   busyId: string | null;
   /** Toggle a group node's expanded state. */
   onToggle: (id: string) => void;
-  /** Activate a leaf (add a service layer, or open a recent project). */
+  /** Activate a leaf (add a service/file layer, or open a recent project). */
   onActivate: (node: BrowserNode) => void;
   /** Open Add Data at `kind` for a group's "New connection" (＋) action. */
   onNewConnection: (kind: AddDataKind) => void;
+  /** Pick a folder to pin, for the Files section's "Add folder" (＋) action. */
+  onAddFolder: () => void;
+  /** Unpin a pinned root folder (its ×), by path. */
+  onRemoveFolder: (path: string) => void;
 }
 
 /** The leading icon for a node, chosen by kind (and expanded state for groups). */
@@ -43,6 +49,8 @@ function nodeIcon(node: BrowserNode, isExpanded: boolean): LucideIcon {
       return Database;
     case "table":
       return Table;
+    case "file":
+      return File;
     default:
       return isExpanded ? FolderOpen : Folder;
   }
@@ -61,6 +69,8 @@ export function BrowserTreeNode({
   onToggle,
   onActivate,
   onNewConnection,
+  onAddFolder,
+  onRemoveFolder,
 }: BrowserTreeNodeProps) {
   const { t } = useTranslation();
   // A status row (loading / error) is non-interactive text, not a tree control.
@@ -103,6 +113,15 @@ export function BrowserTreeNode({
     newConnectionKind === "postgres"
       ? t("browser.newDatabaseConnection")
       : t("browser.newConnection", { kind: node.label });
+  // The trailing ＋ affordance: a service/database group opens Add Data; the
+  // Files section opens a folder picker. At most one applies per node.
+  const plusAction = newConnectionKind
+    ? { label: newConnectionLabel, run: () => onNewConnection(newConnectionKind) }
+    : node.addFolderAction
+      ? { label: t("browser.addFolder"), run: onAddFolder }
+      : null;
+  // Pinned root folders show a × to unpin them from the Files section.
+  const removePath = node.removable ? node.path : undefined;
 
   return (
     <li>
@@ -147,13 +166,24 @@ export function BrowserTreeNode({
             </span>
           ) : null}
         </button>
-        {newConnectionKind ? (
+        {removePath ? (
           <button
             type="button"
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            title={newConnectionLabel}
-            aria-label={newConnectionLabel}
-            onClick={() => onNewConnection(newConnectionKind)}
+            title={t("browser.unpinFolder")}
+            aria-label={t("browser.unpinFolder")}
+            onClick={() => onRemoveFolder(removePath)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+        {plusAction ? (
+          <button
+            type="button"
+            className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            title={plusAction.label}
+            aria-label={plusAction.label}
+            onClick={plusAction.run}
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -172,6 +202,8 @@ export function BrowserTreeNode({
                 onToggle={onToggle}
                 onActivate={onActivate}
                 onNewConnection={onNewConnection}
+                onAddFolder={onAddFolder}
+                onRemoveFolder={onRemoveFolder}
               />
             ))}
           </ul>

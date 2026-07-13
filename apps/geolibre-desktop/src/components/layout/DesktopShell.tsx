@@ -53,6 +53,7 @@ import {
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import {
+  isRasterFileName,
   isTauri,
   loadDroppedPhotoFiles,
   loadDroppedPhotoPaths,
@@ -1223,6 +1224,32 @@ export function DesktopShell({
     [],
   );
 
+  // Add a single local file (clicked in the Browser panel's Files tree) as a
+  // layer, reusing the same loaders + store dispatch as the drag-and-drop path.
+  // Resolves to an inline error message, or null on success. Vector/raster only
+  // (the Files tree filters to those); MBTiles go through the Add Data dialog.
+  const addFilePath = useCallback(
+    async (path: string): Promise<string | null> => {
+      try {
+        if (isRasterFileName(path)) {
+          const count = await addDroppedRasters(
+            await loadDroppedRasterPaths([path]),
+          );
+          return count > 0 ? null : t("browser.addFileFailed");
+        }
+        const importedLayers = await loadDroppedVectorPaths([path]);
+        if (!importedLayers.length) return t("browser.addFileFailed");
+        addImportedVectorLayers(importedLayers);
+        return null;
+      } catch (error) {
+        return error instanceof Error
+          ? error.message
+          : t("browser.addFileFailed");
+      }
+    },
+    [addDroppedRasters, addImportedVectorLayers, t],
+  );
+
   const finishDrop = useCallback(
     (importedLayers: ImportedVectorLayer[], rasterCount: number) => {
       if (!importedLayers.length && !rasterCount) {
@@ -1834,6 +1861,7 @@ export function DesktopShell({
               <BrowserPanel
                 mapControllerRef={mapControllerRef}
                 onOpenRecentProject={projectFiles.handleOpenRecent}
+                onAddFilePath={addFilePath}
               />,
               browserContentEl,
             )

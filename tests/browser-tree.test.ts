@@ -3,11 +3,14 @@ import { describe, it } from "node:test";
 import type { RecentProjectEntry } from "@geolibre/core";
 import {
   augmentConnections,
+  augmentFolders,
   buildBrowserTree,
+  buildDirectoryNodes,
   buildPostgisTableNodes,
   filterBrowserTree,
   type BrowserNode,
   type ConnectionLoad,
+  type DirectoryEntry,
 } from "../apps/geolibre-desktop/src/lib/browser-tree";
 import type {
   ServiceLibraryEntry,
@@ -219,6 +222,159 @@ describe("buildPostgisTableNodes", () => {
 
   it("returns an empty array for no tables", () => {
     assert.deepEqual(buildPostgisTableNodes(CONN, []), []);
+  });
+});
+
+describe("buildBrowserTree — Files section", () => {
+  it("omits the Files section unless files input is provided", () => {
+    const tree = buildBrowserTree({ services: [], recentProjects: [] });
+    assert.equal(find(tree, "section:files"), undefined);
+  });
+
+  it("adds a Files section with an Add-folder action, Project Home, and pins", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      files: {
+        projectHome: { path: "/home/u/proj", label: "proj" },
+        folders: [{ path: "/data/gis", label: "gis" }],
+      },
+    });
+    const files = find(tree, "section:files");
+    assert.equal(files?.kind, "section");
+    assert.equal(files?.addFolderAction, true);
+    assert.equal(files?.count, 2);
+    // Project Home first, then pinned folders.
+    assert.deepEqual(
+      files?.children?.map((c) => c.label),
+      ["proj", "gis"],
+    );
+    const home = find(tree, "folder:/home/u/proj");
+    assert.equal(home?.kind, "folder");
+    assert.equal(home?.path, "/home/u/proj");
+    assert.equal(home?.removable, undefined); // Project Home can't be unpinned
+    assert.deepEqual(home?.children, []); // expandable, lazily filled
+    // Pinned folder is removable.
+    assert.equal(find(tree, "folder:/data/gis")?.removable, true);
+  });
+
+  it("renders the Files section with only the Add-folder action when empty", () => {
+    const tree = buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      files: { projectHome: null, folders: [] },
+    });
+    const files = find(tree, "section:files");
+    assert.equal(files?.addFolderAction, true);
+    assert.equal(files?.children?.length, 0);
+  });
+});
+
+describe("buildDirectoryNodes", () => {
+  const entries: DirectoryEntry[] = [
+    { name: "roads.geojson", path: "/d/roads.geojson", isDirectory: false },
+    { name: "sub", path: "/d/sub", isDirectory: true },
+    { name: "notes.txt", path: "/d/notes.txt", isDirectory: false },
+    { name: "aaa", path: "/d/aaa", isDirectory: true },
+    { name: ".hidden", path: "/d/.hidden", isDirectory: true },
+  ];
+  const isLoadable = (name: string) => name.endsWith(".geojson");
+
+  it("lists folders first (sorted), then loadable files (sorted)", () => {
+    const nodes = buildDirectoryNodes(entries, isLoadable);
+    assert.deepEqual(
+      nodes.map((n) => `${n.kind}:${n.label}`),
+      ["folder:aaa", "folder:sub", "file:roads.geojson"],
+    );
+  });
+
+  it("drops non-loadable files and hidden dotfiles", () => {
+    const nodes = buildDirectoryNodes(entries, isLoadable);
+    assert.equal(
+      nodes.find((n) => n.label === "notes.txt"),
+      undefined,
+    );
+    assert.equal(
+      nodes.find((n) => n.label === ".hidden"),
+      undefined,
+    );
+  });
+
+  it("makes folders expandable groups and files addable leaves", () => {
+    const nodes = buildDirectoryNodes(entries, isLoadable);
+    const folder = nodes.find((n) => n.kind === "folder");
+    assert.deepEqual(folder?.children, []);
+    assert.equal(folder?.addable, false);
+    const file = nodes.find((n) => n.kind === "file");
+    assert.equal(file?.addable, true);
+    assert.equal(file?.path, "/d/roads.geojson");
+  });
+});
+
+describe("augmentFolders", () => {
+  const isLoadable = (name: string) => name.endsWith(".geojson");
+  const baseTree = () =>
+    buildBrowserTree({
+      services: [],
+      recentProjects: [],
+      files: { projectHome: null, folders: [{ path: "/d", label: "d" }] },
+    });
+
+  it("injects a loading row while a folder is loading", () => {
+    const out = augmentFolders(
+      baseTree(),
+      { "/d": { status: "loading" } },
+      "Loading…",
+      isLoadable,
+    );
+    const folder = find(out, "folder:/d");
+    assert.equal(folder?.children?.length, 1);
+    assert.equal(folder?.children?.[0].kind, "info");
+    assert.equal(folder?.children?.[0].label, "Loading…");
+  });
+
+  it("injects subfolder/file nodes once loaded", () => {
+    const out = augmentFolders(
+      baseTree(),
+      {
+        "/d": {
+          status: "loaded",
+          entries: [
+            { name: "sub", path: "/d/sub", isDirectory: true },
+            { name: "a.geojson", path: "/d/a.geojson", isDirectory: false },
+          ],
+        },
+      },
+      "Loading…",
+      isLoadable,
+    );
+    assert.deepEqual(
+      find(out, "folder:/d")?.children?.map((c) => c.label),
+      ["sub", "a.geojson"],
+    );
+  });
+
+  it("recurses so an already-expanded subfolder also gets its listing", () => {
+    const out = augmentFolders(
+      baseTree(),
+      {
+        "/d": {
+          status: "loaded",
+          entries: [{ name: "sub", path: "/d/sub", isDirectory: true }],
+        },
+        "/d/sub": {
+          status: "loaded",
+          entries: [
+            { name: "b.geojson", path: "/d/sub/b.geojson", isDirectory: false },
+          ],
+        },
+      },
+      "Loading…",
+      isLoadable,
+    );
+    const sub = find(out, "folder:/d/sub");
+    assert.equal(sub?.children?.length, 1);
+    assert.equal(sub?.children?.[0].label, "b.geojson");
   });
 });
 
