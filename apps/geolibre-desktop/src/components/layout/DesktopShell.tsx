@@ -1237,11 +1237,18 @@ export function DesktopShell({
           );
           return count > 0 ? null : t("browser.addFileFailed");
         }
+        let cancelled = false;
         const importedLayers = await loadDroppedVectorPaths([path], {
           // Same large-dataset confirmation the drag-and-drop / Open Vector File
           // paths use, so clicking a big file in the tree can't silently hang.
-          onLargeDataset: confirmLargeVectorDataset,
+          onLargeDataset: (dataset) => {
+            const accepted = confirmLargeVectorDataset(dataset);
+            cancelled = !accepted;
+            return accepted;
+          },
         });
+        // A declined large-file prompt is a cancellation, not a failure.
+        if (cancelled) return null;
         if (!importedLayers.length) return t("browser.addFileFailed");
         addImportedVectorLayers(importedLayers);
         return null;

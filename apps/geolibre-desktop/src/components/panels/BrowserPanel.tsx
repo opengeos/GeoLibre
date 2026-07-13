@@ -359,15 +359,37 @@ export function BrowserPanel({
     }
   };
 
-  // A pinned root folder's (×) unpins it from the Files section. Also drop its
-  // cached listing so re-pinning the same path later re-reads it from disk
-  // rather than showing a stale listing (the panel stays mounted while hidden).
+  // A pinned root folder's (×) unpins it from the Files section. Also reset the
+  // folder and any expanded descendants — clear their cached listings + fetch
+  // markers and collapse them — so re-pinning the same path re-reads from disk
+  // and expands cleanly (toggle only fetches on a collapsed→expanded change;
+  // the panel stays mounted while hidden, so this state would otherwise persist).
   const removeFolder = (path: string) => {
-    folderFetchedRef.current.delete(path);
+    const isWithin = (candidate: string) =>
+      candidate === path ||
+      candidate.startsWith(`${path}/`) ||
+      candidate.startsWith(`${path}\\`);
+    for (const key of [...folderFetchedRef.current]) {
+      if (isWithin(key)) folderFetchedRef.current.delete(key);
+    }
     setFolderLoads((prev) => {
-      if (!(path in prev)) return prev;
-      const { [path]: _removed, ...rest } = prev;
-      return rest;
+      const next: Record<string, FolderLoad> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        if (!isWithin(key)) next[key] = value;
+      }
+      return next;
+    });
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      for (const id of prev) {
+        if (
+          id.startsWith(FOLDER_ID_PREFIX) &&
+          isWithin(id.slice(FOLDER_ID_PREFIX.length))
+        ) {
+          next.delete(id);
+        }
+      }
+      return next;
     });
     unpinFolder(path);
   };

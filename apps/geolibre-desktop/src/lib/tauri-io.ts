@@ -192,7 +192,7 @@ export function isLoadableFilePath(name: string): boolean {
   return isRestorableVectorPath(name) || isRasterFileName(name);
 }
 
-/** One entry of a local directory listing (see the Rust `list_directory`). */
+/** One entry of a local directory listing (from {@link listDirectory}). */
 export interface LocalDirectoryEntry {
   name: string;
   /** Absolute path of the entry. */
@@ -218,7 +218,10 @@ export async function listDirectory(
 ): Promise<LocalDirectoryEntry[]> {
   if (!isTauri()) return [];
   const entries = await readDir(path);
-  const base = /[/\\]$/.test(path) ? path : `${path}/`;
+  // Join with the parent's own separator style so a Windows path stays
+  // all-backslash (readDir returns names only, no path).
+  const sep = path.includes("\\") ? "\\" : "/";
+  const base = /[/\\]$/.test(path) ? path : `${path}${sep}`;
   return entries.map((entry) => ({
     name: entry.name,
     path: `${base}${entry.name}`,

@@ -182,6 +182,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Must init after the fs plugin: it restores previously-granted fs
+        // scope (e.g. Browser-panel pinned folders) so they survive a restart.
+        .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .manage(EarthEngineOAuthState::default())
@@ -334,9 +337,9 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// Windows-style paths a project may carry regardless of the host the binary
 /// runs on.
 pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
-    // Absolute, non-UNC, no `..` traversal — the shared guard used by
-    // `list_directory` too, so the byte-parsing lives in one place and can't
-    // diverge between the two security-relevant path checks.
+    // Absolute, non-UNC, no `..` traversal — split into `is_safe_absolute_path`
+    // so the security-relevant byte-parsing lives in one place rather than being
+    // duplicated.
     if !is_safe_absolute_path(path) {
         return false;
     }

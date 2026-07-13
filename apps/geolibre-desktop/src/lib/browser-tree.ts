@@ -274,7 +274,11 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
   return sections;
 }
 
-/** One entry of a directory listing (from the sidecar-free `list_directory`). */
+/**
+ * One entry of a directory listing. Structurally matches `LocalDirectoryEntry`
+ * in tauri-io.ts (which `listDirectory` returns); duplicated here so this pure
+ * model stays decoupled from tauri-io and unit-tests without the filesystem.
+ */
 export interface DirectoryEntry {
   name: string;
   /** Absolute path of the entry. */
