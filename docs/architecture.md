@@ -104,6 +104,32 @@ The container does not run the Tauri desktop shell or the optional Python sideca
 - Tauri CSP allowlists tile and style hosts (OpenFreeMap, CARTO).
 - File access uses dialog-selected paths only.
 
+### Native HTTP trust store and mutual TLS
+
+The desktop app issues some remote fetches (tile/URL resolution, OGC
+GetCapabilities, and similar) from the native Rust process rather than the
+WebView. That path (`guarded_http_client` in `src-tauri/src/lib.rs`) trusts the
+**OS/system certificate store** in addition to the bundled Mozilla roots, so a
+server signed by an enterprise CA installed on the machine is accepted without
+extra configuration.
+
+For endpoints behind **mutual TLS (mTLS)**, the WebView `fetch` path shows an
+interactive OS certificate prompt; the native Rust client cannot, so point it at
+a client certificate with environment variables:
+
+| Variable | Purpose |
+| --- | --- |
+| `GEOLIBRE_HTTP_CA_CERT` | Path to a PEM bundle of extra CA certificate(s) to trust, on top of the OS store (for a private CA not installed system-wide). |
+| `GEOLIBRE_HTTP_CLIENT_CERT` | Path to the client certificate to present. A `.pem` file (certificate chain plus an **unencrypted** PKCS#8 private key) or a PKCS#12 bundle (`.p12`/`.pfx`). |
+| `GEOLIBRE_HTTP_CLIENT_CERT_PASSWORD` | Passphrase for a PKCS#12 client certificate. Its presence also forces the PKCS#12 code path. |
+
+A `.p12`/`.pfx` extension (or a supplied passphrase) selects PKCS#12; any other
+path is read as PEM. PEM identities use the default rustls backend; PKCS#12
+identities use the platform native-tls backend (SChannel on Windows, Secure
+Transport on macOS, OpenSSL on Linux), which also reads the OS trust store.
+Convert a PKCS#12 export to PEM with
+`openssl pkcs12 -in cert.p12 -out cert.pem -nodes` if you prefer the rustls path.
+
 ## Performance: map rendering on Linux (WebKitGTK)
 
 The desktop app uses the system WebView. On Linux that is **WebKitGTK**, whose

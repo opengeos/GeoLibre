@@ -569,6 +569,17 @@ fn close_oauth_popups(app: tauri::AppHandle) {
 const SSRF_BLOCKED_MESSAGE: &str =
     "Refusing to fetch a link-local, unspecified, or multicast address";
 
+/// Path to a PEM bundle of extra CA certificate(s) to trust for server
+/// verification, on top of the OS trust store (issue #1220).
+const HTTP_CA_CERT_ENV: &str = "GEOLIBRE_HTTP_CA_CERT";
+/// Path to the client certificate to present for mutual TLS. A `.pem` file
+/// (certificate chain plus an unencrypted PKCS#8 private key) or a PKCS#12
+/// bundle (`.p12`/`.pfx`, optionally passphrase-protected).
+const HTTP_CLIENT_CERT_ENV: &str = "GEOLIBRE_HTTP_CLIENT_CERT";
+/// Passphrase for a PKCS#12 client certificate. Its presence also forces the
+/// PKCS#12 code path for a client cert that lacks a recognised extension.
+const HTTP_CLIENT_CERT_PASSWORD_ENV: &str = "GEOLIBRE_HTTP_CLIENT_CERT_PASSWORD";
+
 /// Whether an IP sits in a range a webview- or plugin-triggered fetch must not
 /// reach. This is the SSRF guard for [`fetch_url_bytes`] and
 /// [`resolve_url_redirect`]: those commands issue requests from the desktop
@@ -715,15 +726,108 @@ impl reqwest::dns::Resolve for GuardedDnsResolver {
     }
 }
 
+/// A client certificate for mutual TLS, tagged by the backend it needs.
+///
+/// The rustls backend (our default) reads a PEM identity directly. PKCS#12
+/// bundles, which is what Windows exports and what carries a passphrase, are
+/// only parseable by the native-tls backend, so those requests switch backends
+/// for that one client (issue #1220).
+enum ClientIdentity {
+    /// PEM identity (certificate chain plus an unencrypted PKCS#8 key), rustls.
+    Pem(reqwest::Identity),
+    /// PKCS#12 identity, native-tls.
+    Pkcs12(reqwest::Identity),
+}
+
+/// Whether a client certificate should be read as PKCS#12 rather than PEM.
+///
+/// A `.p12`/`.pfx` extension or a supplied passphrase selects PKCS#12; anything
+/// else is treated as PEM.
+fn client_cert_is_pkcs12(path: &std::path::Path, has_password: bool) -> bool {
+    if has_password {
+        return true;
+    }
+    matches!(
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
+        Some("p12") | Some("pfx")
+    )
+}
+
+/// Load extra CA certificate(s) named by [`HTTP_CA_CERT_ENV`], if any.
+fn extra_ca_certificates() -> Result<Vec<reqwest::Certificate>, String> {
+    let Some(path) = env::var_os(HTTP_CA_CERT_ENV) else {
+        return Ok(Vec::new());
+    };
+    let path = PathBuf::from(path);
+    let pem = fs::read(&path)
+        .map_err(|error| format!("Could not read CA certificate {}: {error}", path.display()))?;
+    reqwest::Certificate::from_pem_bundle(&pem)
+        .map_err(|error| format!("Could not parse CA certificate {}: {error}", path.display()))
+}
+
+/// Load the mutual-TLS client identity named by [`HTTP_CLIENT_CERT_ENV`], if any.
+fn client_identity() -> Result<Option<ClientIdentity>, String> {
+    let Some(path) = env::var_os(HTTP_CLIENT_CERT_ENV) else {
+        return Ok(None);
+    };
+    let path = PathBuf::from(path);
+    let bytes = fs::read(&path).map_err(|error| {
+        format!(
+            "Could not read client certificate {}: {error}",
+            path.display()
+        )
+    })?;
+    let password = env::var(HTTP_CLIENT_CERT_PASSWORD_ENV).ok();
+    if client_cert_is_pkcs12(&path, password.is_some()) {
+        let identity = reqwest::Identity::from_pkcs12_der(&bytes, password.as_deref().unwrap_or(""))
+            .map_err(|error| {
+                format!(
+                    "Could not load PKCS#12 client certificate {}: {error}",
+                    path.display()
+                )
+            })?;
+        Ok(Some(ClientIdentity::Pkcs12(identity)))
+    } else {
+        let identity = reqwest::Identity::from_pem(&bytes).map_err(|error| {
+            format!(
+                "Could not load PEM client certificate {}: {error}",
+                path.display()
+            )
+        })?;
+        Ok(Some(ClientIdentity::Pem(identity)))
+    }
+}
+
 /// Build a blocking HTTP client that enforces the SSRF guard at connect time
 /// (via [`GuardedDnsResolver`]) and re-validates redirect hops.
+///
+/// The client trusts the OS certificate store (via the `rustls-tls-native-roots`
+/// feature) so enterprise CAs work, and presents a client certificate for
+/// mutual TLS when one is configured (issue #1220).
 fn guarded_http_client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
-    reqwest::blocking::Client::builder()
+    let mut builder = reqwest::blocking::Client::builder()
         .timeout(timeout)
         .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
         .redirect(guarded_redirect_policy())
         .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
-        .user_agent("GeoLibre Desktop")
+        .user_agent("GeoLibre Desktop");
+
+    for certificate in extra_ca_certificates()? {
+        builder = builder.add_root_certificate(certificate);
+    }
+
+    builder = match client_identity()? {
+        // PKCS#12 identities are only understood by native-tls, which also reads
+        // the OS trust store on every platform; switch this one client over.
+        Some(ClientIdentity::Pkcs12(identity)) => builder.use_native_tls().identity(identity),
+        Some(ClientIdentity::Pem(identity)) => builder.use_rustls_tls().identity(identity),
+        None => builder.use_rustls_tls(),
+    };
+
+    builder
         .build()
         .map_err(|error| format!("Could not create HTTP client: {error}"))
 }
@@ -2896,9 +3000,9 @@ fn configure_linux_webkit() {}
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_fetchable_url, find_zip_manifest_path, is_allowed_local_vector_path,
-        is_allowed_project_path, is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
-        resolve_sidecar_in_resource_dir,
+        client_cert_is_pkcs12, ensure_fetchable_url, find_zip_manifest_path,
+        is_allowed_local_vector_path, is_allowed_project_path, is_disallowed_ip,
+        is_safe_absolute_path, plugin_archive_file_name, resolve_sidecar_in_resource_dir,
     };
     use std::io::{Cursor, Write};
     use std::net::IpAddr;
@@ -2963,6 +3067,24 @@ mod tests {
         // resolves to nothing rather than a false positive.
         let empty = ScratchDir::new("sidecar-empty");
         assert!(resolve_sidecar_in_resource_dir(empty.path()).is_none());
+    }
+
+    // Issue #1220: a client certificate is read as PKCS#12 when its extension is
+    // `.p12`/`.pfx` (case-insensitively) or a passphrase is supplied; everything
+    // else is treated as PEM.
+    #[test]
+    fn classifies_client_cert_format() {
+        use std::path::Path;
+        // Extension selects PKCS#12, case-insensitively.
+        assert!(client_cert_is_pkcs12(Path::new("/certs/id.p12"), false));
+        assert!(client_cert_is_pkcs12(Path::new("/certs/id.PFX"), false));
+        // PEM (and unrecognised) extensions stay PEM without a passphrase.
+        assert!(!client_cert_is_pkcs12(Path::new("/certs/id.pem"), false));
+        assert!(!client_cert_is_pkcs12(Path::new("/certs/id.crt"), false));
+        assert!(!client_cert_is_pkcs12(Path::new("/certs/id"), false));
+        // A passphrase forces PKCS#12 even for a PEM-looking or extensionless path.
+        assert!(client_cert_is_pkcs12(Path::new("/certs/id.pem"), true));
+        assert!(client_cert_is_pkcs12(Path::new("/certs/id"), true));
     }
 
     #[test]

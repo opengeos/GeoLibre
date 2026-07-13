@@ -39,7 +39,10 @@ tauri-plugin-opener = "2"
 tauri-plugin-persisted-scope = "2"
 duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+# rustls-tls stays the default backend for every request. rustls-tls-native-roots
+# also trusts the OS/system certificate store (enterprise CAs), and native-tls is
+# used only on the opt-in mTLS path for PKCS#12 client certificates (issue #1220).
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "rustls-tls-native-roots", "native-tls"] }
 flate2 = "1"
 tar = "0.4"
 zip = { version = "6", default-features = false, features = ["deflate"] }
