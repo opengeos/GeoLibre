@@ -184,6 +184,15 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         // Must init after the fs plugin: it restores previously-granted fs
         // scope (e.g. Browser-panel pinned folders) so they survive a restart.
+        //
+        // SECURITY / SCOPE NOTE (deliberate, maintainer-approved): this persists
+        // *every* dialog-granted fs scope for the life of the install, not just
+        // Browser-panel folder pins — "Open Vector File", "Open Raster", "Save
+        // Project As", etc. also extend fs scope to the picked path, and all of
+        // those now survive a restart. There is also no per-path "forget", so
+        // unpinning a folder in the Browser panel removes the UI pin but does
+        // not revoke its (persisted) read scope. Accepted for durable pins;
+        // revisit if a narrower per-source scope or a revoke path is wanted.
         .plugin(tauri_plugin_persisted_scope::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())

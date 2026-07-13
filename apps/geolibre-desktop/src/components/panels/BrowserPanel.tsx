@@ -365,6 +365,11 @@ export function BrowserPanel({
   // markers and collapse them — so re-pinning the same path re-reads from disk
   // and expands cleanly (toggle only fetches on a collapsed→expanded change;
   // the panel stays mounted while hidden, so this state would otherwise persist).
+  //
+  // Note: this removes the pin from the UI/localStorage but does NOT revoke the
+  // underlying fs scope the picker granted (persisted app-wide via
+  // tauri-plugin-persisted-scope, see src-tauri/src/lib.rs) — there is no clean
+  // per-path "forget". Unpin means "stop listing it here", not "revoke access".
   const removeFolder = (path: string) => {
     const isWithin = (candidate: string) =>
       candidate === path ||
