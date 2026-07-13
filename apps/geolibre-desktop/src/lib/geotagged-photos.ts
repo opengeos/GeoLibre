@@ -82,8 +82,9 @@ const FULL_RESOLUTION_IMAGE_MIME: Record<string, string> = {
 };
 
 /** Base64-encode raw bytes in chunks so large images don't overflow the call
- * stack (`btoa(String.fromCharCode(...allBytes))` throws on multi-MB inputs). */
-function base64FromBytes(bytes: Uint8Array): string {
+ * stack (`btoa(String.fromCharCode(...allBytes))` throws on multi-MB inputs).
+ * Exported for direct testing (the DOM decode path is unavailable under Node). */
+export function base64FromBytes(bytes: Uint8Array): string {
   let binary = "";
   const chunkSize = 0x8000;
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
@@ -263,8 +264,9 @@ interface PhotoImages {
  * cannot render in an `<img>` (TIFF/HEIC), where the viewer falls back to the
  * thumbnail. The bytes are not re-encoded, so there is no quality loss; the
  * trade-off is project-file size, since this is serialized into the project.
+ * Exported for testing.
  */
-async function createFullResolutionDataUrl(
+export async function createFullResolutionDataUrl(
   file: Blob,
   fileName: string,
 ): Promise<string | null> {
@@ -318,6 +320,11 @@ async function createPhotoImages(
     if (!context) return empty;
     context.drawImage(bitmap, 0, 0, width, height);
     const thumbnail = canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
+    // Release the decoded bitmap (a raw RGBA buffer, ~194 MB for an 8064×6048
+    // source) before reading the original bytes and building the base64 string,
+    // where peak memory is highest; the full-res encode reads `file`, not the
+    // bitmap. The `finally` close is a safe no-op on an already-closed bitmap.
+    bitmap.close();
     // Only embed the original when it is larger than the thumbnail; at or below
     // the cap the thumbnail is already native, so a full-res copy would just
     // duplicate it and bloat the project.

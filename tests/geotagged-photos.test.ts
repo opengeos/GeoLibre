@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 
 import type { FeatureCollection, Point } from "geojson";
 import {
+  base64FromBytes,
   buildPhotoProperties,
+  createFullResolutionDataUrl,
   isPhotoDropFileName,
   isPhotoFileName,
   isValidLngLat,
@@ -155,6 +157,53 @@ describe("buildPhotoProperties", () => {
       null,
     );
     assert.equal(props.camera, "Canon EOS R5");
+  });
+});
+
+describe("base64FromBytes", () => {
+  it("encodes bytes the same as Buffer's base64, including chunk boundaries", () => {
+    // A payload past the 0x8000 chunk size exercises the chunked loop.
+    const bytes = new Uint8Array(0x8000 + 500);
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = (i * 31) & 0xff;
+    assert.equal(
+      base64FromBytes(bytes),
+      Buffer.from(bytes).toString("base64"),
+    );
+  });
+
+  it("handles an empty input", () => {
+    assert.equal(base64FromBytes(new Uint8Array(0)), "");
+  });
+});
+
+describe("createFullResolutionDataUrl", () => {
+  it("embeds the original bytes with the extension's MIME type", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const url = await createFullResolutionDataUrl(
+      new Blob([bytes]),
+      "IMG_1234.JPG",
+    );
+    assert.equal(
+      url,
+      `data:image/jpeg;base64,${Buffer.from(bytes).toString("base64")}`,
+    );
+  });
+
+  it("maps png/webp extensions and is case-insensitive", async () => {
+    const blob = new Blob([new Uint8Array([9])]);
+    assert.ok((await createFullResolutionDataUrl(blob, "a.png"))?.startsWith(
+      "data:image/png;base64,",
+    ));
+    assert.ok((await createFullResolutionDataUrl(blob, "a.WEBP"))?.startsWith(
+      "data:image/webp;base64,",
+    ));
+  });
+
+  it("returns null for formats a browser can't show at full size", async () => {
+    const blob = new Blob([new Uint8Array([0])]);
+    assert.equal(await createFullResolutionDataUrl(blob, "scene.tif"), null);
+    assert.equal(await createFullResolutionDataUrl(blob, "photo.heic"), null);
+    assert.equal(await createFullResolutionDataUrl(blob, "noext"), null);
   });
 });
 

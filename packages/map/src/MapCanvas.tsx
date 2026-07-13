@@ -268,6 +268,11 @@ function openPhotoFullscreen(src: string, alt: string): void {
   };
   if (image.complete && image.naturalWidth > 0) measure();
   else image.addEventListener("load", measure, { once: true });
+  // The fit size (and thus the native-zoom ratio and 400% cap) depends on the
+  // viewport, which changes when the browser window resizes or the viewer
+  // enters/leaves native fullscreen, so remeasure on both.
+  const onResize = () => measure();
+  window.addEventListener("resize", onResize);
 
   const setZoom = (next: number) => {
     zoom = clamp(next, 1, maxZoom);
@@ -289,40 +294,75 @@ function openPhotoFullscreen(src: string, alt: string): void {
     { passive: false },
   );
 
-  // Drag to pan once zoomed in.
-  let dragging = false;
+  // Pan (one pointer) and pinch-zoom (two pointers). Touch devices have no
+  // wheel, and `touch-action: none` disables native pinch, so drive the same
+  // zoom/pan transform from raw pointer events here.
+  const activePointers = new Map<number, { x: number; y: number }>();
   let lastX = 0;
   let lastY = 0;
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  const pointerSpread = () => {
+    const [a, b] = [...activePointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
   image.addEventListener("pointerdown", (event) => {
-    if (zoom <= 1) return;
-    dragging = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    image.setPointerCapture(event.pointerId);
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // Arm pan/pinch state before capturing the pointer: setPointerCapture can
+    // throw for a non-active pointer, and that must not skip the setup below.
+    if (activePointers.size === 2) {
+      pinchStartDist = pointerSpread();
+      pinchStartZoom = zoom;
+    } else {
+      lastX = event.clientX;
+      lastY = event.clientY;
+    }
+    try {
+      image.setPointerCapture(event.pointerId);
+    } catch {
+      // The pointer is already gone; pan/pinch still work without capture.
+    }
     event.preventDefault();
   });
   image.addEventListener("pointermove", (event) => {
-    if (!dragging) return;
+    if (!activePointers.has(event.pointerId)) return;
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (activePointers.size >= 2) {
+      // Pinch: scale zoom by how much the finger spread changed.
+      if (pinchStartDist > 0) {
+        setZoom((pinchStartZoom * pointerSpread()) / pinchStartDist);
+      }
+      return;
+    }
+    // Single-pointer pan, only meaningful once zoomed past the fit.
+    if (zoom <= 1) return;
     tx += event.clientX - lastX;
     ty += event.clientY - lastY;
     lastX = event.clientX;
     lastY = event.clientY;
     applyTransform();
   });
-  const endDrag = (event: PointerEvent) => {
-    if (!dragging) return;
-    dragging = false;
+  const endPointer = (event: PointerEvent) => {
+    if (!activePointers.delete(event.pointerId)) return;
     if (image.hasPointerCapture(event.pointerId)) {
       image.releasePointerCapture(event.pointerId);
     }
+    // Dropping from a pinch back to one finger: resume panning from the survivor
+    // so the image doesn't jump on the next move.
+    const [survivor] = [...activePointers.values()];
+    if (survivor) {
+      lastX = survivor.x;
+      lastY = survivor.y;
+    }
   };
-  image.addEventListener("pointerup", endDrag);
-  image.addEventListener("pointercancel", endDrag);
+  image.addEventListener("pointerup", endPointer);
+  image.addEventListener("pointercancel", endPointer);
 
   let closed = false;
   const close = () => {
     if (closed) return;
     closed = true;
+    window.removeEventListener("resize", onResize);
     document.removeEventListener("keydown", onKeyDown);
     document.removeEventListener("fullscreenchange", onFullscreenChange);
     if (document.fullscreenElement === overlay) {
@@ -334,8 +374,14 @@ function openPhotoFullscreen(src: string, alt: string): void {
     if (event.key === "Escape") close();
   };
   const onFullscreenChange = () => {
-    // Leaving native fullscreen (Esc / F11) should also dismiss the overlay.
-    if (document.fullscreenElement !== overlay) close();
+    if (document.fullscreenElement === overlay) {
+      // Entering fullscreen changes the rendered fit size; remeasure so the
+      // badge percentage and the 400%-of-native cap track the new layout.
+      requestAnimationFrame(measure);
+    } else {
+      // Leaving native fullscreen (Esc / F11) should also dismiss the overlay.
+      close();
+    }
   };
 
   closeButton.addEventListener("click", close);
