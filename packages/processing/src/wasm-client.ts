@@ -520,10 +520,19 @@ export async function runWhiteboxToolWasm(
     ) {
       // Prefer bytes the caller resolved (the dialog fetches the layer's data);
       // otherwise try to fetch the parameter as a URL.
+      const provided = request.parameters[name];
+      const hasValue =
+        typeof provided === "string" ? provided.length > 0 : provided != null;
       const bytes =
         request.layer_inputs?.[name]?.bytes ??
-        (await fetchBytes(request.parameters[name]));
+        (hasValue ? await fetchBytes(provided) : null);
       if (!bytes) {
+        // An optional data input the user left blank is simply omitted rather
+        // than force-fetched: e.g. extract_cog_subset's `input` when a `url` is
+        // supplied instead (the tool reads the COG by byte-range from that url).
+        // Only a required input, or one with a value that could not be fetched,
+        // is a hard error.
+        if (!param.required && !hasValue) continue;
         throw new Error(
           `Could not read input "${name}" in the browser. Its data is not fetchable here (only available via the sidecar); turn off "Run locally (WASM)" to use the sidecar.`,
         );
@@ -625,6 +634,18 @@ export async function runWhiteboxToolWasm(
       if (isFeatureCollection(parsed)) out[entry.name] = parsed;
     } catch {
       // leave this output out
+    }
+  }
+  // A tool that declares no typed output parameter still writes a result file:
+  // the GeoLibre COG/WMS/XYZ subset extractors type their `output` as a plain
+  // string path (not a `raster_out`), so the loop above maps nothing. Surface
+  // each produced file as raw bytes, keyed by its stem, so the result COG still
+  // reaches the map/download instead of being silently dropped. Scoped to the
+  // no-typed-output case so normal tools (whose files are already mapped) are
+  // unaffected.
+  if (outputs.length === 0) {
+    for (const [file, bytes] of Object.entries(files)) {
+      out[file.replace(/\.[^.]+$/, "")] = bytes;
     }
   }
   return job(request.tool_id, "succeeded", stdout, out, null);
