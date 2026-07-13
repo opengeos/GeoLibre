@@ -93,6 +93,7 @@ import {
   type CalcOutputType,
 } from "../../lib/attribute-expression";
 import { computeRowSelection } from "../../lib/attribute-selection";
+import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
   AREA_UNITS,
   detectGeometryFamilies,
@@ -124,6 +125,10 @@ type AttributeTableRow = {
   featureId: string;
   properties: Record<string, unknown>;
 };
+
+/** Reserved inline-image property keys (photo thumbnail + full-resolution) that
+ * hold data URLs, so they are hidden from the attribute table's columns. */
+const RESERVED_IMAGE_KEYS = new Set<string>(RESERVED_PROPERTY_KEYS);
 
 const DEFAULT_FEATURE_ID_COLUMN_WIDTH = 72;
 const DEFAULT_ATTRIBUTE_COLUMN_WIDTH = 160;
@@ -591,7 +596,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const propKeys = new Set<string>();
   for (const row of attributeRows) {
     for (const k of Object.keys(row.properties)) {
-      propKeys.add(k);
+      // The inline photo/full-resolution image keys are multi-KB-to-MB data
+      // URLs (the map popup and Identify render them as thumbnails instead); a
+      // table cell would dump the raw base64 as text and jank on large photos.
+      if (!RESERVED_IMAGE_KEYS.has(k)) propKeys.add(k);
     }
   }
   const discoveredColumns = Array.from(propKeys);

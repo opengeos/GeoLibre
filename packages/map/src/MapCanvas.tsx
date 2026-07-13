@@ -178,11 +178,18 @@ function imageDataUrlAt(
 
 /**
  * Find the first feature property holding an inline raster image (a geotagged
- * photo or field-collection thumbnail), returning its data URL or null.
+ * photo or field-collection thumbnail), returning its data URL or null. The
+ * full-resolution key is skipped so this fallback never returns the heavy
+ * original as if it were the light thumbnail (e.g. for a hand-edited feature
+ * whose `photo` thumbnail is missing but `photo_full` is present).
  */
 function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
-  for (const value of Object.values(properties)) {
-    if (typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
+  for (const [key, value] of Object.entries(properties)) {
+    if (
+      key !== PHOTO_FULL_KEY &&
+      typeof value === "string" &&
+      INLINE_IMAGE_DATA_URL.test(value)
+    ) {
       return value;
     }
   }
@@ -251,6 +258,14 @@ function openPhotoFullscreen(src: string, alt: string): void {
     Math.min(max, Math.max(min, value));
 
   const applyTransform = () => {
+    // Bound the pan so the image can't be dragged fully off-screen: the image is
+    // centered, so keeping |tx|/|ty| within half its scaled size guarantees the
+    // viewport centre always sits on the photo (and its double-click-to-reset
+    // target stays reachable). clientWidth/Height are the fit-rendered size.
+    const maxTx = (image.clientWidth * zoom) / 2;
+    const maxTy = (image.clientHeight * zoom) / 2;
+    tx = clamp(tx, -maxTx, maxTx);
+    ty = clamp(ty, -maxTy, maxTy);
     image.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
     image.classList.toggle("is-zoomed", zoom > 1.001);
     const nativePercent = Math.round(fitToNative * zoom * 100);
