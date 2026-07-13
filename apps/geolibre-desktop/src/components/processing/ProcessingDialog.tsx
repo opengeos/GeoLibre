@@ -83,6 +83,11 @@ type ParameterValues = Record<string, unknown>;
 const LAYER_TOKEN_PREFIX = "layer:";
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
+// Smallest the floating panel can be resized to, so the two-column tool browser
+// stays usable (left list + a readable parameter form).
+const PANEL_MIN_W = 560;
+const PANEL_MIN_H = 400;
+
 function toolLabel(tool: WhiteboxTool): string {
   return tool.display_name || humanize(tool.id);
 }
@@ -458,6 +463,18 @@ export function ProcessingDialog({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
+  // Explicit size, null until first resized (the default responsive CSS size
+  // applies). A drag from the bottom-right grip grows the panel from its pinned
+  // top-left corner.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const resizeStart = useRef<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    left: number;
+    top: number;
+  } | null>(null);
 
   const onDragStart = (event: React.PointerEvent) => {
     // Never begin a drag from an interactive control: the pointer capture would
@@ -498,6 +515,46 @@ export function ProcessingDialog({
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
+  const onResizeStart = (event: React.PointerEvent) => {
+    // Don't also start a header drag; the grip lives outside the header but stop
+    // propagation defensively.
+    event.stopPropagation();
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Pin the top-left so the panel grows toward the grip instead of staying
+    // centered (the default placement uses a translate to center it).
+    setPos({ x: rect.left, y: rect.top });
+    resizeStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      w: rect.width,
+      h: rect.height,
+      left: rect.left,
+      top: rect.top,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onResizeMove = (event: React.PointerEvent) => {
+    const start = resizeStart.current;
+    if (!start) return;
+    // Grow from the pinned top-left, clamped to a usable minimum and the viewport.
+    const w = Math.max(
+      PANEL_MIN_W,
+      Math.min(start.w + (event.clientX - start.x), window.innerWidth - start.left),
+    );
+    const h = Math.max(
+      PANEL_MIN_H,
+      Math.min(start.h + (event.clientY - start.y), window.innerHeight - start.top),
+    );
+    setSize({ w, h });
+  };
+
+  const onResizeEnd = (event: React.PointerEvent) => {
+    resizeStart.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
   // Escape closes the panel, preserving the affordance the Radix modal provided.
   // Guarded on `open` so it doesn't intercept Escape for the rest of the app.
   useEffect(() => {
@@ -511,13 +568,22 @@ export function ProcessingDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setProcessingOpen]);
 
-  // Re-clamp a dragged position when the viewport shrinks, so a panel dragged to
-  // an edge can't be left partly off-screen after a window resize. Only touches a
-  // pinned `pos` (functional update reads the latest), so the listener isn't
-  // re-subscribed on every drag frame.
+  // Re-clamp an explicit size and dragged position when the viewport shrinks, so
+  // a resized/moved panel can't be left oversized or partly off-screen after a
+  // window resize. Functional updates read the latest values, so the listener
+  // isn't re-subscribed on every drag/resize frame; a never-moved/never-resized
+  // panel (null) keeps its responsive CSS placement.
   useEffect(() => {
     if (!open) return;
     const clamp = () => {
+      setSize((current) =>
+        current
+          ? {
+              w: Math.max(PANEL_MIN_W, Math.min(current.w, window.innerWidth)),
+              h: Math.max(PANEL_MIN_H, Math.min(current.h, window.innerHeight)),
+            }
+          : null,
+      );
       const panel = panelRef.current;
       if (!panel) return;
       setPos((current) =>
@@ -1265,9 +1331,16 @@ export function ProcessingDialog({
       tabIndex={-1}
       aria-label={t("processing.whitebox.toolbox")}
       aria-modal={false}
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      style={{
+        // Inline width/height (once resized) override the responsive w-/h- classes.
+        ...(pos ? { left: pos.x, top: pos.y } : null),
+        ...(size ? { width: size.w, height: size.h } : null),
+      }}
       className={cn(
-        "fixed z-40 flex h-[min(760px,92vh)] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        // Height leaves room for the top offset (top-16) plus a bottom margin so
+        // the whole panel - including the bottom-right resize grip - stays on
+        // screen at small viewport heights.
+        "fixed z-40 flex h-[min(760px,calc(100vh-6rem))] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
         pos ? "" : "left-1/2 top-16 -translate-x-1/2",
       )}
     >
@@ -1568,6 +1641,31 @@ export function ProcessingDialog({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Resize grip (bottom-right). The diagonal lines hint the affordance.
+          Pointer-only, so it is presentational - there is no keyboard resize to
+          expose to assistive tech. */}
+      <div
+        role="presentation"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
+        onPointerDown={onResizeStart}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+      >
+        <svg
+          viewBox="0 0 10 10"
+          className="h-full w-full text-muted-foreground"
+          aria-hidden="true"
+        >
+          <path
+            d="M9 1 L1 9 M9 5 L5 9"
+            stroke="currentColor"
+            strokeWidth={1}
+            fill="none"
+          />
+        </svg>
       </div>
     </div>
   );
