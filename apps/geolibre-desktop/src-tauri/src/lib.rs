@@ -763,9 +763,11 @@ fn client_cert_password_without_path(has_cert_path: bool, has_password: bool) ->
     has_password && !has_cert_path
 }
 
-/// Load extra CA certificate(s) named by [`HTTP_CA_CERT_ENV`], if any.
+/// Load extra CA certificate(s) named by [`HTTP_CA_CERT_ENV`], if any. A
+/// set-but-empty value (common from `CA_CERT=${SECRET:-}` env interpolation) is
+/// treated as unset rather than read as the path `""`.
 fn extra_ca_certificates() -> Result<Vec<reqwest::Certificate>, String> {
-    let Some(path) = env::var_os(HTTP_CA_CERT_ENV) else {
+    let Some(path) = env::var_os(HTTP_CA_CERT_ENV).filter(|value| !value.is_empty()) else {
         return Ok(Vec::new());
     };
     let path = PathBuf::from(path);
@@ -777,14 +779,22 @@ fn extra_ca_certificates() -> Result<Vec<reqwest::Certificate>, String> {
 
 /// Load the mutual-TLS client identity named by [`HTTP_CLIENT_CERT_ENV`], if any.
 fn client_identity() -> Result<Option<ClientIdentity>, String> {
-    // Treat an empty passphrase as unset: env interpolation in Docker/K8s/.env
+    // Treat missing or empty as unset: env interpolation in Docker/K8s/.env
     // tooling (e.g. `PASSWORD=${SECRET:-}`) commonly yields "" rather than
     // leaving the variable unset, which must not force the PKCS#12 path or trip
-    // the stray-passphrase error below.
-    let password = env::var(HTTP_CLIENT_CERT_PASSWORD_ENV)
-        .ok()
-        .filter(|value| !value.is_empty());
-    let Some(path) = env::var_os(HTTP_CLIENT_CERT_ENV) else {
+    // the stray-passphrase error below. A non-UTF-8 value is surfaced as an error
+    // rather than dropped, since the PKCS#12 loader takes a `&str` passphrase.
+    let password = match env::var(HTTP_CLIENT_CERT_PASSWORD_ENV) {
+        Ok(value) if value.is_empty() => None,
+        Ok(value) => Some(value),
+        Err(env::VarError::NotPresent) => None,
+        Err(env::VarError::NotUnicode(_)) => {
+            return Err(format!("{HTTP_CLIENT_CERT_PASSWORD_ENV} is not valid UTF-8"));
+        }
+    };
+    // A set-but-empty cert path is likewise treated as unset, so it does not
+    // bypass the stray-passphrase guard below or fail later on `fs::read("")`.
+    let Some(path) = env::var_os(HTTP_CLIENT_CERT_ENV).filter(|value| !value.is_empty()) else {
         if client_cert_password_without_path(false, password.is_some()) {
             return Err(format!(
                 "{HTTP_CLIENT_CERT_PASSWORD_ENV} is set but {HTTP_CLIENT_CERT_ENV} is not; \

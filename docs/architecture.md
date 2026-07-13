@@ -129,6 +129,14 @@ identities use the platform native-tls backend (SChannel on Windows, Secure
 Transport on macOS, OpenSSL on Linux), which also reads the OS trust store.
 Convert a PKCS#12 export to PEM with
 `openssl pkcs12 -in cert.p12 -out cert.pem -nodes` if you prefer the rustls path.
+A set-but-empty value for any of these variables is treated as unset.
+
+The configured client certificate is held on the shared native HTTP client and
+is therefore **presented to any HTTPS server that requests one** during a native
+fetch (tile, style, and OGC hosts a project points at), not only the endpoint the
+certificate was issued for. TLS sends a client certificate only when the server
+asks for one, so this is not an unconditional disclosure, but configure a client
+certificate only when the hosts the app talks to are trusted.
 
 ## Performance: map rendering on Linux (WebKitGTK)
 
