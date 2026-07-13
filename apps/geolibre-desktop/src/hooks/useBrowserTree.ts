@@ -13,14 +13,11 @@ import {
 } from "../lib/saved-postgres-connections";
 import {
   folderLabel,
+  parentDirectory,
   PINNED_FOLDERS_CHANGED_EVENT,
   readPinnedFolders,
 } from "../lib/browser-folders";
-import {
-  isAbsoluteLocalPath,
-  isTauri,
-  parentDirectory,
-} from "../lib/tauri-io";
+import { isAbsoluteLocalPath, isTauri } from "../lib/tauri-io";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
 export interface BrowserTreeState {

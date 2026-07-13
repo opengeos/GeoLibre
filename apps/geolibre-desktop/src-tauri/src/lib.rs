@@ -335,31 +335,10 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// Windows-style paths a project may carry regardless of the host the binary
 /// runs on.
 pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
-
-    // Reject UNC paths first. Both the Windows form ("\\server\share") and the
-    // forward-slash form ("//server/share") start with two separators and can
-    // make Windows auto-authenticate against a remote host, so neither may slip
-    // through the POSIX-absolute check below.
-    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
-        return false;
-    }
-
-    // Absolute local path only: POSIX "/..." or a Windows drive-letter "C:\..."
-    // / "C:/...".
-    let is_posix_absolute = bytes.first() == Some(&b'/');
-    let is_windows_drive = bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && is_separator(bytes[2]);
-    if !is_posix_absolute && !is_windows_drive {
-        return false;
-    }
-
-    // Reject a "/../" or "\..\" traversal segment (but not a ".." inside a
-    // filename like "v1..2.gpkg"), matching `hasPathTraversal`.
-    if path.split(['/', '\\']).any(|segment| segment == "..") {
+    // Absolute, non-UNC, no `..` traversal — the shared guard used by
+    // `list_directory` too, so the byte-parsing lives in one place and can't
+    // diverge between the two security-relevant path checks.
+    if !is_safe_absolute_path(path) {
         return false;
     }
 

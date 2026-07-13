@@ -215,18 +215,19 @@ export function BrowserPanel({
         })
         .catch((err: unknown) => {
           // Drop the marker so a re-expand retries (a folder can also change on
-          // disk); surface the message inline via the status row.
+          // disk); surface the message inline via the status row, using the
+          // translated fallback helper like fetchConnectionTables does.
           folderFetchedRef.current.delete(path);
           setFolderLoads((prev) => ({
             ...prev,
             [path]: {
               status: "error",
-              message: err instanceof Error ? err.message : String(err),
+              message: errorMessage(err, t("browser.loadFolderFailed")),
             },
           }));
         });
     },
-    [],
+    [t],
   );
 
   // Inject each connection node's lazily-loaded children (loading/error status

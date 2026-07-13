@@ -375,6 +375,19 @@ describe("augmentFolders", () => {
     );
   });
 
+  it("injects an error row when a folder fails to load", () => {
+    const out = augmentFolders(
+      baseTree(),
+      { "/d": { status: "error", message: "Permission denied" } },
+      "Loading…",
+      isLoadable,
+    );
+    const folder = find(out, "folder:/d");
+    assert.equal(folder?.children?.length, 1);
+    assert.equal(folder?.children?.[0].kind, "info");
+    assert.equal(folder?.children?.[0].label, "Permission denied");
+  });
+
   it("recurses so an already-expanded subfolder also gets its listing", () => {
     const out = augmentFolders(
       baseTree(),

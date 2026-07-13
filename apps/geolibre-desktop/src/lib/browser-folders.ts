@@ -26,6 +26,28 @@ export function folderLabel(path: string): string {
   return segments[segments.length - 1] || trimmed || path;
 }
 
+/**
+ * The parent directory of an absolute path (the text before its last path
+ * separator), used to derive the Browser panel's "Project Home" from the open
+ * project file's path. Kept here (with folderLabel) so the path string-logic is
+ * pure and unit-tested.
+ *
+ * @param path - An absolute file path.
+ * @returns The containing directory (the filesystem root for a top-level file).
+ */
+export function parentDirectory(path: string): string {
+  const trimmed = path.replace(/[/\\]+$/, "");
+  const index = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (index > 0) {
+    const parent = trimmed.slice(0, index);
+    // Restore the separator on a Windows drive root ("C:" -> "C:\"), matching
+    // the POSIX-root case below so the result stays an absolute path the Rust
+    // `is_safe_absolute_path` guard accepts.
+    return /^[a-zA-Z]:$/.test(parent) ? `${parent}\\` : parent;
+  }
+  return index === 0 ? "/" : trimmed;
+}
+
 export function readPinnedFolders(): string[] {
   if (typeof window === "undefined") return [];
   try {

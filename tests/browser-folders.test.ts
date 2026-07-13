@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   folderLabel,
   MAX_PINNED_FOLDERS,
+  parentDirectory,
   pinFolder,
   PINNED_FOLDERS_CHANGED_EVENT,
   readPinnedFolders,
@@ -48,6 +49,21 @@ describe("folderLabel", () => {
     assert.equal(folderLabel("/home/u/gis"), "gis");
     assert.equal(folderLabel("/home/u/gis/"), "gis");
     assert.equal(folderLabel("C:\\data\\gis"), "gis");
+  });
+});
+
+describe("parentDirectory", () => {
+  it("returns the containing directory for a nested path", () => {
+    assert.equal(parentDirectory("/home/u/proj.geolibre.json"), "/home/u");
+    assert.equal(parentDirectory("C:\\Users\\me\\proj.json"), "C:\\Users\\me");
+  });
+
+  it("returns the root for a top-level POSIX file", () => {
+    assert.equal(parentDirectory("/project.json"), "/");
+  });
+
+  it("restores the separator on a Windows drive root", () => {
+    assert.equal(parentDirectory("C:\\project.json"), "C:\\");
   });
 });
 

@@ -170,8 +170,8 @@ export function BrowserTreeNode({
           <button
             type="button"
             className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            title={t("browser.unpinFolder")}
-            aria-label={t("browser.unpinFolder")}
+            title={t("browser.unpinFolder", { name: node.label })}
+            aria-label={t("browser.unpinFolder", { name: node.label })}
             onClick={() => onRemoveFolder(removePath)}
           >
             <X className="h-3.5 w-3.5" />
