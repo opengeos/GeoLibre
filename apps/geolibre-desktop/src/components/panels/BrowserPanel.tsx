@@ -200,20 +200,29 @@ export function BrowserPanel({
     {},
   );
   const folderFetchedRef = useRef<Set<string>>(new Set());
+  // Per-path fetch generation: bumped when a folder is (re)fetched or unpinned,
+  // so a slow listDirectory that resolves after the folder was unpinned/re-pinned
+  // can't clobber newer state with its stale result.
+  const folderGenRef = useRef<Map<string, number>>(new Map());
 
   const fetchFolder = useCallback(
     (path: string) => {
       if (folderFetchedRef.current.has(path)) return;
       folderFetchedRef.current.add(path);
+      const generation = (folderGenRef.current.get(path) ?? 0) + 1;
+      folderGenRef.current.set(path, generation);
+      const isCurrent = () => folderGenRef.current.get(path) === generation;
       setFolderLoads((prev) => ({ ...prev, [path]: { status: "loading" } }));
       listDirectory(path)
         .then((entries) => {
+          if (!isCurrent()) return; // superseded by an unpin/re-pin mid-fetch
           setFolderLoads((prev) => ({
             ...prev,
             [path]: { status: "loaded", entries },
           }));
         })
         .catch((err: unknown) => {
+          if (!isCurrent()) return;
           // Drop the marker so a re-expand retries (a folder can also change on
           // disk); surface the message inline via the status row, using the
           // translated fallback helper like fetchConnectionTables does.
@@ -371,12 +380,24 @@ export function BrowserPanel({
   // tauri-plugin-persisted-scope, see src-tauri/src/lib.rs) — there is no clean
   // per-path "forget". Unpin means "stop listing it here", not "revoke access".
   const removeFolder = (path: string) => {
+    setError(null);
+    // `path` may itself end in a separator (a normalized root: "/" or "C:\"),
+    // so build the descendant prefix from the path's own trailing separator
+    // rather than blindly appending one (which would yield "//" / "C:\\" and
+    // match no real descendant).
+    const separator = path.includes("\\") ? "\\" : "/";
+    const prefix = path.endsWith(separator) ? path : `${path}${separator}`;
     const isWithin = (candidate: string) =>
-      candidate === path ||
-      candidate.startsWith(`${path}/`) ||
-      candidate.startsWith(`${path}\\`);
+      candidate === path || candidate.startsWith(prefix);
     for (const key of [...folderFetchedRef.current]) {
       if (isWithin(key)) folderFetchedRef.current.delete(key);
+    }
+    // Invalidate any in-flight fetch for the folder/descendants so a late
+    // resolution can't repopulate cleared state.
+    for (const key of [...folderGenRef.current.keys()]) {
+      if (isWithin(key)) {
+        folderGenRef.current.set(key, (folderGenRef.current.get(key) ?? 0) + 1);
+      }
     }
     setFolderLoads((prev) => {
       const next: Record<string, FolderLoad> = {};

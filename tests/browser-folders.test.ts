@@ -79,6 +79,18 @@ describe("pinned folders persistence", () => {
     assert.deepEqual(readPinnedFolders(), ["C:\\"]);
   });
 
+  it("normalizes legacy un-normalized stored entries on read", () => {
+    // Simulate an older build that stored a trailing-slash path.
+    (
+      globalThis as unknown as { window: { localStorage: MemoryStorage } }
+    ).window.localStorage.setItem(
+      "geolibre.browser.pinnedFolders",
+      JSON.stringify(["/data/gis/", "/data/gis"]),
+    );
+    // Both collapse to the normalized form and dedupe to one.
+    assert.deepEqual(readPinnedFolders(), ["/data/gis"]);
+  });
+
   it("unpins a folder", () => {
     pinFolder("/a");
     pinFolder("/b");

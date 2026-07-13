@@ -448,10 +448,14 @@ export type FolderLoad =
   | { status: "error"; message: string };
 
 /**
- * Cap on the number of direct children shown per folder. A pathological folder
- * (a drive root, `Downloads`, a build dir) could otherwise mount thousands of
- * unvirtualized rows and stall the panel; beyond the cap the folder shows a
- * "showing first N" status row instead. (Full virtualization is a follow-up.)
+ * Cap on the number of direct children *rendered* per folder. A pathological
+ * folder (a drive root, `Downloads`, a build dir) could otherwise mount
+ * thousands of unvirtualized rows and stall the panel; beyond the cap the folder
+ * shows a "showing first N" status row instead. Note this bounds only the render
+ * cost — `readDir` still reads (and IPC-returns) the whole directory, and
+ * `buildDirectoryNodes` still sorts it — so this prevents the DOM stall, not the
+ * underlying read cost. Full virtualization (and an earlier read-side cap) is a
+ * follow-up.
  */
 export const MAX_DIRECTORY_ENTRIES = 500;
 

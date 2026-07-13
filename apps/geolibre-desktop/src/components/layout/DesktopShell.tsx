@@ -1247,9 +1247,13 @@ export function DesktopShell({
             return accepted;
           },
         });
-        // A declined large-file prompt is a cancellation, not a failure.
-        if (cancelled) return null;
-        if (!importedLayers.length) return t("browser.addFileFailed");
+        // A declined large-file prompt is a cancellation, not a failure — but
+        // loadDroppedVectorPaths can still return valid layers (e.g. KML ground
+        // overlays / models) alongside a declined placemark-vector load, so only
+        // treat an *empty* result as a cancel/no-op; otherwise add what loaded.
+        if (!importedLayers.length) {
+          return cancelled ? null : t("browser.addFileFailed");
+        }
         addImportedVectorLayers(importedLayers);
         return null;
       } catch (error) {

@@ -18,7 +18,7 @@
     "addFolderFailed": "Could not add this folder.",
     "addFileFailed": "Could not add this file.",
     "loadFolderFailed": "Could not read this folder.",
-    "unpinFolder": "Remove folder “{{name}}”",
+    "unpinFolder": "Remove “{{name}}” from the list",
     "loadingFolder": "Loading…",
     "folderTruncated": "Showing first {{shown}} of {{total}}"
   },

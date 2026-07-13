@@ -48,7 +48,14 @@ export function readPinnedFolders(): string[] {
     const parsed = JSON.parse(value);
     return Array.isArray(parsed)
       ? uniquePaths(
-          parsed.filter((item): item is string => typeof item === "string"),
+          parsed
+            .filter(
+              (item): item is string =>
+                typeof item === "string" && item.trim().length > 0,
+            )
+            // Normalize on read too, so a legacy entry stored un-normalized
+            // (e.g. a trailing separator) dedupes against a normalized pin.
+            .map(normalizeFolderPath),
         )
       : [];
   } catch {
