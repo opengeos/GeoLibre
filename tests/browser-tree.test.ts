@@ -231,59 +231,38 @@ describe("buildBrowserTree — Files section", () => {
     assert.equal(find(tree, "section:files"), undefined);
   });
 
-  it("adds a Files section with an Add-folder action, Project Home, and pins", () => {
+  it("adds a Files section with an Add-folder action and removable pins", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
       files: {
-        projectHome: { path: "/home/u/proj", label: "proj" },
-        folders: [{ path: "/data/gis", label: "gis" }],
+        folders: [
+          { path: "/data/gis", label: "gis" },
+          { path: "/home/u/maps", label: "maps" },
+        ],
       },
     });
     const files = find(tree, "section:files");
     assert.equal(files?.kind, "section");
     assert.equal(files?.addFolderAction, true);
     assert.equal(files?.count, 2);
-    // Project Home first, then pinned folders.
+    // Pinned folders are listed in the given (MRU) order.
     assert.deepEqual(
       files?.children?.map((c) => c.label),
-      ["proj", "gis"],
+      ["gis", "maps"],
     );
-    const home = find(tree, "folder:/home/u/proj");
-    assert.equal(home?.kind, "folder");
-    assert.equal(home?.path, "/home/u/proj");
-    assert.equal(home?.removable, undefined); // Project Home can't be unpinned
-    assert.deepEqual(home?.children, []); // expandable, lazily filled
-    // Pinned folder is removable.
-    assert.equal(find(tree, "folder:/data/gis")?.removable, true);
-  });
-
-  it("skips a pinned folder that duplicates Project Home", () => {
-    const tree = buildBrowserTree({
-      services: [],
-      recentProjects: [],
-      files: {
-        projectHome: { path: "/home/u/proj", label: "proj" },
-        folders: [
-          { path: "/home/u/proj", label: "proj" }, // same as Project Home
-          { path: "/data/gis", label: "gis" },
-        ],
-      },
-    });
-    const files = find(tree, "section:files");
-    // Only Project Home + the distinct pin — no duplicate folder:/home/u/proj.
-    assert.deepEqual(
-      files?.children?.map((c) => c.path),
-      ["/home/u/proj", "/data/gis"],
-    );
-    assert.equal(files?.count, 2);
+    const pin = find(tree, "folder:/data/gis");
+    assert.equal(pin?.kind, "folder");
+    assert.equal(pin?.path, "/data/gis");
+    assert.equal(pin?.removable, true); // pinned roots can be unpinned
+    assert.deepEqual(pin?.children, []); // expandable, lazily filled
   });
 
   it("renders the Files section with only the Add-folder action when empty", () => {
     const tree = buildBrowserTree({
       services: [],
       recentProjects: [],
-      files: { projectHome: null, folders: [] },
+      files: { folders: [] },
     });
     const files = find(tree, "section:files");
     assert.equal(files?.addFolderAction, true);
@@ -338,7 +317,7 @@ describe("augmentFolders", () => {
     buildBrowserTree({
       services: [],
       recentProjects: [],
-      files: { projectHome: null, folders: [{ path: "/d", label: "d" }] },
+      files: { folders: [{ path: "/d", label: "d" }] },
     });
 
   it("injects a loading row while a folder is loading", () => {

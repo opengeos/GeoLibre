@@ -10,7 +10,7 @@ import {
   isLoadableFilePath,
   isTauri,
   listDirectory,
-  pickLocalPathWithFallback,
+  pickLocalDirectory,
 } from "../../lib/tauri-io";
 import { pinFolder, unpinFolder } from "../../lib/browser-folders";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
@@ -351,7 +351,7 @@ export function BrowserPanel({
   const addFolder = async () => {
     setError(null);
     try {
-      const picked = await pickLocalPathWithFallback({ directory: true });
+      const picked = await pickLocalDirectory();
       if (picked) pinFolder(picked);
     } catch (err) {
       console.error("Failed to add folder", err);

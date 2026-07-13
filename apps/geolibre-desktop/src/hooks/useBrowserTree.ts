@@ -13,11 +13,10 @@ import {
 } from "../lib/saved-postgres-connections";
 import {
   folderLabel,
-  parentDirectory,
   PINNED_FOLDERS_CHANGED_EVENT,
   readPinnedFolders,
 } from "../lib/browser-folders";
-import { isAbsoluteLocalPath, isTauri } from "../lib/tauri-io";
+import { isTauri } from "../lib/tauri-io";
 import { buildBrowserTree, type BrowserNode } from "../lib/browser-tree";
 
 export interface BrowserTreeState {
@@ -43,7 +42,6 @@ export interface BrowserTreeState {
 export function useBrowserTree(): BrowserTreeState {
   const { t } = useTranslation();
   const recentProjects = useAppStore((s) => s.recentProjects);
-  const projectPath = useAppStore((s) => s.projectPath);
   const servicesLabel = t("browser.services");
   const recentLabel = t("browser.recent");
   const databasesLabel = t("browser.databases");
@@ -82,19 +80,12 @@ export function useBrowserTree(): BrowserTreeState {
         label: savedPostgresConnectionLabel(connectionString),
       }),
     );
-    // The Files section is desktop-only: directory reading needs the Tauri
-    // `list_directory` command. Project Home is the folder of the open project
-    // file (skipped for a URL-backed or unsaved project); pinned folders are the
-    // user's localStorage list (MRU-first).
+    // The Files section is desktop-only: directory reading uses the fs plugin's
+    // readDir, which only works within the scope the OS folder dialog grants, so
+    // the section lists the user's pinned folders (localStorage, MRU-first) that
+    // were added via the picker.
     const files = isTauri()
       ? {
-          projectHome:
-            projectPath && isAbsoluteLocalPath(projectPath)
-              ? (() => {
-                  const dir = parentDirectory(projectPath);
-                  return { path: dir, label: folderLabel(dir) };
-                })()
-              : null,
           folders: readPinnedFolders().map((path) => ({
             path,
             label: folderLabel(path),
@@ -118,7 +109,6 @@ export function useBrowserTree(): BrowserTreeState {
     };
   }, [
     recentProjects,
-    projectPath,
     servicesLabel,
     recentLabel,
     databasesLabel,

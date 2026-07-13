@@ -6,6 +6,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  readDir,
   readFile,
   readTextFile,
   readTextFileLines,
@@ -200,18 +201,29 @@ export interface LocalDirectoryEntry {
 }
 
 /**
- * List a local directory's immediate entries via the Tauri `list_directory`
- * command (desktop only; resolves to `[]` off-desktop). Filtering to loadable
+ * List a local directory's immediate entries via the `fs` plugin's `readDir`
+ * (desktop only; resolves to `[]` off-desktop). This works only within the fs
+ * scope the OS folder dialog grants for a picked directory (and its subtree),
+ * so the Browser panel only lists folders the user added via the picker — no
+ * new unbounded filesystem-read primitive. `readDir` returns names + type flags
+ * only, so the absolute path of each entry is joined here. Filtering to loadable
  * file types is the caller's job.
  *
- * @param path - Absolute directory path to list.
+ * @param path - Absolute directory path to list (a picker-granted folder or a
+ *   descendant of one).
  * @returns The directory's entries (folders and files).
  */
 export async function listDirectory(
   path: string,
 ): Promise<LocalDirectoryEntry[]> {
   if (!isTauri()) return [];
-  return invoke<LocalDirectoryEntry[]>("list_directory", { path });
+  const entries = await readDir(path);
+  const base = /[/\\]$/.test(path) ? path : `${path}/`;
+  return entries.map((entry) => ({
+    name: entry.name,
+    path: `${base}${entry.name}`,
+    isDirectory: entry.isDirectory,
+  }));
 }
 
 // Built at call time so the filter-group label shown in the native file dialog
@@ -2110,6 +2122,24 @@ export async function pickLocalPathWithFallback(
   // require a real path. Return null so callers surface the desktop-only
   // message rather than passing a non-resolvable bare file name.
   return null;
+}
+
+/**
+ * Open the native folder picker and return the chosen directory (desktop only;
+ * null off-desktop or on cancel). `recursive: true` extends the granted fs scope
+ * to the picked directory's subtree, so the Browser panel can lazily {@link
+ * listDirectory} subfolders within it — not just its top level.
+ *
+ * @returns The picked absolute directory path, or null.
+ */
+export async function pickLocalDirectory(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    recursive: true,
+  });
+  return typeof selected === "string" ? selected : null;
 }
 
 export async function pickSavePathWithFallback(

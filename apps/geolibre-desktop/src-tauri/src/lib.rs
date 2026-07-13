@@ -209,7 +209,6 @@ pub fn run() {
             read_local_file,
             read_project_file,
             read_shapefile_siblings,
-            list_directory,
             resolve_url_redirect,
             read_mbtiles_metadata,
             read_mbtiles_tile,
@@ -446,21 +445,11 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
     Ok(siblings)
 }
 
-/// One entry of a directory listing returned by [`list_directory`].
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct DirectoryEntry {
-    name: String,
-    /// Absolute path of the entry.
-    path: String,
-    is_directory: bool,
-}
-
-/// Whether `path` is a safe absolute local path to list: an absolute POSIX
-/// (`/...`) or Windows drive-letter (`C:\...`) path, never a UNC (`\\host\share`)
-/// share, and free of `..` traversal segments. Mirrors the path guards in
-/// [`is_allowed_local_vector_path`] minus the file-extension check (this lists
-/// directories, not vector files).
+/// Whether `path` is a safe absolute local path: an absolute POSIX (`/...`) or
+/// Windows drive-letter (`C:\...`) path, never a UNC (`\\host\share`) share, and
+/// free of `..` traversal segments. The shared absolute/non-UNC/no-traversal
+/// guard behind [`is_allowed_local_vector_path`], kept separate so that
+/// byte-parsing lives in one place rather than being duplicated per caller.
 fn is_safe_absolute_path(path: &str) -> bool {
     let bytes = path.as_bytes();
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
@@ -476,69 +465,6 @@ fn is_safe_absolute_path(path: &str) -> bool {
         return false;
     }
     !path.split(['/', '\\']).any(|segment| segment == "..")
-}
-
-/// List a local directory's immediate entries (non-recursive) for the Browser
-/// panel's Files tree.
-///
-/// The JS `fs` plugin can only read paths the user explicitly picked or dropped,
-/// so it cannot lazily browse arbitrary subfolders or the current project's
-/// folder; this reads the directory directly, guarded by [`is_safe_absolute_path`]
-/// (absolute, non-UNC, no `..` traversal) — mirroring [`read_local_file`] /
-/// [`read_shapefile_siblings`]. Filtering to loadable file types is left to the
-/// JS side. An unreadable directory is returned as an error the panel surfaces
-/// inline.
-///
-/// SECURITY: unlike the file-content read commands, this has no extension
-/// allowlist (it lists directories), so any caller reaching this from the
-/// webview can enumerate entry *names* in any directory the process can read.
-/// That is a deliberate trade-off: the enumeration is name-only (no content),
-/// bounded to the same trust surface as the existing `read_local_file`
-/// content-read primitive, and needed so Project Home / pinned folders work
-/// without a runtime fs-scope grant. If tighter bounding is wanted later, track
-/// the granted roots (pinned folders + project dir) in Tauri state and reject
-/// paths outside them here.
-#[tauri::command]
-fn list_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
-    if !is_safe_absolute_path(&path) {
-        return Err(format!(
-            "Refusing to list \"{path}\": not a safe absolute local path"
-        ));
-    }
-    let entries =
-        fs::read_dir(&path).map_err(|error| format!("Could not read directory: {error}"))?;
-    let mut result = Vec::new();
-    for entry in entries.flatten() {
-        let entry_path = entry.path();
-        let (Some(name), Some(path_str)) = (
-            entry_path.file_name().and_then(|name| name.to_str()),
-            entry_path.to_str(),
-        ) else {
-            continue;
-        };
-        // `file_type()` avoids an extra stat where the OS already knows the kind,
-        // but it does NOT follow symlinks (a symlink reports its own type, not the
-        // target's), so resolve symlinks — and the unknown case — via `is_dir()`,
-        // which follows them. Otherwise a symlinked directory (common for mounted
-        // data dirs) would be classified as neither folder nor loadable file and
-        // vanish from the tree.
-        let is_directory = entry
-            .file_type()
-            .map(|file_type| {
-                if file_type.is_symlink() {
-                    entry_path.is_dir()
-                } else {
-                    file_type.is_dir()
-                }
-            })
-            .unwrap_or_else(|_| entry_path.is_dir());
-        result.push(DirectoryEntry {
-            name: name.to_string(),
-            path: path_str.to_string(),
-            is_directory,
-        });
-    }
-    Ok(result)
 }
 
 /// Read the optional admin UI-profile file (`<app_config_dir>/admin-profile.json`).

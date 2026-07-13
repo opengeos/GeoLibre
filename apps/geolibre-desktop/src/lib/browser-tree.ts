@@ -88,14 +88,12 @@ export interface BrowserTreeInput {
    */
   databaseConnections?: readonly { connectionString: string; label: string }[];
   /**
-   * Filesystem roots to list under the Files section: the current project's
-   * folder (Project Home) and the user's pinned folders. Omitted (undefined)
-   * hides the section — the app passes it only on desktop (`isTauri()`), where
-   * directory reading is available. An empty `folders` array still renders the
-   * section with its "Add folder" (＋) action.
+   * The user's pinned folders to list under the Files section. Omitted
+   * (undefined) hides the section — the app passes it only on desktop
+   * (`isTauri()`), where directory reading is available. An empty `folders`
+   * array still renders the section with its "Add folder" (＋) action.
    */
   files?: {
-    projectHome?: { path: string; label: string } | null;
     folders: readonly { path: string; label: string }[];
   };
   /**
@@ -247,44 +245,29 @@ export function buildBrowserTree(input: BrowserTreeInput): BrowserNode[] {
   }
 
   // The Files section is included only on desktop (the app passes `files` when
-  // `isTauri()`). It always shows its "Add folder" (＋) action; Project Home
-  // (when a project file is open) comes first, then the user's pinned folders.
+  // `isTauri()`). It always shows its "Add folder" (＋) action and lists the
+  // user's pinned folders, each lazily expanded to its subfolders/files.
   if (input.files) {
-    const folderChildren: BrowserNode[] = [];
-    if (input.files.projectHome) {
-      folderChildren.push({
-        id: `folder:${input.files.projectHome.path}`,
-        kind: "folder",
-        label: input.files.projectHome.label,
-        addable: false,
-        path: input.files.projectHome.path,
-        // Expandable group, lazily filled with subfolders/files on first expand.
-        children: [],
-      });
-    }
-    for (const folder of input.files.folders) {
-      // Skip a pin that duplicates Project Home, or the two would share the id
-      // `folder:${path}` (and the panel's per-path load/expand state).
-      if (folder.path === input.files.projectHome?.path) continue;
-      folderChildren.push({
-        id: `folder:${folder.path}`,
-        kind: "folder",
-        label: folder.label,
-        addable: false,
-        path: folder.path,
-        // Pinned roots can be unpinned; subfolders (added on expand) cannot.
-        removable: true,
-        children: [],
-      });
-    }
     sections.push({
       id: "section:files",
       kind: "section",
       label: labels.files ?? "Files",
       addable: false,
       addFolderAction: true,
-      count: folderChildren.length,
-      children: folderChildren,
+      count: input.files.folders.length,
+      children: input.files.folders.map(
+        (folder): BrowserNode => ({
+          id: `folder:${folder.path}`,
+          kind: "folder",
+          label: folder.label,
+          addable: false,
+          path: folder.path,
+          // Pinned roots can be unpinned; subfolders (added on expand) cannot.
+          removable: true,
+          // Expandable group, lazily filled with subfolders/files on expand.
+          children: [],
+        }),
+      ),
     });
   }
 
