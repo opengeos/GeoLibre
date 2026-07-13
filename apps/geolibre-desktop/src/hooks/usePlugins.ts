@@ -541,8 +541,9 @@ function ensureExternalPluginsLoadedWithSettings(
   // opening a project never fetches or imports third-party plugin code; they
   // reach this scan only after the user trusts them, at which point they are in
   // desktopSettings.pluginManifestUrls (see useProjectPluginTrust / #1062).
+  const bundledManifestUrls = bundledPluginManifestUrls();
   const pluginManifestUrls = mergeStringLists(
-    bundledPluginManifestUrls(),
+    bundledManifestUrls,
     desktopSettings.pluginManifestUrls,
   );
   const loadKey = JSON.stringify({
@@ -590,6 +591,9 @@ function ensureExternalPluginsLoadedWithSettings(
         manager,
         desktopSettings.additionalPluginDirectories,
         pluginManifestUrls,
+        // Only manifests fetched from the bundled drop-in URLs may use
+        // activeByDefault (they are baked into the build, hence trusted).
+        { bundledManifestUrls },
       );
     })
     .then((result) => {

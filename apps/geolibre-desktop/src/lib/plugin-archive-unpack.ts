@@ -42,7 +42,9 @@ export function isExternalPluginManifest(
     (manifest.description === undefined ||
       typeof manifest.description === "string") &&
     (manifest.style === undefined ||
-      (typeof manifest.style === "string" && manifest.style.endsWith(".css")))
+      (typeof manifest.style === "string" && manifest.style.endsWith(".css"))) &&
+    (manifest.activeByDefault === undefined ||
+      typeof manifest.activeByDefault === "boolean")
   );
 }
 

@@ -60,6 +60,17 @@ export class PluginManager {
     for (const p of plugins) this.register(p);
   }
 
+  // Mark an already-registered plugin as active-by-default WITHOUT marking it
+  // active now. Unlike `plugin.activeByDefault` handled in register() (built-ins
+  // whose startup side effects are applied idempotently elsewhere), a plugin
+  // marked here still needs its activate(app) called; leaving it out of `active`
+  // lets restoreProjectState's activation loop do that with a real app API.
+  // Used for bundled drop-in plugins whose manifest sets activeByDefault.
+  markDefaultActive(id: string): void {
+    if (!this.plugins.has(id)) return;
+    this.defaultActive.add(id);
+  }
+
   // Remove a plugin at runtime: deactivate it first (so an active plugin tears
   // down its map control) and drop all of its tracking state, then notify so
   // the Plugins menu updates without a reload. Used when an external plugin's

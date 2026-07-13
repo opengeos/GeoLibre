@@ -79,6 +79,24 @@ describe("bundleFromZipBytes", () => {
     await assert.rejects(bundleFromZipBytes("demo.zip", zip), /manifest is invalid/);
   });
 
+  it("accepts a boolean activeByDefault and rejects other types", async () => {
+    const withFlag = (activeByDefault: unknown) =>
+      makeZip({
+        "plugin.json": JSON.stringify({
+          ...VALID_MANIFEST,
+          style: undefined,
+          activeByDefault,
+        }),
+        "dist/plugin.js": "export default {};",
+      });
+    const bundle = await bundleFromZipBytes("demo.zip", withFlag(true));
+    assert.equal(bundle.manifest.activeByDefault, true);
+    await assert.rejects(
+      bundleFromZipBytes("demo.zip", withFlag("true")),
+      /manifest is invalid/,
+    );
+  });
+
   it("rejects an entry path that escapes the archive", async () => {
     const zip = makeZip({
       "plugin.json": JSON.stringify({ ...VALID_MANIFEST, entry: "../evil.js", style: undefined }),
