@@ -80,6 +80,23 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   // because input edits bump that token without starting a request (guarding
   // on it in `finally` would leave isSubmitting stuck true).
   const connectFlightRef = useRef(0);
+  // Invalidation token for the tiles-mode Martin connect, mirroring
+  // listRequestRef for the editable list: a connection-string change bumps it
+  // so an in-flight connect can't revive a server/catalog for the previous
+  // database after the user has moved on.
+  const martinRequestRef = useRef(0);
+
+  // Clear the (shell-owned) Martin connection state so a stale server/catalog
+  // from a previous connection can't be submitted (and submit is disabled)
+  // after the connection string changes. UI-only: any orphaned server process
+  // is stopped on dialog close via martin.stopTransient().
+  const clearMartinState = () => {
+    martinRequestRef.current += 1;
+    martin.setServer(null);
+    martin.setSources([]);
+    martin.setSelectedSourceId("");
+    martin.setStatus(null);
+  };
 
   // Reset the (shell-owned) Martin connection when the source opens, matching
   // the original dialog: a running server is preserved across reopens only
@@ -179,6 +196,7 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
   };
 
   const handleConnectPostgres = async () => {
+    const requestToken = ++martinRequestRef.current;
     source.setError(null);
     martin.setStatus(null);
     source.shell.setIsSubmitting(true);
@@ -205,11 +223,18 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         connectionString,
         defaultSrid: postgresDefaultSrid,
       });
+      if (martinRequestRef.current !== requestToken) {
+        // The connection string changed while connecting; discard this server
+        // for the now-stale database rather than showing it as connected.
+        await stopMartinServer().catch(() => {});
+        return;
+      }
       setSavedPostgresConnections(rememberPostgresConnection(connectionString));
       martin.setServer(server);
       martin.setStatus(t("addData.postgres.statusReadingCatalog"));
 
       const sources = await fetchMartinCatalog(server);
+      if (martinRequestRef.current !== requestToken) return;
       martin.setSources(sources);
       // Preselect the table the user clicked in the Browser panel, if Martin
       // published it; otherwise fall back to the first source.
@@ -433,6 +458,9 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                   setSelectedTableKey("");
                   setPostgisConnection("");
                   setPostgisStatus(null);
+                  // A different database also invalidates the tiles-mode Martin
+                  // connection, so a layer from the old server can't be added.
+                  clearMartinState();
                   // The Browser-panel table preselect belongs to the connection
                   // it was opened for; once the user switches connections it no
                   // longer applies and must not preselect a same-named table in
@@ -474,7 +502,8 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
                 setPostgisConnection("");
                 setPostgisStatus(null);
                 // See the saved-connection handler: a connection change voids
-                // the Browser-panel table preselect.
+                // the tiles-mode Martin connection and the table preselect.
+                clearMartinState();
                 desiredTableRef.current = null;
               }
             }}

@@ -1,6 +1,6 @@
 import { useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
-import { listPostgisTables } from "@geolibre/processing";
+import { fetchPostgisStatus, listPostgisTables } from "@geolibre/processing";
 import { Input, ScrollArea } from "@geolibre/ui";
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
@@ -13,6 +13,7 @@ import {
   type BrowserNode,
 } from "../../lib/browser-tree";
 import { applyServiceEntry } from "../layout/add-data/apply-service";
+import { errorMessage } from "../layout/add-data/helpers";
 import type { AddDataKind } from "../layout/AddDataDialog";
 import { openAddData } from "../layout/add-data/open-add-data";
 import { BrowserTreeNode } from "./BrowserTreeNode";
@@ -56,7 +57,8 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
  * Returns a copy of the tree with each `connection` node's children replaced by
  * the current lazy-load state: a status row while loading or on error, or the
  * schema→table nodes once loaded. Connections with no load entry keep their
- * empty child list (still expandable; expanding triggers the fetch).
+ * empty child list (still expandable; expanding triggers the fetch) — so search
+ * only reaches the tables of connections that have already been introspected.
  *
  * @param nodes - The base tree from {@link useBrowserTree}.
  * @param loads - Per-connection introspection state keyed by connection string.
@@ -146,46 +148,65 @@ export function BrowserPanel({
   // the connection retries (there is no separate refresh affordance).
   const connFetchedRef = useRef<Set<string>>(new Set());
 
-  const fetchConnectionTables = useCallback((connectionString: string) => {
-    if (connFetchedRef.current.has(connectionString)) return;
-    connFetchedRef.current.add(connectionString);
-    setConnLoads((prev) => ({
-      ...prev,
-      [connectionString]: { status: "loading" },
-    }));
-    // The desktop sidecar is spawned on demand and only authenticated after
-    // startGeoLibreSidecar runs, so ensure it is up before hitting /postgis —
-    // best-effort, mirroring PostgresSource.handleConnectEditable (a failed
-    // start still lets the list call surface the real error).
-    void startGeoLibreSidecar()
-      .catch(() => {})
-      .then(() => listPostgisTables(connectionString))
-      .then((tables) => {
-        setConnLoads((prev) => ({
-          ...prev,
-          [connectionString]: {
-            status: "loaded",
-            tables: tables.map((t) => ({ schema: t.schema, table: t.table })),
-          },
-        }));
-      })
-      .catch((err: unknown) => {
-        // Allow a retry: drop the fetched marker so collapsing and re-expanding
-        // the connection re-runs introspection rather than sticking on the error.
-        connFetchedRef.current.delete(connectionString);
-        setConnLoads((prev) => ({
-          ...prev,
-          [connectionString]: {
-            status: "error",
-            message: err instanceof Error ? err.message : String(err),
-          },
-        }));
-      });
-  }, []);
+  const fetchConnectionTables = useCallback(
+    (connectionString: string) => {
+      if (connFetchedRef.current.has(connectionString)) return;
+      connFetchedRef.current.add(connectionString);
+      setConnLoads((prev) => ({
+        ...prev,
+        [connectionString]: { status: "loading" },
+      }));
+      // The desktop sidecar is spawned on demand and only authenticated after
+      // startGeoLibreSidecar runs, so ensure it is up before hitting /postgis —
+      // best-effort, mirroring PostgresSource.handleConnectEditable (a failed
+      // start still lets the status/list calls surface the real error).
+      void startGeoLibreSidecar()
+        .catch(() => {})
+        .then(() => fetchPostgisStatus())
+        .then((status) => {
+          // Same runtime gate as the Add Data dialog, so a missing postgis
+          // extra reads as the friendly "install the extra" message rather
+          // than a raw connection error from /postgis/tables.
+          if (!status.available) {
+            throw new Error(t("addData.postgres.errorRuntimeMissing"));
+          }
+          return listPostgisTables(connectionString);
+        })
+        .then((tables) => {
+          setConnLoads((prev) => ({
+            ...prev,
+            [connectionString]: {
+              status: "loaded",
+              tables: tables.map((tbl) => ({
+                schema: tbl.schema,
+                table: tbl.table,
+              })),
+            },
+          }));
+        })
+        .catch((err: unknown) => {
+          // Allow a retry: drop the fetched marker so collapsing and
+          // re-expanding the connection re-runs introspection rather than
+          // sticking on the error. Reuse the Add Data errorMessage helper for a
+          // translated fallback, matching the dialog's PostGIS entry point.
+          connFetchedRef.current.delete(connectionString);
+          setConnLoads((prev) => ({
+            ...prev,
+            [connectionString]: {
+              status: "error",
+              message: errorMessage(err, t("addData.postgres.errorConnect")),
+            },
+          }));
+        });
+    },
+    [t],
+  );
 
   // Inject each connection node's lazily-loaded children (loading/error status
-  // rows, or schema→table nodes) before filtering, so search reaches the tables
-  // too. Connections that were never expanded keep their empty child list.
+  // rows, or schema→table nodes) before filtering. Search therefore reaches the
+  // tables of connections the user has already expanded; an unexpanded
+  // connection keeps its empty child list, so its tables aren't searchable
+  // until it is first drilled into.
   const loadingLabel = t("browser.loadingTables");
   const augmented = useMemo(
     () => augmentConnections(tree, connLoads, loadingLabel),
