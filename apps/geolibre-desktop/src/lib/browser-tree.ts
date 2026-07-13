@@ -18,6 +18,7 @@ import {
   type ServiceLibraryKind,
 } from "../components/layout/add-data/service-library";
 import type { AddDataKind } from "../components/layout/add-data/types";
+import type { FavoriteKind } from "./browser-favorites";
 import type { RecentProjectEntry } from "@geolibre/core";
 
 /** The kind of node, which determines its icon and click behavior. */
@@ -355,7 +356,7 @@ export function buildDirectoryNodes(
 /** A favorited node descriptor (structural subset of `BrowserFavorite`). */
 export interface FavoriteNodeInput {
   id: string;
-  kind: "service" | "connection" | "folder" | "file";
+  kind: FavoriteKind;
   label: string;
   serviceId?: string;
   serviceKind?: ServiceLibraryKind;
