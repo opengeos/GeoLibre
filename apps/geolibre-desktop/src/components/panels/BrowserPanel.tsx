@@ -6,6 +6,7 @@ import { Search } from "lucide-react";
 import { useCallback, useMemo, useRef, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import { isTauri } from "../../lib/tauri-io";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
   augmentConnections,
@@ -104,6 +105,21 @@ export function BrowserPanel({
     (connectionString: string) => {
       if (connFetchedRef.current.has(connectionString)) return;
       connFetchedRef.current.add(connectionString);
+      // PostGIS browsing needs the desktop sidecar/Martin; off-Tauri, show the
+      // same localized "requires GeoLibre Desktop" message the Add Data dialog
+      // gives rather than letting startGeoLibreSidecar/fetch fail with a raw
+      // network error. Dropped from the fetched set so it can retry on desktop.
+      if (!isTauri()) {
+        connFetchedRef.current.delete(connectionString);
+        setConnLoads((prev) => ({
+          ...prev,
+          [connectionString]: {
+            status: "error",
+            message: t("addData.postgres.errorDesktopOnly"),
+          },
+        }));
+        return;
+      }
       setConnLoads((prev) => ({
         ...prev,
         [connectionString]: { status: "loading" },

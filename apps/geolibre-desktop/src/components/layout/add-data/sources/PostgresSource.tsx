@@ -88,10 +88,18 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
 
   // Clear the (shell-owned) Martin connection state so a stale server/catalog
   // from a previous connection can't be submitted (and submit is disabled)
-  // after the connection string changes. UI-only: any orphaned server process
-  // is stopped on dialog close via martin.stopTransient().
+  // after the connection string changes.
   const clearMartinState = () => {
     martinRequestRef.current += 1;
+    // A completed connect leaves a real Martin process running. stopTransient
+    // (on dialog close) only stops it while martin.server is set, so stop it
+    // here before clearing the state — otherwise it leaks, and since the Rust
+    // side refuses a second concurrent server a later reconnect would fail.
+    // An in-flight connect (server not yet set) is instead torn down by
+    // handleConnectPostgres's own staleness checks.
+    if (martin.server) {
+      void stopMartinServer().catch(() => {});
+    }
     martin.setServer(null);
     martin.setSources([]);
     martin.setSelectedSourceId("");
