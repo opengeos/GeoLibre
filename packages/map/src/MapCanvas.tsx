@@ -359,11 +359,13 @@ function openPhotoFullscreen(src: string, alt: string): void {
     } catch {
       // The pointer is already gone; pan/pinch still work without capture.
     }
-    // Only suppress the default (text selection, image drag, and the mouse-
-    // compatibility event chain) when a pan or pinch is actually starting.
-    // Calling preventDefault on a plain mouse click at fit can swallow the
-    // double-click-to-zoom on some browsers, so leave that gesture untouched.
-    if (event.pointerType !== "mouse" || zoom > 1 || activePointers.size === 2) {
+    // Only suppress the default for a mouse drag while zoomed, to stop the native
+    // image ghost-drag during a pan. Touch gestures are already neutralized by
+    // `touch-action: none` on the image, so we must NOT preventDefault there: on
+    // pointerdown that would suppress the compatibility events a double-tap's
+    // dblclick is synthesized from, breaking double-tap-to-zoom on touch. A plain
+    // mouse click at fit is likewise left untouched so mouse double-click works.
+    if (event.pointerType === "mouse" && zoom > 1) {
       event.preventDefault();
     }
   });
