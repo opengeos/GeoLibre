@@ -255,7 +255,10 @@ export function sliceRouteAtDistance(
 
   const segment = segmentAtDistance(cumulative, distance);
   const traveledCoords = coords.slice(0, segment);
-  const traveledElevations = elevations.slice(0, segment);
+  // Build elevations aligned 1:1 with the returned coords, defaulting missing
+  // entries to 0 (mirrors pointAlongLine's `elevations[i] ?? 0`) so a shorter
+  // elevations array can never leave the two arrays out of sync.
+  const traveledElevations = traveledCoords.map((_, i) => elevations[i] ?? 0);
   const end = pointAlongLine(coords, cumulative, distance, elevations);
   traveledCoords.push(end.coord);
   traveledElevations.push(end.elevation);

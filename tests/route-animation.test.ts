@@ -395,6 +395,14 @@ describe("sliceRouteAtDistance", () => {
     // The capped vertex sits at the interpolated midpoint elevation (50 m).
     assert.ok(Math.abs(route.elevations[1] - 50) < 1e-6);
   });
+
+  it("keeps coords and elevations aligned when elevations is short", () => {
+    // A malformed shorter elevations array must not desync the two outputs;
+    // missing entries default to 0.
+    const route = sliceRouteAtDistance(LINE, cumulative, totalMeters, []);
+    assert.equal(route.coords.length, route.elevations.length);
+    assert.deepEqual(route.elevations, [0, 0, 0]);
+  });
 });
 
 describe("route-animation store", () => {

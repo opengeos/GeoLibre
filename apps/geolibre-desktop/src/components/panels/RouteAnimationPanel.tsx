@@ -148,10 +148,15 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       styleValue(layer.style, "elevation3dOffset"),
     ].join("|");
   });
-  // True once the resolved route carries real Z values, mirroring the map-side
-  // gate (`isElevation3dLayer`) so the marker only lifts when the layer actually
-  // renders in 3D.
-  const [routeHasZ, setRouteHasZ] = useState(false);
+  // Whether the resolved route carries real Z values, tagged with the layer it
+  // was resolved for. Mirrors the map-side gate (`isElevation3dLayer`) so the
+  // marker only lifts when the layer actually renders in 3D. Tagging by layer
+  // id means a pending resolution for a newly-selected layer never lets the
+  // previous layer's Z verdict leak into the elevation push below.
+  const [routeZ, setRouteZ] = useState<{
+    layerId: string;
+    hasZ: boolean;
+  } | null>(null);
 
   const {
     layerId,
@@ -207,7 +212,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     let cancelled = false;
     if (!layerId) {
       setRouteAnimationRoute([]);
-      setRouteHasZ(false);
+      setRouteZ(null);
       return;
     }
     const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
@@ -216,7 +221,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       // stale selection so the dropdown falls back to the placeholder and a save
       // doesn't persist a layerId that no longer exists.
       setRouteAnimationRoute([]);
-      setRouteHasZ(false);
+      setRouteZ(null);
       setRouteAnimationSettings({ layerId: null });
       return;
     }
@@ -227,8 +232,9 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       const { coords, elevations } = flattenToRoute(fc);
       setRouteAnimationRoute(coords, elevations);
       // Mirror the map-side gate: the layer only renders 3D when its data has
-      // real Z somewhere, so the marker only lifts in that case.
-      setRouteHasZ(geojsonHasZCoordinates(fc));
+      // real Z somewhere, so the marker only lifts in that case. Tag the verdict
+      // with the layer id so a later effect never uses a prior layer's value.
+      setRouteZ({ layerId, hasZ: geojsonHasZCoordinates(fc) });
     })();
     return () => {
       cancelled = true;
@@ -246,15 +252,19 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       setRouteAnimationElevation({ active: false, verticalScale: 1, offset: 0 });
       return;
     }
+    // Only trust the Z verdict once it has been resolved for THIS layer; while a
+    // freshly-selected layer's geometry is still resolving, treat it as flat so
+    // the previous layer's Z verdict can't briefly force a wrong 3D lift.
+    const hasZ = routeZ?.layerId === layerId && routeZ.hasZ;
     const enabled = styleValue(layer.style, "elevation3dEnabled") === true;
     const rawScale = styleValue(layer.style, "elevation3dVerticalScale");
     const rawOffset = styleValue(layer.style, "elevation3dOffset");
     setRouteAnimationElevation({
-      active: enabled && routeHasZ,
+      active: enabled && hasZ,
       verticalScale: Number.isFinite(rawScale) ? rawScale : 1,
       offset: Number.isFinite(rawOffset) ? rawOffset : 0,
     });
-  }, [layerId, elevation3dKey, routeHasZ]);
+  }, [layerId, elevation3dKey, routeZ]);
 
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button,input,select")) return;
