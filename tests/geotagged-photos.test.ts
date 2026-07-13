@@ -6,6 +6,7 @@ import {
   base64FromBytes,
   buildPhotoProperties,
   createFullResolutionDataUrl,
+  MAX_FULL_RESOLUTION_BYTES,
   isPhotoDropFileName,
   isPhotoFileName,
   isValidLngLat,
@@ -208,6 +209,18 @@ describe("createFullResolutionDataUrl", () => {
       "mislabeled.png",
     );
     assert.ok(url?.startsWith("data:image/jpeg;base64,"), url ?? "null");
+  });
+
+  it("falls back to thumbnail-only for a pathologically large original", async () => {
+    // A fake Blob reporting a size over the ceiling (no allocation) must be
+    // skipped without reading its bytes.
+    const oversize = {
+      size: MAX_FULL_RESOLUTION_BYTES + 1,
+      arrayBuffer: async () => {
+        throw new Error("must not read bytes past the size ceiling");
+      },
+    } as unknown as Blob;
+    assert.equal(await createFullResolutionDataUrl(oversize, "huge.jpg"), null);
   });
 
   it("returns null for formats a browser can't show at full size", async () => {

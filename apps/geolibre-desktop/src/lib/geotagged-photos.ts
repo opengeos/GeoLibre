@@ -84,6 +84,18 @@ const FULL_RESOLUTION_IMAGE_MIME: Record<string, string> = {
 };
 
 /**
+ * Upper bound (bytes) on a single embedded full-resolution original. Normal
+ * high-resolution phone/DSLR photos (the reporter's are ~7 MB; 20-30 MB is
+ * typical for the largest) stay well under this and embed as intended; a
+ * pathologically large file (a giant panorama, an uncompressed original) falls
+ * back to thumbnail-only rather than adding hundreds of MB to the project from a
+ * single photo. This is a per-photo sanity ceiling, not a per-project one: many
+ * ordinary photos still grow the project roughly with their total size, which is
+ * the intended trade-off for native resolution.
+ */
+export const MAX_FULL_RESOLUTION_BYTES = 64 * 1024 * 1024;
+
+/**
  * Detect an image's MIME type from its leading magic bytes, so a mislabeled
  * file (e.g. a `.png` that is actually JPEG data) still gets a data URL a
  * browser can decode. Returns null when the signature is unrecognized, letting
@@ -310,6 +322,9 @@ export async function createFullResolutionDataUrl(
   // mislabeled extension can't produce an undecodable data URL.
   const extensionMime = FULL_RESOLUTION_IMAGE_MIME[fileExtension(fileName)];
   if (!extensionMime) return null;
+  // A pathologically large original falls back to thumbnail-only so one photo
+  // can't add hundreds of MB to the project.
+  if (file.size > MAX_FULL_RESOLUTION_BYTES) return null;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const mime = sniffImageMime(bytes) ?? extensionMime;

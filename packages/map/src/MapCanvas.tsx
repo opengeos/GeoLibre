@@ -282,9 +282,12 @@ function openPhotoFullscreen(src: string, alt: string): void {
       image.naturalWidth > 0 && image.clientWidth > 0
         ? image.clientWidth / image.naturalWidth
         : 1;
-    // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native, but always allow at
-    // least a little zoom for images that already fit within the viewport.
-    maxZoom = Math.max(1.5, PHOTO_MAX_ZOOM_FRACTION / fitToNative);
+    // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native. The floor of 1
+    // only guards the degenerate case where the image is somehow larger than the
+    // fit (fitToNative > cap) so zoom never drops below the fit; in the normal
+    // case (fitToNative <= 1, no upscaling) this is always the native-cap branch,
+    // keeping the badge at exactly 400% of native at maximum zoom.
+    maxZoom = Math.max(1, PHOTO_MAX_ZOOM_FRACTION / fitToNative);
     // A resize (or entering fullscreen) can grow the fit ratio and shrink
     // maxZoom below the current zoom; reclamp so the 400%-of-native cap holds
     // instead of rendering (and reporting) a now-out-of-range zoom.
@@ -336,6 +339,9 @@ function openPhotoFullscreen(src: string, alt: string): void {
     return Math.hypot(a.x - b.x, a.y - b.y);
   };
   image.addEventListener("pointerdown", (event) => {
+    // Track at most two pointers; a third (e.g. an accidental palm touch) is
+    // ignored so it can't perturb the pan anchor or the pinch spread.
+    if (activePointers.size >= 2) return;
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     // Arm pan/pinch state before capturing the pointer: setPointerCapture can
     // throw for a non-active pointer, and that must not skip the setup below.
@@ -460,8 +466,12 @@ function createPhotoPopupElement(
   const thumbnail =
     imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ??
     findPhotoDataUrl(properties);
-  const fullResolution = imageDataUrlAt(properties, PHOTO_FULL_KEY) ?? thumbnail;
   if (thumbnail) {
+    // Prefer the embedded full-resolution image, falling back to the thumbnail
+    // when the source was already native or its format can't be shown at full
+    // size; `thumbnail` is non-null here, so this is always a string.
+    const fullResolution =
+      imageDataUrlAt(properties, PHOTO_FULL_KEY) ?? thumbnail;
     const image = document.createElement("img");
     image.src = thumbnail;
     image.alt = typeof properties.name === "string" ? properties.name : "Photo";
@@ -472,7 +482,7 @@ function createPhotoPopupElement(
     // not trigger MapLibre's double-click zoom.
     image.addEventListener("dblclick", (event) => {
       event.stopPropagation();
-      openPhotoFullscreen(fullResolution ?? thumbnail, image.alt);
+      openPhotoFullscreen(fullResolution, image.alt);
     });
     root.appendChild(image);
   } else {
