@@ -65,6 +65,20 @@ describe("pinned folders persistence", () => {
     assert.deepEqual(readPinnedFolders(), ["/a", "/b"]);
   });
 
+  it("normalizes trailing separators so a folder isn't pinned twice", () => {
+    pinFolder("/data/gis");
+    pinFolder("/data/gis/"); // trailing slash — same folder
+    assert.deepEqual(readPinnedFolders(), ["/data/gis"]);
+    // Unpin with the trailing-slash form still removes it.
+    unpinFolder("/data/gis/");
+    assert.deepEqual(readPinnedFolders(), []);
+  });
+
+  it("preserves a Windows drive root when normalizing", () => {
+    pinFolder("C:\\");
+    assert.deepEqual(readPinnedFolders(), ["C:\\"]);
+  });
+
   it("unpins a folder", () => {
     pinFolder("/a");
     pinFolder("/b");

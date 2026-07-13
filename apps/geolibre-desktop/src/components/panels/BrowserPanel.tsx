@@ -244,8 +244,9 @@ export function BrowserPanel({
         folderLoads,
         foldersLoadingLabel,
         isLoadableFilePath,
+        (shown, total) => t("browser.folderTruncated", { shown, total }),
       ),
-    [tree, connLoads, loadingLabel, folderLoads, foldersLoadingLabel],
+    [tree, connLoads, loadingLabel, folderLoads, foldersLoadingLabel, t],
   );
 
   const filtered = useMemo(

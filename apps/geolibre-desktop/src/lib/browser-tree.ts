@@ -448,6 +448,14 @@ export type FolderLoad =
   | { status: "error"; message: string };
 
 /**
+ * Cap on the number of direct children shown per folder. A pathological folder
+ * (a drive root, `Downloads`, a build dir) could otherwise mount thousands of
+ * unvirtualized rows and stall the panel; beyond the cap the folder shows a
+ * "showing first N" status row instead. (Full virtualization is a follow-up.)
+ */
+export const MAX_DIRECTORY_ENTRIES = 500;
+
+/**
  * Returns a copy of the tree with each `folder` node's children replaced by its
  * lazy-load state: a status row while loading or on error, or the subfolder/file
  * nodes once loaded. Unlike {@link augmentConnections}, folders nest, so a loaded
@@ -458,6 +466,8 @@ export type FolderLoad =
  * @param loads - Per-folder listing state keyed by absolute path.
  * @param loadingLabel - Translated label for the "loading" status row.
  * @param isLoadable - Whether a file name is a loadable geospatial format.
+ * @param truncatedLabel - Optional label for the "showing first N of M" row a
+ *   folder gets when its direct children exceed {@link MAX_DIRECTORY_ENTRIES}.
  * @returns A new tree; folder nodes get their status/subfolder/file children.
  */
 export function augmentFolders(
@@ -465,6 +475,7 @@ export function augmentFolders(
   loads: Record<string, FolderLoad>,
   loadingLabel: string,
   isLoadable: (name: string) => boolean,
+  truncatedLabel?: (shown: number, total: number) => string,
 ): BrowserNode[] {
   const recurse = (list: readonly BrowserNode[]): BrowserNode[] =>
     list.map((node) => {
@@ -490,8 +501,24 @@ export function augmentFolders(
             },
           ];
         } else if (load?.status === "loaded") {
-          // Recurse so an already-expanded subfolder also gets its listing.
-          children = recurse(buildDirectoryNodes(load.entries, isLoadable));
+          const direct = buildDirectoryNodes(load.entries, isLoadable);
+          if (direct.length > MAX_DIRECTORY_ENTRIES) {
+            // Cap the direct children, then append a truncation status row so a
+            // huge folder can't stall the panel. Recurse before capping's info
+            // row so an expanded subfolder within the kept slice still loads.
+            children = recurse(direct.slice(0, MAX_DIRECTORY_ENTRIES));
+            children.push({
+              id: `${node.id}:truncated`,
+              kind: "info",
+              label: truncatedLabel
+                ? truncatedLabel(MAX_DIRECTORY_ENTRIES, direct.length)
+                : `Showing first ${MAX_DIRECTORY_ENTRIES} of ${direct.length}`,
+              addable: false,
+            });
+          } else {
+            // Recurse so an already-expanded subfolder also gets its listing.
+            children = recurse(direct);
+          }
         }
         return { ...node, children };
       }

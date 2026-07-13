@@ -19,6 +19,20 @@ function uniquePaths(paths: string[]): string[] {
   return Array.from(new Set(paths));
 }
 
+/**
+ * Normalize a folder path for storage/dedupe: trim, then strip trailing path
+ * separators so `/data/gis` and `/data/gis/` are the same pin — but preserve a
+ * POSIX root (`/`) and a Windows drive root (`C:\`), since a bare `C:` is not a
+ * valid absolute path. (Case-insensitive Windows paths are left as-is; the
+ * native picker returns a consistent form.)
+ */
+export function normalizeFolderPath(path: string): string {
+  const stripped = path.trim().replace(/[/\\]+$/, "");
+  if (stripped === "") return "/";
+  if (/^[a-zA-Z]:$/.test(stripped)) return `${stripped}\\`;
+  return stripped;
+}
+
 /** The trailing path segment (folder name) of an absolute path, for the label. */
 export function folderLabel(path: string): string {
   const trimmed = path.replace(/[/\\]+$/, "");
@@ -58,19 +72,20 @@ function writePinnedFolders(paths: string[]): string[] {
   return next;
 }
 
-/** Add a folder to the front of the pinned list (deduped, capped). */
+/** Add a folder to the front of the pinned list (normalized, deduped, capped). */
 export function pinFolder(path: string): string[] {
-  const trimmed = path.trim();
-  if (!trimmed) return readPinnedFolders();
+  if (!path.trim()) return readPinnedFolders();
+  const normalized = normalizeFolderPath(path);
   return writePinnedFolders([
-    trimmed,
-    ...readPinnedFolders().filter((value) => value !== trimmed),
+    normalized,
+    ...readPinnedFolders().filter((value) => value !== normalized),
   ]);
 }
 
 /** Remove a folder from the pinned list. */
 export function unpinFolder(path: string): string[] {
+  const normalized = normalizeFolderPath(path);
   return writePinnedFolders(
-    readPinnedFolders().filter((value) => value !== path),
+    readPinnedFolders().filter((value) => value !== normalized),
   );
 }

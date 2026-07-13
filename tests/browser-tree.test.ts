@@ -8,6 +8,7 @@ import {
   buildDirectoryNodes,
   buildPostgisTableNodes,
   filterBrowserTree,
+  MAX_DIRECTORY_ENTRIES,
   type BrowserNode,
   type ConnectionLoad,
   type DirectoryEntry,
@@ -365,6 +366,30 @@ describe("augmentFolders", () => {
     assert.equal(folder?.children?.length, 1);
     assert.equal(folder?.children?.[0].kind, "info");
     assert.equal(folder?.children?.[0].label, "Permission denied");
+  });
+
+  it("caps a huge folder and appends a truncation row", () => {
+    const entries: DirectoryEntry[] = Array.from(
+      { length: MAX_DIRECTORY_ENTRIES + 3 },
+      (_unused, i) => ({
+        name: `f${String(i).padStart(5, "0")}.geojson`,
+        path: `/d/f${i}.geojson`,
+        isDirectory: false,
+      }),
+    );
+    const out = augmentFolders(
+      baseTree(),
+      { "/d": { status: "loaded", entries } },
+      "Loading…",
+      isLoadable,
+      (shown, total) => `first ${shown}/${total}`,
+    );
+    const children = find(out, "folder:/d")?.children ?? [];
+    // MAX kept file nodes + one truncation info row.
+    assert.equal(children.length, MAX_DIRECTORY_ENTRIES + 1);
+    const last = children[children.length - 1];
+    assert.equal(last.kind, "info");
+    assert.equal(last.label, `first ${MAX_DIRECTORY_ENTRIES}/${entries.length}`);
   });
 
   it("recurses so an already-expanded subfolder also gets its listing", () => {

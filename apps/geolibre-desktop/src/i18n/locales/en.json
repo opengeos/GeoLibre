@@ -19,7 +19,8 @@
     "addFileFailed": "Could not add this file.",
     "loadFolderFailed": "Could not read this folder.",
     "unpinFolder": "Remove folder “{{name}}”",
-    "loadingFolder": "Loading…"
+    "loadingFolder": "Loading…",
+    "folderTruncated": "Showing first {{shown}} of {{total}}"
   },
   "about": {
     "trigger": "About",
