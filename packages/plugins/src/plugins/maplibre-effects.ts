@@ -1,4 +1,5 @@
 import type { Map as MapLibreMap } from "maplibre-gl";
+import { getActiveEllipsoid } from "@geolibre/core";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 /**
@@ -855,7 +856,12 @@ class EffectsEngine {
       this.starsDirty = false;
     }
     this.updateAndDrawComets();
-    this.drawHalo(getGeoglifyGlobeCircle(this.map));
+    // The atmospheric halo is Earth-only — other celestial bodies (Moon, Mars,
+    // Pluto, …) are airless or don't share Earth's blue glow, so we keep the
+    // space backdrop, starfield, and comets but skip the halo for them.
+    if (getActiveEllipsoid().id === "earth") {
+      this.drawHalo(getGeoglifyGlobeCircle(this.map));
+    }
 
     this.start();
   }

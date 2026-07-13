@@ -97,13 +97,23 @@
     "applyCustom": "適用",
     "invalidUrl": "有効なHTTPまたはHTTPSのスタイルURLを入力してください。",
     "sectionMoon": "月",
-    "sectionMars": "火星"
+    "sectionMars": "火星",
+    "sectionOther": "その他の天体"
   },
   "planetSwitcher": {
     "label": "天体",
     "earth": "地球",
     "moon": "月",
-    "mars": "火星"
+    "mars": "火星",
+    "mercury": "水星",
+    "venus": "金星",
+    "io": "イオ",
+    "europa": "エウロパ",
+    "ganymede": "ガニメデ",
+    "callisto": "カリスト",
+    "titan": "タイタン",
+    "pluto": "冥王星",
+    "charon": "カロン"
   },
   "common": {
     "pickColorFromScreen": "画面から色を選択",

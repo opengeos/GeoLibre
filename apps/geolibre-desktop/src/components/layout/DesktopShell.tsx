@@ -45,6 +45,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { createPortal } from "react-dom";
+import {
+  BROWSER_PANEL_ID,
+  useRegisterBrowserPanel,
+} from "../../hooks/useRegisterBrowserPanel";
+import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
+import { useProjectFileActions } from "../../hooks/useProjectFileActions";
 import {
   isTauri,
   loadDroppedPhotoFiles,
@@ -127,6 +134,7 @@ import {
   SilentErrorBoundary,
 } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
+import { BrowserPanel } from "../panels/BrowserPanel";
 import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
 import { SunPanel } from "../panels/SunPanel";
@@ -552,6 +560,13 @@ export function DesktopShell({
   const setPythonConsoleOpen = useAppStore((s) => s.setPythonConsoleOpen);
   const sqlWorkspaceOpen = useAppStore((s) => s.ui.sqlWorkspaceOpen);
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
+  // Register the Browser as a movable/dockable right panel; its body is portaled
+  // into a dedicated content host (below) that the dock slots adopt.
+  useRegisterBrowserPanel();
+  // One shared project-file-actions instance for both the toolbar and the
+  // Browser panel, so their "open recent" calls coordinate their aborts (two
+  // instances would race). Lifted here for the same reason as `collaboration`.
+  const projectFiles = useProjectFileActions(mapControllerRef);
   const notebookOpen = useAppStore((s) => s.ui.notebookOpen);
   const storymapPresenting = useAppStore((s) => s.ui.storymapPresenting);
   // A plugin panel docks at one of four positions beside the Layers/Style
@@ -577,8 +592,20 @@ export function DesktopShell({
     el.className = "contents";
     return el;
   });
+  // A second, dedicated host for the Browser panel's React portal (below). Kept
+  // separate from pluginContentEl so the imperative plugin-render effect's
+  // `replaceChildren` can never wipe the portal-managed DOM, and vice versa.
+  const [browserContentEl] = useState(() => {
+    const el = document.createElement("div");
+    el.className = "contents";
+    return el;
+  });
   const activePanelId = useRightPanelState().activeId;
   const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
+  // The dock slots adopt whichever host owns the active panel's content: the
+  // Browser's dedicated portal host, or the shared imperative plugin host.
+  const dockContentEl =
+    activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
   // Render the active panel into the shared host once; re-run when its
   // registration is replaced (re-registration refresh) but not on dock/collapse
   // changes.
@@ -1789,6 +1816,7 @@ export function DesktopShell({
             showProjectInfo={layoutOptions.showProjectInfo}
             themeMode={themeMode}
             collaboration={collaboration}
+            projectFiles={projectFiles}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
             onToggleThemeMode={onToggleThemeMode}
           />
@@ -1798,6 +1826,18 @@ export function DesktopShell({
         data-workspace-row=""
         className="relative flex min-h-0 flex-1 flex-col md:flex-row"
       >
+        {/* The Browser panel body is portaled into its dedicated content host
+            (which the dock slots relocate between positions), so it shares the
+            app's React context and the shell owns its dock chrome. */}
+        {activePanelId === BROWSER_PANEL_ID
+          ? createPortal(
+              <BrowserPanel
+                mapControllerRef={mapControllerRef}
+                onOpenRecentProject={projectFiles.handleOpenRecent}
+              />,
+              browserContentEl,
+            )
+          : null}
         {replaceLayersPanelId ? (
           // Shared-rail mode on the Layers (left) side: the plugin panel shares
           // the Layers sidebar surface, so a single rail lists both the workbench
@@ -1807,12 +1847,20 @@ export function DesktopShell({
               key={replaceLayersPanelId}
               side="layers"
               pluginId={replaceLayersPanelId}
-              pluginContentEl={pluginContentEl}
+              pluginContentEl={dockContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
               builtinVisible={layoutOptions.layerPanelVisible}
               builtinTitle={t("sharedRail.layers")}
               builtinIcon={<Layers className="h-4 w-4" />}
+              // The Browser docks here on by default but must not bury Layers:
+              // start with Layers expanded and Browser a collapsed rail entry.
+              // On a phone-width viewport both start collapsed (panels overlay
+              // there), matching the mobile "panels default collapsed" behavior.
+              initialBuiltinExpanded={
+                replaceLayersPanelId === BROWSER_PANEL_ID &&
+                !getIsMobileViewport()
+              }
               // The story-map presentation is the only standalone Layers
               // autoCollapse trigger (the notebook collapses Style, not Layers).
               forceBuiltinCollapsed={storymapPresenting}
@@ -1840,7 +1888,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (left of Layers)">
               <PluginRightPanel
                 dock="left-of-layers"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
@@ -1867,7 +1915,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (right of Layers)">
               <PluginRightPanel
                 dock="right-of-layers"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
@@ -1968,7 +2016,7 @@ export function DesktopShell({
               key={replaceStylePanelId}
               side="style"
               pluginId={replaceStylePanelId}
-              pluginContentEl={pluginContentEl}
+              pluginContentEl={dockContentEl}
               pluginWidth={pluginPanelWidth}
               onPluginWidthChange={setPluginPanelWidth}
               builtinVisible={layoutOptions.stylePanelVisible}
@@ -1995,7 +2043,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (left of Style)">
               <PluginRightPanel
                 dock="left-of-style"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />
@@ -2020,7 +2068,7 @@ export function DesktopShell({
             <SectionErrorBoundary label="Plugin panel (right of Style)">
               <PluginRightPanel
                 dock="right-of-style"
-                contentEl={pluginContentEl}
+                contentEl={dockContentEl}
                 width={pluginPanelWidth}
                 onWidthChange={setPluginPanelWidth}
               />

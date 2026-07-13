@@ -43,6 +43,7 @@ import {
   vectorTileStyleLayerIds,
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
+import { PlanetaryScaleControl } from "./planetary-scale-control";
 import { ResetBearingControl } from "./reset-bearing-control";
 import {
   TerrainControl,
@@ -355,7 +356,7 @@ export class MapController {
   // Undefined until the React layer supplies a translated label; the control
   // falls back to its own default in the meantime (single source for the string).
   private terrainLabel: string | undefined;
-  private scaleControl: maplibregl.ScaleControl | null = null;
+  private scaleControl: PlanetaryScaleControl | null = null;
   private attributionControl: maplibregl.AttributionControl | null = null;
   private logoControl: maplibregl.LogoControl | null = null;
   private layerControl: LayerControl | null = null;
@@ -812,6 +813,10 @@ export class MapController {
     this.basemapOriginalPaintValues.clear();
     this.removeLayerControl();
     this.map.setStyle(resolveMapStyle(url));
+    // Switching to/from a planetary basemap changes the active body (the store's
+    // ellipsoid subscription runs first, so the singleton is already current),
+    // so redraw the scale bar for the new radius without waiting for a pan.
+    this.scaleControl?.refresh();
   }
 
   setBasemapVisible(visible: boolean): void {
@@ -873,6 +878,10 @@ export class MapController {
       createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
     );
     this.applyView(this.readView());
+    // The ellipsoid can change here (Settings' celestial-body dropdown) without
+    // the basemap changing, so redraw the body-aware scale bar now — the store's
+    // ellipsoid subscription has already updated the active-radius singleton.
+    this.scaleControl?.refresh();
   }
 
   readView(): MapViewState {
@@ -2347,10 +2356,10 @@ export class MapController {
     if (!this.map || this.scaleControl || !this.controlVisibility.scale) {
       return false;
     }
-    this.scaleControl = new maplibregl.ScaleControl({
-      maxWidth: 120,
-      unit: "metric",
-    });
+    // A body-aware scale bar (MapLibre's built-in ScaleControl assumes Earth's
+    // radius, so it is wrong on Moon/Mars/Mercury/etc.). Metric only, matching
+    // the previous configuration.
+    this.scaleControl = new PlanetaryScaleControl({ maxWidth: 120 });
     this.map.addControl(this.scaleControl, this.controlPositions.scale);
     return true;
   }

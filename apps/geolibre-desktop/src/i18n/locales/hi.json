@@ -98,13 +98,23 @@
     "applyCustom": "लागू करें",
     "invalidUrl": "एक मान्य HTTP या HTTPS स्टाइल URL दर्ज करें।",
     "sectionMoon": "चंद्रमा",
-    "sectionMars": "मंगल"
+    "sectionMars": "मंगल",
+    "sectionOther": "अन्य खगोलीय पिंड"
   },
   "planetSwitcher": {
     "label": "खगोलीय पिंड",
     "earth": "पृथ्वी",
     "moon": "चंद्रमा",
-    "mars": "मंगल"
+    "mars": "मंगल",
+    "mercury": "बुध",
+    "venus": "शुक्र",
+    "io": "आयो",
+    "europa": "यूरोपा",
+    "ganymede": "गैनिमीड",
+    "callisto": "कैलिस्टो",
+    "titan": "टाइटन",
+    "pluto": "प्लूटो",
+    "charon": "कैरन"
   },
   "common": {
     "pickColorFromScreen": "स्क्रीन से रंग चुनें",

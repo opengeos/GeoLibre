@@ -98,13 +98,23 @@
     "applyCustom": "Uygula",
     "invalidUrl": "Geçerli bir HTTP veya HTTPS stil URL'si girin.",
     "sectionMoon": "Ay",
-    "sectionMars": "Mars"
+    "sectionMars": "Mars",
+    "sectionOther": "Diğer gök cisimleri"
   },
   "planetSwitcher": {
     "label": "Gök cismi",
     "earth": "Dünya",
     "moon": "Ay",
-    "mars": "Mars"
+    "mars": "Mars",
+    "mercury": "Merkür",
+    "venus": "Venüs",
+    "io": "Io",
+    "europa": "Europa",
+    "ganymede": "Ganymede",
+    "callisto": "Kallisto",
+    "titan": "Titan",
+    "pluto": "Plüton",
+    "charon": "Charon"
   },
   "common": {
     "pickColorFromScreen": "Ekrandan bir renk seç",

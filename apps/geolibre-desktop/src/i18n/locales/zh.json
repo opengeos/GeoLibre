@@ -97,13 +97,23 @@
     "applyCustom": "应用",
     "invalidUrl": "请输入有效的 HTTP 或 HTTPS 样式 URL。",
     "sectionMoon": "月球",
-    "sectionMars": "火星"
+    "sectionMars": "火星",
+    "sectionOther": "其他天体"
   },
   "planetSwitcher": {
     "label": "天体",
     "earth": "地球",
     "moon": "月球",
-    "mars": "火星"
+    "mars": "火星",
+    "mercury": "水星",
+    "venus": "金星",
+    "io": "木卫一",
+    "europa": "木卫二",
+    "ganymede": "木卫三",
+    "callisto": "木卫四",
+    "titan": "土卫六",
+    "pluto": "冥王星",
+    "charon": "冥卫一"
   },
   "common": {
     "pickColorFromScreen": "从屏幕上拾取颜色",

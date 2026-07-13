@@ -1,4 +1,19 @@
 {
+  "browser": {
+    "title": "Browser",
+    "services": "Services",
+    "recent": "Recent",
+    "databases": "Databases",
+    "newDatabaseConnection": "New database connection",
+    "searchPlaceholder": "Search data sources",
+    "empty": "No saved services or recent projects yet.",
+    "emptyGroup": "Empty",
+    "noMatches": "No matches.",
+    "addFailed": "Could not add this data source.",
+    "builtinBadge": "built-in",
+    "newConnection": "New {{kind}} connection",
+    "loadingTables": "Loading tables…"
+  },
   "about": {
     "trigger": "About",
     "title": "About GeoLibre",
@@ -98,13 +113,23 @@
     "applyCustom": "Apply",
     "invalidUrl": "Enter a valid HTTP or HTTPS style URL.",
     "sectionMoon": "The Moon",
-    "sectionMars": "Mars"
+    "sectionMars": "Mars",
+    "sectionOther": "Other celestial bodies"
   },
   "planetSwitcher": {
     "label": "Celestial body",
     "earth": "Earth",
+    "mercury": "Mercury",
+    "venus": "Venus",
     "moon": "Moon",
-    "mars": "Mars"
+    "mars": "Mars",
+    "io": "Io",
+    "europa": "Europa",
+    "ganymede": "Ganymede",
+    "callisto": "Callisto",
+    "titan": "Titan",
+    "pluto": "Pluto",
+    "charon": "Charon"
   },
   "common": {
     "pickColorFromScreen": "Pick a color from the screen",
@@ -1281,6 +1306,7 @@
       "showProjectInfoToolbar": "Show project info in the toolbar",
       "showLayersPanel": "Show Layers panel",
       "showStylePanel": "Show Style panel",
+      "showBrowserPanel": "Show Browser panel",
       "showAttributePanel": "Show Attribute panel",
       "urlParamsNote": "URL layout parameters still apply when present in shared viewer links."
     },

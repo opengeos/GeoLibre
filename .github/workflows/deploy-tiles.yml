@@ -1,0 +1,47 @@
+name: Deploy tiles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "workers/tiles/**"
+      - ".github/workflows/deploy-tiles.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-tiles-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy planetary tile proxy to Cloudflare Workers
+    runs-on: ubuntu-latest
+    # workflow_dispatch can target any branch; only ever deploy main to
+    # production so a manual run can't publish unmerged code.
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # Unlike the viewer/collab workers, this one has a real runtime dependency
+      # (upng-js) that wrangler must bundle, so the workspace deps have to be
+      # installed before deploy. wrangler-action does not install for us.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Cloudflare Workers
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: workers/tiles
