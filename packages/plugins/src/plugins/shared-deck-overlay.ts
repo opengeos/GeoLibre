@@ -28,9 +28,16 @@ type DeviceListener = (device: unknown) => void;
 /**
  * Draw order, bottom (drawn first) to top (drawn last). Rasters sit under 3D
  * tiles, which sit under vector / deck-viz overlays -- typical GIS stacking.
+ * The route-animation marker/trail sit on top of everything so the animated
+ * position stays visible above the 3D track it rides (see #1210).
  * Ordering WITHIN a source is whatever order that source supplies.
  */
-const SOURCE_DRAW_ORDER = ["raster", "google-3d-tiles", "deckviz"] as const;
+const SOURCE_DRAW_ORDER = [
+  "raster",
+  "google-3d-tiles",
+  "deckviz",
+  "route-anim",
+] as const;
 export type SharedDeckSource = (typeof SOURCE_DRAW_ORDER)[number];
 
 let overlay: MapboxOverlay | null = null;

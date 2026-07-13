@@ -1494,6 +1494,9 @@
       "progress": "Progress",
       "speed": "Speed",
       "followCamera": "Follow",
+      "followPitch": "Camera pitch",
+      "followZoom": "Camera zoom",
+      "followRotate": "Rotate to heading",
       "color": "Track color",
       "marker": "Marker",
       "markerStyle": {

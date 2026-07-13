@@ -3,13 +3,44 @@ import type {
   Map as MapLibreMap,
 } from "maplibre-gl";
 import type { Feature, LineString, Point } from "geojson";
-import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
+import type { Layer } from "@deck.gl/core";
+import type { GeoLibreAppAPI, GeoLibreDeckGL, GeoLibrePlugin } from "../types";
+import { colorToRgba } from "./deck-style-utils";
+import {
+  ensureSharedDeckOverlay,
+  setSharedDeckLayers,
+} from "./shared-deck-overlay";
 import {
   type LngLat,
   measureLine,
   pointAlongLine,
   sliceLineAtDistance,
+  sliceRouteAtDistance,
 } from "./route-animation-geometry";
+
+/**
+ * How the selected route layer is being drawn, so the animated marker/trail can
+ * match it. When `active`, the layer renders through the deck.gl overlay at its
+ * coordinate Z values (Style panel's "3D (Z values)" mode), so the marker/trail
+ * must be lifted by the same `z * verticalScale + offset` transform to ride the
+ * elevated line instead of its flat ground projection (see #1210).
+ */
+export interface RouteElevationConfig {
+  /** Whether the layer is rendered in 3D (Z values) mode. */
+  active: boolean;
+  /** Vertical exaggeration multiplier applied to each Z value. */
+  verticalScale: number;
+  /** Constant altitude (meters) added after scaling. */
+  offset: number;
+}
+
+const FLAT_ELEVATION: RouteElevationConfig = {
+  active: false,
+  verticalScale: 1,
+  offset: 0,
+};
+
+const ROUTE_ANIM_DECK_SOURCE = "route-anim";
 
 /**
  * GeoLibre route-animation plugin.
@@ -17,13 +48,18 @@ import {
  * Animates a marker along any line layer already loaded in the project — the
  * GeoLibre take on MapLibre's "update a feature in realtime" example. A floating
  * panel (rendered by the desktop shell) picks the line layer and drives play /
- * pause / speed / loop, plus optional camera-follow, heading rotation, and a
- * growing trail. The marker, trail, and the arrow icon are native MapLibre
- * sources/layers the engine owns directly (like the sun simulation), updated via
- * `GeoJSONSource.setData` every animation frame. The route geometry itself is
- * resolved by the panel (it has store + map access) and handed to the engine via
- * {@link setRouteAnimationRoute}; only the lightweight settings persist with the
- * project, so a saved file reopens on the same layer without embedding geometry.
+ * pause / speed / loop, plus an optional camera chase (tilt / zoom / rotate),
+ * heading rotation, and a growing trail. In flat 2D the marker, trail, and the
+ * arrow icon are native MapLibre sources/layers the engine owns directly (like
+ * the sun simulation), updated via `GeoJSONSource.setData` every animation
+ * frame. When the selected layer is drawn in the Style panel's "3D (Z values)"
+ * mode, the marker and trail instead render through the shared deck.gl overlay
+ * at the same `z * verticalScale + offset` altitude as the line, so they ride
+ * the elevated track rather than its flat ground projection (see #1210). The
+ * route geometry itself is resolved by the panel (it has store + map access) and
+ * handed to the engine via {@link setRouteAnimationRoute}; only the lightweight
+ * settings persist with the project, so a saved file reopens on the same layer
+ * without embedding geometry.
  */
 
 export const ROUTE_ANIMATION_PLUGIN_ID = "geolibre-route-animation";
@@ -61,8 +97,21 @@ export interface RouteAnimationSettings {
   loop: boolean;
   /** Fraction of the route traversed, in `[0, 1]`. */
   progress: number;
-  /** When true, the camera pans to keep the marker centered (stays north-up). */
+  /** When true, the camera chases the marker (see the follow-camera fields). */
   followCamera: boolean;
+  /**
+   * Camera pitch (degrees, `0` = straight down) held while following. Lets the
+   * follow view tilt into a 3D chase so it tracks an elevated track instead of
+   * snapping flat (see opengeos/GeoLibre#1211).
+   */
+  followPitch: number;
+  /** Camera zoom held while following. */
+  followZoom: number;
+  /**
+   * When true, the map rotates so the direction of travel points up-screen (a
+   * chase cam). When false the map stays north-up while following.
+   */
+  followRotate: boolean;
   /** Which marker to draw at the moving position. */
   markerStyle: RouteMarkerStyle;
   /** When true, a line is drawn over the portion of the route already traveled. */
@@ -77,6 +126,13 @@ const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 export const ROUTE_ANIM_SPEED_MIN = 1;
 export const ROUTE_ANIM_SPEED_MAX = 1000;
 
+// Follow-camera bounds. Pitch tops out where MapLibre clamps it; zoom mirrors
+// the map's usable range.
+export const ROUTE_FOLLOW_PITCH_MIN = 0;
+export const ROUTE_FOLLOW_PITCH_MAX = 85;
+export const ROUTE_FOLLOW_ZOOM_MIN = 1;
+export const ROUTE_FOLLOW_ZOOM_MAX = 22;
+
 export const DEFAULT_ROUTE_ANIMATION_SETTINGS: RouteAnimationSettings = {
   layerId: null,
   playing: false,
@@ -84,6 +140,9 @@ export const DEFAULT_ROUTE_ANIMATION_SETTINGS: RouteAnimationSettings = {
   loop: true,
   progress: 0,
   followCamera: false,
+  followPitch: 60,
+  followZoom: 15,
+  followRotate: true,
   markerStyle: "arrow",
   showTrail: true,
   color: DEFAULT_COLOR,
@@ -121,6 +180,20 @@ export function normalizeRouteAnimationSettings(
     progress: clampNumber(c.progress, 0, 1, base.progress),
     followCamera:
       typeof c.followCamera === "boolean" ? c.followCamera : base.followCamera,
+    followPitch: clampNumber(
+      c.followPitch,
+      ROUTE_FOLLOW_PITCH_MIN,
+      ROUTE_FOLLOW_PITCH_MAX,
+      base.followPitch,
+    ),
+    followZoom: clampNumber(
+      c.followZoom,
+      ROUTE_FOLLOW_ZOOM_MIN,
+      ROUTE_FOLLOW_ZOOM_MAX,
+      base.followZoom,
+    ),
+    followRotate:
+      typeof c.followRotate === "boolean" ? c.followRotate : base.followRotate,
     markerStyle: ROUTE_MARKER_STYLES.includes(c.markerStyle as RouteMarkerStyle)
       ? (c.markerStyle as RouteMarkerStyle)
       : base.markerStyle,
@@ -143,6 +216,9 @@ function settingsEqual(
     a.loop === b.loop &&
     a.progress === b.progress &&
     a.followCamera === b.followCamera &&
+    a.followPitch === b.followPitch &&
+    a.followZoom === b.followZoom &&
+    a.followRotate === b.followRotate &&
     a.markerStyle === b.markerStyle &&
     a.showTrail === b.showTrail &&
     a.color === b.color
@@ -183,6 +259,38 @@ function createArrowIcon(color: string): ImageData | null {
 }
 
 // ---------------------------------------------------------------------------
+// deck.gl marker icons. The 3D marker rides the deck overlay (so it sits at the
+// track's real altitude), which needs image sources rather than a MapLibre
+// sprite. Both icons point up (north) at angle 0 and are colored with the
+// marker color so no runtime tinting is needed; the arrow is spun to the
+// heading via IconLayer's `getAngle`.
+// ---------------------------------------------------------------------------
+
+const DECK_ICON_SIZE = 64;
+
+function svgDataUri(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** An upward chevron filled with `color` and a white outline (points north). */
+function deckArrowIconUri(color: string): string {
+  return svgDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${DECK_ICON_SIZE}" height="${DECK_ICON_SIZE}" viewBox="0 0 64 64">` +
+      `<path d="M32 6 L54 56 L32 44 L10 56 Z" fill="${color}" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>` +
+      `</svg>`,
+  );
+}
+
+/** A filled dot in `color` with a white ring (the "point" marker). */
+function deckDotIconUri(color: string): string {
+  return svgDataUri(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${DECK_ICON_SIZE}" height="${DECK_ICON_SIZE}" viewBox="0 0 64 64">` +
+      `<circle cx="32" cy="32" r="22" fill="${color}" stroke="#ffffff" stroke-width="6"/>` +
+      `</svg>`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Map engine: owns the marker/trail sources and layers and the animation loop.
 // ---------------------------------------------------------------------------
 
@@ -190,6 +298,8 @@ class RouteAnimationEngine {
   private readonly map: MapLibreMap;
   private settings: RouteAnimationSettings;
   private coords: LngLat[] = [];
+  private elevations: number[] = [];
+  private elevation: RouteElevationConfig = FLAT_ELEVATION;
   private cumulative: number[] = [];
   private totalMeters = 0;
   private rafId: number | null = null;
@@ -197,20 +307,31 @@ class RouteAnimationEngine {
   private destroyed = false;
   // Color the arrow icon was last drawn with, so we only redraw on change.
   private iconColor = "";
+  // Lazily-resolved deck.gl bundle used to draw the elevated 3D marker/trail;
+  // null until the host resolves it (2D marker renders in the meantime).
+  private readonly getDeck: () => GeoLibreDeckGL | null;
+  // Whether deck layers are currently contributed to the shared overlay, so we
+  // only clear the "route-anim" source when it actually holds something.
+  private deckActive = false;
 
   constructor(
     map: MapLibreMap,
     settings: RouteAnimationSettings,
     coords: LngLat[],
+    elevations: number[],
+    elevation: RouteElevationConfig,
+    getDeck: () => GeoLibreDeckGL | null,
   ) {
     this.map = map;
     this.settings = settings;
+    this.elevation = elevation;
+    this.getDeck = getDeck;
     this.handleStyleData = this.handleStyleData.bind(this);
     this.tick = this.tick.bind(this);
     map.on("styledata", this.handleStyleData);
     // setRoute() starts the animation loop itself when settings.playing and the
     // route has length, so no extra play() call is needed here.
-    this.setRoute(coords);
+    this.setRoute(coords, elevations);
   }
 
   getMapInstance(): MapLibreMap {
@@ -218,8 +339,9 @@ class RouteAnimationEngine {
   }
 
   /** Replace the route the marker follows and re-render at the current progress. */
-  setRoute(coords: LngLat[]): void {
+  setRoute(coords: LngLat[], elevations: number[] = []): void {
     this.coords = coords;
+    this.elevations = elevations;
     const { cumulative, totalMeters } = measureLine(coords);
     this.cumulative = cumulative;
     this.totalMeters = totalMeters;
@@ -228,6 +350,12 @@ class RouteAnimationEngine {
     // A route with no length can't be animated; stop any running loop.
     if (this.totalMeters <= 0) this.pause();
     else if (this.settings.playing && this.rafId === null) this.play();
+  }
+
+  /** Adopt how the route layer is drawn (2D vs elevated) and re-render. */
+  applyElevation(elevation: RouteElevationConfig): void {
+    this.elevation = elevation;
+    this.render();
   }
 
   applySettings(settings: RouteAnimationSettings): void {
@@ -254,6 +382,7 @@ class RouteAnimationEngine {
     this.pause();
     this.map.off("styledata", this.handleStyleData);
     this.removeLayers();
+    this.clearDeck();
   }
 
   // A basemap style swap wipes custom layers/images; re-add on next styledata.
@@ -419,29 +548,162 @@ class RouteAnimationEngine {
     if (this.totalMeters <= 0) {
       markerSource?.setData({ type: "FeatureCollection", features: [] });
       trailSource?.setData(emptyLine());
+      this.clearDeck();
       return;
     }
-    if (!markerSource) return;
 
     const distance = this.settings.progress * this.totalMeters;
-    const { coord, bearing } = pointAlongLine(
+    const point = pointAlongLine(
       this.coords,
       this.cumulative,
       distance,
+      this.elevations,
     );
-    markerSource.setData(markerFeature(coord, bearing));
+    const { coord, bearing } = point;
+
+    // When the selected layer is drawn elevated (Style panel's "3D (Z values)"),
+    // draw the marker/trail through the deck.gl overlay at the same altitude so
+    // they ride the visualized 3D line rather than its flat ground projection
+    // (#1210). The 2D MapLibre marker/trail are cleared so nothing double-draws.
+    if (this.render3d(distance, point)) {
+      markerSource?.setData({ type: "FeatureCollection", features: [] });
+      trailSource?.setData(emptyLine());
+    } else {
+      this.clearDeck();
+      if (markerSource) markerSource.setData(markerFeature(coord, bearing));
+      if (this.settings.showTrail) {
+        trailSource?.setData(
+          lineFeature(
+            sliceLineAtDistance(this.coords, this.cumulative, distance),
+          ),
+        );
+      } else {
+        trailSource?.setData(emptyLine());
+      }
+    }
+
+    this.applyFollowCamera(coord, bearing);
+  }
+
+  /**
+   * Draw the elevated marker/trail via the shared deck.gl overlay. Returns true
+   * when it took over the render (layer is in 3D mode and deck.gl is ready), so
+   * the caller clears the flat MapLibre marker/trail; false to fall back to 2D.
+   */
+  private render3d(
+    distance: number,
+    point: { coord: LngLat; bearing: number; elevation: number },
+  ): boolean {
+    if (!this.elevation.active) return false;
+    const deck = this.getDeck();
+    if (!deck) return false;
+
+    const { verticalScale, offset } = this.elevation;
+    const lift = (z: number): number => z * verticalScale + offset;
+    const { color } = this.settings;
+    const layers: Layer[] = [];
 
     if (this.settings.showTrail) {
-      trailSource?.setData(
-        lineFeature(sliceLineAtDistance(this.coords, this.cumulative, distance)),
+      const trail = sliceRouteAtDistance(
+        this.coords,
+        this.cumulative,
+        distance,
+        this.elevations,
       );
+      if (trail.coords.length >= 2) {
+        const path = trail.coords.map(
+          (c, i) =>
+            [c[0], c[1], lift(trail.elevations[i] ?? 0)] as [
+              number,
+              number,
+              number,
+            ],
+        );
+        layers.push(
+          new deck.layers.PathLayer<{ path: [number, number, number][] }>({
+            id: `${ROUTE_ANIM_DECK_SOURCE}-trail`,
+            data: [{ path }],
+            getPath: (d) => d.path,
+            getColor: colorToRgba(color, 0.85),
+            getWidth: 4,
+            widthUnits: "pixels",
+            widthMinPixels: 2,
+            billboard: true,
+            // Draw over the track it rides instead of z-fighting with it.
+            parameters: { depthCompare: "always" },
+          }),
+        );
+      }
     }
 
-    if (this.settings.followCamera) {
-      // Recenter only, keeping the map north-up. Rotating the map to the heading
-      // makes an arrow marker (aligned to the map) look like it never turns.
-      this.map.jumpTo({ center: coord });
-    }
+    const markerLayer = this.deckMarkerLayer(deck, point, lift, color);
+    if (markerLayer) layers.push(markerLayer);
+
+    setSharedDeckLayers(ROUTE_ANIM_DECK_SOURCE, layers);
+    this.deckActive = true;
+    return true;
+  }
+
+  /** The deck marker (arrow/point) for the current position, or null for "none". */
+  private deckMarkerLayer(
+    deck: GeoLibreDeckGL,
+    point: { coord: LngLat; bearing: number; elevation: number },
+    lift: (z: number) => number,
+    color: string,
+  ): Layer | null {
+    const style = this.settings.markerStyle;
+    if (style === "none") return null;
+    const position: [number, number, number] = [
+      point.coord[0],
+      point.coord[1],
+      lift(point.elevation),
+    ];
+    const isArrow = style === "arrow";
+    const url = isArrow ? deckArrowIconUri(color) : deckDotIconUri(color);
+    // The chevron points up (north) at angle 0; IconLayer rotates
+    // counter-clockwise, so the map bearing minus the travel bearing keeps it
+    // pointing along the route on screen (≈ up when the chase cam is rotating).
+    const angle = isArrow ? this.map.getBearing() - point.bearing : 0;
+    return new deck.layers.IconLayer<{ position: [number, number, number] }>({
+      id: `${ROUTE_ANIM_DECK_SOURCE}-marker`,
+      data: [{ position }],
+      getPosition: (d) => d.position,
+      getIcon: () => ({
+        url,
+        width: DECK_ICON_SIZE,
+        height: DECK_ICON_SIZE,
+        anchorX: DECK_ICON_SIZE / 2,
+        anchorY: DECK_ICON_SIZE / 2,
+        mask: false,
+      }),
+      getSize: isArrow ? 34 : 18,
+      sizeUnits: "pixels",
+      getAngle: angle,
+      billboard: true,
+      parameters: { depthCompare: "always" },
+    });
+  }
+
+  /** Remove this engine's contribution to the shared deck overlay, if any. */
+  private clearDeck(): void {
+    if (!this.deckActive) return;
+    setSharedDeckLayers(ROUTE_ANIM_DECK_SOURCE, []);
+    this.deckActive = false;
+  }
+
+  /** Chase the marker with the configured pitch / zoom / heading, if following. */
+  private applyFollowCamera(coord: LngLat, bearing: number): void {
+    if (!this.settings.followCamera) return;
+    this.map.jumpTo({
+      center: coord,
+      pitch: this.settings.followPitch,
+      zoom: this.settings.followZoom,
+      // Rotate the map so travel points up-screen (a chase cam); otherwise keep
+      // the current bearing (north-up unless the user rotated the map).
+      bearing: this.settings.followRotate
+        ? bearing
+        : this.map.getBearing(),
+    });
   }
 
   play(): void {
@@ -508,6 +770,14 @@ let settings: RouteAnimationSettings = { ...DEFAULT_ROUTE_ANIMATION_SETTINGS };
 // re-derivable from `layerId`, so the panel re-resolves it rather than the
 // project embedding it. Re-applied whenever the engine (re)attaches to a map.
 let routeCoords: LngLat[] = [];
+// Raw Z per vertex (aligned with routeCoords) plus how the layer is drawn, so
+// the engine can lift the marker/trail onto the elevated 3D line (#1210).
+let routeElevations: number[] = [];
+let routeElevation: RouteElevationConfig = FLAT_ELEVATION;
+// The host's deck.gl bundle, resolved lazily the first time the panel attaches
+// (the 3D marker needs it). Null until ready; the marker renders 2D meanwhile.
+let deckGLBundle: GeoLibreDeckGL | null = null;
+let deckGLPending = false;
 
 const panelListeners = new Set<() => void>();
 const stateListeners = new Set<() => void>();
@@ -519,11 +789,41 @@ function notifyState(): void {
   for (const listener of stateListeners) listener();
 }
 
+// Resolve the deck.gl bundle and the shared interleaved overlay once, then
+// re-render so an already-elevated route swaps its flat marker for the 3D one.
+function ensureDeck(app: GeoLibreAppAPI): void {
+  if (deckGLBundle || deckGLPending || !app.getDeckGL) return;
+  deckGLPending = true;
+  void app
+    .getDeckGL()
+    .then(async (bundle) => {
+      deckGLBundle = bundle;
+      await ensureSharedDeckOverlay(app);
+      engine?.render();
+    })
+    .catch((error) => {
+      console.warn("[GeoLibre] route-animation: deck.gl unavailable", error);
+    })
+    .finally(() => {
+      deckGLPending = false;
+    });
+}
+
 function attachEngine(app: GeoLibreAppAPI): boolean {
   const map = app.getMap?.();
   if (!map) return false;
   if (engine && engine.getMapInstance() !== map) detachEngine();
-  if (!engine) engine = new RouteAnimationEngine(map, settings, routeCoords);
+  if (!engine) {
+    engine = new RouteAnimationEngine(
+      map,
+      settings,
+      routeCoords,
+      routeElevations,
+      routeElevation,
+      () => deckGLBundle,
+    );
+  }
+  ensureDeck(app);
   return true;
 }
 
@@ -636,15 +936,21 @@ export function setRouteAnimationProgress(progress: number): void {
  * or a load must never snap a running/restored animation back to the start. When
  * the coordinates are unchanged the engine already holds them, so it is a no-op.
  */
-export function setRouteAnimationRoute(coords: LngLat[]): void {
+export function setRouteAnimationRoute(
+  coords: LngLat[],
+  elevations: number[] = [],
+): void {
   const unchanged =
     coords.length === routeCoords.length &&
     coords.every(
       (c, i) => c[0] === routeCoords[i][0] && c[1] === routeCoords[i][1],
-    );
+    ) &&
+    elevations.length === routeElevations.length &&
+    elevations.every((z, i) => z === routeElevations[i]);
   routeCoords = coords;
+  routeElevations = elevations;
   if (unchanged) return;
-  engine?.setRoute(coords);
+  engine?.setRoute(coords, elevations);
   // If the route can no longer be animated (e.g. the selected layer was deleted),
   // clear `playing` so the panel doesn't keep showing a disabled Pause button.
   // Sync the engine too, otherwise its stale `this.settings.playing === true`
@@ -654,6 +960,25 @@ export function setRouteAnimationRoute(coords: LngLat[]): void {
     engine?.applySettings(settings);
     notifyState();
   }
+}
+
+/**
+ * Tell the engine how the selected route layer is drawn, so the marker/trail
+ * can match it. When the layer uses the Style panel's "3D (Z values)" mode the
+ * marker/trail are lifted by the same `z * verticalScale + offset` transform to
+ * ride the elevated line (#1210); otherwise they render flat as before. Cheap
+ * and idempotent, so the panel may call it whenever those style values change.
+ */
+export function setRouteAnimationElevation(
+  elevation: RouteElevationConfig,
+): void {
+  const unchanged =
+    routeElevation.active === elevation.active &&
+    routeElevation.verticalScale === elevation.verticalScale &&
+    routeElevation.offset === elevation.offset;
+  routeElevation = elevation;
+  if (unchanged) return;
+  engine?.applyElevation(elevation);
 }
 
 /**
@@ -697,7 +1022,10 @@ export function restoreRouteAnimation(
   // engine: an already-open panel keeps its engine (attachEngine only rebuilds on
   // a map change), so without this it would keep rendering the old route.
   routeCoords = [];
+  routeElevations = [];
+  routeElevation = FLAT_ELEVATION;
   engine?.setRoute([]);
+  engine?.applyElevation(FLAT_ELEVATION);
   const shouldOpen = Boolean(
     state && typeof state === "object" && (state as { open?: unknown }).open,
   );

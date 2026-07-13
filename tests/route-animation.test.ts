@@ -5,6 +5,10 @@ import {
   DEFAULT_ROUTE_ANIMATION_SETTINGS,
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
+  ROUTE_FOLLOW_PITCH_MAX,
+  ROUTE_FOLLOW_PITCH_MIN,
+  ROUTE_FOLLOW_ZOOM_MAX,
+  ROUTE_FOLLOW_ZOOM_MIN,
   ROUTE_VIDEO_MIME_CANDIDATES,
   advanceRouteProgress,
   getRouteAnimationDurationSeconds,
@@ -23,9 +27,11 @@ import {
 import {
   bearingBetween,
   flattenToLine,
+  flattenToRoute,
   measureLine,
   pointAlongLine,
   sliceLineAtDistance,
+  sliceRouteAtDistance,
   type LngLat,
 } from "../packages/plugins/src/plugins/route-animation-geometry";
 import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
@@ -97,11 +103,36 @@ describe("normalizeRouteAnimationSettings", () => {
     const s = normalizeRouteAnimationSettings({
       loop: false,
       followCamera: true,
+      followRotate: false,
       showTrail: false,
     });
     assert.equal(s.loop, false);
     assert.equal(s.followCamera, true);
+    assert.equal(s.followRotate, false);
     assert.equal(s.showTrail, false);
+  });
+
+  it("clamps the follow-camera pitch and zoom into their ranges", () => {
+    assert.equal(
+      normalizeRouteAnimationSettings({ followPitch: -20 }).followPitch,
+      ROUTE_FOLLOW_PITCH_MIN,
+    );
+    assert.equal(
+      normalizeRouteAnimationSettings({ followPitch: 999 }).followPitch,
+      ROUTE_FOLLOW_PITCH_MAX,
+    );
+    assert.equal(
+      normalizeRouteAnimationSettings({ followZoom: 0 }).followZoom,
+      ROUTE_FOLLOW_ZOOM_MIN,
+    );
+    assert.equal(
+      normalizeRouteAnimationSettings({ followZoom: 99 }).followZoom,
+      ROUTE_FOLLOW_ZOOM_MAX,
+    );
+    assert.equal(
+      normalizeRouteAnimationSettings({ followPitch: 45 }).followPitch,
+      45,
+    );
   });
 
   it("accepts valid hex colors and rejects malformed ones", () => {
@@ -203,6 +234,61 @@ describe("flattenToLine", () => {
   });
 });
 
+// A 3D LineString: due east then due north, climbing 0 → 100 → 250 meters.
+const LINE_3D: number[][] = [
+  [0, 0, 0],
+  [1, 0, 100],
+  [1, 1, 250],
+];
+
+describe("flattenToRoute", () => {
+  it("returns coordinates and their aligned Z values", () => {
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "LineString", coordinates: LINE_3D },
+        },
+      ],
+    };
+    const route = flattenToRoute(fc);
+    assert.deepEqual(route.coords, [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+    ]);
+    assert.deepEqual(route.elevations, [0, 100, 250]);
+  });
+
+  it("treats missing/non-finite Z as 0", () => {
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 0, Number.NaN],
+              [1, 1, 42],
+            ],
+          },
+        },
+      ],
+    };
+    assert.deepEqual(flattenToRoute(fc).elevations, [0, 0, 42]);
+  });
+
+  it("returns empty arrays when there is no line", () => {
+    assert.deepEqual(flattenToRoute(undefined), { coords: [], elevations: [] });
+    assert.deepEqual(flattenToRoute(null), { coords: [], elevations: [] });
+  });
+});
+
 describe("pointAlongLine", () => {
   const { cumulative, totalMeters } = measureLine(LINE);
 
@@ -233,6 +319,26 @@ describe("pointAlongLine", () => {
     const p = pointAlongLine(LINE, cumulative, intoSecond);
     assert.ok(Math.abs(p.bearing - 0) < 1e-6);
   });
+
+  it("interpolates the elevation when an elevations array is supplied", () => {
+    const elevations = [0, 100, 250];
+    const halfFirst = cumulative[1] / 2;
+    // Halfway up the first segment (0 → 100 m) is 50 m.
+    assert.ok(
+      Math.abs(
+        pointAlongLine(LINE, cumulative, halfFirst, elevations).elevation - 50,
+      ) < 1e-6,
+    );
+    // At the far end the elevation is the last vertex's Z.
+    assert.equal(
+      pointAlongLine(LINE, cumulative, totalMeters, elevations).elevation,
+      250,
+    );
+  });
+
+  it("reports elevation 0 when no elevations array is supplied", () => {
+    assert.equal(pointAlongLine(LINE, cumulative, totalMeters).elevation, 0);
+  });
 });
 
 describe("sliceLineAtDistance", () => {
@@ -255,6 +361,39 @@ describe("sliceLineAtDistance", () => {
     assert.equal(slice.length, 2);
     assert.deepEqual(slice[0], START);
     assert.ok(Math.abs(slice[1][0] - 0.5) < 1e-6);
+  });
+});
+
+describe("sliceRouteAtDistance", () => {
+  const { cumulative, totalMeters } = measureLine(LINE);
+  const elevations = [0, 100, 250];
+
+  it("returns empty arrays at distance 0", () => {
+    assert.deepEqual(sliceRouteAtDistance(LINE, cumulative, 0, elevations), {
+      coords: [],
+      elevations: [],
+    });
+  });
+
+  it("returns the whole route with its elevations at the total length", () => {
+    const route = sliceRouteAtDistance(
+      LINE,
+      cumulative,
+      totalMeters,
+      elevations,
+    );
+    assert.deepEqual(route.coords, LINE);
+    assert.deepEqual(route.elevations, elevations);
+  });
+
+  it("caps the trail with the interpolated elevation partway along", () => {
+    const halfFirst = cumulative[1] / 2;
+    const route = sliceRouteAtDistance(LINE, cumulative, halfFirst, elevations);
+    assert.equal(route.coords.length, 2);
+    assert.deepEqual(route.coords[0], START);
+    assert.equal(route.elevations[0], 0);
+    // The capped vertex sits at the interpolated midpoint elevation (50 m).
+    assert.ok(Math.abs(route.elevations[1] - 50) < 1e-6);
   });
 });
 

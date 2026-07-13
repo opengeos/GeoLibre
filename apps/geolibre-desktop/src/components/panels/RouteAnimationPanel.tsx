@@ -1,19 +1,25 @@
-import { useAppStore } from "@geolibre/core";
+import { geojsonHasZCoordinates, styleValue, useAppStore } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import {
   ROUTE_ANIM_SPEED_MAX,
   ROUTE_ANIM_SPEED_MIN,
+  ROUTE_FOLLOW_PITCH_MAX,
+  ROUTE_FOLLOW_PITCH_MIN,
+  ROUTE_FOLLOW_ZOOM_MAX,
+  ROUTE_FOLLOW_ZOOM_MIN,
   ROUTE_MARKER_STYLES,
   RouteVideoUnsupportedError,
   type RouteMarkerStyle,
   closeRouteAnimationPanel,
   flattenToLine,
+  flattenToRoute,
   getRouteAnimationDurationSeconds,
   getRouteAnimationSnapshot,
   isRouteAnimationPanelVisible,
   isRouteVideoSupported,
   pickRouteVideoMimeType,
   recordRouteAnimation,
+  setRouteAnimationElevation,
   setRouteAnimationProgress,
   setRouteAnimationRoute,
   setRouteAnimationSettings,
@@ -27,11 +33,14 @@ import {
   ChevronDown,
   ChevronUp,
   Circle,
+  Compass,
   Film,
+  Mountain,
   Navigation,
   Pause,
   Play,
   Repeat,
+  Search,
   Spline,
   Video,
   X,
@@ -126,6 +135,24 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
   // out from under the running capture.
   const busy = recordStatus !== "idle";
 
+  // Whether the selected layer is drawn elevated ("3D (Z values)") and how, kept
+  // in a store-derived key so tweaking the exaggeration/offset in the Style
+  // panel re-pushes the transform without re-resolving the geometry. Empty when
+  // no layer is selected.
+  const elevation3dKey = useAppStore((s) => {
+    const layer = s.layers.find((l) => l.id === settings.layerId);
+    if (!layer) return "";
+    return [
+      styleValue(layer.style, "elevation3dEnabled") === true ? 1 : 0,
+      styleValue(layer.style, "elevation3dVerticalScale"),
+      styleValue(layer.style, "elevation3dOffset"),
+    ].join("|");
+  });
+  // True once the resolved route carries real Z values, mirroring the map-side
+  // gate (`isElevation3dLayer`) so the marker only lifts when the layer actually
+  // renders in 3D.
+  const [routeHasZ, setRouteHasZ] = useState(false);
+
   const {
     layerId,
     playing,
@@ -133,6 +160,9 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     loop,
     progress,
     followCamera,
+    followPitch,
+    followZoom,
+    followRotate,
     markerStyle,
     showTrail,
     color,
@@ -177,6 +207,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     let cancelled = false;
     if (!layerId) {
       setRouteAnimationRoute([]);
+      setRouteHasZ(false);
       return;
     }
     const layer = useAppStore.getState().layers.find((l) => l.id === layerId);
@@ -185,6 +216,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
       // stale selection so the dropdown falls back to the placeholder and a save
       // doesn't persist a layerId that no longer exists.
       setRouteAnimationRoute([]);
+      setRouteHasZ(false);
       setRouteAnimationSettings({ layerId: null });
       return;
     }
@@ -192,12 +224,37 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
     (async () => {
       const fc = await resolveLayerGeojson(layer, map).catch(() => null);
       if (cancelled) return;
-      setRouteAnimationRoute(flattenToLine(fc));
+      const { coords, elevations } = flattenToRoute(fc);
+      setRouteAnimationRoute(coords, elevations);
+      // Mirror the map-side gate: the layer only renders 3D when its data has
+      // real Z somewhere, so the marker only lifts in that case.
+      setRouteHasZ(geojsonHasZCoordinates(fc));
     })();
     return () => {
       cancelled = true;
     };
   }, [layerId, geojsonLayerKey, mapControllerRef]);
+
+  // Tell the engine how the selected layer is drawn (flat vs elevated), so the
+  // marker/trail ride the visualized 3D line. Re-runs when the layer's 3D style
+  // values change or the route's Z availability does.
+  useEffect(() => {
+    const layer = layerId
+      ? useAppStore.getState().layers.find((l) => l.id === layerId)
+      : undefined;
+    if (!layer) {
+      setRouteAnimationElevation({ active: false, verticalScale: 1, offset: 0 });
+      return;
+    }
+    const enabled = styleValue(layer.style, "elevation3dEnabled") === true;
+    const rawScale = styleValue(layer.style, "elevation3dVerticalScale");
+    const rawOffset = styleValue(layer.style, "elevation3dOffset");
+    setRouteAnimationElevation({
+      active: enabled && routeHasZ,
+      verticalScale: Number.isFinite(rawScale) ? rawScale : 1,
+      offset: Number.isFinite(rawOffset) ? rawOffset : 0,
+    });
+  }, [layerId, elevation3dKey, routeHasZ]);
 
   const handleDragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest("button,input,select")) return;
@@ -517,6 +574,45 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           />
         </div>
 
+        {/* Follow-camera controls: a chase cam that can tilt/zoom/rotate so the
+            view tracks an elevated 3D track instead of snapping flat (#1211).
+            Only shown while Follow is on. */}
+        {followCamera && (
+          <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2">
+            <SliderRow
+              label={t("toolbar.routeAnimation.followPitch")}
+              icon={<Mountain className="h-3.5 w-3.5" />}
+              min={ROUTE_FOLLOW_PITCH_MIN}
+              max={ROUTE_FOLLOW_PITCH_MAX}
+              step={1}
+              value={followPitch}
+              disabled={busy}
+              format={(v) => `${Math.round(v)}°`}
+              onChange={(v) => setRouteAnimationSettings({ followPitch: v })}
+            />
+            <SliderRow
+              label={t("toolbar.routeAnimation.followZoom")}
+              icon={<Search className="h-3.5 w-3.5" />}
+              min={ROUTE_FOLLOW_ZOOM_MIN}
+              max={ROUTE_FOLLOW_ZOOM_MAX}
+              step={0.5}
+              value={followZoom}
+              disabled={busy}
+              format={(v) => v.toFixed(1)}
+              onChange={(v) => setRouteAnimationSettings({ followZoom: v })}
+            />
+            <ToggleChip
+              active={followRotate}
+              icon={<Compass className="h-3.5 w-3.5" />}
+              label={t("toolbar.routeAnimation.followRotate")}
+              disabled={busy}
+              onClick={() =>
+                setRouteAnimationSettings({ followRotate: !followRotate })
+              }
+            />
+          </div>
+        )}
+
         {/* Video export: record one full pass of the animation to a video file.
             Only shown when the browser can record the canvas. */}
         {VIDEO_SUPPORTED && (
@@ -620,6 +716,8 @@ function ToggleChip({ active, icon, label, disabled, onClick }: ToggleChipProps)
 
 interface SliderRowProps {
   label: string;
+  /** Optional leading icon shown next to the label. */
+  icon?: React.ReactNode;
   min: number;
   max: number;
   step: number;
@@ -631,6 +729,7 @@ interface SliderRowProps {
 
 function SliderRow({
   label,
+  icon,
   min,
   max,
   step,
@@ -642,7 +741,10 @@ function SliderRow({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
+        <span className="flex items-center gap-1.5 text-muted-foreground">
+          {icon}
+          {label}
+        </span>
         <span className="tabular-nums text-foreground">{format(value)}</span>
       </div>
       <Slider
