@@ -73,8 +73,18 @@ export async function loadExternalPlugins(
   manager: PluginManager,
   additionalPluginDirectories: string[] = [],
   pluginManifestUrls: string[] = [],
+  options: {
+    /**
+     * Manifest URLs of bundled drop-ins (public/plugins/<id>/). Only manifests
+     * fetched from these URLs may use `activeByDefault`; deployer-baked
+     * drop-ins are as trusted as built-ins, while runtime-installed zips and
+     * URL plugins must not force themselves active.
+     */
+    bundledManifestUrls?: readonly string[];
+  } = {},
 ): Promise<ExternalPluginLoadResult> {
   const issues: ExternalPluginLoadIssue[] = [];
+  const bundledUrls = new Set(options.bundledManifestUrls ?? []);
   // The filesystem scan (Tauri IPC + disk), the manifest URL fetches (network),
   // and the IndexedDB read (web-installed archives) are independent, so overlap
   // them. Web-installed archives are the browser counterpart of the desktop
@@ -133,6 +143,16 @@ export async function loadExternalPlugins(
 
       const plugin = await importExternalPlugin(bundle);
       manager.register(plugin);
+      // Manifest-level activeByDefault, honored for bundled drop-ins only
+      // (silently ignored elsewhere; see the manifest type doc). Marked after
+      // register() so the restore pass activates it with a real app API.
+      if (
+        bundle.manifest.activeByDefault === true &&
+        bundle.sourceUrl !== undefined &&
+        bundledUrls.has(bundle.sourceUrl)
+      ) {
+        manager.markDefaultActive(plugin.id);
+      }
       registeredPluginIds.add(plugin.id);
       externallyLoadedPluginSources.set(plugin.id, bundle.archiveName);
       // Inject the style only after registration succeeds; an orphaned

@@ -231,6 +231,15 @@ docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
 
 The container always serves the app from its root path. The build argument only sets the URL prefix that the app expects, so subpath deployments also require a reverse proxy in front of the container that strips the prefix before forwarding requests (for example, nginx `proxy_pass http://geolibre/;` with a trailing slash).
 
+To skip the first-launch welcome wizard for every visitor (kiosk or embedded
+deployments), bake `VITE_WELCOME_DISABLED=1` into the build:
+
+```bash
+docker build --build-arg VITE_WELCOME_DISABLED=1 -t geolibre .
+```
+
+Individual links can also opt out at runtime with `?welcome=0`.
+
 ## SQL Workspace
 
 The SQL Workspace runs DuckDB SQL (with the Spatial extension loaded, so `ST_*` functions are available) directly in the browser against your loaded layers and remote data. Open it from the Processing menu.

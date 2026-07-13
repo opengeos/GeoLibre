@@ -472,6 +472,8 @@ The same folder serves **both** the web and desktop builds: the desktop app bund
 
 Private plugins should be git-ignored under `public/plugins/` (see that folder's `.gitignore`) and copied in at build/deploy time (for example in CI before `npm run build`, or by a plugin repo's own install script) so their code stays out of GeoLibre's history. The discovery code is generic and committed; only the plugin payload is excluded.
 
+A bundled drop-in's `plugin.json` may additionally set `"activeByDefault": true` to activate the plugin on startup, so its control appears without a trip to the Plugins menu. Saved plugin state still wins: a loaded project (or the user's persisted plugin state) that carries `activePluginIds` overrides the default. The flag is honored **only** for bundled drop-ins, since a deployer who bakes a plugin into the build is trusted like a built-in author; it is silently ignored on manifests installed at runtime from URLs or zips.
+
 If instead you want a plugin compiled into the main JS bundle (no `plugin.json`, no fetch), register it as a built-in plugin (see "Add a plugin" in the repository README).
 
 ```json
@@ -491,7 +493,7 @@ External plugin entries are executed with `import(URL.createObjectURL(...))`, wh
 
 Because plugins run as trusted code in the host document, they can read `window.__GEOLIBRE_RUNTIME_ENV__`, the runtime environment map. On the desktop app this map includes the AI Assistant's [OS-environment keys](user-guide/ai-assistant.md#reading-keys-from-your-system-environment-desktop) (the allowlisted provider variables read from the user's shell), not only the values typed into Settings → Environment Variables. Treat any credential reachable through the app's environment as visible to installed plugins, and only install plugins you trust.
 
-Manifest paths must be relative zip paths with forward slashes, no leading slash, no backslashes, and no `..` segments. External plugins cannot use `activeByDefault`; saved project state can still reactivate an external plugin by ID after the zip is loaded.
+Manifest paths must be relative zip paths with forward slashes, no leading slash, no backslashes, and no `..` segments. External plugins cannot set `activeByDefault` on the exported plugin object, and the manifest-level flag is honored only for bundled drop-ins (see "Bundled plugins" above); saved project state can still reactivate an external plugin by ID after the zip is loaded.
 
 The optional `style` CSS is injected globally into the host document, not scoped to the plugin. Plugin authors are responsible for scoping their selectors (for example with a plugin-specific class prefix) so broad rules do not restyle the rest of the app. Injected CSS can also issue network requests through `url()` references and `@import`, so a plugin stylesheet can load external fonts, images, or additional sheets; treat plugin CSS with the same trust expectations as plugin code.
 

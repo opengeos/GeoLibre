@@ -680,4 +680,12 @@ export interface GeoLibreExternalPluginManifest {
   entry: string;
   description?: string;
   style?: string;
+  /**
+   * Activate the plugin on startup when no saved plugin state overrides it.
+   * Honored only for bundled drop-ins (public/plugins/<id>/), which are baked
+   * into the build by the deployer and therefore as trusted as built-ins.
+   * Ignored for plugins installed at runtime from zips or manifest URLs, so
+   * third-party plugins cannot force themselves active.
+   */
+  activeByDefault?: boolean;
 }

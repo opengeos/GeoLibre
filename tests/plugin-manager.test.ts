@@ -943,3 +943,67 @@ describe("PluginManager panel auto-expand on restore", () => {
     );
   });
 });
+
+describe("PluginManager markDefaultActive", () => {
+  it("activates a marked plugin on restore with no saved state", () => {
+    const manager = new PluginManager();
+    const activated: string[] = [];
+    manager.register(
+      testPlugin({
+        id: "bundled-drop-in",
+        activate: () => {
+          activated.push("bundled-drop-in");
+        },
+      }),
+    );
+    manager.markDefaultActive("bundled-drop-in");
+
+    // Marking must NOT activate immediately: unlike built-in activeByDefault
+    // plugins (whose startup side effects are applied idempotently elsewhere),
+    // a drop-in needs its activate(app) called by the restore pass.
+    assert.equal(manager.isActive("bundled-drop-in"), false);
+    assert.deepEqual(activated, []);
+
+    manager.restoreProjectState(null, app);
+    assert.equal(manager.isActive("bundled-drop-in"), true);
+    assert.deepEqual(activated, ["bundled-drop-in"]);
+  });
+
+  it("is overridden by saved state that omits the plugin", () => {
+    const manager = new PluginManager();
+    const activated: string[] = [];
+    manager.register(
+      testPlugin({
+        id: "bundled-drop-in",
+        activate: () => {
+          activated.push("bundled-drop-in");
+        },
+      }),
+    );
+    manager.markDefaultActive("bundled-drop-in");
+
+    manager.restoreProjectState(
+      { manifestUrls: [], activePluginIds: [], mapControlPositions: {}, settings: {} },
+      app,
+    );
+    assert.equal(manager.isActive("bundled-drop-in"), false);
+    assert.deepEqual(activated, []);
+  });
+
+  it("ignores unregistered ids", () => {
+    const manager = new PluginManager();
+    manager.markDefaultActive("never-registered");
+    manager.restoreProjectState(null, app);
+    assert.equal(manager.isActive("never-registered"), false);
+  });
+
+  it("is cleared when the plugin is unregistered", () => {
+    const manager = new PluginManager();
+    manager.register(testPlugin({ id: "bundled-drop-in" }));
+    manager.markDefaultActive("bundled-drop-in");
+    manager.unregister("bundled-drop-in", app);
+
+    manager.restoreProjectState(null, app);
+    assert.equal(manager.isActive("bundled-drop-in"), false);
+  });
+});
