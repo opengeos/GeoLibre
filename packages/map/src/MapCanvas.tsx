@@ -1,6 +1,8 @@
 import {
   applyGroupEffects,
   isDuckDBQueryLayer,
+  PHOTO_FULL_PROPERTY,
+  PHOTO_PROPERTY,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -129,20 +131,21 @@ function createIdentifyPopupElement(
 
   if (featureId != null) appendRow("id", featureId);
 
-  const entries = Object.entries(properties);
+  // Skip the full-resolution image: it is an internal companion to the
+  // thumbnail, so Identify shouldn't decode a multi-megapixel data URL just to
+  // show a second copy of the same photo in the same small box. Filter before
+  // the empty-state check so a feature whose only property is `photo_full` still
+  // reports "No attributes" rather than rendering an empty panel.
+  const entries = Object.entries(properties).filter(
+    ([key]) => key !== PHOTO_FULL_KEY,
+  );
   if (entries.length === 0 && featureId == null) {
     const empty = document.createElement("div");
     empty.className = "text-muted-foreground";
     empty.textContent = "No attributes";
     rows.appendChild(empty);
   } else {
-    for (const [key, value] of entries) {
-      // The full-resolution image is an internal companion to the thumbnail;
-      // skip it so Identify doesn't decode a multi-megapixel data URL just to
-      // show a second copy of the same photo in the same small thumbnail box.
-      if (key === PHOTO_FULL_KEY) continue;
-      appendRow(key, value);
-    }
+    for (const [key, value] of entries) appendRow(key, value);
   }
 
   return root;
@@ -158,12 +161,11 @@ function createIdentifyMessagePopupElement(
 /** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
 const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
 
-// Feature-property keys for geotagged/field-collection photos. Kept in sync with
-// PHOTO_PROPERTY / PHOTO_FULL_PROPERTY in the app's field-collection module (this
-// package can't import from the app): the popup shows the light thumbnail while
-// the fullscreen viewer and "Save image" use the embedded full-resolution image.
-const PHOTO_THUMBNAIL_KEY = "photo";
-const PHOTO_FULL_KEY = "photo_full";
+// Feature-property keys for geotagged/field-collection photos, from the shared
+// @geolibre/core schema: the popup shows the light thumbnail while the fullscreen
+// viewer and "Save image" use the embedded full-resolution image.
+const PHOTO_THUMBNAIL_KEY = PHOTO_PROPERTY;
+const PHOTO_FULL_KEY = PHOTO_FULL_PROPERTY;
 
 /** Return the value at `key` when it is an inline raster image data URL. */
 function imageDataUrlAt(
@@ -470,13 +472,17 @@ function createPhotoPopupElement(
     // Prefer the embedded full-resolution image, falling back to the thumbnail
     // when the source was already native or its format can't be shown at full
     // size; `thumbnail` is non-null here, so this is always a string.
-    const fullResolution =
-      imageDataUrlAt(properties, PHOTO_FULL_KEY) ?? thumbnail;
+    const fullImage = imageDataUrlAt(properties, PHOTO_FULL_KEY);
+    const fullResolution = fullImage ?? thumbnail;
     const image = document.createElement("img");
     image.src = thumbnail;
     image.alt = typeof properties.name === "string" ? properties.name : "Photo";
     image.className = "geolibre-photo-popup-img";
-    image.title = "Double-click to view at full resolution";
+    // Only promise "full resolution" when the native original is actually
+    // embedded; otherwise the double-click just opens the thumbnail fullscreen.
+    image.title = fullImage
+      ? "Double-click to view at full resolution"
+      : "Double-click to view fullscreen";
     // Double-click (not single, so it never fights the resize drag) opens the
     // photo fullscreen. The image is popup DOM, not the map canvas, so this does
     // not trigger MapLibre's double-click zoom.

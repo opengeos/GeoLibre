@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./photo";
 export * from "./ellipsoids";
 export * from "./geojson-z";
 export * from "./color-ramp";

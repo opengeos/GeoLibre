@@ -128,6 +128,26 @@ function sniffImageMime(bytes: Uint8Array): string | null {
   return null;
 }
 
+/**
+ * Read a Blob as a base64 data URL. Prefers `FileReader.readAsDataURL`, which
+ * runs off the main thread and streams the base64 without the ~2x intermediate
+ * UTF-16 string {@link base64FromBytes} builds, so a near-cap (tens of MB) photo
+ * doesn't spike memory or freeze the UI. Falls back to `arrayBuffer()` + manual
+ * base64 under Node (tests), where `FileReader` is unavailable.
+ */
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  if (typeof FileReader === "function") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+      reader.readAsDataURL(blob);
+    });
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return `data:${blob.type};base64,${base64FromBytes(bytes)}`;
+}
+
 /** Base64-encode raw bytes in chunks so large images don't overflow the call
  * stack (`btoa(String.fromCharCode(...allBytes))` throws on multi-MB inputs).
  * Exported for direct testing (the DOM decode path is unavailable under Node). */
@@ -326,9 +346,12 @@ export async function createFullResolutionDataUrl(
   // can't add hundreds of MB to the project.
   if (file.size > MAX_FULL_RESOLUTION_BYTES) return null;
   try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const mime = sniffImageMime(bytes) ?? extensionMime;
-    return `data:${mime};base64,${base64FromBytes(bytes)}`;
+    // Sniff only the header so the MIME is correct for a mislabeled extension,
+    // then encode from a Blob retagged with that MIME. Blob.slice is a view, so
+    // this doesn't copy the image bytes just to set the type.
+    const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const mime = sniffImageMime(header) ?? extensionMime;
+    return await blobToDataUrl(file.slice(0, file.size, mime));
   } catch {
     return null;
   }
