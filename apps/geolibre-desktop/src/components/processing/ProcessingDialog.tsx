@@ -22,11 +22,6 @@ import {
 } from "@geolibre/processing";
 import {
   Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   Input,
   Label,
   ScrollArea,
@@ -40,6 +35,7 @@ import {
   ChevronDown,
   ChevronUp,
   FolderOpen,
+  GripHorizontal,
   Loader2,
   Play,
   RefreshCw,
@@ -48,6 +44,7 @@ import {
   Search,
   Server,
   ServerOff,
+  X,
 } from "lucide-react";
 import {
   type ChangeEvent,
@@ -451,6 +448,68 @@ export function ProcessingDialog({
   // terminal job (never "pending"/"running"), so without this flag the Run
   // button would stay enabled mid-execution and allow concurrent runs.
   const [runningLocal, setRunningLocal] = useState(false);
+
+  // Floating, non-modal panel (GH: whitebox modal -> floating panel). Rendered
+  // as a draggable `fixed` window instead of a Radix modal so the map stays
+  // interactive while a tool is open (e.g. to pan/zoom and use "Use map extent"
+  // for the subset tools). Mirrors RecordVideoDialog's drag pattern. `pos` is
+  // null until first dragged, when the default corner placement (CSS) applies;
+  // afterwards it pins to explicit coords.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragOffset = useRef<{ x: number; y: number } | null>(null);
+
+  const onDragStart = (event: React.PointerEvent) => {
+    // Never begin a drag from an interactive control: the pointer capture would
+    // swallow the ensuing click (e.g. the close button).
+    if ((event.target as Element).closest("button, a, input, [role='button']"))
+      return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragOffset.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    setPos({ x: rect.left, y: rect.top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onDragMove = (event: React.PointerEvent) => {
+    if (!dragOffset.current) return;
+    const width = panelRef.current?.offsetWidth ?? 0;
+    const height = panelRef.current?.offsetHeight ?? 0;
+    // Keep the panel within the viewport so it can't be dragged off-screen.
+    const x = Math.max(
+      0,
+      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(
+        event.clientY - dragOffset.current.y,
+        window.innerHeight - height,
+      ),
+    );
+    setPos({ x, y });
+  };
+
+  const onDragEnd = (event: React.PointerEvent) => {
+    dragOffset.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  // Escape closes the panel, preserving the affordance the Radix modal provided.
+  // Guarded on `open` so it doesn't intercept Escape for the rest of the app.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        setProcessingOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, setProcessingOpen]);
   const importedJobIdRef = useRef<string | null>(null);
   // The selected tool's row in the left list, so a preselection arriving from the
   // Processing menu can be scrolled into view (it may sit far down the catalog).
@@ -1147,24 +1206,58 @@ export function ProcessingDialog({
     runningLocal || Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
-  return (
-    <Dialog open={open} onOpenChange={setProcessingOpen}>
-      <DialogContent
-        className="h-[min(760px,92vh)] max-w-6xl"
-        bodyClassName="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-5"
-      >
-        <DialogHeader>
-          <DialogTitle>Whitebox toolbox</DialogTitle>
-          <DialogDescription>
-            {runtimeAvailable === null
-              ? "Checking runtime."
-              : runtimeAvailable
-                ? runtimeMessage || `${tools.length} tools available.`
-                : runtimeMessage || "Whitebox runtime is unavailable."}
-          </DialogDescription>
-        </DialogHeader>
+  if (!open) return null;
 
-        <div className="grid min-h-0 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4">
+  return (
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-label="Whitebox toolbox"
+      aria-modal={false}
+      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      className={cn(
+        "fixed z-40 flex h-[min(760px,92vh)] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        pos ? "" : "left-1/2 top-16 -translate-x-1/2",
+      )}
+    >
+      {/* Draggable title bar (replaces the Radix modal header) so the map stays
+          interactive underneath the panel. */}
+      <div
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+        className="flex cursor-move touch-none select-none items-start justify-between gap-3 border-b px-5 py-3"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <GripHorizontal
+            className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold leading-none tracking-tight">
+              Whitebox toolbox
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {runtimeAvailable === null
+                ? "Checking runtime."
+                : runtimeAvailable
+                  ? runtimeMessage || `${tools.length} tools available.`
+                  : runtimeMessage || "Whitebox runtime is unavailable."}
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          aria-label={t("common.close")}
+          onClick={() => setProcessingOpen(false)}
+          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4 overflow-hidden p-5">
           <div className="flex min-h-0 flex-col gap-3 border-r pr-4">
             <div className="flex gap-2">
               <div className="relative min-w-0 flex-1">
@@ -1421,8 +1514,7 @@ export function ProcessingDialog({
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
   );
 }
 
