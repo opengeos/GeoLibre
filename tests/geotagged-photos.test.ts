@@ -178,8 +178,8 @@ describe("base64FromBytes", () => {
 });
 
 describe("createFullResolutionDataUrl", () => {
-  it("embeds the original bytes with the extension's MIME type", async () => {
-    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+  it("embeds the original bytes with the MIME from the magic bytes", async () => {
+    const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x42]);
     const url = await createFullResolutionDataUrl(
       new Blob([bytes]),
       "IMG_1234.JPG",
@@ -190,14 +190,22 @@ describe("createFullResolutionDataUrl", () => {
     );
   });
 
-  it("maps png/webp extensions and is case-insensitive", async () => {
-    const blob = new Blob([new Uint8Array([9])]);
-    assert.ok((await createFullResolutionDataUrl(blob, "a.png"))?.startsWith(
-      "data:image/png;base64,",
-    ));
-    assert.ok((await createFullResolutionDataUrl(blob, "a.WEBP"))?.startsWith(
-      "data:image/webp;base64,",
-    ));
+  it("recognizes PNG and WebP signatures, case-insensitively", async () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    assert.ok(
+      (await createFullResolutionDataUrl(new Blob([png]), "a.PNG"))?.startsWith(
+        "data:image/png;base64,",
+      ),
+    );
+    // "RIFF" + 4 size bytes + "WEBP".
+    const webp = new Uint8Array([
+      0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
+    ]);
+    assert.ok(
+      (
+        await createFullResolutionDataUrl(new Blob([webp]), "a.webp")
+      )?.startsWith("data:image/webp;base64,"),
+    );
   });
 
   it("derives the MIME from the bytes when the extension is mislabeled", async () => {
@@ -209,6 +217,16 @@ describe("createFullResolutionDataUrl", () => {
       "mislabeled.png",
     );
     assert.ok(url?.startsWith("data:image/jpeg;base64,"), url ?? "null");
+  });
+
+  it("skips full-res for unrecognized bytes under a supported extension", async () => {
+    // A GIF (magic GIF89a) saved as .jpg decodes for a thumbnail but must not be
+    // embedded as image/jpeg, which would be undecodable.
+    const gif = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+    assert.equal(
+      await createFullResolutionDataUrl(new Blob([gif]), "actually-a.jpg"),
+      null,
+    );
   });
 
   it("falls back to thumbnail-only for a pathologically large original", async () => {

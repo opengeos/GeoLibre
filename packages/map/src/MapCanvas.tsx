@@ -373,9 +373,14 @@ function openPhotoFullscreen(src: string, alt: string): void {
     if (!activePointers.has(event.pointerId)) return;
     activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (activePointers.size >= 2) {
-      // Pinch: scale zoom by how much the finger spread changed.
-      if (pinchStartDist > 0) {
-        setZoom((pinchStartZoom * pointerSpread()) / pinchStartDist);
+      const spread = pointerSpread();
+      // Re-anchor if the initial spread was zero (both fingers landed on the
+      // same spot), so pinch isn't stuck disabled for the rest of the gesture.
+      if (pinchStartDist <= 0) {
+        pinchStartDist = spread;
+        pinchStartZoom = zoom;
+      } else {
+        setZoom((pinchStartZoom * spread) / pinchStartDist);
       }
       return;
     }

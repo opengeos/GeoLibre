@@ -14,9 +14,10 @@
  *
  * A second, full-resolution image (the original bytes, un-re-encoded) rides
  * along under {@link PHOTO_FULL_PROPERTY} for formats a browser can display so
- * the enlarged/fullscreen viewer and a right-click "Save image" keep native
- * detail rather than the downscaled thumbnail. It is omitted when the source is
- * already at or below the thumbnail cap (the thumbnail is then already native).
+ * the enlarged/fullscreen viewer and a right-click "Save image" keep the native
+ * detail (and PNG/WebP transparency) rather than the downscaled, re-encoded
+ * thumbnail. It is omitted only for formats a browser can't show at native size
+ * (TIFF/HEIC), mislabeled bytes, or originals past the size ceiling.
  *
  * The thumbnail and feature-shaping helpers live here (UI-free) so the Add Data
  * dialog and the map drag-and-drop handler share one implementation.
@@ -319,8 +320,8 @@ interface PhotoImages {
   thumbnail: string | null;
   /**
    * Full-resolution image (data URL of the original bytes) for the enlarged
-   * viewer, or null when the thumbnail is already native (source at/below the
-   * cap) or the format can't be shown at full size (TIFF/HEIC).
+   * viewer, or null when the format can't be shown at full size (TIFF/HEIC), the
+   * bytes are mislabeled, or the original exceeds the size ceiling.
    */
   fullResolution: string | null;
 }
@@ -338,19 +339,21 @@ export async function createFullResolutionDataUrl(
   fileName: string,
 ): Promise<string | null> {
   // Gate on the extension so TIFF/HEIC (which a browser can't show at full size)
-  // are never embedded, but derive the actual MIME from the bytes so a
-  // mislabeled extension can't produce an undecodable data URL.
-  const extensionMime = FULL_RESOLUTION_IMAGE_MIME[fileExtension(fileName)];
-  if (!extensionMime) return null;
+  // are never embedded.
+  if (!FULL_RESOLUTION_IMAGE_MIME[fileExtension(fileName)]) return null;
   // A pathologically large original falls back to thumbnail-only so one photo
   // can't add hundreds of MB to the project.
   if (file.size > MAX_FULL_RESOLUTION_BYTES) return null;
   try {
-    // Sniff only the header so the MIME is correct for a mislabeled extension,
-    // then encode from a Blob retagged with that MIME. Blob.slice is a view, so
-    // this doesn't copy the image bytes just to set the type.
+    // Derive the MIME from the actual magic bytes, not the extension: a genuine
+    // JPEG/PNG/WebP always has a recognizable signature, so a failed sniff means
+    // the file is mislabeled (e.g. a GIF/BMP named .jpg), and tagging its bytes
+    // as image/jpeg would be undecodable — skip full-res (the canvas thumbnail
+    // still works). Blob.slice is a view, so retagging the type doesn't copy the
+    // image bytes.
     const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
-    const mime = sniffImageMime(header) ?? extensionMime;
+    const mime = sniffImageMime(header);
+    if (!mime) return null;
     return await blobToDataUrl(file.slice(0, file.size, mime));
   } catch {
     return null;
@@ -402,13 +405,12 @@ async function createPhotoImages(
     // where peak memory is highest; the full-res encode reads `file`, not the
     // bitmap. The `finally` close is a safe no-op on an already-closed bitmap.
     bitmap.close();
-    // Only embed the original when it is larger than the thumbnail; at or below
-    // the cap the thumbnail is already native, so a full-res copy would just
-    // duplicate it and bloat the project.
-    const fullResolution =
-      longestEdge > PHOTO_MAX_DIMENSION
-        ? await createFullResolutionDataUrl(file, fileName)
-        : null;
+    // Embed the original whenever the format allows, even when it is at/below the
+    // thumbnail cap: the thumbnail is a re-encoded, quality-0.82 JPEG (opaque,
+    // with compression artifacts), so it is not the original even at matching
+    // dimensions. This keeps the true bytes for the viewer/save and preserves
+    // PNG/WebP transparency.
+    const fullResolution = await createFullResolutionDataUrl(file, fileName);
     return { thumbnail, fullResolution };
   } catch {
     return empty;
