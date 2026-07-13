@@ -483,24 +483,36 @@ function ensureFootprintLayers(map: MapLibreMap): void {
   }
 }
 
-/** Registers the footprints as a first-class Layers-panel entry (once). */
-function registerFootprintLayer(): void {
-  if (footprintsRegistered) return;
+/**
+ * Registers (or updates) the footprints as a first-class Layers-panel entry.
+ * The `geojson` is passed every call so the store layer carries the feature
+ * data — that is what the attribute table (and export) read. Paint/opacity are
+ * seeded only on the first registration so a "Load more" (or any later data
+ * refresh) does not clobber the user's opacity/colour edits.
+ */
+function syncFootprintStoreLayer(
+  features: Feature<Polygon | MultiPolygon, OamFootprintProps>[],
+): void {
   appRef?.registerExternalNativeLayer?.({
     id: FOOTPRINT_STORE_LAYER_ID,
     name: labels.footprintsLayer,
     type: "geojson",
     nativeLayerIds: [FOOTPRINT_FILL_LAYER_ID, FOOTPRINT_LINE_LAYER_ID],
     sourceIds: [FOOTPRINT_SOURCE_ID],
-    opacity: 1,
-    // Seed the store paint to the faint fill + hairline outline. The Layers/Style
-    // panel drives it from here on (opacity slider, colour pickers all apply).
-    style: {
-      fillColor: FOOTPRINT_COLOR,
-      fillOpacity: 0.08,
-      strokeColor: FOOTPRINT_COLOR,
-      strokeWidth: 1.5,
-    },
+    geojson: { type: "FeatureCollection", features } as FeatureCollection,
+    ...(footprintsRegistered
+      ? {}
+      : {
+          opacity: 1,
+          // Seed the faint fill + hairline outline; the Layers/Style panel drives
+          // it from here on (opacity slider, colour pickers all apply).
+          style: {
+            fillColor: FOOTPRINT_COLOR,
+            fillOpacity: 0.08,
+            strokeColor: FOOTPRINT_COLOR,
+            strokeWidth: 1.5,
+          },
+        }),
   });
   footprintsRegistered = true;
 }
@@ -527,7 +539,7 @@ function setFootprints(map: MapLibreMap, images: OamImage[]): void {
     }
   }
   source.setData({ type: "FeatureCollection", features });
-  if (features.length > 0) registerFootprintLayer();
+  if (features.length > 0) syncFootprintStoreLayer(features);
   else unregisterFootprintLayer();
 }
 

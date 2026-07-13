@@ -250,6 +250,23 @@ describe("footprintFeature", () => {
     assert.equal(feature?.properties.hasTile, true);
   });
 
+  it("carries the image metadata as attribute-table properties", () => {
+    const feature = footprintFeature(
+      image({
+        provider: "Maxar",
+        platform: "satellite",
+        acquisitionEnd: "2024-10-02T14:12:00.000Z",
+        gsd: 0.3,
+      }),
+    );
+    assert.equal(feature?.properties.provider, "Maxar");
+    assert.equal(feature?.properties.platform, "satellite");
+    assert.equal(feature?.properties.acquired, "2024-10-02");
+    assert.equal(feature?.properties.gsd, 0.3);
+    assert.equal(feature?.properties.resolution, "30.0 cm/px");
+    assert.equal(feature?.properties.cogUrl, "https://oin.example.com/img1.tif");
+  });
+
   it("traces a rectangle from the bbox when there is no geometry", () => {
     const feature = footprintFeature(image({ bbox: [-1, -2, 3, 4] }));
     assert.equal(feature?.geometry.type, "Polygon");

@@ -74,12 +74,30 @@ export interface OamImage {
   raw: unknown;
 }
 
-/** Properties carried on a footprint feature so a map click maps back to a result. */
+/**
+ * Properties carried on a footprint feature. `id` maps a map click back to a
+ * result; the rest populate the footprints layer's attribute table with the
+ * image's key metadata. All values are flat primitives (GeoJSON-safe).
+ */
 export interface OamFootprintProps {
   /** The {@link OamImage.id} this footprint belongs to. */
   id: string;
-  /** The image title (used for a hover/click label). */
+  /** The image title. */
   title: string;
+  /** Data provider / source. */
+  provider: string;
+  /** Capture platform (e.g. "satellite", "uav"), or empty when unknown. */
+  platform: string;
+  /** Acquisition date (YYYY-MM-DD), preferring the end timestamp, or null. */
+  acquired: string | null;
+  /** Ground sample distance in meters, or null. */
+  gsd: number | null;
+  /** Human-readable resolution (e.g. "30.0 cm/px"), or null. */
+  resolution: string | null;
+  /** Source COG URL, or null. */
+  cogUrl: string | null;
+  /** Preview thumbnail URL, or null. */
+  thumbnailUrl: string | null;
   /** Whether the image can be visualized (has a tile template). */
   hasTile: boolean;
 }
@@ -268,9 +286,24 @@ function normalizeImage(raw: unknown): OamImage | null {
 export function footprintFeature(
   image: OamImage,
 ): Feature<Polygon | MultiPolygon, OamFootprintProps> | null {
+  const acquired =
+    (image.acquisitionEnd ?? image.acquisitionStart)?.slice(0, 10) ?? null;
+  const resolution =
+    image.gsd == null
+      ? null
+      : image.gsd < 1
+        ? `${(image.gsd * 100).toFixed(1)} cm/px`
+        : `${image.gsd.toFixed(2)} m/px`;
   const properties: OamFootprintProps = {
     id: image.id,
     title: image.title,
+    provider: image.provider,
+    platform: image.platform,
+    acquired,
+    gsd: image.gsd,
+    resolution,
+    cogUrl: image.cogUrl,
+    thumbnailUrl: image.thumbnailUrl,
     hasTile: image.tileUrl != null,
   };
   if (image.geometry) {
