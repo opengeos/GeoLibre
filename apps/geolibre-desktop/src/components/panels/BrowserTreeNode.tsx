@@ -71,6 +71,9 @@ export function BrowserTreeNode({
           className="truncate py-1 text-xs text-muted-foreground"
           style={{ paddingLeft: 8 + depth * 14 }}
           title={node.label}
+          // Announce the loading→tables/error transition to screen readers.
+          role="status"
+          aria-live="polite"
         >
           {node.label}
         </p>

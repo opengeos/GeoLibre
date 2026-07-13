@@ -108,11 +108,15 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
 
   // Reset the (shell-owned) Martin connection when the source opens, matching
   // the original dialog: a running server is preserved across reopens only
-  // after a layer was added.
+  // after a layer was added. But when opened from a Browser-panel table click
+  // (initialPostgres), that preserve behavior would leave the previous add's
+  // server/source connected — and submittable — for a *different* clicked
+  // table, so force a clean slate (stopping the old server) instead.
   useEffect(() => {
-    martin.resetOnOpen();
-    // Mount-only: `martin` is intentionally excluded from the deps — re-running
-    // resetOnOpen on every render would clear connection state mid-flow.
+    if (initialPostgres) clearMartinState();
+    else martin.resetOnOpen();
+    // Mount-only: `martin`/`clearMartinState` are intentionally excluded from
+    // the deps — re-running on every render would clear state mid-flow.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
