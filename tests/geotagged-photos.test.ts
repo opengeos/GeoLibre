@@ -199,6 +199,17 @@ describe("createFullResolutionDataUrl", () => {
     ));
   });
 
+  it("derives the MIME from the bytes when the extension is mislabeled", async () => {
+    // JPEG magic bytes (FF D8 FF) in a file named .png must yield image/jpeg,
+    // not image/png, so the data URL stays decodable.
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+    const url = await createFullResolutionDataUrl(
+      new Blob([jpegBytes]),
+      "mislabeled.png",
+    );
+    assert.ok(url?.startsWith("data:image/jpeg;base64,"), url ?? "null");
+  });
+
   it("returns null for formats a browser can't show at full size", async () => {
     const blob = new Blob([new Uint8Array([0])]);
     assert.equal(await createFullResolutionDataUrl(blob, "scene.tif"), null);

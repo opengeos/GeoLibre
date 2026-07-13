@@ -322,7 +322,13 @@ function openPhotoFullscreen(src: string, alt: string): void {
     } catch {
       // The pointer is already gone; pan/pinch still work without capture.
     }
-    event.preventDefault();
+    // Only suppress the default (text selection, image drag, and the mouse-
+    // compatibility event chain) when a pan or pinch is actually starting.
+    // Calling preventDefault on a plain mouse click at fit can swallow the
+    // double-click-to-zoom on some browsers, so leave that gesture untouched.
+    if (event.pointerType !== "mouse" || zoom > 1 || activePointers.size === 2) {
+      event.preventDefault();
+    }
   });
   image.addEventListener("pointermove", (event) => {
     if (!activePointers.has(event.pointerId)) return;
