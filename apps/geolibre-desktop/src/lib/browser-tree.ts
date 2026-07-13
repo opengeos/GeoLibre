@@ -274,6 +274,67 @@ export function buildPostgisTableNodes(
     }));
 }
 
+/** Async load state for one connection's spatial-table introspection. */
+export type ConnectionLoad =
+  | { status: "loading" }
+  | { status: "loaded"; tables: readonly PostgisTableRef[] }
+  | { status: "error"; message: string };
+
+/**
+ * Returns a copy of the tree with each `connection` node's children replaced by
+ * the current lazy-load state: a status row while loading or on error, or the
+ * schema→table nodes once loaded. Connections with no load entry keep their
+ * empty child list (still expandable; expanding triggers the fetch) — so search
+ * only reaches the tables of connections that have already been introspected.
+ * Pure so the panel's tree augmentation unit-tests without React/the sidecar.
+ *
+ * @param nodes - The base tree from {@link buildBrowserTree}.
+ * @param loads - Per-connection introspection state keyed by connection string.
+ * @param loadingLabel - Translated label for the "loading tables" status row.
+ * @returns A new tree; connection nodes get their status/table children.
+ */
+export function augmentConnections(
+  nodes: readonly BrowserNode[],
+  loads: Record<string, ConnectionLoad>,
+  loadingLabel: string,
+): BrowserNode[] {
+  return nodes.map((node) => {
+    if (node.kind === "connection" && node.connectionString) {
+      const load = loads[node.connectionString];
+      let children: BrowserNode[] = [];
+      if (load?.status === "loading") {
+        children = [
+          {
+            id: `${node.id}:loading`,
+            kind: "info",
+            label: loadingLabel,
+            addable: false,
+          },
+        ];
+      } else if (load?.status === "error") {
+        children = [
+          {
+            id: `${node.id}:error`,
+            kind: "info",
+            label: load.message,
+            addable: false,
+          },
+        ];
+      } else if (load?.status === "loaded") {
+        children = buildPostgisTableNodes(node.connectionString, load.tables);
+      }
+      return { ...node, children };
+    }
+    if (node.children) {
+      return {
+        ...node,
+        children: augmentConnections(node.children, loads, loadingLabel),
+      };
+    }
+    return node;
+  });
+}
+
 /**
  * Filters the tree to nodes whose label (or a descendant's label) matches the
  * query, case-insensitively. Returns the tree unchanged for an empty query.

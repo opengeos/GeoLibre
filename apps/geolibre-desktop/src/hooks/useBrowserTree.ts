@@ -1,5 +1,5 @@
 import { useAppStore } from "@geolibre/core";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   BUILTIN_SERVICES,
@@ -7,6 +7,7 @@ import {
   type ServiceLibraryEntry,
 } from "../components/layout/add-data/service-library";
 import {
+  POSTGRES_CONNECTIONS_CHANGED_EVENT,
   readSavedPostgresConnections,
   savedPostgresConnectionLabel,
 } from "../lib/saved-postgres-connections";
@@ -39,6 +40,17 @@ export function useBrowserTree(): BrowserTreeState {
   const recentLabel = t("browser.recent");
   const databasesLabel = t("browser.databases");
 
+  // Saved connections live in localStorage (no reactive store), so re-read them
+  // when one is added/removed — otherwise a connection saved from the Add Data
+  // dialog wouldn't appear until the (still-mounted) panel is reopened.
+  const [connectionsRevision, setConnectionsRevision] = useState(0);
+  useEffect(() => {
+    const bump = () => setConnectionsRevision((n) => n + 1);
+    window.addEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bump);
+    return () =>
+      window.removeEventListener(POSTGRES_CONNECTIONS_CHANGED_EVENT, bump);
+  }, []);
+
   return useMemo(() => {
     const services = [...BUILTIN_SERVICES, ...readUserServices()];
     const byId = new Map(services.map((entry) => [entry.id, entry]));
@@ -65,5 +77,11 @@ export function useBrowserTree(): BrowserTreeState {
       }),
       serviceById: (id: string) => byId.get(id),
     };
-  }, [recentProjects, servicesLabel, recentLabel, databasesLabel]);
+  }, [
+    recentProjects,
+    servicesLabel,
+    recentLabel,
+    databasesLabel,
+    connectionsRevision,
+  ]);
 }

@@ -8,21 +8,16 @@ import { useTranslation } from "react-i18next";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import { useBrowserTree } from "../../hooks/useBrowserTree";
 import {
-  buildPostgisTableNodes,
+  augmentConnections,
   filterBrowserTree,
   type BrowserNode,
+  type ConnectionLoad,
 } from "../../lib/browser-tree";
 import { applyServiceEntry } from "../layout/add-data/apply-service";
 import { errorMessage } from "../layout/add-data/helpers";
 import type { AddDataKind } from "../layout/AddDataDialog";
 import { openAddData } from "../layout/add-data/open-add-data";
 import { BrowserTreeNode } from "./BrowserTreeNode";
-
-/** Async load state for one connection's spatial-table introspection. */
-type ConnectionLoad =
-  | { status: "loading" }
-  | { status: "loaded"; tables: { schema: string; table: string }[] }
-  | { status: "error"; message: string };
 
 /** The `connection:` id prefix a connection node carries (id = prefix + connString). */
 const CONNECTION_ID_PREFIX = "connection:";
@@ -51,49 +46,6 @@ function collectGroupIds(nodes: readonly BrowserNode[], into: Set<string>): void
       collectGroupIds(node.children, into);
     }
   }
-}
-
-/**
- * Returns a copy of the tree with each `connection` node's children replaced by
- * the current lazy-load state: a status row while loading or on error, or the
- * schema→table nodes once loaded. Connections with no load entry keep their
- * empty child list (still expandable; expanding triggers the fetch) — so search
- * only reaches the tables of connections that have already been introspected.
- *
- * @param nodes - The base tree from {@link useBrowserTree}.
- * @param loads - Per-connection introspection state keyed by connection string.
- * @param loadingLabel - Translated label for the "loading tables" status row.
- */
-function augmentConnections(
-  nodes: readonly BrowserNode[],
-  loads: Record<string, ConnectionLoad>,
-  loadingLabel: string,
-): BrowserNode[] {
-  return nodes.map((node) => {
-    if (node.kind === "connection" && node.connectionString) {
-      const load = loads[node.connectionString];
-      let children: BrowserNode[] = [];
-      if (load?.status === "loading") {
-        children = [
-          { id: `${node.id}:loading`, kind: "info", label: loadingLabel, addable: false },
-        ];
-      } else if (load?.status === "error") {
-        children = [
-          { id: `${node.id}:error`, kind: "info", label: load.message, addable: false },
-        ];
-      } else if (load?.status === "loaded") {
-        children = buildPostgisTableNodes(node.connectionString, load.tables);
-      }
-      return { ...node, children };
-    }
-    if (node.children) {
-      return {
-        ...node,
-        children: augmentConnections(node.children, loads, loadingLabel),
-      };
-    }
-    return node;
-  });
 }
 
 /**
