@@ -26,6 +26,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      # Unlike the viewer/collab workers, this one has a real runtime dependency
+      # (upng-js) that wrangler must bundle, so the workspace deps have to be
+      # installed before deploy. wrangler-action does not install for us.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v4
         with:
