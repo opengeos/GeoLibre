@@ -718,6 +718,11 @@ function pwaPlugin(): Plugin[] {
     // its own service worker scoped to /jupyterlite/. Keep it entirely out of
     // the app shell precache, or first visit would balloon by thousands of files.
     "**/jupyterlite/**",
+    // Bundled drop-in plugins (public/plugins/<id>/) load at runtime through
+    // the external-plugin path (fetch → blob import), so they never need to be
+    // in the app-shell precache — and a large private plugin bundle would
+    // otherwise trip workbox's maximumFileSizeToCacheInBytes and fail the build.
+    "**/plugins/**",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy
