@@ -173,15 +173,21 @@ export function BrowserPanel({
           return listPostgisTables(connectionString);
         })
         .then((tables) => {
+          // geometry_columns returns one row per geometry column, so a table
+          // with several geometry columns appears several times; keep the first
+          // (mirrors PostgresSource.handleConnectEditable's dedup) so the tree
+          // doesn't emit duplicate node ids.
+          const seen = new Set<string>();
+          const deduped: { schema: string; table: string }[] = [];
+          for (const tbl of tables) {
+            const key = `${tbl.schema}.${tbl.table}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            deduped.push({ schema: tbl.schema, table: tbl.table });
+          }
           setConnLoads((prev) => ({
             ...prev,
-            [connectionString]: {
-              status: "loaded",
-              tables: tables.map((tbl) => ({
-                schema: tbl.schema,
-                table: tbl.table,
-              })),
-            },
+            [connectionString]: { status: "loaded", tables: deduped },
           }));
         })
         .catch((err: unknown) => {

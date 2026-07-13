@@ -178,6 +178,9 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
         : undefined;
       const defaultTable = desiredTable ?? tables.find((table) => table.primary_key);
       setSelectedTableKey(defaultTable ? postgisTableKey(defaultTable) : "");
+      // Consumed once: a later reconnect on the same connection must not undo a
+      // manual table pick by re-applying the originally-clicked table.
+      desiredTableRef.current = null;
       setPostgisStatus(
         tables.length > 0
           ? t("addData.postgres.statusTablesFound", { count: tables.length })
@@ -234,7 +237,12 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
       martin.setStatus(t("addData.postgres.statusReadingCatalog"));
 
       const sources = await fetchMartinCatalog(server);
-      if (martinRequestRef.current !== requestToken) return;
+      if (martinRequestRef.current !== requestToken) {
+        // Mirror the earlier staleness check: a superseded request must stop
+        // its server rather than leaving it running in the background.
+        await stopMartinServer().catch(() => {});
+        return;
+      }
       martin.setSources(sources);
       // Preselect the table the user clicked in the Browser panel, if Martin
       // published it; otherwise fall back to the first source.
@@ -245,17 +253,25 @@ export function PostgresSource({ initialPostgres }: PostgresSourceProps) {
           )
         : undefined;
       martin.setSelectedSourceId(match?.id ?? sources[0]?.id ?? "");
+      // Consumed once: a later reconnect on the same connection must not undo a
+      // manual source pick by re-applying the originally-clicked table.
+      desiredTableRef.current = null;
       martin.setStatus(
         sources.length > 0
           ? t("addData.postgres.statusFound", { count: sources.length })
           : t("addData.postgres.statusNoSources"),
       );
     } catch (err) {
-      martin.setServer(null);
-      source.setError(
-        errorMessage(err, t("addData.postgres.errorConnect")),
-      );
-      martin.setStatus(null);
+      // Ignore a superseded call's failure so it can't wipe a fresher, working
+      // connection or show a misleading error for a connection the user has
+      // already moved on from. (finally stays unguarded — clearMartinState also
+      // bumps this token without starting a request, so guarding it would leave
+      // the Connect button stuck disabled.)
+      if (martinRequestRef.current === requestToken) {
+        martin.setServer(null);
+        source.setError(errorMessage(err, t("addData.postgres.errorConnect")));
+        martin.setStatus(null);
+      }
     } finally {
       source.shell.setIsSubmitting(false);
     }

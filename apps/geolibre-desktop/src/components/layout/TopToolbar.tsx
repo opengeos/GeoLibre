@@ -356,6 +356,14 @@ export function TopToolbar({
   const [addDataPostgres, setAddDataPostgres] = useState<
     OpenAddDataPostgres | undefined
   >(undefined);
+  // Drop the prefill whenever the dialog isn't on the PostgreSQL source, so a
+  // stale prefill can't leak into a later postgres open reached via a path that
+  // sets addDataKind directly (command palette / menus) rather than through the
+  // Browser-panel event that sets the prefill. The event sets the prefill and
+  // kind together, so this never clears a freshly-set prefill.
+  useEffect(() => {
+    if (addDataKind !== "postgres") setAddDataPostgres(undefined);
+  }, [addDataKind]);
   // Let any panel (e.g. the Browser panel's "New connection" action) open the
   // Add Data dialog at a given kind without prop-drilling, mirroring
   // openSettingsSection. This toolbar owns the dialog + its kind state.
