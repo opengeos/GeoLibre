@@ -457,7 +457,6 @@ export function BrowserPanel({
       serviceId: node.serviceId,
       serviceKind: node.serviceKind,
       builtin: node.builtin,
-      connectionString: node.connectionString,
       path: node.path,
     });
   };

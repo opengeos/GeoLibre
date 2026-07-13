@@ -18,12 +18,19 @@ export const MAX_FAVORITES = 100;
 /** Fired on `window` after the favorites list is written (same-tab refresh). */
 export const FAVORITES_CHANGED_EVENT = "geolibre:favorites-changed";
 
-/** The kinds of node that can be favorited. */
-export type FavoriteKind = "service" | "connection" | "folder" | "file";
+/**
+ * The kinds of node that can be favorited. Database connections are excluded on
+ * purpose: a connection node's id embeds the raw (credential-bearing)
+ * connection string, so favoriting one would persist that credential in a
+ * second localStorage key with a larger, longer-lived cap than the saved-
+ * connections store — and connections already have their own Databases section,
+ * so favoriting them is redundant.
+ */
+export type FavoriteKind = "service" | "folder" | "file";
 
 /** A pinned Browser-tree node, with enough to rebuild + activate it. */
 export interface BrowserFavorite {
-  /** The favorited node's stable id (e.g. `service:x`, `connection:y`, `folder:/p`). */
+  /** The favorited node's stable id (e.g. `service:x`, `folder:/p`, `file:/p/a`). */
   id: string;
   kind: FavoriteKind;
   label: string;
@@ -32,20 +39,13 @@ export interface BrowserFavorite {
   serviceKind?: ServiceLibraryKind;
   /** Whether the favorited service is a built-in preset, for the badge. */
   builtin?: boolean;
-  /** Connection string (kind `connection`). */
-  connectionString?: string;
   /** Absolute path (kind `folder`/`file`). */
   path?: string;
 }
 
 /** Whether a node kind can be favorited. */
 export function isFavoritableKind(kind: string): kind is FavoriteKind {
-  return (
-    kind === "service" ||
-    kind === "connection" ||
-    kind === "folder" ||
-    kind === "file"
-  );
+  return kind === "service" || kind === "folder" || kind === "file";
 }
 
 function isValidFavorite(value: unknown): value is BrowserFavorite {
@@ -65,8 +65,6 @@ function isValidFavorite(value: unknown): value is BrowserFavorite {
   switch (fav.kind) {
     case "service":
       return typeof fav.serviceId === "string";
-    case "connection":
-      return typeof fav.connectionString === "string";
     case "folder":
     case "file":
       return typeof fav.path === "string";
@@ -111,11 +109,6 @@ function writeBrowserFavorites(favorites: BrowserFavorite[]): BrowserFavorite[] 
     // Best-effort persistence (mirrors readBrowserFavorites' guard).
   }
   return next;
-}
-
-/** Whether a node id is currently favorited. */
-export function isFavorite(id: string): boolean {
-  return readBrowserFavorites().some((fav) => fav.id === id);
 }
 
 /** Add a favorite to the front of the list (deduped by id, capped). */

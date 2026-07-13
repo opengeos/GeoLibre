@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import {
   addFavorite,
   FAVORITES_CHANGED_EVENT,
-  isFavorite,
   isFavoritableKind,
   MAX_FAVORITES,
   readBrowserFavorites,
@@ -50,10 +49,11 @@ const svc = (id: string): BrowserFavorite => ({
 
 describe("isFavoritableKind", () => {
   it("accepts the favoritable kinds and rejects others", () => {
-    for (const k of ["service", "connection", "folder", "file"]) {
+    for (const k of ["service", "folder", "file"]) {
       assert.equal(isFavoritableKind(k), true);
     }
-    for (const k of ["section", "category", "recent-project", "table", "info"]) {
+    // "connection" is deliberately not favoritable (credential in the node id).
+    for (const k of ["connection", "section", "category", "recent-project", "table", "info"]) {
       assert.equal(isFavoritableKind(k), false);
     }
   });
@@ -79,11 +79,10 @@ describe("favorites persistence", () => {
     );
   });
 
-  it("reports and removes by id", () => {
+  it("removes by id", () => {
     addFavorite(svc("a"));
-    assert.equal(isFavorite("service:a"), true);
+    assert.equal(readBrowserFavorites().length, 1);
     removeFavorite("service:a");
-    assert.equal(isFavorite("service:a"), false);
     assert.deepEqual(readBrowserFavorites(), []);
   });
 

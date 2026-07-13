@@ -361,7 +361,6 @@ export interface FavoriteNodeInput {
   serviceId?: string;
   serviceKind?: ServiceLibraryKind;
   builtin?: boolean;
-  connectionString?: string;
   path?: string;
 }
 
@@ -390,15 +389,6 @@ export function buildFavoriteNodes(
           serviceKind: fav.serviceKind,
           // Keep the "built-in" badge on a favorited preset service.
           builtin: fav.builtin,
-        };
-      case "connection":
-        return {
-          id: fav.id,
-          kind: "connection",
-          label: fav.label,
-          addable: false,
-          connectionString: fav.connectionString,
-          children: [],
         };
       case "folder":
         return {

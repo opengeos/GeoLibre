@@ -230,21 +230,20 @@ describe("buildPostgisTableNodes", () => {
 describe("buildFavoriteNodes", () => {
   it("rebuilds each favorite kind into its node", () => {
     const nodes = buildFavoriteNodes([
-      { id: "service:s1", kind: "service", label: "Basemap", serviceId: "s1", serviceKind: "xyz" },
-      { id: "connection:c", kind: "connection", label: "db", connectionString: "c" },
+      { id: "service:s1", kind: "service", label: "Basemap", serviceId: "s1", serviceKind: "xyz", builtin: true },
       { id: "folder:/d", kind: "folder", label: "d", path: "/d" },
       { id: "file:/d/a.geojson", kind: "file", label: "a.geojson", path: "/d/a.geojson" },
     ]);
     assert.deepEqual(
       nodes.map((n) => `${n.kind}:${n.addable}`),
-      ["service:true", "connection:false", "folder:false", "file:true"],
+      ["service:true", "folder:false", "file:true"],
     );
-    // Groups (connection/folder) are expandable with empty children; the ids
-    // match the originals so the panel's per-id/-path state is shared.
+    // A favorited folder is an expandable group with empty children; the id
+    // matches the original so the panel's per-path state is shared.
     assert.deepEqual(nodes[1].children, []);
-    assert.deepEqual(nodes[2].children, []);
     assert.equal(nodes[0].serviceId, "s1");
-    assert.equal(nodes[3].path, "/d/a.geojson");
+    assert.equal(nodes[0].builtin, true); // built-in badge preserved
+    assert.equal(nodes[2].path, "/d/a.geojson");
   });
 });
 
