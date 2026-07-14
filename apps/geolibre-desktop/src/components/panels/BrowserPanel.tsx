@@ -350,7 +350,16 @@ export function BrowserPanel({
     if (index === -1) return;
     const row = visibleRows[index];
     let targetId: string | null | undefined;
-    switch (event.key) {
+    // Horizontal arrows follow the reading direction (WAI-ARIA tree pattern):
+    // in a right-to-left layout ArrowLeft expands and ArrowRight collapses.
+    const isRtl = document.documentElement.dir === "rtl";
+    const key =
+      isRtl && event.key === "ArrowRight"
+        ? "ArrowLeft"
+        : isRtl && event.key === "ArrowLeft"
+          ? "ArrowRight"
+          : event.key;
+    switch (key) {
       case "ArrowDown":
         targetId = visibleRows[index + 1]?.id;
         break;

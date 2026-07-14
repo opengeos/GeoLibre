@@ -134,10 +134,13 @@ export function PluginRightPanel({
     el.setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startWidth = width;
+    const dirSign = getComputedStyle(el).direction === "rtl" ? -1 : 1;
     const handleMove = (move: PointerEvent) => {
       // The resizable edge faces away from the dock side: dragging it widens the
       // panel.
-      const delta = isLayersSide ? move.clientX - startX : startX - move.clientX;
+      const delta =
+        dirSign *
+        (isLayersSide ? move.clientX - startX : startX - move.clientX);
       onWidthChange(clamp(startWidth + delta, MIN_WIDTH, MAX_WIDTH));
     };
     const handleEnd = () => {
@@ -163,8 +166,13 @@ export function PluginRightPanel({
     );
 
   const borderSide = isLayersSide ? "md:border-e" : "md:border-s";
-  const canMoveLeft = activeDock !== "left-of-layers";
-  const canMoveRight = activeDock !== "right-of-style";
+  // Dock names describe the LTR arrangement, so the visual move-left/right
+  // actions and their guards swap in a right-to-left layout.
+  const isRtl = document.documentElement.dir === "rtl";
+  const canMoveLeft =
+    activeDock !== (isRtl ? "right-of-style" : "left-of-layers");
+  const canMoveRight =
+    activeDock !== (isRtl ? "left-of-layers" : "right-of-style");
 
   return (
     <aside
@@ -225,7 +233,9 @@ export function PluginRightPanel({
                   title={t("pluginPanel.moveLeft")}
                   aria-label={t("pluginPanel.moveLeft")}
                   disabled={!canMoveLeft}
-                  onClick={() => moveActiveRightPanelDock("left")}
+                  onClick={() =>
+                    moveActiveRightPanelDock(isRtl ? "right" : "left")
+                  }
                 >
                   <ArrowLeftToLine className="h-4 w-4" />
                 </Button>
@@ -236,7 +246,9 @@ export function PluginRightPanel({
                   title={t("pluginPanel.moveRight")}
                   aria-label={t("pluginPanel.moveRight")}
                   disabled={!canMoveRight}
-                  onClick={() => moveActiveRightPanelDock("right")}
+                  onClick={() =>
+                    moveActiveRightPanelDock(isRtl ? "left" : "right")
+                  }
                 >
                   <ArrowRightToLine className="h-4 w-4" />
                 </Button>

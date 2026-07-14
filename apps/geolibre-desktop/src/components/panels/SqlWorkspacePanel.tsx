@@ -552,10 +552,14 @@ export function SqlWorkspacePanel() {
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
+    const isRtl = getComputedStyle(container).direction === "rtl";
+
     const onMove = (moveEvent: MouseEvent) => {
-      // Editor is the left pane: its width is the gap between the container's
-      // left edge and the cursor.
-      const raw = (moveEvent.clientX - rect.left) / rect.width;
+      // The editor pane hugs the container's inline-start: its width is the gap
+      // between that edge and the cursor.
+      const raw = isRtl
+        ? (rect.right - moveEvent.clientX) / rect.width
+        : (moveEvent.clientX - rect.left) / rect.width;
       nextFraction = Math.min(
         MAX_EDITOR_FRACTION,
         Math.max(MIN_EDITOR_FRACTION, raw),

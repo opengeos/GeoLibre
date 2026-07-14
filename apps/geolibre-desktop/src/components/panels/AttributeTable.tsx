@@ -272,6 +272,9 @@ interface AttributeTableProps {
 
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const { t } = useTranslation();
+  // Column order is visual: in a right-to-left layout the first column renders
+  // rightmost, so the move-left/right actions and their guards swap.
+  const isRtl = document.documentElement.dir === "rtl";
   const tableSectionRef = useRef<HTMLElement>(null);
   const tableResizeGuideRef = useRef<HTMLDivElement>(null);
   // The Radix ScrollArea viewport, used as the virtualizer's scroll container.
@@ -1280,15 +1283,15 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               {t("attributeTable.hideField")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={index === 0}
-              onSelect={() => handleMoveColumn(col, "left")}
+              disabled={isRtl ? index === columns.length - 1 : index === 0}
+              onSelect={() => handleMoveColumn(col, isRtl ? "right" : "left")}
             >
               <ArrowLeft className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.moveLeft")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={index === columns.length - 1}
-              onSelect={() => handleMoveColumn(col, "right")}
+              disabled={isRtl ? index === 0 : index === columns.length - 1}
+              onSelect={() => handleMoveColumn(col, isRtl ? "left" : "right")}
             >
               <ArrowRight className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.moveRight")}

@@ -199,7 +199,7 @@ export function ViewMenu({
             disabled={!history.canGoBack}
             onSelect={history.goBack}
           >
-            <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0" />
+            <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.previousView")}
             </span>
@@ -210,7 +210,7 @@ export function ViewMenu({
             disabled={!history.canGoForward}
             onSelect={history.goForward}
           >
-            <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0" />
+            <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.nextView")}
             </span>

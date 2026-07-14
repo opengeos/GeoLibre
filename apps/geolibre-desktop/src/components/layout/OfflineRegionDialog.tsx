@@ -512,7 +512,7 @@ export function OfflineRegionDialog({
               {showAdvanced ? (
                 <ChevronDown className="h-4 w-4" />
               ) : (
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4 rtl:rotate-180" />
               )}
               {t("offline.advanced")}
             </button>

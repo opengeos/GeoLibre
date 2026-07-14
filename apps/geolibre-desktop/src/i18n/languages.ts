@@ -32,7 +32,28 @@ export const LANGUAGE_NAMES: Record<
   id: { nativeName: "Bahasa Indonesia", englishName: "Indonesian" },
   tr: { nativeName: "Türkçe", englishName: "Turkish" },
   hi: { nativeName: "हिन्दी", englishName: "Hindi" },
+  ar: { nativeName: "العربية", englishName: "Arabic" },
 };
+
+/**
+ * Languages written right-to-left. Checked by base subtag, so regional tags
+ * (`ar-SA`) resolve the same way `resolveLanguage` resolves catalogs.
+ */
+const RTL_LANGUAGES = new Set(["ar", "he", "fa", "ur"]);
+
+export type LanguageDirection = "ltr" | "rtl";
+
+/**
+ * The writing direction for a language tag. Works for any tag, not just the
+ * codes in `LANGUAGE_NAMES`, and defaults to `ltr` for unknown or empty input.
+ */
+export function languageDirection(
+  code: string | null | undefined,
+): LanguageDirection {
+  if (!code) return "ltr";
+  const base = code.trim().toLowerCase().split(/[-_]/)[0];
+  return RTL_LANGUAGES.has(base) ? "rtl" : "ltr";
+}
 
 export interface LanguageOption {
   code: string;
