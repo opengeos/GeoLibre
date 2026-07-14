@@ -818,17 +818,19 @@ function drawNorthArrow(
   ctx.restore();
 }
 
-/** Round a distance down to a "nice" 1/2/5 × 10ⁿ value. */
-function niceDistance(meters: number): number {
+/**
+ * Round a span down to a "nice" `1 / 2 / 3 / 5 / 10 × 10ⁿ` value. This is the
+ * same nice-number set the on-screen bar uses (`getRoundNum` in
+ * `@geolibre/map`'s `PlanetaryScaleControl`), so the printed bar rounds the same
+ * ground span to the same value the map does, in whichever unit it is measured.
+ */
+function niceDistance(span: number): number {
   // Guard against a zero/negative body width: Math.log10(0) is -Infinity, which
   // would propagate as NaN through the scale-bar geometry.
-  if (meters <= 0) return 1;
-  const pow = Math.pow(10, Math.floor(Math.log10(meters)));
-  const frac = meters / pow;
-  let nice: number;
-  if (frac >= 5) nice = 5;
-  else if (frac >= 2) nice = 2;
-  else nice = 1;
+  if (span <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(span)));
+  const frac = span / pow;
+  const nice = frac >= 10 ? 10 : frac >= 5 ? 5 : frac >= 3 ? 3 : frac >= 2 ? 2 : 1;
   return nice * pow;
 }
 
