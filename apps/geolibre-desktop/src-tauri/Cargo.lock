@@ -1703,7 +1703,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-persisted-scope",
  "webkit2gtk-sys",
- "zip",
+ "zip 8.6.0",
 ]
 
 [[package]]
@@ -2564,7 +2564,7 @@ dependencies = [
  "serde_json",
  "tar",
  "vcpkg",
- "zip",
+ "zip 6.0.0",
 ]
 
 [[package]]
@@ -5248,6 +5248,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typeid"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6533,6 +6539,20 @@ dependencies = [
  "flate2",
  "indexmap 2.14.0",
  "memchr",
+ "zopfli",
+]
+
+[[package]]
+name = "zip"
+version = "8.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d04a6b5381502aa6087c94c669499eb1602eb9c5e8198e534de571f7154809b"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap 2.14.0",
+ "memchr",
+ "typed-path",
  "zopfli",
 ]
 
