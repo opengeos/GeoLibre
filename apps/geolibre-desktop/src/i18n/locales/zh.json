@@ -1788,6 +1788,7 @@
       "maplibre-gl-annotations": "注释",
       "maplibre-gl-streetview": "街景",
       "maplibre-gl-time-slider": "时间滑块",
+      "geolibre-timelapse": "延时影像",
       "maplibre-gl-esri-wayback": "历史影像",
       "maplibre-gl-swipe": "图层滑动对比",
       "geolibre-elevation-profile": "高程剖面",

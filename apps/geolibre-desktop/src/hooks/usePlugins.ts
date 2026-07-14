@@ -31,7 +31,9 @@ import {
   maplibreRouteAnimationPlugin,
   maplibreSwipePlugin,
   SWIPE_PLUGIN_ID,
+  maplibreTimelapsePlugin,
   maplibreTimeSliderPlugin,
+  setTimelapseVideoSaver,
   maplibreUsgsLidarPlugin,
   PluginManager,
   registerRightPanel,
@@ -91,6 +93,7 @@ import {
   openLocalDataFileWithFallback,
   pickVectorFilesWithSidecars,
   readVectorFileWithSidecars,
+  saveBinaryFileWithFallback,
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
@@ -146,6 +149,7 @@ manager.registerAll([
   maplibreOpenAerialMapPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
+  maplibreTimelapsePlugin,
   maplibreOvertureMapsPlugin,
   maplibreGeoAgentPlugin,
   maplibreUsgsLidarPlugin,
@@ -164,6 +168,23 @@ manager.registerAll([
   maplibreDeckGlVizPlugin,
   maplibreComponentsPlugin,
 ]);
+
+// The Timelapse plugin records the map to a video blob but cannot depend on
+// the app's Tauri I/O helpers, so the save step (native dialog under Tauri,
+// download in the browser) is injected here once at startup.
+setTimelapseVideoSaver((blob, { defaultName, extension, mimeType }) =>
+  saveBinaryFileWithFallback(blob, {
+    defaultName,
+    filters: [{ name: "Video", extensions: [extension] }],
+    browserTypes: [
+      {
+        description: "Video",
+        accept: { [mimeType.split(";")[0]]: [`.${extension}`] },
+      },
+    ],
+    mimeType,
+  }),
+);
 
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;

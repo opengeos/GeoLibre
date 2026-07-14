@@ -404,6 +404,29 @@ export {
   getLayerTimeBinding,
 } from "./plugins/maplibre-time-slider";
 export {
+  getActiveTimelapseControl,
+  maplibreTimelapsePlugin,
+  recordTimelapseCycle,
+  setTimelapseVideoSaver,
+  TIMELAPSE_PLUGIN_ID,
+  TIMELAPSE_SOURCE_KIND,
+  timelapseStoreLayerId,
+  TimelapseControl,
+  TimelapseVideoUnsupportedError,
+  type RecordTimelapseCycleOptions,
+  type TimelapseRecording,
+  type TimelapseVideoSaver,
+} from "./plugins/maplibre-timelapse";
+export {
+  eoxS2CloudlessProvider,
+  EOX_S2CLOUDLESS_PROVIDER_ID,
+  getTimelapseProvider,
+  listTimelapseProviders,
+  registerTimelapseProvider,
+  type TimelapseFrame,
+  type TimelapseProvider,
+} from "./plugins/timelapse-providers";
+export {
   bandOptionsFromResults,
   downsampleSteps,
   getTimeSliderCogSources,

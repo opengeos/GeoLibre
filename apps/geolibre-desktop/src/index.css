@@ -1485,6 +1485,26 @@ body,
   color-scheme: dark;
 }
 
+/* The timelapse control panel is plain DOM like the graticule panel above, so
+   theme its native speed select (and dropdown popup) from the design tokens. */
+.geolibre-timelapse-ctrl select {
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  color: hsl(var(--foreground));
+  padding: 2px 4px;
+}
+
+.geolibre-timelapse-ctrl select option {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.dark .geolibre-timelapse-ctrl select,
+.dark .geolibre-timelapse-ctrl input {
+  color-scheme: dark;
+}
+
 .geolibre-colorbar-control .colorbar-gui-input,
 .geolibre-colorbar-control .colorbar-gui-select,
 .geolibre-colorbar-control .colorbar-gui-textarea,

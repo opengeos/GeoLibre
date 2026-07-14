@@ -1972,6 +1972,7 @@
       "maplibre-gl-annotations": "Annotations",
       "maplibre-gl-streetview": "Street View",
       "maplibre-gl-time-slider": "Time Slider",
+      "geolibre-timelapse": "Timelapse",
       "maplibre-gl-esri-wayback": "Historical Imagery",
       "maplibre-gl-openaerialmap": "OpenAerialMap",
       "maplibre-gl-swipe": "Layer Swipe",
