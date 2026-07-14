@@ -117,7 +117,7 @@ export function ProjectMenu({
         {show("project.openFrom") && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <FolderOpen className="me-2 h-3.5 w-3.5" />
+              <FolderOpen className="h-3.5 w-3.5" />
               {t("toolbar.item.openFrom")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
@@ -139,7 +139,7 @@ export function ProjectMenu({
         {show("project.openRecent") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
-            <History className="me-2 h-3.5 w-3.5" />
+            <History className="h-3.5 w-3.5" />
             {t("toolbar.item.openRecent")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-80">

@@ -649,13 +649,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     const startX = event.clientX;
     const startWidth = columnWidth(key);
     const { min, max } = columnWidthLimits(key);
-    const dirSign =
+    // The handle sits at the column's logical inline-end (`-end-2`) — the right
+    // edge in LTR, the left edge in RTL. clientX still increases to the right in
+    // both, so invert the delta under RTL: dragging the (left-side) RTL handle
+    // outward lowers clientX but should widen the column.
+    const directionSign =
       getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const nextWidth = Math.min(
         max,
-        Math.max(min, startWidth + dirSign * (moveEvent.clientX - startX)),
+        Math.max(min, startWidth + directionSign * (moveEvent.clientX - startX)),
       );
       setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
     };
