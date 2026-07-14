@@ -243,6 +243,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "processing.modelBuilder", menuId: "processing", labelKey: "toolbar.item.modelBuilder", tier: "advanced" },
   { id: "processing.segmentation", menuId: "processing", labelKey: "toolbar.command.segmentation", tier: "advanced" },
   { id: "processing.objectDetection", menuId: "processing", labelKey: "toolbar.command.objectDetection", tier: "advanced" },
+  { id: "processing.segmentEverything", menuId: "processing", labelKey: "toolbar.command.segmentEverything", tier: "advanced" },
   { id: "processing.sqlWorkspace", menuId: "processing", labelKey: "toolbar.command.sqlWorkspace", tier: "intermediate" },
   { id: "processing.pythonConsole", menuId: "processing", labelKey: "toolbar.command.pythonConsole", tier: "advanced" },
   { id: "processing.notebook", menuId: "processing", labelKey: "toolbar.command.notebook", tier: "advanced" },

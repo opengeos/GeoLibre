@@ -1603,6 +1603,7 @@
       "earthEngine": "Earth Engine",
       "segmentation": "AI Segmentation",
       "objectDetection": "Object Detection",
+      "segmentEverything": "Segment Everything",
       "toggleControl": "Toggle {{name}} Control",
       "toggleAtmosphereEffects": "Toggle Atmospheric Effects",
       "toggleDirections": "Toggle Directions",
@@ -2644,6 +2645,28 @@
       "chooseModel": "Choose a YOLO model exported to ONNX (.onnx).",
       "downloadModel": "Could not download the model. Check your connection and try again.",
       "failed": "Detection failed."
+    }
+  },
+  "segmentEverything": {
+    "title": "Segment Everything",
+    "description": "Run SlimSAM automatically over a GeoTIFF, fully in the browser. Every detected object becomes a georeferenced polygon added as one layer.",
+    "hint": "A grid of points is sampled across the image and segmented with SlimSAM (downloaded and cached once). No clicks or labels — denser grids find more objects but take longer.",
+    "imageLabel": "Image (GeoTIFF)",
+    "imagePlaceholder": "Choose a GeoTIFF…",
+    "chooseImage": "Choose image",
+    "gridLabel": "Grid",
+    "qualityLabel": "Quality",
+    "minSizeLabel": "Min size %",
+    "run": "Segment",
+    "downloadingModel": "Downloading model…",
+    "progress": "Segmenting… {{done}}/{{total}}",
+    "noObjects": "No objects segmented. Try a denser grid or a lower quality threshold.",
+    "added": "Added {{count}} segment(s).",
+    "layerName": "Segments",
+    "error": {
+      "chooseImage": "Choose an image (GeoTIFF) to segment.",
+      "downloadModel": "Could not download the model. Check your connection and try again.",
+      "failed": "Segmentation failed."
     }
   },
   "pluginPanel": {

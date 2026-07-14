@@ -178,6 +178,11 @@ export {
   type DetectionOptions,
 } from "./object-detection";
 export {
+  segmentEverything,
+  type SegmentMask,
+  type SegmentEverythingOptions,
+} from "./segment-everything";
+export {
   extractCogSubset,
   extractWmsSubset,
   extractXyzTileSubset,

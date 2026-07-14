@@ -323,6 +323,19 @@ const ObjectDetectionDialog = lazy(() =>
     }),
 );
 
+const SegmentEverythingPanel = lazy(() =>
+  import("../processing/SegmentEverythingPanel")
+    .then((module) => ({
+      default: module.SegmentEverythingPanel,
+    }))
+    .catch((error) => {
+      console.error("Failed to load SegmentEverythingPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/SegmentEverythingPanel").SegmentEverythingPanel;
+      return { default: Fallback };
+    }),
+);
+
 const SqlWorkspacePanel = lazy(() =>
   import("../panels/SqlWorkspacePanel")
     .then((module) => ({
@@ -2028,6 +2041,9 @@ export function DesktopShell({
               />
               <Suspense fallback={null}>
                 <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+              </Suspense>
+              <Suspense fallback={null}>
+                <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
               </Suspense>
               <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
