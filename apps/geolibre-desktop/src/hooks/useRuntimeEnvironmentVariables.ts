@@ -14,6 +14,12 @@ export function useRuntimeEnvironmentVariables() {
   const cesiumIonToken = useDesktopSettingsStore(
     (s) => s.desktopSettings.cesiumIonToken,
   );
+  // Device-local AI Assistant provider credentials (Settings → AI Providers).
+  // Projected below so the assistant picks them up after a restart without the
+  // keys ever living in the shared project file. See useDesktopSettings.ts.
+  const aiProviderEnv = useDesktopSettingsStore(
+    (s) => s.desktopSettings.aiProviderEnv,
+  );
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
 
@@ -58,6 +64,14 @@ export function useRuntimeEnvironmentVariables() {
         .map((variable) => [variable.key.trim(), variable.value]),
     );
 
+    // Device-local AI provider credentials, keyed by env var name. Empty values
+    // are dropped so a blank entry never blanks out a build-time or OS value.
+    const aiEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(aiProviderEnv)) {
+      const name = key.trim();
+      if (name && value) aiEnv[name] = value;
+    }
+
     // Only inject the Cesium token when set: an empty value would override (and
     // so blank out) a build-time VITE_CESIUM_TOKEN via getRuntimeEnvironment's
     // spread. A free-form env-var row of the same name still wins over this.
@@ -68,10 +82,17 @@ export function useRuntimeEnvironmentVariables() {
     const runtimeEnv = {
       // OS-provided AI keys sit at the lowest precedence: an explicit value in
       // the project's Environment variables (or a derived geocoder var) always
-      // wins, and the OS environment only fills the gaps. scopeOsEnvToProject
-      // also drops OS aliases the project defines under a different alias, so the
-      // "project always wins" guarantee holds across alias collisions too.
-      ...scopeOsEnvToProject(osEnv, new Set(Object.keys(projectEnv))),
+      // wins, then the device-local AI provider keys, and the OS environment
+      // only fills the remaining gaps. scopeOsEnvToProject also drops OS aliases
+      // covered by a project or device credential under a different alias, so the
+      // "explicit value always wins" guarantee holds across alias collisions too.
+      ...scopeOsEnvToProject(
+        osEnv,
+        new Set([...Object.keys(projectEnv), ...Object.keys(aiEnv)]),
+      ),
+      // Device-local AI keys outrank the OS environment but yield to an explicit
+      // same-named project Environment variable (spread last below).
+      ...aiEnv,
       ...geocoderEnv,
       ...cesiumEnv,
       ...projectEnv,
@@ -101,5 +122,5 @@ export function useRuntimeEnvironmentVariables() {
     window.dispatchEvent(
       new CustomEvent("geolibre:runtime-env-change", { detail: runtimeEnv }),
     );
-  }, [environmentVariables, geocoding, cesiumIonToken, osEnv]);
+  }, [environmentVariables, geocoding, cesiumIonToken, aiProviderEnv, osEnv]);
 }

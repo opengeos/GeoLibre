@@ -238,6 +238,7 @@ interface DraftDesktopSettings {
   layout: DesktopLayoutSettings;
   shareToken: string;
   cesiumIonToken: string;
+  aiProviderEnv: Record<string, string>;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
 }
@@ -267,6 +268,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
     layout: { ...settings.layout },
     shareToken: settings.shareToken,
     cesiumIonToken: settings.cesiumIonToken,
+    aiProviderEnv: { ...settings.aiProviderEnv },
     uiProfile: {
       ...settings.uiProfile,
       hiddenDataSources: [...settings.uiProfile.hiddenDataSources],
@@ -490,6 +492,20 @@ export function SettingsDialog({
     }
     return env;
   }, [draftPreferences.environmentVariables]);
+  // Device-local AI provider credentials (Settings → AI Providers). The AI
+  // section reads and writes these instead of the project's Environment
+  // variables so a key persists across restarts without entering the shared
+  // project file. Non-empty entries only, matching the live runtime projection.
+  const draftAiEnv = useMemo(() => {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(
+      draftDesktopSettings.aiProviderEnv,
+    )) {
+      const name = key.trim();
+      if (name && value) env[name] = value;
+    }
+    return env;
+  }, [draftDesktopSettings.aiProviderEnv]);
   // AI keys read from the user's OS environment (desktop only). This dialog is
   // mounted eagerly at startup — before the App-root loader populates the cache
   // and before the async Tauri read resolves — so a mount-only read would freeze
@@ -511,14 +527,19 @@ export function SettingsDialog({
   // plain spread would disagree in the alias-collision case (e.g. an empty
   // project GOOGLE_API_KEY row shadows the whole Google OS alias group).
   const scopedOsEnv = useMemo(
-    () => scopeOsEnvToProject(osEnv, new Set(Object.keys(draftEnv))),
-    [osEnv, draftEnv],
+    () =>
+      scopeOsEnvToProject(
+        osEnv,
+        new Set([...Object.keys(draftEnv), ...Object.keys(draftAiEnv)]),
+      ),
+    [osEnv, draftEnv, draftAiEnv],
   );
-  // Merge OS env under the draft so a provider configured purely via a system
-  // environment variable still reports "ready" — draft values win the overlap.
+  // Merge OS env under the drafts so a provider configured purely via a system
+  // environment variable still reports "ready". Precedence mirrors the live
+  // runtime merge: OS < device AI keys < project Environment variables.
   const effectiveEnv = useMemo(
-    () => ({ ...scopedOsEnv, ...draftEnv }),
-    [scopedOsEnv, draftEnv],
+    () => ({ ...scopedOsEnv, ...draftAiEnv, ...draftEnv }),
+    [scopedOsEnv, draftAiEnv, draftEnv],
   );
   const configuredProviders = useMemo(
     () => new Set(availableProviders(effectiveEnv)),
@@ -559,8 +580,22 @@ export function SettingsDialog({
       const key = variable.key.trim();
       if (variable.enabled && key) seededProjectEnv[key] = variable.value;
     }
+    const seededAiEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(
+      useDesktopSettingsStore.getState().desktopSettings.aiProviderEnv,
+    )) {
+      const name = key.trim();
+      if (name && value) seededAiEnv[name] = value;
+    }
     const seededEnv = {
-      ...scopeOsEnvToProject(readOsEnv(), new Set(Object.keys(seededProjectEnv))),
+      ...scopeOsEnvToProject(
+        readOsEnv(),
+        new Set([
+          ...Object.keys(seededProjectEnv),
+          ...Object.keys(seededAiEnv),
+        ]),
+      ),
+      ...seededAiEnv,
       ...seededProjectEnv,
     };
     setAiProvider(availableProviders(seededEnv)[0] ?? "google");
@@ -684,11 +719,18 @@ export function SettingsDialog({
     ...(field.aliases ?? []),
   ];
 
-  // The value of an env-var-backed AI provider field, or "" when unset. Only an
-  // enabled row counts: a var disabled in the Environment section must read as
-  // empty so the field matches the (also enabled-only) status banner. An aliased
-  // value (e.g. an existing GOOGLE_API_KEY) is surfaced rather than hidden.
+  // The value of an env-var-backed AI provider field, or "" when unset. Reads
+  // the device-local AI credential store first (where the AI section now saves
+  // keys so they persist across restarts), then falls back to a matching value
+  // still held in the project's Environment variables — e.g. one loaded from a
+  // `.geolibre.json` or set by hand under the Environment section — so an
+  // existing credential stays visible and editable here. An aliased value (e.g.
+  // an existing GOOGLE_API_KEY) is surfaced rather than hidden.
   const getProviderField = (field: ProviderField): string => {
+    for (const key of fieldEnvKeys(field)) {
+      const value = draftDesktopSettings.aiProviderEnv[key];
+      if (value) return value;
+    }
     for (const key of fieldEnvKeys(field)) {
       const row = draftPreferences.environmentVariables.find(
         (variable) => variable.key === key && variable.enabled,
@@ -708,37 +750,31 @@ export function SettingsDialog({
     return null;
   };
 
-  // Write an AI provider field through to its backing env var. Edits the enabled
-  // row the user already has (canonical or alias) so re-entering a credential
-  // never creates a duplicate key; otherwise drops any same-named disabled rows
-  // (so a deliberately disabled var is not silently re-enabled with its old
-  // value) and appends a fresh enabled row under the canonical name. Clearing
-  // removes the row so the Environment list never accrues empty entries.
+  // Write an AI provider field through to the device-local credential store,
+  // keyed by the field's canonical env var name. Any alias entry is dropped so
+  // re-entering a credential never leaves a stale duplicate under an alias, and
+  // clearing removes the entry so the store never accrues empty values. The
+  // matching rows are also removed from the project's Environment variables:
+  // these keys now live device-local, so a leftover project row must not shadow
+  // the device value at runtime (project env has higher precedence) nor get
+  // serialized into a shared project file.
   const setProviderField = (field: ProviderField, value: string) => {
     const keys = fieldEnvKeys(field);
+    setDraftDesktopSettings((current) => {
+      const next = { ...current.aiProviderEnv };
+      for (const key of keys) delete next[key];
+      if (value !== "") next[field.envKey] = value;
+      return { ...current, aiProviderEnv: next };
+    });
     setDraftPreferences((current) => {
-      const enabledIndex = current.environmentVariables.findIndex(
-        (variable) => keys.includes(variable.key) && variable.enabled,
-      );
-      if (enabledIndex !== -1) {
-        const next = current.environmentVariables.slice();
-        if (value === "") {
-          next.splice(enabledIndex, 1);
-        } else {
-          next[enabledIndex] = { ...next[enabledIndex], value };
-        }
-        return { ...current, environmentVariables: next };
+      if (!current.environmentVariables.some((v) => keys.includes(v.key))) {
+        return current;
       }
-      if (value === "") return current;
-      const kept = current.environmentVariables.filter(
-        (variable) => !keys.includes(variable.key),
-      );
       return {
         ...current,
-        environmentVariables: [
-          ...kept,
-          { id: createDraftId(), key: field.envKey, value, enabled: true },
-        ],
+        environmentVariables: current.environmentVariables.filter(
+          (v) => !keys.includes(v.key),
+        ),
       };
     });
     setError(null);
@@ -1110,6 +1146,7 @@ export function SettingsDialog({
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
       cesiumIonToken: draftDesktopSettings.cesiumIonToken,
+      aiProviderEnv: draftDesktopSettings.aiProviderEnv,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
     });
@@ -2359,7 +2396,7 @@ export function SettingsDialog({
                   )}
                   <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span>{t("settings.env.secretsWarning")}</span>
+                    <span>{t("settings.ai.secretsNote")}</span>
                   </div>
                   {PROVIDER_FIELDS[aiProvider].some(
                     (field) => osFieldEnvName(field) !== null,

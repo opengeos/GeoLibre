@@ -51,6 +51,19 @@ export interface DesktopSettings {
    */
   cesiumIonToken: string;
   /**
+   * AI Assistant provider credentials (Settings → AI Providers), keyed by the
+   * runtime environment variable each field maps to (e.g. `ANTHROPIC_API_KEY`,
+   * `OPENAI_API_KEY`, `OLLAMA_BASE_URL`). Stored here — device-local
+   * localStorage, not the shared project file — so a personal API key survives
+   * app restarts (the desktop webview persists localStorage across launches)
+   * yet is never serialized into a `.geolibre.json` a user shares. Projected
+   * into `window.__GEOLIBRE_RUNTIME_ENV__` at runtime by
+   * `useRuntimeEnvironmentVariables`, below any explicit project Environment
+   * variable of the same name. Same "secret in localStorage" trade-off as
+   * {@link cesiumIonToken}.
+   */
+  aiProviderEnv: Record<string, string>;
+  /**
    * Appearance preferences (the accent color scheme). The light/dark mode is
    * handled separately by `useThemeMode` (it tracks the OS / embed preference).
    */
@@ -168,6 +181,7 @@ const DEFAULT_DESKTOP_SETTINGS: DesktopSettings = {
   pluginManifestUrls: [],
   shareToken: "",
   cesiumIonToken: "",
+  aiProviderEnv: {},
   theme: DEFAULT_THEME_SETTINGS,
   uiProfile: DEFAULT_UI_PROFILE_SETTINGS,
   updates: DEFAULT_UPDATE_SETTINGS,
@@ -180,7 +194,7 @@ export const EXPERIENCE_LEVELS: readonly ExperienceLevel[] = [
   "advanced",
 ];
 
-function normalizeDesktopSettings(settings: unknown): DesktopSettings {
+export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
   if (!settings || typeof settings !== "object") {
     return DEFAULT_DESKTOP_SETTINGS;
   }
@@ -204,10 +218,27 @@ function normalizeDesktopSettings(settings: unknown): DesktopSettings {
       typeof candidate.cesiumIonToken === "string"
         ? candidate.cesiumIonToken.trim()
         : "",
+    aiProviderEnv: normalizeEnvRecord(candidate.aiProviderEnv),
     theme: normalizeThemeSettings(candidate.theme),
     uiProfile: normalizeUiProfileSettings(candidate.uiProfile),
     updates: normalizeUpdateSettings(candidate.updates),
   };
+}
+
+/**
+ * Coerce a persisted (or tampered) value into a clean env-var record: string
+ * keys with a non-empty trimmed name mapped to string values. Anything else is
+ * dropped so a malformed localStorage entry cannot inject non-string values
+ * into the runtime environment.
+ */
+function normalizeEnvRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const name = key.trim();
+    if (name && typeof entry === "string") result[name] = entry;
+  }
+  return result;
 }
 
 function normalizeThemeSettings(theme: unknown): ThemeSettings {

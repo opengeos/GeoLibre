@@ -1420,6 +1420,7 @@
       "optionalMark": "(optional)",
       "statusReady": "{{provider}} is configured and ready to use.",
       "statusIncomplete": "Fill in the required fields below to enable {{provider}}.",
+      "secretsNote": "Credentials are saved locally on this device, not in the project file you share, so they persist across restarts. Anyone with access to this device could read them.",
       "getCredentials": "Where to get {{provider}} credentials",
       "showValue": "Show {{name}}",
       "hideValue": "Hide {{name}}",
