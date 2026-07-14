@@ -1699,6 +1699,15 @@ export function LayerPanel({
         },
       });
 
+      // The stock fs-plugin `watch()` is subject to the fs runtime scope, so it
+      // only covers paths granted this session via a picker/drag-drop (persisted
+      // by tauri-plugin-persisted-scope) — the common case for a file the user
+      // just added. Unlike "Reload from disk" (which falls back to the
+      // scope-bypassing `read_local_file` command), watching a project-reopened
+      // path that was never picked on this install can be scope-denied; that
+      // surfaces as the `watchError` status below rather than silently doing
+      // nothing. A scope-bypassing Rust watcher would be the follow-up if that
+      // case proves common.
       void import("@tauri-apps/plugin-fs")
         .then(({ watch }) =>
           watch(
@@ -1723,6 +1732,11 @@ export function LayerPanel({
           watchUnsubsRef.current.set(layer.id, { path, unwatch });
         })
         .catch((error) => {
+          // Only act if this attempt is still the live one. If it was cancelled
+          // (watch toggled off, or off-then-on so a newer attempt now owns this
+          // layer id), deleting the map entry would drop the newer attempt's
+          // watcher and show a spurious error while watching is actually active.
+          if (cancelled) return;
           watchUnsubsRef.current.delete(layer.id);
           console.warn(
             `[GeoLibre] Could not watch "${path}" for changes.`,

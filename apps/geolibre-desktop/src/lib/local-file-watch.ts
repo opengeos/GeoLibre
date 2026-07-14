@@ -89,13 +89,26 @@ export function setLayerWatchConfig(
 /**
  * Re-reads a local-file vector layer's features from disk. Runs the same
  * conversion pipeline as the original import (`loadDroppedVectorPaths`), so
- * every supported vector format reloads the same way it first loaded. For a
- * multi-layer file the entry is matched back to the layer by display name,
- * falling back to the first entry (mirrors `restoreLocalFileLayers`).
+ * every supported vector format reloads the same way it first loaded.
+ *
+ * A single-layer file (the common case, and every GeoJSON) reloads
+ * unconditionally. For a multi-layer file (e.g. a GPX with Waypoints/Tracks/
+ * Routes) the entry is matched back to the layer by display name; unlike the
+ * once-on-reopen `restoreLocalFileLayers`, this backs the interactive Reload /
+ * Watch actions, which can run *after* the user renamed the layer. Rather than
+ * silently swapping in the wrong sub-layer's geometry when the name no longer
+ * matches, this throws so the mismatch surfaces instead of corrupting the layer.
+ *
+ * Note: `onLargeDataset` is intentionally omitted, so a large file materializes
+ * without prompting. A prompt would be wrong for the automatic Watch path (it
+ * would pop on every debounced disk write); the manual Reload is an explicit
+ * user action on a file they already imported, so the original import's prompt
+ * has already been answered.
  *
  * @param layer - A layer for which {@link isLocalFileLayer} is true.
  * @returns The refreshed GeoJSON and its feature count.
- * @throws If the file yields no vector layers (moved, deleted, or now empty).
+ * @throws If the file yields no vector layers (moved, deleted, or now empty),
+ *   or if a multi-layer file no longer has an entry matching the layer's name.
  */
 export async function reloadLocalFileLayer(
   layer: GeoLibreLayer,
@@ -115,7 +128,12 @@ export async function reloadLocalFileLayer(
   let match = loaded[0];
   if (loaded.length > 1) {
     const named = loaded.find((entry) => entry.name === layer.name);
-    if (named) match = named;
+    if (!named) {
+      throw new Error(
+        `Could not match "${layer.name}" to a layer in this file. Renaming a layer from a multi-layer file breaks its link to the source; re-add the file to reload it.`,
+      );
+    }
+    match = named;
   }
 
   return { geojson: match.data, featureCount: match.data.features.length };

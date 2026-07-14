@@ -186,6 +186,22 @@ milliseconds:
 
 Manual refresh uses the same saved source URL without requiring this metadata.
 
+For local-file vector layers on the desktop app, `metadata.watch` can persist a
+"watch this file for changes" toggle. When enabled, the desktop app registers a
+filesystem watcher that reloads the layer's features from `sourcePath` whenever
+the file changes on disk:
+
+```json
+{
+  "metadata": {
+    "watch": { "enabled": true }
+  }
+}
+```
+
+The key is omitted when watching is off, and it has no effect off the desktop
+host (the browser cannot watch a local filesystem path).
+
 When a `geojson` layer enables `style.simpleStyleEnabled`, individual features
 may override the layer style with [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)
 properties (`stroke`, `fill`, `stroke-width`, `fill-opacity`, ...). GeoLibre also
