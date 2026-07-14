@@ -103,6 +103,16 @@
   "viewState": {
     "panelTitle": "Info"
   },
+  "terrainMeasure": {
+    "title": "Terrain (3D)",
+    "surfaceDistance": "Surface distance",
+    "surfaceArea": "Surface area",
+    "elevationGainLoss": "Gain / loss",
+    "elevationRange": "Min / max elevation",
+    "meanSlope": "Mean slope",
+    "computing": "Computing terrain…",
+    "partialData": "Some samples had no terrain data"
+  },
   "fileNamePrompt": {
     "title": "Save file as",
     "description": "Enter a file name. The file downloads to your browser's downloads folder.",

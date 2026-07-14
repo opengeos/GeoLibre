@@ -27,6 +27,7 @@ import {
   restoreVectorLayers,
   setBookmarkLabels,
   setNonTiledRasterHandler,
+  setTerrainMeasureLabels,
   setViewStateLabels,
   startLayerGeometryEdit,
   subscribeGeometryEdit,
@@ -488,6 +489,16 @@ export function DesktopShell({
       defaultFolderName: t("bookmark.defaultFolderName"),
     });
     setViewStateLabels({ title: t("viewState.panelTitle") });
+    setTerrainMeasureLabels({
+      title: t("terrainMeasure.title"),
+      surfaceDistance: t("terrainMeasure.surfaceDistance"),
+      surfaceArea: t("terrainMeasure.surfaceArea"),
+      elevationGainLoss: t("terrainMeasure.elevationGainLoss"),
+      elevationRange: t("terrainMeasure.elevationRange"),
+      meanSlope: t("terrainMeasure.meanSlope"),
+      computing: t("terrainMeasure.computing"),
+      partialData: t("terrainMeasure.partialData"),
+    });
   }, [t]);
   // The map's Fullscreen control maximizes the map *canvas* (it calls
   // requestFullscreen on the map container). Chromium promotes that element to

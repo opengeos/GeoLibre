@@ -76,6 +76,7 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import { attachTerrainMeasure, type TerrainMapLike } from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   KerchunkReferenceStore,
@@ -700,6 +701,7 @@ let printControl: PrintControl | null = null;
 let searchControl: SearchControl | null = null;
 let spinGlobeControl: SpinGlobeControl | null = null;
 let measureControl: MeasureControl | null = null;
+let measureTerrainDetach: (() => void) | null = null;
 let bookmarkControl: BookmarkControl | null = null;
 let minimapControl: MinimapControl | null = null;
 let viewStateControl: ViewStateControl | null = null;
@@ -2334,6 +2336,12 @@ async function openStandaloneMeasureControl(
       return false;
     }
     measureControlMounted = true;
+    // Terrain-aware 3D readouts (surface distance/area) appended to the
+    // control's panel; requires the panel from onAdd, so attach after mounting.
+    measureTerrainDetach = attachTerrainMeasure(
+      measureControl,
+      () => (app.getMap?.() ?? null) as TerrainMapLike | null,
+    );
   }
 
   setTimeout(() => {
@@ -3805,6 +3813,8 @@ function setSearchPlacesPanelVisible(visible: boolean): void {
 }
 
 function teardownMeasureControl(app: GeoLibreAppAPI): void {
+  measureTerrainDetach?.();
+  measureTerrainDetach = null;
   if (measureControl && measureControlMounted) {
     app.removeMapControl(measureControl);
   }
