@@ -128,6 +128,12 @@ import {
   setLayerRefreshConfig,
 } from "../../lib/layer-refresh";
 import {
+  getLayerWatchConfig,
+  isLocalFileLayer,
+  reloadLocalFileLayer,
+  setLayerWatchConfig,
+} from "../../lib/local-file-watch";
+import {
   canExportRasterLayer,
   exportRasterLayer,
 } from "../../lib/raster-export";
@@ -632,6 +638,13 @@ export function LayerPanel({
   const refreshingLayerIdsRef = useRef(new Set<string>());
   const refreshTimersRef = useRef(new Map<string, LayerRefreshTimer>());
   const refreshStatusTimersRef = useRef(new Map<string, number>());
+  // Active filesystem watchers for "watch local file" layers, keyed by layer id.
+  // `path` lets us restart the watch if a layer's source path ever changes;
+  // `unwatch` tears it down (and doubles as a cancel flag while `watch()` is
+  // still resolving — see the watch-lifecycle effect below).
+  const watchUnsubsRef = useRef(
+    new Map<string, { path: string; unwatch: () => void }>(),
+  );
   const visibleLayers = useMemo(() => [...layers].reverse(), [layers]);
   // Group lookup + the top-most member of each group in display order. Members
   // are kept contiguous in `layers`, so the first occurrence walking the
@@ -822,6 +835,35 @@ export function LayerPanel({
       }));
 
       try {
+        if (isLocalFileLayer(layer)) {
+          // Local-file vector layers re-read their features from disk (the same
+          // conversion the import ran) rather than fetching a URL.
+          const { geojson, featureCount } = await reloadLocalFileLayer(layer);
+          const latest = useAppStore
+            .getState()
+            .layers.find((candidate) => candidate.id === layer.id);
+          if (!latest) return;
+
+          updateLayer(layer.id, {
+            geojson,
+            metadata: {
+              ...latest.metadata,
+              featureCount,
+            },
+          });
+
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "success",
+              message: t("layers.refreshedCount", {
+                count: featureCount.toLocaleString(),
+              }),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
         if (isVectorControlRefreshLayer(layer)) {
           const info = await reloadVectorControlLayer(layer.id);
           if (!info) {
@@ -1625,8 +1667,92 @@ export function LayerPanel({
     }
   }, [layers]);
 
+  // Watch-mode lifecycle: for each local-file layer with watch enabled, register
+  // a debounced filesystem watcher that reloads the layer when the file changes.
+  // Only runs on the desktop host (the browser cannot watch a local path).
   useEffect(() => {
+    if (!isTauri()) return;
+    const activeLayerIds = new Set<string>();
+
+    for (const layer of layers) {
+      if (!isLocalFileLayer(layer) || !getLayerWatchConfig(layer).enabled) {
+        continue;
+      }
+      const path = layer.sourcePath;
+      if (typeof path !== "string" || !path) continue;
+
+      activeLayerIds.add(layer.id);
+      const existing = watchUnsubsRef.current.get(layer.id);
+      // Already watching this exact path (or a start is in flight for it).
+      if (existing?.path === path) continue;
+      if (existing) existing.unwatch();
+
+      // `watch()` resolves asynchronously; the effect may re-run or unmount
+      // before it does. Record a placeholder whose `unwatch` flips `cancelled`
+      // so a watcher that lands after teardown is torn down immediately, and so
+      // a concurrent effect run sees the path as already handled.
+      let cancelled = false;
+      watchUnsubsRef.current.set(layer.id, {
+        path,
+        unwatch: () => {
+          cancelled = true;
+        },
+      });
+
+      void import("@tauri-apps/plugin-fs")
+        .then(({ watch }) =>
+          watch(
+            path,
+            () => {
+              const latest = useAppStore
+                .getState()
+                .layers.find((candidate) => candidate.id === layer.id);
+              if (!latest || !getLayerWatchConfig(latest).enabled) return;
+              void handleRefreshLayerRef.current(latest, true);
+            },
+            // Debounce a burst of write events (a rewrite is rarely one event)
+            // into a single reload.
+            { delayMs: 400 },
+          ),
+        )
+        .then((unwatch) => {
+          if (cancelled) {
+            unwatch();
+            return;
+          }
+          watchUnsubsRef.current.set(layer.id, { path, unwatch });
+        })
+        .catch((error) => {
+          watchUnsubsRef.current.delete(layer.id);
+          console.warn(
+            `[GeoLibre] Could not watch "${path}" for changes.`,
+            error,
+          );
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message: t("layers.watchError"),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+        });
+    }
+
+    for (const [id, entry] of watchUnsubsRef.current) {
+      if (activeLayerIds.has(id)) continue;
+      entry.unwatch();
+      watchUnsubsRef.current.delete(id);
+    }
+  }, [layers, scheduleStatusClear, t]);
+
+  useEffect(() => {
+    const watchers = watchUnsubsRef.current;
     return () => {
+      for (const entry of watchers.values()) {
+        entry.unwatch();
+      }
+      watchers.clear();
       for (const entry of refreshTimersRef.current.values()) {
         window.clearInterval(entry.timer);
       }
@@ -1653,6 +1779,19 @@ export function LayerPanel({
           intervalMs,
         }),
       );
+    },
+    [updateLayer],
+  );
+
+  const toggleWatchLayer = useCallback(
+    (layer: GeoLibreLayer, enabled: boolean) => {
+      // Read the latest layer so a concurrent reload's metadata is not
+      // overwritten by a stale snapshot (mirrors setRefreshInterval).
+      const latest =
+        useAppStore
+          .getState()
+          .layers.find((candidate) => candidate.id === layer.id) ?? layer;
+      updateLayer(layer.id, setLayerWatchConfig(latest, enabled));
     },
     [updateLayer],
   );
@@ -2185,6 +2324,10 @@ export function LayerPanel({
               layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
             const refreshConfig = getLayerRefreshConfig(layer);
+            // Local-file vector layers (desktop only) can be reloaded from disk
+            // and watched for changes instead of the URL-based refresh above.
+            const canWatchLocalFile = isTauri() && isLocalFileLayer(layer);
+            const watchConfig = getLayerWatchConfig(layer);
             const refreshStatus = refreshStatuses[layer.id];
             const isRefreshing = refreshStatus?.type === "refreshing";
             return (
@@ -2718,36 +2861,67 @@ export function LayerPanel({
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
-                      <DropdownMenuItem
-                        disabled={!canRefresh || isRefreshing}
-                        onSelect={() => {
-                          void handleRefreshLayer(layer);
-                        }}
-                      >
-                        <RefreshCw
-                          className={`mr-2 h-3.5 w-3.5 ${
-                            isRefreshing ? "animate-spin" : ""
-                          }`}
-                        />
-                        {t("layers.refresh")}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={!canRefresh}
-                        onSelect={() => {
-                          setRefreshSettingsLayerId(layer.id);
-                        }}
-                      >
-                        <Timer className="mr-2 h-3.5 w-3.5" />
-                        {refreshConfig.enabled
-                          ? t("layers.autoRefreshOn")
-                          : t("layers.autoRefresh")}
-                      </DropdownMenuItem>
-                      {!canRefresh && (
+                      {canWatchLocalFile ? (
                         <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem disabled>
-                            {t("layers.refreshWfsGeojsonOnly")}
+                          <DropdownMenuItem
+                            disabled={isRefreshing}
+                            onSelect={() => {
+                              void handleRefreshLayer(layer);
+                            }}
+                          >
+                            <RefreshCw
+                              className={`mr-2 h-3.5 w-3.5 ${
+                                isRefreshing ? "animate-spin" : ""
+                              }`}
+                            />
+                            {t("layers.reloadFromDisk")}
                           </DropdownMenuItem>
+                          <DropdownMenuCheckboxItem
+                            checked={watchConfig.enabled}
+                            // Keep the menu open on toggle so the checked state
+                            // is visible before dismissing.
+                            onSelect={(e) => e.preventDefault()}
+                            onCheckedChange={(checked) => {
+                              toggleWatchLayer(layer, checked === true);
+                            }}
+                          >
+                            {t("layers.watchFile")}
+                          </DropdownMenuCheckboxItem>
+                        </>
+                      ) : (
+                        <>
+                          <DropdownMenuItem
+                            disabled={!canRefresh || isRefreshing}
+                            onSelect={() => {
+                              void handleRefreshLayer(layer);
+                            }}
+                          >
+                            <RefreshCw
+                              className={`mr-2 h-3.5 w-3.5 ${
+                                isRefreshing ? "animate-spin" : ""
+                              }`}
+                            />
+                            {t("layers.refresh")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={!canRefresh}
+                            onSelect={() => {
+                              setRefreshSettingsLayerId(layer.id);
+                            }}
+                          >
+                            <Timer className="mr-2 h-3.5 w-3.5" />
+                            {refreshConfig.enabled
+                              ? t("layers.autoRefreshOn")
+                              : t("layers.autoRefresh")}
+                          </DropdownMenuItem>
+                          {!canRefresh && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem disabled>
+                                {t("layers.refreshWfsGeojsonOnly")}
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </>
                       )}
                     </DropdownMenuContent>

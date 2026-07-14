@@ -12,6 +12,8 @@
     "fs:allow-read-text-file",
     "fs:allow-write-file",
     "fs:allow-write-text-file",
+    "fs:allow-watch",
+    "fs:allow-unwatch",
     {
       "identifier": "opener:allow-open-url",
       "allow": [
