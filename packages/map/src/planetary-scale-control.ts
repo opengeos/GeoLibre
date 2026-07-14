@@ -31,11 +31,16 @@ export class PlanetaryScaleControl implements maplibregl.IControl {
     this.unit = options.unit ?? "metric";
   }
 
-  /** Switch the unit system and redraw immediately if the bar is on the map. */
-  setUnit(unit: MapScaleUnit): void {
-    if (this.unit === unit) return;
+  /**
+   * Switch the unit system, redrawing immediately when it changed. Returns
+   * `true` if the unit differed (and the bar was redrawn) so callers can skip a
+   * redundant {@link refresh}.
+   */
+  setUnit(unit: MapScaleUnit): boolean {
+    if (this.unit === unit) return false;
     this.unit = unit;
     this.update();
+    return true;
   }
 
   onAdd(map: maplibregl.Map): HTMLElement {
