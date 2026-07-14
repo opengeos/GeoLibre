@@ -32,15 +32,13 @@ export class PlanetaryScaleControl implements maplibregl.IControl {
   }
 
   /**
-   * Switch the unit system, redrawing immediately when it changed. Returns
-   * `true` if the unit differed (and the bar was redrawn) so callers can skip a
-   * redundant {@link refresh}.
+   * Set the unit system. This only stores the unit; the bar is redrawn on the
+   * next {@link refresh} (or map move), so callers that change the unit outside
+   * a move should follow with `refresh()`. Keeping it a pure setter lets the map
+   * controller change the unit and the radius and then redraw exactly once.
    */
-  setUnit(unit: MapScaleUnit): boolean {
-    if (this.unit === unit) return false;
+  setUnit(unit: MapScaleUnit): void {
     this.unit = unit;
-    this.update();
-    return true;
   }
 
   onAdd(map: maplibregl.Map): HTMLElement {

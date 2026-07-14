@@ -881,12 +881,11 @@ export class MapController {
     // The ellipsoid or the scale unit can change here (Settings' dropdowns)
     // without the basemap changing, so push the unit and redraw the body-aware
     // scale bar now — the store's ellipsoid subscription has already updated the
-    // active-radius singleton. setUnit redraws when the unit differs and reports
-    // it, so only refresh() when it did not (e.g. an ellipsoid-only change), to
-    // avoid recomputing the bar twice.
-    if (!this.scaleControl?.setUnit(preferences.scaleUnit)) {
-      this.scaleControl?.refresh();
-    }
+    // active-radius singleton. setUnit only stores the unit, so the single
+    // refresh() below redraws the bar once for whatever changed (unit, radius,
+    // or both).
+    this.scaleControl?.setUnit(preferences.scaleUnit);
+    this.scaleControl?.refresh();
   }
 
   readView(): MapViewState {
