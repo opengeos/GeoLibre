@@ -133,6 +133,8 @@ export interface TimelapseLabels {
   title: string;
   /** Accessible name of the imagery-provider picker (shown only with >1 provider). */
   provider: string;
+  /** Heading above a thematic provider's class legend (e.g. land cover). */
+  legend: string;
   yearSlider: string;
   play: string;
   pause: string;
@@ -154,6 +156,7 @@ export interface TimelapseLabels {
 export const DEFAULT_TIMELAPSE_LABELS: TimelapseLabels = {
   title: "Timelapse",
   provider: "Imagery source",
+  legend: "Legend",
   yearSlider: "Timelapse year",
   play: "Play",
   pause: "Pause",
@@ -314,6 +317,7 @@ export class TimelapseControl {
   private recordButton: HTMLButtonElement | null = null;
   private recordStatus: HTMLElement | null = null;
   private attributionLine: HTMLElement | null = null;
+  private legendHeading: HTMLElement | null = null;
   private badge: HTMLElement | null = null;
 
   constructor(options: TimelapseControlOptions) {
@@ -878,6 +882,42 @@ export class TimelapseControl {
     recordRow.appendChild(recordStatus);
     container.appendChild(recordRow);
 
+    // Legend (thematic providers only, e.g. land-cover classes). The colors
+    // are the data, so this is rendered where imagery providers show nothing.
+    const legendItems = this.provider.legend;
+    if (legendItems && legendItems.length > 0) {
+      const legend = document.createElement("div");
+      legend.style.display = "flex";
+      legend.style.flexDirection = "column";
+      legend.style.gap = "3px";
+      legend.style.fontSize = "10px";
+      const heading = document.createElement("div");
+      heading.style.fontWeight = "600";
+      heading.style.opacity = "0.8";
+      this.legendHeading = heading;
+      legend.appendChild(heading);
+      const grid = document.createElement("div");
+      grid.style.display = "grid";
+      grid.style.gridTemplateColumns = "auto 1fr";
+      grid.style.gap = "2px 6px";
+      grid.style.alignItems = "center";
+      for (const item of legendItems) {
+        const swatch = document.createElement("span");
+        swatch.style.width = "12px";
+        swatch.style.height = "12px";
+        swatch.style.flexShrink = "0";
+        swatch.style.borderRadius = "2px";
+        swatch.style.background = item.color;
+        swatch.style.border = "1px solid hsl(var(--border))";
+        const text = document.createElement("span");
+        text.textContent = item.label;
+        grid.appendChild(swatch);
+        grid.appendChild(text);
+      }
+      legend.appendChild(grid);
+      container.appendChild(legend);
+    }
+
     // Attribution (per-frame, year-specific — updated in updateUi).
     const attribution = document.createElement("div");
     attribution.style.fontSize = "10px";
@@ -902,6 +942,7 @@ export class TimelapseControl {
       this.recordButton = null;
       this.recordStatus = null;
       this.attributionLine = null;
+      this.legendHeading = null;
     };
   }
 
@@ -932,6 +973,7 @@ export class TimelapseControl {
     if (this.providerSelect) {
       this.providerSelect.setAttribute("aria-label", labels.provider);
     }
+    if (this.legendHeading) this.legendHeading.textContent = labels.legend;
     if (this.slider) {
       this.slider.setAttribute("aria-label", labels.yearSlider);
     }

@@ -5,6 +5,8 @@ import {
   eoxS2CloudlessProvider,
   getTimelapseProvider,
   listTimelapseProviders,
+  MODIS_LANDCOVER_PROVIDER_ID,
+  modisLandCoverProvider,
   NASA_GIBS_WELD_PROVIDER_ID,
   nasaGibsWeldProvider,
   registerTimelapseProvider,
@@ -112,6 +114,56 @@ describe("nasaGibsWeldProvider", () => {
   });
 });
 
+describe("modisLandCoverProvider", () => {
+  function frames(): TimelapseFrame[] {
+    const result = modisLandCoverProvider.listFrames();
+    assert.ok(Array.isArray(result), "MODIS land cover provider is synchronous");
+    return result;
+  }
+
+  it("lists the 24 continuous annual mosaics 2001–2024 in order", () => {
+    const years = frames().map((frame) => frame.year);
+    assert.equal(years.length, 24);
+    assert.equal(years[0], 2001);
+    assert.equal(years[years.length - 1], 2024);
+    // Continuous — no gaps, unlike the WELD provider.
+    for (let i = 1; i < years.length; i += 1) {
+      assert.equal(years[i] - years[i - 1], 1);
+    }
+  });
+
+  it("targets the IGBP land-cover WMTS layer as PNG with the January date", () => {
+    for (const frame of frames()) {
+      assert.equal(
+        frame.tileUrlTemplate,
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" +
+          "MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual/default/" +
+          `${frame.year}-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+      );
+      assert.equal(frame.maxzoom, 8);
+      assert.equal(frame.tileSize, 256);
+    }
+  });
+
+  it("carries the IGBP class legend as rgb swatches", () => {
+    const legend = modisLandCoverProvider.legend;
+    assert.ok(legend, "provider has a legend");
+    assert.equal(legend.length, 17);
+    for (const item of legend) {
+      assert.match(item.color, /^rgb\(\d+,\d+,\d+\)$/);
+      assert.ok(item.label.length > 0);
+    }
+    assert.ok(legend.some((item) => item.label === "Urban and built-up"));
+  });
+
+  it("credits NASA EOSDIS GIBS with the mosaic year in each frame", () => {
+    for (const frame of frames()) {
+      assert.ok(frame.attribution.includes(String(frame.year)));
+      assert.ok(frame.attribution.includes("NASA EOSDIS GIBS"));
+    }
+  });
+});
+
 describe("timelapse provider registry", () => {
   it("returns the EOX provider by id and as the fallback", () => {
     assert.equal(
@@ -122,14 +174,19 @@ describe("timelapse provider registry", () => {
     assert.equal(getTimelapseProvider(undefined), eoxS2CloudlessProvider);
   });
 
-  it("returns the NASA GIBS provider by id and lists both built-ins", () => {
+  it("returns each NASA GIBS provider by id and lists all built-ins", () => {
     assert.equal(
       getTimelapseProvider(NASA_GIBS_WELD_PROVIDER_ID),
       nasaGibsWeldProvider,
     );
+    assert.equal(
+      getTimelapseProvider(MODIS_LANDCOVER_PROVIDER_ID),
+      modisLandCoverProvider,
+    );
     const all = listTimelapseProviders();
     assert.ok(all.includes(eoxS2CloudlessProvider));
     assert.ok(all.includes(nasaGibsWeldProvider));
+    assert.ok(all.includes(modisLandCoverProvider));
   });
 
   it("lists registered providers and resolves them by id", () => {

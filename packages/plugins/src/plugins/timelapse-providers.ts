@@ -5,10 +5,12 @@
  * raster tile URL template the plugin turns into a pre-warmed MapLibre raster
  * layer. Providers with remote discovery (Google Earth Engine per-year
  * composites, Planetary Computer mosaic searches) can return a Promise from
- * {@link TimelapseProvider.listFrames}; the two built-in providers (EOX
- * Sentinel-2 cloudless and NASA GIBS Landsat/WELD) are static. Register more
- * with {@link registerTimelapseProvider} — the control only shows a provider
- * picker when more than one is registered.
+ * {@link TimelapseProvider.listFrames}; the three built-in providers (EOX
+ * Sentinel-2 cloudless, NASA GIBS Landsat/WELD, and NASA GIBS MODIS land
+ * cover) are static. Register more with {@link registerTimelapseProvider} —
+ * the control only shows a provider picker when more than one is registered. A
+ * thematic provider may add a {@link TimelapseProvider.legend} the panel
+ * renders (the imagery providers omit it).
  */
 
 /** One dated imagery frame (a year) a timelapse steps through. */
@@ -29,11 +31,26 @@ export interface TimelapseFrame {
   scheme?: "xyz" | "tms";
 }
 
+/** One class of a categorical provider's legend (a colored swatch + label). */
+export interface TimelapseLegendItem {
+  /** CSS color of the class swatch, e.g. `rgb(255,0,0)`. */
+  color: string;
+  /** Human-readable class name shown next to the swatch. */
+  label: string;
+}
+
 /** A source of annual imagery frames for the Timelapse plugin. */
 export interface TimelapseProvider {
   id: string;
   /** Human-readable name shown in the control header (e.g. provider picker). */
   name: string;
+  /**
+   * Optional categorical legend for a thematic provider (e.g. land-cover
+   * classes). When present, the panel renders it so the colors are readable;
+   * full-imagery providers (EOX, WELD true color) omit it. The same legend
+   * applies to every year, so it lives on the provider, not per frame.
+   */
+  legend?: TimelapseLegendItem[];
   /**
    * One attribution string applied to every frame's map source. All frames of
    * a provider are live sources at once (the pre-warmed stack), so per-frame
@@ -167,9 +184,93 @@ export const nasaGibsWeldProvider: TimelapseProvider = {
     })),
 };
 
+export const MODIS_LANDCOVER_PROVIDER_ID = "nasa-gibs-modis-landcover";
+
+const MODIS_LANDCOVER_FIRST_YEAR = 2001;
+const MODIS_LANDCOVER_LAST_YEAR = 2024;
+
+/** Native depth of the layer's GoogleMapsCompatible_Level8 matrix set. */
+const MODIS_LANDCOVER_MAXZOOM = 8;
+
+/**
+ * The MODIS IGBP 17-class legend, with the exact swatch colors GIBS renders
+ * (read from its colormap, keyed by IGBP class 1–17). The panel shows this so
+ * the categorical map is readable — unlike the imagery providers, the colors
+ * are the data. Ordered by class number.
+ */
+const MODIS_IGBP_LEGEND: TimelapseLegendItem[] = [
+  { color: "rgb(33,138,33)", label: "Evergreen needleleaf forest" },
+  { color: "rgb(49,204,49)", label: "Evergreen broadleaf forest" },
+  { color: "rgb(152,204,49)", label: "Deciduous needleleaf forest" },
+  { color: "rgb(150,250,150)", label: "Deciduous broadleaf forest" },
+  { color: "rgb(141,186,141)", label: "Mixed forest" },
+  { color: "rgb(186,141,141)", label: "Closed shrublands" },
+  { color: "rgb(245,222,179)", label: "Open shrublands" },
+  { color: "rgb(218,235,157)", label: "Woody savannas" },
+  { color: "rgb(255,213,0)", label: "Savannas" },
+  { color: "rgb(240,185,103)", label: "Grasslands" },
+  { color: "rgb(71,131,181)", label: "Permanent wetlands" },
+  { color: "rgb(250,239,115)", label: "Croplands" },
+  { color: "rgb(255,0,0)", label: "Urban and built-up" },
+  { color: "rgb(153,147,86)", label: "Cropland / natural vegetation mosaic" },
+  { color: "rgb(255,255,255)", label: "Permanent snow and ice" },
+  { color: "rgb(191,191,189)", label: "Barren" },
+  { color: "rgb(134,202,227)", label: "Water bodies" },
+];
+
+/** MODIS land cover is MCD12Q1; NASA asks that GIBS imagery credit EOSDIS. */
+function modisLandCoverAttribution(year: number): string {
+  return (
+    `Land cover ${year} (MODIS MCD12Q1, IGBP) — data courtesy of ` +
+    '<a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-mcd12q1-061" ' +
+    'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>'
+  );
+}
+
+/**
+ * NASA GIBS MODIS combined (Terra + Aqua) Land Cover Type, IGBP classification,
+ * global annual (2001–2024) — a continuous 24-year categorical series that
+ * shows land-cover change (deforestation, urban growth, cropland expansion).
+ * Unlike the imagery providers this is thematic PNG with a fixed
+ * {@link MODIS_IGBP_LEGEND}; it is coarse (Level8 matrix set) and best read as
+ * a full-globe overlay rather than zoomed in.
+ */
+export const modisLandCoverProvider: TimelapseProvider = {
+  id: MODIS_LANDCOVER_PROVIDER_ID,
+  name: "Land cover (MODIS IGBP)",
+  legend: MODIS_IGBP_LEGEND,
+  attribution:
+    "Land cover 2001–2024 (MODIS MCD12Q1, IGBP) — data courtesy of " +
+    '<a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-mcd12q1-061" ' +
+    'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>',
+  listFrames: () => {
+    const frames: TimelapseFrame[] = [];
+    for (
+      let year = MODIS_LANDCOVER_FIRST_YEAR;
+      year <= MODIS_LANDCOVER_LAST_YEAR;
+      year += 1
+    ) {
+      frames.push({
+        id: `modis-landcover-${year}`,
+        label: String(year),
+        year,
+        tileUrlTemplate:
+          "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" +
+          "MODIS_Combined_L3_IGBP_Land_Cover_Type_Annual/default/" +
+          `${year}-01-01/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png`,
+        attribution: modisLandCoverAttribution(year),
+        maxzoom: MODIS_LANDCOVER_MAXZOOM,
+        tileSize: 256,
+      });
+    }
+    return frames;
+  },
+};
+
 const providers = new Map<string, TimelapseProvider>([
   [eoxS2CloudlessProvider.id, eoxS2CloudlessProvider],
   [nasaGibsWeldProvider.id, nasaGibsWeldProvider],
+  [modisLandCoverProvider.id, modisLandCoverProvider],
 ]);
 
 /**
