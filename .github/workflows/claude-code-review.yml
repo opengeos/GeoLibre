@@ -21,10 +21,19 @@ on:
     types: [created]
 
 # Cancel a superseded run when a PR is pushed to repeatedly, capping the
-# CI-minute / Claude-credit cost from rapid synchronize events. Keyed on the PR
-# number, which lives in a different place for the two triggering events.
+# CI-minute / Claude-credit cost from rapid synchronize events.
+#
+# The group key is evaluated at the RUN level, before the job's `if:` gate. So it
+# must NOT collapse unrelated issue_comment events into the same group as a
+# running review — otherwise any comment (from anyone) would spawn a run that,
+# though ultimately skipped by `if:`, cancels the in-flight review first. We
+# therefore key on the event name plus, for comments, the unique comment id:
+#   - pull_request_target pushes to PR N  -> claude-review-pull_request_target-N-push
+#     (shared across pushes, so cancel-in-progress dedupes rapid synchronizes)
+#   - issue_comment on PR N               -> claude-review-issue_comment-N-<comment id>
+#     (unique per comment, so it never cancels — and is never cancelled by — anything)
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.comment.id || 'push' }}
   cancel-in-progress: true
 
 jobs:
