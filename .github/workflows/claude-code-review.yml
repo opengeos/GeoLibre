@@ -15,6 +15,12 @@ on:
     #   - "src/**/*.js"
     #   - "src/**/*.jsx"
 
+# Cancel a superseded run when a fork PR is pushed to repeatedly, capping the
+# CI-minute / Claude-credit cost from rapid synchronize events.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   claude-review:
     # Optional: Filter by PR author
@@ -28,7 +34,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: write
-      id-token: write
 
     steps:
       - name: Checkout PR head (read-only; code is reviewed, not executed)
