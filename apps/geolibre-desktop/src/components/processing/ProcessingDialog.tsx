@@ -63,6 +63,7 @@ import {
   pickSavePathWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
+import { clamp } from "../../lib/clamp";
 import { fetchableUrl } from "../../lib/url-utils";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
@@ -543,14 +544,21 @@ export function ProcessingDialog({
   const onResizeMove = (event: React.PointerEvent) => {
     const start = resizeStart.current;
     if (!start) return;
-    // Grow from the pinned top-left, clamped to a usable minimum and the viewport.
-    const w = Math.max(
-      PANEL_MIN_W,
-      Math.min(start.w + (event.clientX - start.x), window.innerWidth - start.left),
+    // Grow from the pinned top-left, clamped to a usable minimum and the room
+    // available to the viewport edge. The minimum is itself capped to that room,
+    // so a panel pinned near the edge (or a viewport smaller than the minimum)
+    // shrinks to fit rather than being forced off-screen past the grip.
+    const availW = window.innerWidth - start.left;
+    const availH = window.innerHeight - start.top;
+    const w = clamp(
+      start.w + (event.clientX - start.x),
+      Math.min(PANEL_MIN_W, availW),
+      availW,
     );
-    const h = Math.max(
-      PANEL_MIN_H,
-      Math.min(start.h + (event.clientY - start.y), window.innerHeight - start.top),
+    const h = clamp(
+      start.h + (event.clientY - start.y),
+      Math.min(PANEL_MIN_H, availH),
+      availH,
     );
     setSize({ w, h });
   };
@@ -560,14 +568,20 @@ export function ProcessingDialog({
     event.currentTarget.releasePointerCapture?.(event.pointerId);
   };
 
-  // Escape closes the panel, preserving the affordance the Radix modal provided.
-  // Guarded on `open` so it doesn't intercept Escape for the rest of the app, and
-  // suppressed while drawing so Escape cancels the in-progress rubber-band (the
-  // draw helper's own Escape handler) instead of closing the whole panel.
+  // Escape closes the panel, mirroring the affordance the Radix modal provided.
+  // Since the panel is non-modal, only act when focus is inside it, so pressing
+  // Escape to cancel an unrelated map/panel interaction doesn't also close this
+  // one. Suppressed while drawing so Escape cancels the in-progress rubber-band
+  // (the draw helper's own Escape handler) instead of closing the whole panel.
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented && !drawing) {
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !drawing &&
+        panelRef.current?.contains(document.activeElement)
+      ) {
         setProcessingOpen(false);
       }
     };
@@ -575,19 +589,30 @@ export function ProcessingDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, drawing, setProcessingOpen]);
 
-  // Re-clamp an explicit size and dragged position when the viewport shrinks, so
-  // a resized/moved panel can't be left oversized or partly off-screen after a
-  // window resize. Functional updates read the latest values, so the listener
-  // isn't re-subscribed on every drag/resize frame; a never-moved/never-resized
-  // panel (null) keeps its responsive CSS placement.
+  // Re-clamp an explicit size and dragged position to the viewport, so a
+  // resized/moved panel can't be left oversized or partly off-screen. Runs once
+  // on open (position/size persist across opens, so the window may have shrunk
+  // while the panel was closed) and on every subsequent resize. Functional
+  // updates read the latest values, so the listener isn't re-subscribed on every
+  // drag/resize frame; a never-moved/never-resized panel (null) keeps its
+  // responsive CSS placement. The size minimum is capped to the viewport so a
+  // window smaller than the minimum shrinks the panel to fit.
   useEffect(() => {
     if (!open) return;
-    const clamp = () => {
+    const clampToViewport = () => {
       setSize((current) =>
         current
           ? {
-              w: Math.max(PANEL_MIN_W, Math.min(current.w, window.innerWidth)),
-              h: Math.max(PANEL_MIN_H, Math.min(current.h, window.innerHeight)),
+              w: clamp(
+                current.w,
+                Math.min(PANEL_MIN_W, window.innerWidth),
+                window.innerWidth,
+              ),
+              h: clamp(
+                current.h,
+                Math.min(PANEL_MIN_H, window.innerHeight),
+                window.innerHeight,
+              ),
             }
           : null,
       );
@@ -608,8 +633,9 @@ export function ProcessingDialog({
           : null,
       );
     };
-    window.addEventListener("resize", clamp);
-    return () => window.removeEventListener("resize", clamp);
+    clampToViewport();
+    window.addEventListener("resize", clampToViewport);
+    return () => window.removeEventListener("resize", clampToViewport);
   }, [open]);
 
   // The non-modal panel no longer gets Radix's focus management, so move focus
@@ -1042,6 +1068,9 @@ export function ProcessingDialog({
   };
 
   const handleUseMapExtent = () => {
+    // Cancel any in-flight draw so its late-resolving box can't overwrite the
+    // extent the user just asked for from the current view.
+    drawAbortRef.current?.abort();
     applyBboxExtent(mapControllerRef.current?.readView().bbox);
   };
 
@@ -1083,6 +1112,12 @@ export function ProcessingDialog({
     drawAbortRef.current?.abort();
   }, [open]);
   useEffect(() => () => drawAbortRef.current?.abort(), []);
+  // Abort an in-flight draw when the selected tool changes: `values` is reset to
+  // the new tool's defaults on that change, so a box that resolves after the
+  // switch would otherwise fill the wrong tool's bbox field.
+  useEffect(() => {
+    drawAbortRef.current?.abort();
+  }, [selectedToolId]);
 
   const handleRunLocalChange = (nextRunLocal: boolean) => {
     setRunLocal(nextRunLocal);
