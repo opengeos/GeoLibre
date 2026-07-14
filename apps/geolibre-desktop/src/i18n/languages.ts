@@ -33,6 +33,7 @@ export const LANGUAGE_NAMES: Record<
   tr: { nativeName: "Türkçe", englishName: "Turkish" },
   hi: { nativeName: "हिन्दी", englishName: "Hindi" },
   ar: { nativeName: "العربية", englishName: "Arabic" },
+  ka: { nativeName: "ქართული", englishName: "Georgian" },
 };
 
 /**
