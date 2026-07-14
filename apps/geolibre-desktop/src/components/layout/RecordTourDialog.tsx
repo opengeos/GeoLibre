@@ -1092,7 +1092,7 @@ export function RecordTourDialog({
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
         onKeyDown={onResizeKey("sw")}
-        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-es-lg border-b-2 border-s-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
+        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-bl-lg border-b-2 border-l-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
       <button
         type="button"
@@ -1102,7 +1102,7 @@ export function RecordTourDialog({
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
         onKeyDown={onResizeKey("se")}
-        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-ee-lg border-b-2 border-e-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-br-lg border-b-2 border-r-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
     </div>
   );

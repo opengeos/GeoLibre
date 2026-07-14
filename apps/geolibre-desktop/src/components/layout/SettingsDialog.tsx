@@ -1158,7 +1158,7 @@ export function SettingsDialog({
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <Languages className="me-2 h-3.5 w-3.5" />
+              <Languages className="h-3.5 w-3.5" />
               {t("language.label")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-44">
