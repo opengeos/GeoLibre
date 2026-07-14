@@ -53,6 +53,13 @@ jobs:
           # Claude to the model.
           github_token: ${{ secrets.GITHUB_TOKEN }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # By default the action aborts ("Actor does not have write permissions
+          # to the repository") when the PR author lacks write access, which
+          # skips every fork/external-contributor PR. Allow all authors so Claude
+          # reviews ALL PRs. This is safe here because the job only reads the diff
+          # and posts comments with the minimal-scope GITHUB_TOKEN, never runs the
+          # PR's code, and restricts tools via claude_args below.
+          allowed_non_write_users: "*"
           prompt: |
             Perform a thorough code review of pull request ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
 
