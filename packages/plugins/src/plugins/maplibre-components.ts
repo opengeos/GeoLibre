@@ -2342,6 +2342,7 @@ async function openStandaloneMeasureControl(
       measureControl,
       () => (app.getMap?.() ?? null) as TerrainMapLike | null,
     );
+    makeMeasurePanelResizable(measureControl);
   }
 
   setTimeout(() => {
@@ -3417,6 +3418,37 @@ function createMeasureControl(
 ): MeasureControl {
   const control = new MeasureControlClass(MEASURE_OPTIONS);
   return control;
+}
+
+/**
+ * The MeasureControl's panel ships with a hard pixel max-height that forces
+ * its content (measurement list, terrain section) to scroll. Let the panel
+ * size to its content up to most of the viewport instead, and hand the user
+ * the native bottom-right resize handle for manual control. Reads the private
+ * `_panel` member (same access, and same loud warning on an upstream rename,
+ * as the terrain-measure attachment).
+ */
+function makeMeasurePanelResizable(control: MeasureControl): void {
+  const panel = (control as unknown as { _panel?: HTMLElement })._panel;
+  if (!panel) {
+    console.warn(
+      "MeasureControl: _panel not found; Measure panel resize styling is " +
+        "inactive. Check maplibre-gl-components."
+    );
+    return;
+  }
+  // Fit content instead of scrolling at the fixed cap, but never outgrow the
+  // viewport; the map's own chrome needs the remaining room.
+  panel.style.height = "auto";
+  panel.style.maxHeight = "min(75vh, 900px)";
+  // The native CSS resize handle (bottom-right in LTR, mirrored in RTL)
+  // requires a non-visible overflow; content scrolls once the user shrinks
+  // the panel below its natural size.
+  panel.style.overflow = "auto";
+  panel.style.resize = "both";
+  panel.style.minWidth = "220px";
+  panel.style.minHeight = "160px";
+  panel.style.maxWidth = "min(90vw, 560px)";
 }
 
 function createBookmarkControl(
