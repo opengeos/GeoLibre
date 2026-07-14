@@ -8,6 +8,8 @@
  * (PNG / PDF), so the preview is faithful to the output.
  */
 
+import type { MapScaleUnit } from "@geolibre/core";
+
 export type PaperSizeId =
   | "a4"
   | "a3"
@@ -155,6 +157,13 @@ export interface LayoutOptions {
   titleAlign?: "left" | "center" | "right";
   showLegend: boolean;
   showScaleBar: boolean;
+  /**
+   * Unit system the scale bar labels distances in: `"metric"` (km/m/cm),
+   * `"imperial"` (mi/ft), or `"nautical"` (nmi). Follows the project's map
+   * preference so the printed bar matches the on-screen bar. Defaults to
+   * `"metric"` when omitted.
+   */
+  scaleUnit?: MapScaleUnit;
   showNorthArrow: boolean;
   /**
    * Group the north arrow directly above the scale bar in the lower-right
@@ -682,6 +691,7 @@ export function drawLayout(
       outputMpp,
       unit,
       scaleRatio,
+      opts.scaleUnit ?? "metric",
     );
   }
   if (opts.showNorthArrow) {
@@ -822,15 +832,42 @@ function niceDistance(meters: number): number {
   return nice * pow;
 }
 
-function formatDistance(meters: number): string {
-  if (meters >= 1000) {
-    const km = meters / 1000;
-    return `${km % 1 === 0 ? km : km.toFixed(1)} km`;
+const FEET_PER_METER = 3.2808398950131235; // 1 / 0.3048
+const METERS_PER_FOOT = 0.3048;
+const METERS_PER_MILE = 1609.344; // 5280 ft
+const METERS_PER_NAUTICAL_MILE = 1852;
+
+/**
+ * Pick the denomination the scale bar rounds and labels with for a ground span
+ * of `maxMeters` in the requested unit system, mirroring the on-screen bar
+ * (`scaleSpan` in `@geolibre/map`): km/m/cm for metric, mi/ft for imperial, and
+ * nautical miles for nautical. Returns the metres in one unit of that
+ * denomination so the caller can round in unit space and convert back.
+ */
+function pickScaleDenomination(
+  maxMeters: number,
+  unit: MapScaleUnit,
+): { metersPerUnit: number; label: string } {
+  if (unit === "imperial") {
+    const feet = maxMeters * FEET_PER_METER;
+    return feet >= 5280
+      ? { metersPerUnit: METERS_PER_MILE, label: "mi" }
+      : { metersPerUnit: METERS_PER_FOOT, label: "ft" };
   }
+  if (unit === "nautical") {
+    return { metersPerUnit: METERS_PER_NAUTICAL_MILE, label: "nmi" };
+  }
+  if (maxMeters >= 1000) return { metersPerUnit: 1000, label: "km" };
   // Below a metre (street/parcel zoom) label in centimetres instead of showing
   // a useless "0.0 m".
-  if (meters >= 1) return `${Math.round(meters)} m`;
-  return `${Math.round(meters * 100)} cm`;
+  if (maxMeters >= 1) return { metersPerUnit: 1, label: "m" };
+  return { metersPerUnit: 0.01, label: "cm" };
+}
+
+/** Format a rounded span in its denomination, trimming trailing-zero noise. */
+function formatSpanLabel(span: number, label: string): string {
+  const clean = Number.parseFloat(span.toPrecision(12)).toString();
+  return `${clean} ${label}`;
 }
 
 /**
@@ -849,9 +886,15 @@ function drawScaleBar(
   metersPerPixel: number,
   unit: number,
   scaleRatio = 0,
+  scaleUnit: MapScaleUnit = "metric",
 ): number {
   const maxMeters = maxWidthPx * metersPerPixel;
-  const distance = niceDistance(maxMeters);
+  // Round to a nice number in the target unit (feet, miles, km, ...) so the bar
+  // lands on a readable value in that system, then convert back to metres for
+  // the pixel width.
+  const { metersPerUnit, label } = pickScaleDenomination(maxMeters, scaleUnit);
+  const niceSpan = niceDistance(maxMeters / metersPerUnit);
+  const distance = niceSpan * metersPerUnit;
   const barWidth = distance / metersPerPixel;
   const barHeight = unit * 1.1;
   const x0 = rightX - barWidth;
@@ -893,7 +936,7 @@ function drawScaleBar(
   ctx.font = `500 ${unit * 1.7}px system-ui, sans-serif`;
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";
-  ctx.fillText(formatDistance(distance), rightX, y0 - unit * 0.5);
+  ctx.fillText(formatSpanLabel(niceSpan, label), rightX, y0 - unit * 0.5);
   ctx.restore();
   return backingTop;
 }

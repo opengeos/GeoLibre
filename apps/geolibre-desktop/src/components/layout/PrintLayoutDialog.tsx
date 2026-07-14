@@ -131,6 +131,9 @@ export function PrintLayoutDialog({
   const projectName = useAppStore((s) => s.projectName);
   const legendConfig = useAppStore((s) => s.legend);
   const setLegendConfig = useAppStore((s) => s.setLegend);
+  // Follow the map's scale-bar unit preference so the printed bar matches the
+  // on-screen one (metric / imperial / nautical).
+  const scaleUnit = useAppStore((s) => s.preferences.map.scaleUnit);
 
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
@@ -565,6 +568,7 @@ export function PrintLayoutDialog({
       titleAlign,
       showLegend,
       showScaleBar,
+      scaleUnit,
       showNorthArrow,
       navigationGrouped,
       showFooter,
@@ -636,6 +640,7 @@ export function PrintLayoutDialog({
       titleAlign,
       showLegend,
       showScaleBar,
+      scaleUnit,
       showNorthArrow,
       navigationGrouped,
       showFooter,

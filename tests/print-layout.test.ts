@@ -252,6 +252,70 @@ describe("drawLayout cartographic furniture", () => {
     );
   });
 
+  it("labels the scale bar in metric by default", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        showScaleBar: true,
+        metersPerPixel: 10,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+      }),
+    );
+    assert.ok(
+      fills.some((f) => /^\d[\d.]* (km|m|cm)$/.test(f.text)),
+      "expected a metric distance label (km/m/cm)",
+    );
+    assert.ok(
+      !fills.some((f) => /(mi|ft|nmi)$/.test(f.text)),
+      "did not expect an imperial/nautical label under metric",
+    );
+  });
+
+  it("labels the scale bar in imperial when scaleUnit is imperial", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        showScaleBar: true,
+        scaleUnit: "imperial",
+        metersPerPixel: 10,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+      }),
+    );
+    assert.ok(
+      fills.some((f) => /^\d[\d.]* (mi|ft)$/.test(f.text)),
+      "expected an imperial distance label (mi/ft)",
+    );
+    assert.ok(
+      !fills.some((f) => /(km|nmi)$/.test(f.text) || / m$| cm$/.test(f.text)),
+      "did not expect a metric/nautical label under imperial",
+    );
+  });
+
+  it("labels the scale bar in nautical miles when scaleUnit is nautical", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        showScaleBar: true,
+        scaleUnit: "nautical",
+        metersPerPixel: 10,
+        mapImage: {} as CanvasImageSource,
+        mapImageWidth: 400,
+        mapImageHeight: 400,
+      }),
+    );
+    assert.ok(
+      fills.some((f) => /^\d[\d.]* nmi$/.test(f.text)),
+      "expected a nautical-mile distance label (nmi)",
+    );
+  });
+
   it("does not draw a scale ratio for a pixel screen size", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(
