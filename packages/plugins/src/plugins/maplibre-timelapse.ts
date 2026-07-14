@@ -599,6 +599,11 @@ export class TimelapseControl {
       this.recordAbort?.abort();
       return;
     }
+    // Mirror the Play gate (the button is disabled in updateUi, but guard the
+    // programmatic path too): recording against an absent stack would export
+    // a blank map with year labels, and starting before the pre-warm idle
+    // would capture half-loaded opening frames.
+    if (!this.stackPresent || !this.tilesReady) return;
     this.recording = true;
     this.recordAbort = new AbortController();
     this.pause();
@@ -865,6 +870,13 @@ export class TimelapseControl {
       this.recordButton.textContent = this.recording
         ? `■ ${labels.stopRecording}`
         : `● ${labels.record}`;
+      // Gate Record like Play — but never disable it mid-recording, when the
+      // same button is the Stop control.
+      this.recordButton.disabled =
+        !this.recording &&
+        (this.frames.length < 2 || !this.stackPresent || !this.tilesReady);
+      this.recordButton.title =
+        !this.tilesReady && !this.recording ? labels.loadingTiles : "";
     }
     if (this.slider) this.slider.disabled = this.recording;
     if (this.attributionLine && frame) {
