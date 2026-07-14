@@ -43,7 +43,13 @@ export {
 } from "./geojson-loader";
 export { ResetBearingControl } from "./reset-bearing-control";
 export { isPlaceholderLayer, placeholderMessage } from "./placeholders";
-export { setExternalDeckLayerOrderHandler } from "./layer-sync";
+export {
+  pmtilesNativeLayerIds,
+  readPMTilesArchiveInfo,
+  registerPMTilesArchive,
+  setExternalDeckLayerOrderHandler,
+  type PMTilesArchiveInfo,
+} from "./layer-sync";
 export {
   buildMapboxStyle,
   mapboxStyleToJson,

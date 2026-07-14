@@ -173,6 +173,14 @@ export {
   type GeoTiffInfo,
 } from "./cog-convert";
 export {
+  extractPmtiles,
+  pmtilesTileTypeKind,
+  type ExtractPmtilesOptions,
+  type PmtilesExtractProgress,
+  type PmtilesExtractResult,
+  type PmtilesSourceInfo,
+} from "./pmtiles-extract";
+export {
   detectObjects,
   type Detection,
   type DetectionOptions,

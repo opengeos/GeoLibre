@@ -106,6 +106,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "geoparquet", section: "cloud", labelKey: "toolbar.item.geoparquetLayer", tier: "basic" },
   { id: "flatgeobuf", section: "cloud", labelKey: "toolbar.item.flatgeobufLayer", tier: "intermediate" },
   { id: "pmtiles", section: "cloud", labelKey: "toolbar.item.pmtilesLayer", tier: "intermediate" },
+  { id: "basemap-extract", section: "cloud", labelKey: "toolbar.item.basemapExtract", tier: "intermediate" },
   { id: "zarr", section: "cloud", labelKey: "toolbar.item.zarrLayer", tier: "advanced" },
   { id: "netcdf", section: "cloud", labelKey: "toolbar.item.netcdfHdf", tier: "advanced" },
   // 3D layers

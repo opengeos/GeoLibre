@@ -117,6 +117,7 @@ import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { RecordTourDialog } from "./RecordTourDialog";
 import { RecordVideoDialog } from "./RecordVideoDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
+import { BasemapExtractDialog } from "./BasemapExtractDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { OfflineManagerDialog } from "./OfflineManagerDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
@@ -442,6 +443,7 @@ export function TopToolbar({
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
+  const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const [offlineManagerOpen, setOfflineManagerOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [recordTourOpen, setRecordTourOpen] = useState(false);
@@ -484,6 +486,7 @@ export function TopToolbar({
     stac: () => openStacSearchLayerPanel(appApi),
     flatGeobuf: () => openFlatGeobufAddVectorLayerPanel(appApi),
     pmtiles: () => openPMTilesLayerPanel(appApi),
+    basemapExtract: () => setBasemapExtractOpen(true),
     zarr: () => openZarrLayerPanel(appApi),
     netcdf: () => setNetcdfDialogOpen(true),
     lidar: () => openLidarLayerPanel(appApi),
@@ -1223,6 +1226,11 @@ export function TopToolbar({
       <OfflineRegionDialog
         open={offlineRegionOpen}
         onOpenChange={setOfflineRegionOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <BasemapExtractDialog
+        open={basemapExtractOpen}
+        onOpenChange={setBasemapExtractOpen}
         mapControllerRef={mapControllerRef}
       />
       <OfflineManagerDialog

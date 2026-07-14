@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 753 tools across 9 categories. */
+/** 754 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -42,6 +42,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
         tools: [
           { id: "h3_to_vector", name: "H3 Cells to Polygons" },
           { id: "h3_polyfill", name: "H3 Polyfill" },
+          { id: "pmtiles_extract", name: "PMTiles Extract" },
           { id: "raster_to_h3", name: "Raster to H3 Bins" },
           { id: "write_pmtiles", name: "Raster to PMTiles" },
           { id: "raster_to_tiles", name: "Raster to XYZ Tiles" },
