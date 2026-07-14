@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { browserSaveFallsBackToDownload } from "../lib/tauri-io";
 
 /**
  * Options describing a single file-name prompt request.
@@ -66,3 +67,57 @@ export const useFileNamePrompt = create<FileNamePromptState>((set, get) => ({
     resolve?.(null);
   },
 }));
+
+/**
+ * Append the first allowed extension to a user-entered file name when it lacks
+ * one, so a name like "my-story" becomes "my-story.html".
+ */
+export function ensureFileExtension(
+  name: string,
+  extensions: string[],
+): string {
+  const ext = extensions[0];
+  if (!ext) return name;
+  const lower = name.toLowerCase();
+  const present = extensions.find((e) => lower.endsWith(`.${e.toLowerCase()}`));
+  if (present) {
+    // Already ends in an allowed extension; keep it, but guard a base-less name
+    // like ".html" (a hidden dotfile) by giving it a "download" stem.
+    const base = name.slice(0, -(present.length + 1)).replace(/\.+$/, "");
+    return base ? name : `download${name.slice(-(present.length + 1))}`;
+  }
+  // Strip any trailing dots first so "my-story." doesn't become a double dot;
+  // fall back to "download" when the name was only dots (e.g. "." / "..") so we
+  // never produce a hidden, extension-only file like ".html".
+  return `${name.replace(/\.+$/, "") || "download"}.${ext}`;
+}
+
+/**
+ * Prompt for a download file name when the browser would otherwise save under a
+ * fixed default. Tauri and Chromium offer a name in their native save dialog,
+ * so this returns {@link defaultName} unchanged there; only Firefox/Safari
+ * (which auto-download) open the name prompt. The pre-filled value is the base
+ * name without its extension, which is re-applied (and path-illegal characters
+ * are stripped) once the user confirms.
+ *
+ * @param defaultName Suggested file name, including its extension.
+ * @param extensions Allowed extensions; the first is appended when missing.
+ * @returns The name to pass as `defaultName`, or null if the user cancelled.
+ */
+export async function promptDownloadNameIfNeeded(
+  defaultName: string,
+  extensions: string[],
+): Promise<string | null> {
+  if (!browserSaveFallsBackToDownload()) return defaultName;
+  const base = defaultName.replace(/\.[^./\\]+$/, "");
+  const chosen = await useFileNamePrompt.getState().prompt({ defaultName: base });
+  if (chosen === null) return null;
+  // `chosen` is already trimmed by the prompt's submit handler.
+  const sanitized = chosen
+    // Replace characters illegal in common filesystems (path separators and the
+    // C0 control range plus DEL, incl. the null byte) so a pasted name cannot
+    // smuggle in a path or control character.
+    // eslint-disable-next-line no-control-regex
+    .replace(/[/\\:*?"<>|\x00-\x1f\x7f]/g, "_");
+  return ensureFileExtension(sanitized, extensions);
+}

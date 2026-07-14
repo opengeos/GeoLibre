@@ -41,7 +41,7 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Downloads: downloads.md
-  - Live Demo: /demo/
+  - Launch GeoLibre Web: /demo/
   - User Guide:
       - Interface Overview: user-guide/interface.md
       - Projects: user-guide/projects.md
@@ -60,6 +60,7 @@ nav:
       - Settings & Preferences: user-guide/settings.md
       - Story Maps: user-guide/storymaps.md
       - Embedding & Sharing: user-guide/embedding.md
+      - Troubleshooting: user-guide/troubleshooting.md
   - Tutorials:
       - Overview: tutorials/index.md
       - Your First Map: tutorials/first-map.md
@@ -82,6 +83,7 @@ nav:
       - How to Cite: citation.md
       - Acknowledgements: acknowledgements.md
       - Privacy Policy: privacy.md
+      - Terms of Service: terms.md
 
 plugins:
   - search

@@ -11,6 +11,7 @@
  * `metadata.collectionSchema`. Both ride through `.geolibre.json` save/load via
  * the layer's free-form `metadata` bag, so collection layers reopen ready to use.
  */
+import { PHOTO_FULL_PROPERTY, PHOTO_PROPERTY } from "@geolibre/core";
 import type {
   Feature,
   FeatureCollection,
@@ -18,6 +19,10 @@ import type {
   Point,
   Polygon,
 } from "geojson";
+
+// Re-exported so existing importers (geotagged-photos, tests) keep a single
+// import site; the canonical definitions live in @geolibre/core's schema.
+export { PHOTO_FULL_PROPERTY, PHOTO_PROPERTY };
 
 /** The attribute field kinds a collection form can declare. */
 export type FieldType = "text" | "number" | "date" | "choice";
@@ -48,11 +53,11 @@ export const FIELD_COLLECTION_FLAG = "fieldCollection";
 export const COLLECTION_SCHEMA_KEY = "collectionSchema";
 export const COLLECTION_GEOMETRY_KEY = "collectionGeometry";
 
-/** Property key under which a captured photo (data URL) is stored. */
-export const PHOTO_PROPERTY = "photo";
-
 /** Property keys the tool manages itself; user fields must not reuse them. */
-export const RESERVED_PROPERTY_KEYS: readonly string[] = [PHOTO_PROPERTY];
+export const RESERVED_PROPERTY_KEYS: readonly string[] = [
+  PHOTO_PROPERTY,
+  PHOTO_FULL_PROPERTY,
+];
 
 /**
  * Cap embedded photos so a capture session can't bloat the project JSON without

@@ -38,6 +38,14 @@ interface SharedSidebarProps {
    * state when this clears, matching the standalone panel's behavior.
    */
   forceBuiltinCollapsed: boolean;
+  /**
+   * Start with the built-in panel expanded (and the plugin panel a collapsed
+   * rail entry) instead of the default "plugin is the active workspace" layout.
+   * Used for the Browser panel, which docks here on by default but should not
+   * bury the Layers panel — it starts as a collapsed entry beside expanded
+   * Layers. Only sets the initial state; the user's later toggles win.
+   */
+  initialBuiltinExpanded?: boolean;
   /** Render the built-in panel with controlled collapse. */
   renderBuiltin: (args: {
     collapsed: boolean;
@@ -81,6 +89,7 @@ export function SharedSidebar({
   builtinTitle,
   builtinIcon,
   forceBuiltinCollapsed,
+  initialBuiltinExpanded = false,
   renderBuiltin,
 }: SharedSidebarProps) {
   const { t } = useTranslation();
@@ -88,7 +97,7 @@ export function SharedSidebar({
   // The built-in panel is collapsed by default while the plugin is active; the
   // user opts it in. This resets when the sidebar unmounts (the plugin closes),
   // which is the desired "collapsed by default" behavior on reopen.
-  const [builtinOptedIn, setBuiltinOptedIn] = useState(false);
+  const [builtinOptedIn, setBuiltinOptedIn] = useState(initialBuiltinExpanded);
 
   const pluginExpanded = activeId === pluginId && !collapsed;
   // The plugin displaces the built-in panel: one shared surface, one expanded

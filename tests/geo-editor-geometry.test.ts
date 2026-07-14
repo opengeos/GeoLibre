@@ -4,7 +4,9 @@ import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "../packages/core/src/types";
 import {
   GEOMETRY_EDIT_FID_PROPERTY,
+  type OverlayOrderLayer,
   canEditLayerGeometry,
+  planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
 } from "../packages/plugins/src/plugins/geo-editor-geometry";
@@ -254,5 +256,77 @@ describe("reconcileEditedFeatures", () => {
     assert.equal(ids[0], "7");
     assert.notEqual(ids[1], "7");
     assert.equal(new Set(ids).size, ids.length);
+  });
+});
+
+describe("planGeoEditorOverlayOrder", () => {
+  function row(
+    id: string,
+    flags: Partial<OverlayOrderLayer> = {},
+  ): OverlayOrderLayer {
+    return { id, isOverlay: false, isAnchor: false, ...flags };
+  }
+
+  it("raises overlay above a layer stacked over the edited layer (issue #1015)", () => {
+    // Bottom-to-top: the overlay has sunk below the raster, which is stacked
+    // above the (hidden) edited layer; it must move back up to the edited slot.
+    const plan = planGeoEditorOverlayOrder([
+      row("basemap"),
+      row("gm_main-fill", { isOverlay: true }),
+      row("geo-editor-selection-fill", { isOverlay: true }),
+      row("xyz-raster"),
+      row("edited-fill", { isAnchor: true }),
+      row("edited-line", { isAnchor: true }),
+    ]);
+    assert.deepEqual(plan, {
+      overlayIds: ["gm_main-fill", "geo-editor-selection-fill"],
+      // The edited layer is the topmost data layer here, so nothing real sits
+      // above it: the overlay goes to the very top.
+      beforeId: undefined,
+    });
+  });
+
+  it("anchors the overlay just below the first layer above the edited layer", () => {
+    // The overlay has sunk to the bottom; the edited layer is genuinely below a
+    // raster, so the overlay must return to the edited layer's slot (below the
+    // raster), not jump to the very top.
+    const plan = planGeoEditorOverlayOrder([
+      row("basemap"),
+      row("gm_main-fill", { isOverlay: true }),
+      row("edited-fill", { isAnchor: true }),
+      row("raster-on-top"),
+    ]);
+    assert.deepEqual(plan, {
+      overlayIds: ["gm_main-fill"],
+      beforeId: "raster-on-top",
+    });
+  });
+
+  it("returns null when the overlay already sits directly above the anchor", () => {
+    const plan = planGeoEditorOverlayOrder([
+      row("basemap"),
+      row("edited-fill", { isAnchor: true }),
+      row("edited-line", { isAnchor: true }),
+      row("gm_main-fill", { isOverlay: true }),
+      row("geo-editor-selection-fill", { isOverlay: true }),
+      row("raster-on-top"),
+    ]);
+    assert.equal(plan, null);
+  });
+
+  it("returns null when the edited layer is not on the map (no anchor)", () => {
+    const plan = planGeoEditorOverlayOrder([
+      row("basemap"),
+      row("gm_main-fill", { isOverlay: true }),
+    ]);
+    assert.equal(plan, null);
+  });
+
+  it("returns null when there are no overlay layers", () => {
+    const plan = planGeoEditorOverlayOrder([
+      row("basemap"),
+      row("edited-fill", { isAnchor: true }),
+    ]);
+    assert.equal(plan, null);
   });
 });

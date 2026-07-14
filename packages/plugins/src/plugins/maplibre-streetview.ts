@@ -1,3 +1,4 @@
+import { getGoogleMapsApiKey } from "@geolibre/core";
 import {
   StreetViewControl,
   type StreetViewControlOptions,
@@ -29,7 +30,7 @@ function getStreetViewCredentials(): Pick<
   "defaultProvider" | "googleApiKey" | "mapillaryAccessToken"
 > {
   const env = getRuntimeEnvironment();
-  const googleApiKey = env.VITE_GOOGLE_MAPS_API_KEY?.trim() || undefined;
+  const googleApiKey = getGoogleMapsApiKey(env);
   const mapillaryAccessToken =
     env.VITE_MAPILLARY_ACCESS_TOKEN?.trim() || undefined;
 
@@ -60,6 +61,21 @@ const STREET_VIEW_OPTIONS = {
 let streetViewControl: StreetViewControl | null = null;
 let activeApp: GeoLibreAppAPI | null = null;
 let removeRuntimeEnvListener: (() => void) | null = null;
+// The credentials the current control was built with, so a runtime-env change
+// that doesn't touch Street View's own vars (a common case now that the desktop
+// app loads unrelated AI keys from the OS environment on launch) doesn't force a
+// needless control remove/recreate + re-expand.
+let appliedCredentialsSignature: string | null = null;
+
+function credentialsSignature(): string {
+  const { defaultProvider, googleApiKey, mapillaryAccessToken } =
+    getStreetViewCredentials();
+  return JSON.stringify([
+    defaultProvider,
+    googleApiKey ?? "",
+    mapillaryAccessToken ?? "",
+  ]);
+}
 
 export const maplibreStreetViewPlugin: GeoLibrePlugin = {
   id: "maplibre-gl-streetview",
@@ -78,11 +94,13 @@ export const maplibreStreetViewPlugin: GeoLibrePlugin = {
       cleanupRuntimeEnvListener();
       return false;
     }
+    appliedCredentialsSignature = credentialsSignature();
     setTimeout(() => streetViewControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (streetViewControl) app.removeMapControl(streetViewControl);
     streetViewControl = null;
+    appliedCredentialsSignature = null;
     cleanupRuntimeEnvListener();
   },
   getMapControlPosition: () => streetViewPosition,
@@ -112,6 +130,11 @@ function addRuntimeEnvListener(): void {
 
   const handleRuntimeEnvChange = () => {
     if (!activeApp) return;
+    // Ignore env changes that don't affect Street View's own credentials so we
+    // don't tear down and re-expand the control for unrelated updates (e.g. the
+    // OS-environment AI keys the desktop app loads shortly after launch).
+    const signature = credentialsSignature();
+    if (streetViewControl && signature === appliedCredentialsSignature) return;
     if (streetViewControl) activeApp.removeMapControl(streetViewControl);
     streetViewControl = new StreetViewControl(getStreetViewOptions());
     const added = activeApp.addMapControl(streetViewControl, streetViewPosition);
@@ -126,6 +149,7 @@ function addRuntimeEnvListener(): void {
       );
       return;
     }
+    appliedCredentialsSignature = signature;
     setTimeout(() => streetViewControl?.expand(), 0);
   };
 

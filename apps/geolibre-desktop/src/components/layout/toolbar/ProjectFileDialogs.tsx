@@ -8,16 +8,28 @@ import {
   Input,
   Label,
 } from "@geolibre/ui";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import type { useProjectFileActions } from "../../../hooks/useProjectFileActions";
+import type { ProjectFileActions } from "../../../hooks/useProjectFileActions";
 
 interface ProjectFileDialogsProps {
-  projectFiles: ReturnType<typeof useProjectFileActions>;
+  projectFiles: ProjectFileActions;
 }
 
 /** The project-file dialogs: Open-from-URL, the error dialog, the save-name prompt, and the env-var strip prompt. */
 export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
   const { t } = useTranslation();
+
+  // The save-name prompt is cleared to null synchronously on submit/cancel,
+  // before the dialog's exit animation finishes. Keep the last non-null copy so
+  // its title/label text stays put through the close transition instead of
+  // flashing blank.
+  const lastSaveNamePrompt = useRef<typeof projectFiles.saveNamePrompt>(null);
+  if (projectFiles.saveNamePrompt) {
+    lastSaveNamePrompt.current = projectFiles.saveNamePrompt;
+  }
+  const saveNameLabels =
+    projectFiles.saveNamePrompt ?? lastSaveNamePrompt.current;
 
   return (
     <>
@@ -93,23 +105,19 @@ export function ProjectFileDialogs({ projectFiles }: ProjectFileDialogsProps) {
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{t("toolbar.item.saveProjectAsTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("toolbar.item.saveProjectAsDesc")}
-            </DialogDescription>
+            <DialogTitle>{saveNameLabels?.title}</DialogTitle>
+            <DialogDescription>{saveNameLabels?.description}</DialogDescription>
           </DialogHeader>
           <form
             className="space-y-4"
             onSubmit={projectFiles.submitSaveNamePrompt}
           >
             <div className="space-y-2">
-              <Label htmlFor="save-project-name">
-                {t("toolbar.item.saveProjectFileName")}
-              </Label>
+              <Label htmlFor="save-project-name">{saveNameLabels?.label}</Label>
               <Input
                 id="save-project-name"
                 autoFocus
-                placeholder={t("toolbar.item.saveProjectFileNamePlaceholder")}
+                placeholder={saveNameLabels?.placeholder}
                 value={projectFiles.saveNameInput}
                 onChange={(event) =>
                   projectFiles.setSaveNameInput(event.target.value)

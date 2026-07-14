@@ -1,4 +1,5 @@
 ---
+title: Home
 hide:
   - toc
 ---
@@ -15,7 +16,7 @@ hide:
       work, project files, styling, plugins, and modern geospatial workflows.
     </p>
     <div class="hero__actions">
-      <a class="md-button md-button--primary" href="https://viewer.geolibre.app/">Open live demo</a>
+      <a class="md-button md-button--primary" href="https://web.geolibre.app/">Launch GeoLibre Web</a>
       <a class="md-button" href="getting-started/">Get started</a>
       <a class="md-button" href="user-guide/interface/">User guide</a>
       <a class="md-button" href="downloads/">Download app</a>
@@ -118,29 +119,29 @@ New to GeoLibre? Start with the [User Guide](user-guide/interface.md) for a feat
 [Read the User Guide](user-guide/interface.md){ .md-button .md-button--primary }
 [Browse the Tutorials](tutorials/index.md){ .md-button }
 
-## Try it in the browser
+## GeoLibre on the web
 
-The live demo is the browser-capable version of the GeoLibre desktop UI. It is useful for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
+GeoLibre Web is the full browser version of the GeoLibre app, ready to use with nothing to install. It is great for exploring the map, loading browser-selected vector data supported by DuckDB-WASM Spatial, adding URL-based layers, styling layers, and testing plugins. Desktop-only file dialogs, local MBTiles, local raster reads, and filesystem save/open operations still require the installed Tauri app.
 
 !!! note "Hosted on GitHub Pages, private by design"
-    The live demo is a static site deployed on GitHub Pages and runs entirely in your browser. It has no analytics and no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
+    GeoLibre Web is a static site deployed on GitHub Pages and runs entirely in your browser. It has no analytics and no server account, and the data you load is processed client-side in your browser session. Data leaves your browser only when you choose to add a remote URL or explicitly share a project.
 
 Open a project by passing a public `.geolibre.json` URL with the `url` query parameter:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json
 ```
 
 For narrow embeds, add `?layout=compact` to the demo URL to use icon-only toolbar buttons and hide project metadata:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact
 ```
 
 For map-focused embeds, add `&panels=none` to hide the Layers, Style, and Attribute table panels:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact&panels=none
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&layout=compact&panels=none
 ```
 
 Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden`, `panels=hide`, `panels=off`, and `hidePanels=true` are accepted aliases for hiding panels.
@@ -148,14 +149,14 @@ Use `toolbar=icons` when you only want icon-only toolbar buttons. `panels=hidden
 For a fully chrome-free, map-only embed, add `&maponly` to hide the toolbar menu, all panels, and the status bar:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
+https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json&maponly
 ```
 
 Other parameters control the toolbar, panels, and theme. See [Embedding & Sharing](user-guide/embedding.md) for the full parameter reference and `<iframe>` examples.
 
-[Open the live demo](https://viewer.geolibre.app/){ .md-button .md-button--primary }
+[Launch GeoLibre Web](https://web.geolibre.app/){ .md-button .md-button--primary }
 [Embedding & Sharing](user-guide/embedding.md){ .md-button }
 
 ## Project status
 
-GeoLibre 1.7 is a stable release. It includes the map workspace, the `.geolibre.json` project format with Save, Open, and Share, the plugin API, and the plugin marketplace for installing, updating, and removing external plugins. Data support spans browser vector import, DuckDB-WASM Spatial loading, the full Add Data surface (files, web services, cloud formats, 3D layers, and databases), and cloud integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and the federal Web Services plugins. Processing covers the vector tools (Turf.js with an optional GeoPandas sidecar), the raster tools (rasterio sidecar with a client-side fallback), a Spectral Index toolbox, a Raster Georeferencer, a Spatial Statistics toolbox, network analysis (isochrones, service areas, OD cost matrices), the Conversion menu (GeoParquet, FlatGeobuf, PMTiles, COG), the Whitebox toolbox, AI Segmentation via SamGeo/SAM 3, and the SQL Workspace for DuckDB Spatial SQL (with PGlite PostGIS and Apache Sedona engines). The release also ships a docked Notebook panel that runs Jupyter beside the map (JupyterLite on the web, a desktop JupyterLab server), a Field Collection tool for capturing point, line, and polygon observations, real-time multi-user collaboration, a scroll-driven story map builder, a natural-language AI assistant and in-app Python Console, multi-provider geocoding, the Time Slider plugin, a Controls menu (Measure, Bookmark, Minimap, View State), a Print menu, Layout settings, runtime environment variables, diagnostics, embed-friendly URL parameters including the `maponly` mode, cross-platform installers (including a macOS Homebrew Cask and a Windows Microsoft Store listing), and Docker support for the browser app. GeoLibre also ships as a native **Android** app built from the same codebase via Tauri v2 mobile (see [Android](android.md)), with a responsive touch layout for phones, and offline improvements (a Download Offline Area tool plus service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines). See the [roadmap](roadmap.md) for the full release history and what comes next.
+GeoLibre 2.0 is a stable release. It includes the map workspace, the `.geolibre.json` project format with Save, Open, and Share, the plugin API, and the plugin marketplace for installing, updating, and removing external plugins. Data support spans browser vector import, DuckDB-WASM Spatial loading, the full Add Data surface (files, web services, cloud formats, 3D layers, and databases), and cloud integrations through the Planetary Computer and Earth Engine panels, the Overture Maps plugin, and the federal Web Services plugins. Processing covers the vector tools (Turf.js with an optional GeoPandas sidecar), the raster tools (rasterio sidecar with a client-side fallback), a Spectral Index toolbox, a Raster Georeferencer, a Spatial Statistics toolbox, network analysis (isochrones, service areas, OD cost matrices), the Conversion menu (GeoParquet, FlatGeobuf, PMTiles, COG), the Whitebox toolbox, AI Segmentation via SamGeo/SAM 3, and the SQL Workspace for DuckDB Spatial SQL (with PGlite PostGIS and Apache Sedona engines). The release also ships a docked Notebook panel that runs Jupyter beside the map (JupyterLite on the web, a desktop JupyterLab server), a Field Collection tool for capturing point, line, and polygon observations, real-time multi-user collaboration, a scroll-driven story map builder, a natural-language AI assistant and in-app Python Console, multi-provider geocoding, the Time Slider plugin, a Controls menu (Measure, Bookmark, Minimap, View State), a Print menu, Layout settings, runtime environment variables, diagnostics, embed-friendly URL parameters including the `maponly` mode, cross-platform installers (including a macOS Homebrew Cask and a Windows Microsoft Store listing), and Docker support for the browser app. GeoLibre also ships as a native **Android** app built from the same codebase via Tauri v2 mobile (see [Android](android.md)), with a responsive touch layout for phones, and offline improvements (a Download Offline Area tool plus service-worker caching of the CDN-loaded Pyodide and PGlite/PostGIS engines). Version 2.0 adds a CesiumJS 3D globe view for any map pane, planetary mapping (Mars and the Moon from OpenPlanetaryMap, plus Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon from USGS Astrogeology reprojected to Web Mercator, with a per-project ellipsoid and a planet switcher in the Layers panel), symbology interchange that imports and exports vector styling as OGC SLD, QGIS QML, and Mapbox GL style JSON, editable source layers that write vector edits back to GeoPackage, GeoJSON, and PostGIS, a Weather menu with live cloud and precipitation radar overlays and a sun position simulation, and new Mapillary, Historical Imagery, and Elevation Profile plugins. See the [roadmap](roadmap.md) for the full release history and what comes next.

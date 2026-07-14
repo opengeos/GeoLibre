@@ -11,9 +11,18 @@ import { GeoEditor, type GeoEditorOptions } from "maplibre-gl-geo-editor";
 import {
   SKETCHES_SOURCE_KIND,
   canEditLayerGeometry,
+  planGeoEditorOverlayOrder,
   reconcileEditedFeatures,
   tagFeatureKeys,
 } from "./geo-editor-geometry";
+import {
+  type ViewImportBaseline,
+  type ViewImportExport,
+  buildChangedExport,
+  buildFullExport,
+  captureViewImportBaseline,
+  tagViewFeaturesForImport,
+} from "./geo-editor-view-import";
 import type {
   GeoLibreAppAPI,
   GeoLibreMapControlPosition,
@@ -110,16 +119,28 @@ let editTargetOriginalVisible: boolean | null = null;
 /** Listeners notified when a geometry edit session starts or ends. */
 const geometryEditListeners = new Set<() => void>();
 
+/**
+ * Baseline of the features most recently loaded from a map view, keyed by their
+ * view-import id and captured from the post-import (Geoman-normalized) geometry.
+ * Used to compute the "changed only" export (added/modified/deleted). Null until
+ * a view load happens, and cleared when the plugin deactivates.
+ */
+let viewImportBaseline: ViewImportBaseline | null = null;
+/** Per-load id-prefix counter so appended loads cannot collide feature ids. */
+let viewImportLoadCounter = 0;
+
 const GEOMAN_EDIT_SYNC_EVENTS = [
   "gm:dragend",
   "gm:editend",
   "gm:rotateend",
 ] as const;
 
+export const GEO_EDITOR_PLUGIN_ID = "maplibre-gl-geo-editor";
+
 export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-geo-editor",
+  id: GEO_EDITOR_PLUGIN_ID,
   name: "GeoEditor",
-  version: "0.8.0",
+  version: "0.9.0",
   activate: (app: GeoLibreAppAPI) => {
     pluginActive = true;
     appApi = app;
@@ -156,6 +177,7 @@ export const maplibreGeoEditorPlugin: GeoLibrePlugin = {
     // below, so this need not be awaited.
     if (editTargetLayerId) void endLayerGeometryEdit(app, { save: true });
     pluginActive = false;
+    viewImportBaseline = null;
     sketchesIdleDisplayOverride = false;
     unionSketchesWithStoreOnNextSync = false;
     setSketchesMapLayerSuppressed(false);
@@ -420,6 +442,151 @@ function syncSketchesToStore(): void {
   if (!sketchesIdleDisplayOverride) {
     scheduleApplySketchesMapDisplay();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Loading map-view features into the editor (and exporting them)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether the shared editor is ready to receive features loaded from a map view:
+ * the plugin is active, the control exists, and no in-place geometry edit session
+ * is holding the editor. Callers should activate the plugin first if this is
+ * false because the editor was never created.
+ */
+export function isGeoEditorAvailableForImport(): boolean {
+  return pluginActive && geoEditorControl != null && editTargetLayerId == null;
+}
+
+/** Number of features currently in the editor (for the load-confirm prompt). */
+export function getGeoEditorFeatureCount(): number {
+  if (!geoEditorControl) return 0;
+  try {
+    return geoEditorControl.getAllFeatureCollection().features.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Whether a view-import baseline exists, so a "changed only" export is meaningful. */
+export function hasViewImportBaseline(): boolean {
+  return viewImportBaseline != null;
+}
+
+/**
+ * Load features queried from a map layer in the current view into the shared
+ * editor, so they become editable "Sketches". Features are normalized and tagged
+ * (see `tagViewFeaturesForImport`); the editor's `loadGeoJson` fires the sketches
+ * sync, so they also appear as the Sketches store layer. A baseline is captured
+ * from the post-import geometry for later "changed only" export.
+ *
+ * @param features Plain features from `queryViewLayerFeatures`.
+ * @param options `replace` clears the editor first; otherwise the features are
+ *   appended to whatever is already loaded.
+ * @returns How many features were imported and how many were dropped as
+ *   un-editable, or throws when the editor is not available.
+ */
+export async function loadViewFeaturesIntoEditor(
+  features: Feature[],
+  { replace }: { replace: boolean },
+): Promise<{ imported: number; dropped: number }> {
+  if (!pluginActive || !geoEditorControl) {
+    throw new Error("The GeoEditor is not active.");
+  }
+  if (editTargetLayerId) {
+    throw new Error(
+      "Finish editing the current layer's geometry before loading view features.",
+    );
+  }
+
+  await ensureGeomanReady();
+  if (!geoEditorControl) throw new Error("The GeoEditor is not active.");
+
+  const idPrefix = `view${viewImportLoadCounter++}`;
+  const tagged = tagViewFeaturesForImport(features, idPrefix);
+  // Bail out before touching the editor: with `replace: true`, loading an empty
+  // collection (every queried feature was un-editable) would wipe whatever the
+  // user already had loaded/edited (and the persisted Sketches layer). Report
+  // nothing imported instead.
+  if (tagged.prepared === 0) {
+    return { imported: 0, dropped: tagged.dropped };
+  }
+  const newIds = new Set(
+    tagged.collection.features.map((feature) => String(feature.id)),
+  );
+
+  let collectionToLoad = tagged.collection;
+  if (!replace) {
+    const existing = cloneFeatureCollection(
+      geoEditorControl.getAllFeatureCollection(),
+    );
+    collectionToLoad = {
+      type: "FeatureCollection",
+      features: [...existing.features, ...tagged.collection.features],
+    };
+  }
+
+  // loadGeoJson replaces the editor's collection and fires onGeoJsonLoad, which
+  // (the restore guard being off here) syncs the loaded features to the Sketches
+  // store layer so they render and stay editable.
+  await geoEditorControl.loadGeoJson(collectionToLoad, SKETCHES_SOURCE_PATH);
+
+  // Capture the baseline from the post-import geometry: Geoman normalizes
+  // coordinates on load, so comparing against the loaded values (not the raw
+  // source ones) means only genuine user edits later count as "modified".
+  const afterLoad = geoEditorControl.getAllFeatureCollection();
+  if (replace || !viewImportBaseline) {
+    viewImportBaseline = captureViewImportBaseline(afterLoad);
+  } else {
+    const appended = captureViewImportBaseline(afterLoad, newIds);
+    for (const [id, entry] of appended) viewImportBaseline.set(id, entry);
+  }
+
+  syncSketchesToStore();
+  applySketchesMapDisplay();
+
+  return { imported: tagged.prepared, dropped: tagged.dropped };
+}
+
+/**
+ * Build a GeoJSON collection to export from the editor's current features.
+ * `changedOnly` diffs against the view-import baseline and returns only the
+ * added/modified/deleted features (each tagged); otherwise every feature is
+ * returned with editor-internal properties stripped.
+ *
+ * @param options Whether to export only changes, plus the editor name and ISO
+ *   timestamp stamped onto changed features.
+ * @returns The export result, or null when the editor is unavailable or an
+ *   in-place geometry-edit session has re-targeted the editor.
+ */
+export function buildEditorSaveCollection(options: {
+  changedOnly: boolean;
+  editorName?: string;
+  now: string;
+}): ViewImportExport | null {
+  if (!geoEditorControl) return null;
+  // During an in-place "Edit geometry" session the shared editor holds the
+  // target layer's features, not the loaded view features, and the view-import
+  // baseline is stale. Exporting now would produce a nonsensical diff, so refuse
+  // (the dialog disables Save while such a session is active).
+  if (editTargetLayerId) return null;
+  const collection = cloneFeatureCollection(
+    geoEditorControl.getAllFeatureCollection(),
+  );
+
+  if (!options.changedOnly) {
+    return buildFullExport(collection);
+  }
+  if (!viewImportBaseline) {
+    return {
+      collection: { type: "FeatureCollection", features: [] },
+      counts: { added: 0, modified: 0, deleted: 0 },
+    };
+  }
+  return buildChangedExport(collection, viewImportBaseline, {
+    editorName: options.editorName,
+    now: options.now,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -791,17 +958,18 @@ function bindSketchesStoreSync(): void {
       const previousTarget = previous.layers.find(
         (layer) => layer.id === editTargetLayerId,
       );
-      if (
-        previousTarget &&
-        (target.visible !== previousTarget.visible ||
-          target.opacity !== previousTarget.opacity ||
-          target.style !== previousTarget.style)
-      ) {
-        // If the user toggled the target layer back on while editing, re-hide it
-        // so its stale normal rendering does not double-draw over Geoman.
-        if (target.visible && !previousTarget.visible) {
-          setEditTargetStoreVisible(editTargetLayerId, false);
-        }
+      // If the user toggled the target layer back on while editing, re-hide it
+      // so its stale normal rendering does not double-draw over Geoman.
+      if (target.visible && previousTarget && !previousTarget.visible) {
+        setEditTargetStoreVisible(editTargetLayerId, false);
+      }
+      // Any change to the layers array (this layer's visibility/opacity/style, or
+      // another layer being added, removed, reordered, or toggled) re-runs
+      // MapController.syncLayers, which reorders the map's style layers and can
+      // push the editor's overlay below a layer stacked above the edited one
+      // (issue #1015). Re-apply the edit display so the overlay returns to the
+      // edited layer's slot in the stack.
+      if (state.layers !== previous.layers) {
         scheduleApplySketchesMapDisplay();
       }
       return;
@@ -884,12 +1052,14 @@ function applySketchesMapDisplay(): void {
   // visibility for the target is unnecessary and would race the layer sync.
   if (editTargetLayerId) {
     showGeomanDisplayLayers();
+    positionGeoEditorOverlayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
     return;
   }
 
   if (isGeoEditorInteractionMode()) {
     showGeomanDisplayLayers();
+    positionGeoEditorOverlayLayers();
     scheduleShowGeomanDisplayLayersOnStyleData();
     setSketchesMapLayerSuppressed(true);
     return;
@@ -899,9 +1069,30 @@ function applySketchesMapDisplay(): void {
   setSketchesMapLayerSuppressed(false);
 }
 
+// Coalesce flags so a burst of store updates (e.g. an opacity slider dragged on
+// any layer while a geometry-edit session is active, each of which re-runs
+// MapController.syncLayers and can disturb the overlay ordering) collapses to a
+// single apply per phase instead of one apply per update. The two phases are
+// kept: a microtask pass and a macrotask pass, so the display is re-applied both
+// before and after the layer sync that the same update triggers.
+let applyMicrotaskPending = false;
+let applyMacrotaskPending = false;
+
 function scheduleApplySketchesMapDisplay(): void {
-  queueMicrotask(() => applySketchesMapDisplay());
-  window.setTimeout(() => applySketchesMapDisplay(), 0);
+  if (!applyMicrotaskPending) {
+    applyMicrotaskPending = true;
+    queueMicrotask(() => {
+      applyMicrotaskPending = false;
+      applySketchesMapDisplay();
+    });
+  }
+  if (!applyMacrotaskPending) {
+    applyMacrotaskPending = true;
+    window.setTimeout(() => {
+      applyMacrotaskPending = false;
+      applySketchesMapDisplay();
+    }, 0);
+  }
 }
 
 function scheduleShowGeomanDisplayLayersOnStyleData(): void {
@@ -912,6 +1103,7 @@ function scheduleShowGeomanDisplayLayersOnStyleData(): void {
     pendingStyleDataListener = null;
     if (editTargetLayerId || isGeoEditorInteractionMode()) {
       showGeomanDisplayLayers();
+      positionGeoEditorOverlayLayers();
     }
   };
   map.once("styledata", pendingStyleDataListener);
@@ -983,6 +1175,72 @@ function hideGeomanDisplayLayers(): void {
 
 function showGeomanDisplayLayers(): void {
   setGeomanDisplayLayersVisibility("visible");
+}
+
+/**
+ * The edited layer's own map layers, used as the z-anchor for the editor
+ * overlay. Add-Vector-Layer layers carry their layer ids in
+ * `metadata.nativeLayerIds`; plain geojson layers use the conventional
+ * `layer-<id>-*` ids. Only ids that actually exist on the map are returned.
+ */
+function geoEditorTargetAnchorLayerIds(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+): string[] {
+  const nativeLayerIds = layer.metadata.nativeLayerIds;
+  // Filter to strings first, then fall back: a non-empty `nativeLayerIds` that
+  // holds only non-string entries must still fall back to the conventional ids.
+  const stringIds = Array.isArray(nativeLayerIds)
+    ? nativeLayerIds.filter((id): id is string => typeof id === "string")
+    : [];
+  const candidates =
+    stringIds.length > 0 ? stringIds : sketchesMapLayerIds(layer.id);
+  return candidates.filter((id) => map.getLayer(id));
+}
+
+/**
+ * Move the editor's overlay layers (Geoman's `gm_*` display layers and the
+ * GeoEditor selection layers) to sit immediately above the edited layer's own
+ * (hidden) map layers, so the features being edited render at that layer's
+ * position in the tree.
+ *
+ * `MapController.syncLayers` reorders the store's layers on every layers change
+ * and has no knowledge of the overlay, so without this the overlay drifts below
+ * any layer stacked above the edited one and the edit features disappear behind
+ * it (issue #1015). Idempotent: `planGeoEditorOverlayOrder` returns `null` when
+ * the overlay is already in place, so the `styledata` that `moveLayer` triggers
+ * does not loop.
+ */
+function positionGeoEditorOverlayLayers(): void {
+  const map = appApi?.getMap?.();
+  if (!map) return;
+  const styleLayers = map.getStyle()?.layers;
+  if (!styleLayers || styleLayers.length === 0) return;
+
+  const target = activeEditableLayer(useAppStore.getState().layers);
+  if (!target) return;
+  const anchorIds = new Set(geoEditorTargetAnchorLayerIds(map, target));
+  // Without the edited layer on the map there is no anchor; leave the overlay
+  // where Geoman placed it (on top) rather than guessing a position.
+  if (anchorIds.size === 0) return;
+
+  const plan = planGeoEditorOverlayOrder(
+    styleLayers.map((layer) => ({
+      id: layer.id,
+      isOverlay: isGeoEditorOverlayLayer(layer),
+      isAnchor: anchorIds.has(layer.id),
+    })),
+  );
+  if (!plan) return;
+
+  // Moving each id before the same anchor preserves the overlay's draw order.
+  for (const id of plan.overlayIds) {
+    try {
+      map.moveLayer(id, plan.beforeId);
+    } catch {
+      // A layer may have been removed by a concurrent style change.
+    }
+  }
 }
 
 function applyGeomanSketchesStyle(
@@ -1076,6 +1334,28 @@ function setGeomanPaintProperty(
   } catch {
     // Geoman layers are rebuilt often and may not support every paint property.
   }
+}
+
+/**
+ * Every map layer that belongs to the editor overlay and must be kept above the
+ * edited layer: Geoman's `gm_*` display layers plus the GeoEditor's own
+ * selection layers. Used only for z-ordering, so it is broader than
+ * `isGeomanDisplayLayer` (which drives show/hide of the Geoman layers).
+ *
+ * The `geo-editor` prefix matches the layers `maplibre-gl-geo-editor` adds for
+ * its selection highlight (observed ids `geo-editor-selection-{fill,line,
+ * circle}-layer` on the `geo-editor-selection-source` source). The library does
+ * not export those ids, so this stays a prefix heuristic; if a future version
+ * renames them the overlay would simply not be re-stacked (a safe degradation,
+ * no error). The Geoman `gm_*` layers are matched by `isGeomanDisplayLayer`.
+ */
+function isGeoEditorOverlayLayer(layer: maplibregl.LayerSpecification): boolean {
+  if (isGeomanDisplayLayer(layer)) return true;
+  const id = layer.id.toLowerCase();
+  if (id.startsWith("geo-editor")) return true;
+  if (!("source" in layer)) return false;
+  const source = layer.source;
+  return typeof source === "string" && source.startsWith("geo-editor");
 }
 
 function isGeomanDisplayLayer(layer: maplibregl.LayerSpecification): boolean {

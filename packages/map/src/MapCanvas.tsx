@@ -1,6 +1,8 @@
 import {
   applyGroupEffects,
   isDuckDBQueryLayer,
+  PHOTO_FULL_PROPERTY,
+  PHOTO_PROPERTY,
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
@@ -129,7 +131,14 @@ function createIdentifyPopupElement(
 
   if (featureId != null) appendRow("id", featureId);
 
-  const entries = Object.entries(properties);
+  // Skip the full-resolution image: it is an internal companion to the
+  // thumbnail, so Identify shouldn't decode a multi-megapixel data URL just to
+  // show a second copy of the same photo in the same small box. Filter before
+  // the empty-state check so a feature whose only property is `photo_full` still
+  // reports "No attributes" rather than rendering an empty panel.
+  const entries = Object.entries(properties).filter(
+    ([key]) => key !== PHOTO_FULL_KEY,
+  );
   if (entries.length === 0 && featureId == null) {
     const empty = document.createElement("div");
     empty.className = "text-muted-foreground";
@@ -152,27 +161,59 @@ function createIdentifyMessagePopupElement(
 /** Match an inline base64 raster image (excludes SVG, which can carry scripts). */
 const INLINE_IMAGE_DATA_URL = /^data:image\/(?!svg)[\w.+-]+;base64,/i;
 
+// Feature-property keys for geotagged/field-collection photos, from the shared
+// @geolibre/core schema: the popup shows the light thumbnail while the fullscreen
+// viewer and "Save image" use the embedded full-resolution image.
+const PHOTO_THUMBNAIL_KEY = PHOTO_PROPERTY;
+const PHOTO_FULL_KEY = PHOTO_FULL_PROPERTY;
+
+/** Return the value at `key` when it is an inline raster image data URL. */
+function imageDataUrlAt(
+  properties: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = properties[key];
+  return typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)
+    ? value
+    : null;
+}
+
 /**
  * Find the first feature property holding an inline raster image (a geotagged
- * photo or field-collection thumbnail), returning its data URL or null.
+ * photo or field-collection thumbnail), returning its data URL or null. The
+ * full-resolution key is skipped so this fallback never returns the heavy
+ * original as if it were the light thumbnail (e.g. for a hand-edited feature
+ * whose `photo` thumbnail is missing but `photo_full` is present).
  */
 function findPhotoDataUrl(properties: Record<string, unknown>): string | null {
-  for (const value of Object.values(properties)) {
-    if (typeof value === "string" && INLINE_IMAGE_DATA_URL.test(value)) {
+  for (const [key, value] of Object.entries(properties)) {
+    if (
+      key !== PHOTO_FULL_KEY &&
+      typeof value === "string" &&
+      INLINE_IMAGE_DATA_URL.test(value)
+    ) {
       return value;
     }
   }
   return null;
 }
 
+/** How far past native resolution the fullscreen viewer can magnify (400%). */
+const PHOTO_MAX_ZOOM_FRACTION = 4;
+/** Per-wheel-notch zoom step. */
+const PHOTO_ZOOM_STEP = 1.15;
+
 /**
  * Open a photo in a fullscreen lightbox: a backdrop overlay with the image
- * centered (scaled to fit). Uses the native Fullscreen API so it fills the whole
- * screen, falling back to a viewport-filling overlay where fullscreen is denied.
- * Closes on the × button, a backdrop click, Escape, a double-click on the image,
- * or the user leaving native fullscreen.
+ * centered and scaled to fit. The mouse wheel zooms in on the photo (up to 400%
+ * of its native resolution) and, once zoomed past the fit, dragging pans it; a
+ * badge reports the current zoom as a percentage of native resolution alongside
+ * the source pixel dimensions. Uses the native Fullscreen API so it fills the
+ * whole screen, falling back to a viewport-filling overlay where fullscreen is
+ * denied. Closes on the × button, a backdrop click, or Escape (double-click
+ * toggles zoom rather than closing), or when the user leaves native fullscreen.
  *
- * @param src - The image data URL or URL.
+ * @param src - The image data URL or URL (native resolution where available).
  * @param alt - Accessible label for the image.
  */
 function openPhotoFullscreen(src: string, alt: string): void {
@@ -188,6 +229,11 @@ function openPhotoFullscreen(src: string, alt: string): void {
   image.className = "geolibre-photo-fullscreen-img";
   overlay.appendChild(image);
 
+  const badge = document.createElement("div");
+  badge.className = "geolibre-photo-fullscreen-badge";
+  badge.setAttribute("aria-hidden", "true");
+  overlay.appendChild(badge);
+
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "geolibre-photo-fullscreen-close";
@@ -200,10 +246,173 @@ function openPhotoFullscreen(src: string, alt: string): void {
   // control inside it (and Escape/Enter act on the close button by default).
   closeButton.focus();
 
+  // Zoom is a multiple of the fit-to-screen size (1 = fit). `tx`/`ty` translate
+  // the image while panning a zoomed photo.
+  let zoom = 1;
+  let tx = 0;
+  let ty = 0;
+  // Set once the image loads: the fit-size-to-native ratio (so the badge can
+  // report zoom as a fraction of native), and the fit and max zoom multiples.
+  let fitToNative = 1;
+  let maxZoom = PHOTO_MAX_ZOOM_FRACTION;
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, value));
+
+  const applyTransform = () => {
+    // Bound the pan so the image can't be dragged fully off-screen: the image is
+    // centered, so keeping |tx|/|ty| within half its scaled size guarantees the
+    // viewport centre always sits on the photo (and its double-click-to-reset
+    // target stays reachable). clientWidth/Height are the fit-rendered size.
+    const maxTx = (image.clientWidth * zoom) / 2;
+    const maxTy = (image.clientHeight * zoom) / 2;
+    tx = clamp(tx, -maxTx, maxTx);
+    ty = clamp(ty, -maxTy, maxTy);
+    image.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
+    image.classList.toggle("is-zoomed", zoom > 1.001);
+    const nativePercent = Math.round(fitToNative * zoom * 100);
+    badge.textContent =
+      image.naturalWidth > 0
+        ? `${nativePercent}% · ${image.naturalWidth} × ${image.naturalHeight}`
+        : "";
+  };
+
+  const measure = () => {
+    // clientWidth is the fit-rendered width (max-width/height:100%, aspect kept);
+    // dividing by naturalWidth gives how much of native the fit view shows.
+    fitToNative =
+      image.naturalWidth > 0 && image.clientWidth > 0
+        ? image.clientWidth / image.naturalWidth
+        : 1;
+    // Cap magnification at PHOTO_MAX_ZOOM_FRACTION of native. The floor of 1
+    // only guards the degenerate case where the image is somehow larger than the
+    // fit (fitToNative > cap) so zoom never drops below the fit; in the normal
+    // case (fitToNative <= 1, no upscaling) this is always the native-cap branch,
+    // keeping the badge at exactly 400% of native at maximum zoom.
+    maxZoom = Math.max(1, PHOTO_MAX_ZOOM_FRACTION / fitToNative);
+    // A resize (or entering fullscreen) can grow the fit ratio and shrink
+    // maxZoom below the current zoom; reclamp so the 400%-of-native cap holds
+    // instead of rendering (and reporting) a now-out-of-range zoom.
+    zoom = clamp(zoom, 1, maxZoom);
+    if (zoom === 1) {
+      tx = 0;
+      ty = 0;
+    }
+    applyTransform();
+  };
+  if (image.complete && image.naturalWidth > 0) measure();
+  else image.addEventListener("load", measure, { once: true });
+  // The fit size (and thus the native-zoom ratio and 400% cap) depends on the
+  // viewport, which changes when the browser window resizes or the viewer
+  // enters/leaves native fullscreen, so remeasure on both.
+  const onResize = () => measure();
+  window.addEventListener("resize", onResize);
+
+  const setZoom = (next: number) => {
+    zoom = clamp(next, 1, maxZoom);
+    if (zoom <= 1.001) {
+      // Back at fit: recenter so a later zoom-in starts from the middle.
+      zoom = 1;
+      tx = 0;
+      ty = 0;
+    }
+    applyTransform();
+  };
+
+  overlay.addEventListener(
+    "wheel",
+    (event) => {
+      event.preventDefault();
+      setZoom(zoom * (event.deltaY < 0 ? PHOTO_ZOOM_STEP : 1 / PHOTO_ZOOM_STEP));
+    },
+    { passive: false },
+  );
+
+  // Pan (one pointer) and pinch-zoom (two pointers). Touch devices have no
+  // wheel, and `touch-action: none` disables native pinch, so drive the same
+  // zoom/pan transform from raw pointer events here.
+  const activePointers = new Map<number, { x: number; y: number }>();
+  let lastX = 0;
+  let lastY = 0;
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  const pointerSpread = () => {
+    const [a, b] = [...activePointers.values()];
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
+  image.addEventListener("pointerdown", (event) => {
+    // Track at most two pointers; a third (e.g. an accidental palm touch) is
+    // ignored so it can't perturb the pan anchor or the pinch spread.
+    if (activePointers.size >= 2) return;
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    // Arm pan/pinch state before capturing the pointer: setPointerCapture can
+    // throw for a non-active pointer, and that must not skip the setup below.
+    if (activePointers.size === 2) {
+      pinchStartDist = pointerSpread();
+      pinchStartZoom = zoom;
+    } else {
+      lastX = event.clientX;
+      lastY = event.clientY;
+    }
+    try {
+      image.setPointerCapture(event.pointerId);
+    } catch {
+      // The pointer is already gone; pan/pinch still work without capture.
+    }
+    // Only suppress the default for a mouse drag while zoomed, to stop the native
+    // image ghost-drag during a pan. Touch gestures are already neutralized by
+    // `touch-action: none` on the image, so we must NOT preventDefault there: on
+    // pointerdown that would suppress the compatibility events a double-tap's
+    // dblclick is synthesized from, breaking double-tap-to-zoom on touch. A plain
+    // mouse click at fit is likewise left untouched so mouse double-click works.
+    if (event.pointerType === "mouse" && zoom > 1) {
+      event.preventDefault();
+    }
+  });
+  image.addEventListener("pointermove", (event) => {
+    if (!activePointers.has(event.pointerId)) return;
+    activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (activePointers.size >= 2) {
+      const spread = pointerSpread();
+      // Re-anchor if the initial spread was zero (both fingers landed on the
+      // same spot), so pinch isn't stuck disabled for the rest of the gesture.
+      if (pinchStartDist <= 0) {
+        pinchStartDist = spread;
+        pinchStartZoom = zoom;
+      } else {
+        setZoom((pinchStartZoom * spread) / pinchStartDist);
+      }
+      return;
+    }
+    // Single-pointer pan, only meaningful once zoomed past the fit.
+    if (zoom <= 1) return;
+    tx += event.clientX - lastX;
+    ty += event.clientY - lastY;
+    lastX = event.clientX;
+    lastY = event.clientY;
+    applyTransform();
+  });
+  const endPointer = (event: PointerEvent) => {
+    if (!activePointers.delete(event.pointerId)) return;
+    if (image.hasPointerCapture(event.pointerId)) {
+      image.releasePointerCapture(event.pointerId);
+    }
+    // Dropping from a pinch back to one finger: resume panning from the survivor
+    // so the image doesn't jump on the next move.
+    const [survivor] = [...activePointers.values()];
+    if (survivor) {
+      lastX = survivor.x;
+      lastY = survivor.y;
+    }
+  };
+  image.addEventListener("pointerup", endPointer);
+  image.addEventListener("pointercancel", endPointer);
+
   let closed = false;
   const close = () => {
     if (closed) return;
     closed = true;
+    window.removeEventListener("resize", onResize);
     document.removeEventListener("keydown", onKeyDown);
     document.removeEventListener("fullscreenchange", onFullscreenChange);
     if (document.fullscreenElement === overlay) {
@@ -215,8 +424,14 @@ function openPhotoFullscreen(src: string, alt: string): void {
     if (event.key === "Escape") close();
   };
   const onFullscreenChange = () => {
-    // Leaving native fullscreen (Esc / F11) should also dismiss the overlay.
-    if (document.fullscreenElement !== overlay) close();
+    if (document.fullscreenElement === overlay) {
+      // Entering fullscreen changes the rendered fit size; remeasure so the
+      // badge percentage and the 400%-of-native cap track the new layout.
+      requestAnimationFrame(measure);
+    } else {
+      // Leaving native fullscreen (Esc / F11) should also dismiss the overlay.
+      close();
+    }
   };
 
   closeButton.addEventListener("click", close);
@@ -224,7 +439,12 @@ function openPhotoFullscreen(src: string, alt: string): void {
   overlay.addEventListener("click", (event) => {
     if (event.target === overlay) close();
   });
-  image.addEventListener("dblclick", close);
+  // Double-click toggles between fit and 100% of native (or max, if native is
+  // beyond the cap), rather than closing, so the viewer stays a zoom surface.
+  image.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    setZoom(zoom > 1.001 ? 1 : Math.min(1 / fitToNative, maxZoom));
+  });
   document.addEventListener("keydown", onKeyDown);
   document.addEventListener("fullscreenchange", onFullscreenChange);
 
@@ -249,19 +469,33 @@ function createPhotoPopupElement(
   const root = document.createElement("div");
   root.className = "geolibre-photo-popup";
 
-  const photo = findPhotoDataUrl(properties);
-  if (photo) {
+  // The popup shows the light thumbnail; the fullscreen viewer prefers the
+  // embedded full-resolution image (falling back to the thumbnail when no
+  // original was embedded, e.g. a format that can't be shown at full size).
+  const thumbnail =
+    imageDataUrlAt(properties, PHOTO_THUMBNAIL_KEY) ??
+    findPhotoDataUrl(properties);
+  if (thumbnail) {
+    // Prefer the embedded full-resolution image, falling back to the thumbnail
+    // when no original was embedded (TIFF/HEIC, mislabeled bytes, or an original
+    // over the size ceiling); `thumbnail` is non-null here, so this is a string.
+    const fullImage = imageDataUrlAt(properties, PHOTO_FULL_KEY);
+    const fullResolution = fullImage ?? thumbnail;
     const image = document.createElement("img");
-    image.src = photo;
+    image.src = thumbnail;
     image.alt = typeof properties.name === "string" ? properties.name : "Photo";
     image.className = "geolibre-photo-popup-img";
-    image.title = "Double-click to view fullscreen";
+    // Only promise "full resolution" when the native original is actually
+    // embedded; otherwise the double-click just opens the thumbnail fullscreen.
+    image.title = fullImage
+      ? "Double-click to view at full resolution"
+      : "Double-click to view fullscreen";
     // Double-click (not single, so it never fights the resize drag) opens the
     // photo fullscreen. The image is popup DOM, not the map canvas, so this does
     // not trigger MapLibre's double-click zoom.
     image.addEventListener("dblclick", (event) => {
       event.stopPropagation();
-      openPhotoFullscreen(photo, image.alt);
+      openPhotoFullscreen(fullResolution, image.alt);
     });
     root.appendChild(image);
   } else {
@@ -327,6 +561,20 @@ function findFeatureId(
 
 function isWmsLayer(layer: GeoLibreLayer): boolean {
   return layer.type === "wms";
+}
+
+/**
+ * The features to highlight for the current selection: the full multi-select
+ * set when present, otherwise the single anchor (or none). Shared by the
+ * selection effect and the map/basemap style-load handlers so a style reload
+ * never collapses a multi-selection down to its anchor.
+ */
+function resolveHighlightIds(state: {
+  selectedFeatureIds: string[];
+  selectedFeatureId: string | null;
+}): string[] {
+  if (state.selectedFeatureIds.length > 0) return state.selectedFeatureIds;
+  return state.selectedFeatureId ? [state.selectedFeatureId] : [];
 }
 
 function duckDBBridge(): GeoLibreDuckDBBridge | undefined {
@@ -749,6 +997,7 @@ export const MapCanvas = memo(function MapCanvas({
   const layerGroups = useAppStore((s) => s.layerGroups);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectedFeatureId = useAppStore((s) => s.selectedFeatureId);
+  const selectedFeatureIds = useAppStore((s) => s.selectedFeatureIds);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const zoomToSelectedFeature = useAppStore((s) => s.ui.zoomToSelectedFeature);
   const selectFeature = useAppStore((s) => s.selectFeature);
@@ -821,7 +1070,7 @@ export const MapCanvas = memo(function MapCanvas({
       mc.setBasemapOpacity(state.basemapOpacity);
       mc.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
-        state.selectedFeatureId,
+        resolveHighlightIds(state),
       );
       updateView();
       onControllerReadyRef.current?.();
@@ -895,7 +1144,7 @@ export const MapCanvas = memo(function MapCanvas({
       controller.current?.setBasemapOpacity(state.basemapOpacity);
       controller.current?.highlightFeature(
         state.layers.find((layer) => layer.id === state.selectedLayerId),
-        state.selectedFeatureId,
+        resolveHighlightIds(state),
       );
       onControllerReadyRef.current?.();
     });
@@ -941,9 +1190,19 @@ export const MapCanvas = memo(function MapCanvas({
 
   useEffect(() => {
     const layer = layers.find((item) => item.id === selectedLayerId);
+    // Highlight the full multi-selection (attribute table Ctrl/Shift picks).
+    const highlightIds = resolveHighlightIds({
+      selectedFeatureIds,
+      selectedFeatureId,
+    });
+    // Key on the whole selection set, not just the anchor: a Shift-range pick
+    // keeps the anchor fixed while adding features, so an anchor-only key would
+    // never re-fit. Any change to the set re-triggers the fit to frame them all.
+    // Join on NUL — a byte that can't appear in a feature id — so ids containing
+    // commas (e.g. ["a,b"] vs ["a","b"]) don't collide into the same key.
     const nextKey =
-      selectedLayerId && selectedFeatureId
-        ? `${selectedLayerId}:${selectedFeatureId}`
+      selectedLayerId && highlightIds.length > 0
+        ? `${selectedLayerId}:${highlightIds.join("\u0000")}`
         : null;
     const shouldFit = Boolean(
       zoomToSelectedFeature &&
@@ -951,7 +1210,7 @@ export const MapCanvas = memo(function MapCanvas({
       nextKey !== previousSelectedFeatureKey.current,
     );
     previousSelectedFeatureKey.current = nextKey;
-    controller.current?.highlightFeature(layer, selectedFeatureId, {
+    controller.current?.highlightFeature(layer, highlightIds, {
       fit: shouldFit,
     });
     if (layer && isDuckDBQueryLayer(layer)) {
@@ -971,7 +1230,13 @@ export const MapCanvas = memo(function MapCanvas({
       );
       previousDuckDBSelectionLayerId.current = null;
     }
-  }, [layers, selectedLayerId, selectedFeatureId, zoomToSelectedFeature]);
+  }, [
+    layers,
+    selectedLayerId,
+    selectedFeatureId,
+    selectedFeatureIds,
+    zoomToSelectedFeature,
+  ]);
 
   useEffect(() => {
     const map = controller.current?.getMap();

@@ -21,6 +21,19 @@ export const APP_VERSION: string =
   typeof __GEOLIBRE_VERSION__ !== "undefined" ? __GEOLIBRE_VERSION__ : "0.0.0";
 
 /**
+ * True in the Microsoft Store MSIX build, where the entire in-app update flow is
+ * removed so the app updates only through the Store (Microsoft policy 10.2.5
+ * rejects a Store app that updates itself outside the Store). Guarded the same
+ * way as {@link APP_VERSION} so the pure helpers here stay importable in a plain
+ * Node test (where the define is absent) without throwing a ReferenceError.
+ * Injected by vite.config.ts; set only by the Store build (msix-store.yml).
+ */
+export const IS_STORE_BUILD: boolean =
+  typeof __GEOLIBRE_STORE_BUILD__ !== "undefined"
+    ? __GEOLIBRE_STORE_BUILD__
+    : false;
+
+/**
  * How a newer release differs from the running version. Used to filter startup
  * notifications by the user's chosen granularity (see {@link UpdateNotificationLevel}).
  */

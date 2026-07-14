@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { classifyFetchFailure } from "./fetch-error";
 import { isTauri } from "./is-tauri";
 
 export type DiagnosticCategory = "console" | "map" | "network" | "runtime";
@@ -66,8 +67,16 @@ const TAURI_IPC_FALLBACK_WARNING =
 // projection is active — globe simply ignores the around-point and the camera
 // still moves correctly. It is harmless but fires on routine interaction, so it
 // is kept out of the diagnostics panel (still echoed to the console for devs).
+//
+// three.js warns this once when more than one copy of its module ends up in the
+// bundle. Several first- and third-party deps (deck.gl mesh layers, the 3D
+// tiles / lidar / splat plugins, mapillary-js) each pull in three at slightly
+// different versions, so a single deduped copy is not guaranteed. The warning
+// is cosmetic — our three usage does not rely on cross-copy identity — so it is
+// kept out of the diagnostics panel (still echoed to the console for devs).
 const BENIGN_CONSOLE_WARNINGS = [
   "Easing around a point is not supported under globe projection.",
+  "WARNING: Multiple instances of Three.js being imported.",
 ];
 
 /** Whether a console.warn message is a known-benign warning to drop entirely. */
@@ -238,7 +247,13 @@ function safeStringify(value: unknown): string {
   }
 }
 
-function formatUnknown(value: unknown): string {
+/**
+ * Renders an arbitrary thrown value as a diagnostics detail string: an Error's
+ * stack (or message), a string as-is, anything else JSON-stringified. Exported
+ * so callers that build their own records (e.g. native-http.ts) format errors
+ * the same way.
+ */
+export function formatUnknown(value: unknown): string {
   if (value instanceof Error) return value.stack ?? value.message;
   if (typeof value === "string") return value;
   return safeStringify(value);
@@ -268,6 +283,21 @@ function redactUrl(raw: string): string {
   } catch {
     return raw;
   }
+}
+
+// Matches an http(s) URL embedded in free text, stopping before whitespace or a
+// closing delimiter so a URL inside `(...)` or quotes is captured without its
+// surrounding punctuation.
+const EMBEDDED_URL = /https?:\/\/[^\s)"'<>]+/g;
+
+// A record's `detail` often carries a raw error string, and a native
+// (Rust/reqwest) error embeds the full request URL verbatim — including any
+// `api_key`/`token` query param that `redactUrl` strips from the record's `url`
+// field. The detail is rendered in the panel and included in the "Copy JSON"
+// export, so redact any URLs it contains the same way, keeping secrets out of
+// exported diagnostics.
+function redactUrlsInText(text: string): string {
+  return text.replace(EMBEDDED_URL, (match) => redactUrl(match));
 }
 
 function requestUrl(input: Parameters<typeof fetch>[0]): string {
@@ -308,8 +338,11 @@ export function appendDiagnostic(input: DiagnosticInput): void {
     ...input,
     id: `diagnostic-${Date.now()}-${sequence++}`,
     timestamp: input.timestamp ?? new Date().toISOString(),
-    message: truncate(input.message),
-    detail: input.detail ? truncate(input.detail) : undefined,
+    // Runtime/plugin/console emitters can forward an arbitrary error or console
+    // string (which may embed a tokenized URL) into either field, so redact both
+    // the same way as the `url` field before storing/exporting them.
+    message: truncate(redactUrlsInText(input.message)),
+    detail: input.detail ? truncate(redactUrlsInText(input.detail)) : undefined,
     source: input.source ? truncate(input.source) : undefined,
     url: input.url ? truncate(redactUrl(input.url)) : undefined,
   };
@@ -431,6 +464,13 @@ export function installDiagnosticsCapture(): () => void {
       // It mirrors the unhandled-rejection downgrade below; genuine failures
       // outside the window are still flagged as errors.
       const benignStartup = !isAbort && !optional && isBenignStartupFetch(error);
+      // Classify a genuine failure (network/TLS/CORS vs. timeout) so the panel
+      // record interprets the otherwise-opaque browser error and carries an
+      // actionable hint (issue #1175). Aborts, optional-resource failures, and
+      // the benign startup warm-up keep their existing handling above.
+      const classified = !isAbort && !optional && !benignStartup;
+      const failure = classified ? classifyFetchFailure(error) : null;
+      const rawDetail = isAbort ? undefined : formatUnknown(error);
       appendDiagnostic({
         category: "network",
         level:
@@ -439,8 +479,13 @@ export function installDiagnosticsCapture(): () => void {
           ? `${method} aborted`
           : benignStartup
             ? `${method} request failed (benign Tauri custom-protocol warm-up)`
-            : `${method} request failed`,
-        detail: isAbort ? undefined : formatUnknown(error),
+            : failure && failure.kind !== "unknown"
+              ? `${method} request failed (${failure.label})`
+              : `${method} request failed`,
+        detail:
+          failure?.hint && rawDetail
+            ? `${failure.hint}\n\n${rawDetail}`
+            : rawDetail,
         durationMs: Math.round(performance.now() - startedAt),
         method,
         url,

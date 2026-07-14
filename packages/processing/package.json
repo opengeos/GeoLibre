@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/processing",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -32,7 +32,8 @@
     "@turf/tin": "^7.3.5",
     "@turf/union": "^7.3.5",
     "@turf/voronoi": "^7.3.5",
-    "geolibre-wasm": "^0.5.1",
+    "fflate": "^0.8.3",
+    "geolibre-wasm": "^0.6.0",
     "geotiff": "^3.0.5",
     "onnxruntime-web": "1.27.0"
   },

@@ -41,7 +41,8 @@ The **Print** tool lives under the [Project menu](projects.md#print).
 
 ## Map navigation basics
 
-- **Pan**: drag the map.
-- **Zoom**: scroll wheel, pinch, or the navigation control.
-- **Rotate**: hold the right mouse button and drag, or use the compass.
-- **Tilt**: hold `Ctrl`/`Cmd` and drag to tilt the map into a perspective view.
+- **Pan**: drag the map, or use the arrow keys while the map has focus.
+- **Zoom**: scroll wheel, pinch, the navigation control, or the `+` / `-` keys.
+- **Rotate**: hold the right mouse button and drag, use the compass, or `Shift` + `←` / `→`.
+- **Tilt**: hold `Ctrl`/`Cmd` and drag to tilt the map into a perspective view, or `Shift` + `↑` / `↓`.
+- **Reset the view**: press `N` for north up, `U` for a top-down view, or `R` to reset both pitch and bearing. See [the interface guide](interface.md#command-palette-and-keyboard-shortcuts) for the full shortcut list.

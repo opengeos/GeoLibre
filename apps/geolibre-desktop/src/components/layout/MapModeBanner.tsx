@@ -1,21 +1,67 @@
 import {
   clearDirectionsWaypoints,
+  getDirectionsRouteMetrics,
   DIRECTIONS_PLUGIN_ID,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
+  isDirectionsRouteLoading,
   removeLastDirectionsWaypoint,
   REVERSE_GEOCODE_PLUGIN_ID,
   subscribeDirectionsState,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
-import { MapPin, Navigation, Trash2, Undo2, X } from "lucide-react";
+import { Clock, MapPin, Navigation, Route, Trash2, Undo2, X } from "lucide-react";
 import { type RefObject, useSyncExternalStore } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { Button } from "@geolibre/ui";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 
 interface MapModeBannerProps {
   mapControllerRef: RefObject<MapController | null>;
+}
+
+function formatDistance(
+  meters: number,
+  locale: string,
+  t: TFunction,
+): string {
+  if (meters >= 1000) {
+    const value = new Intl.NumberFormat(locale, {
+      maximumFractionDigits: meters >= 10000 ? 0 : 1,
+    }).format(meters / 1000);
+    return t("map.directionsMode.distanceKilometers", { value });
+  }
+  const value = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 0,
+  }).format(meters);
+  return t("map.directionsMode.distanceMeters", { value });
+}
+
+function formatDuration(
+  seconds: number,
+  locale: string,
+  t: TFunction,
+): string {
+  if (seconds < 30) {
+    return t("map.directionsMode.durationLessThanMinute");
+  }
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) {
+    const value = new Intl.NumberFormat(locale).format(minutes);
+    return t("map.directionsMode.durationMinutes", { value });
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const formattedHours = new Intl.NumberFormat(locale).format(hours);
+  if (remainder > 0) {
+    const formattedMinutes = new Intl.NumberFormat(locale).format(remainder);
+    return t("map.directionsMode.durationHoursMinutes", {
+      hours: formattedHours,
+      minutes: formattedMinutes,
+    });
+  }
+  return t("map.directionsMode.durationHours", { value: formattedHours });
 }
 
 /**
@@ -31,7 +77,7 @@ interface MapModeBannerProps {
  * automatically as waypoints change, so no manual "calculate" action is needed.
  */
 export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
   const { isActive, toggle } = usePluginRegistry();
 
   // Live waypoint count, so the remove/clear actions can disable themselves
@@ -47,6 +93,16 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
     subscribeDirectionsState,
     isDirectionsRemovalInFlight,
     isDirectionsRemovalInFlight,
+  );
+  const routeMetrics = useSyncExternalStore(
+    subscribeDirectionsState,
+    getDirectionsRouteMetrics,
+    getDirectionsRouteMetrics,
+  );
+  const routeLoading = useSyncExternalStore(
+    subscribeDirectionsState,
+    isDirectionsRouteLoading,
+    isDirectionsRouteLoading,
   );
 
   const directionsActive = isActive(DIRECTIONS_PLUGIN_ID);
@@ -88,6 +144,85 @@ export function MapModeBanner({ mapControllerRef }: MapModeBannerProps) {
           <span className="sr-only" aria-live="polite">
             {t("map.directionsMode.waypointCount", { count: waypointCount })}
           </span>
+          {waypointCount >= 2 ? (
+            <div
+              className="rounded-md border bg-muted/30 p-2"
+              aria-live="polite"
+              aria-atomic="true"
+              data-testid="directions-route-metrics"
+            >
+              {routeLoading ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("map.directionsMode.calculating")}
+                </p>
+              ) : routeMetrics ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                        <Route className="h-3 w-3" aria-hidden="true" />
+                        {t("map.directionsMode.totalDistance")}
+                      </div>
+                      <p className="truncate text-sm font-semibold">
+                        {formatDistance(
+                          routeMetrics.totalDistanceMeters,
+                          i18n.language,
+                          t,
+                        )}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                        <Clock className="h-3 w-3" aria-hidden="true" />
+                        {t("map.directionsMode.estimatedTime")}
+                      </div>
+                      <p className="truncate text-sm font-semibold">
+                        {formatDuration(
+                          routeMetrics.totalDurationSeconds,
+                          i18n.language,
+                          t,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  {routeMetrics.legs.length > 1 ? (
+                    <div className="max-h-20 space-y-1 overflow-auto border-t pt-2 text-xs text-muted-foreground">
+                      {routeMetrics.legs.map((leg, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <span>
+                            {t("map.directionsMode.segment", {
+                              index: index + 1,
+                            })}
+                          </span>
+                          <span className="shrink-0 tabular-nums">
+                            {formatDistance(
+                              leg.distanceMeters,
+                              i18n.language,
+                              t,
+                            )}
+                            {" / "}
+                            {formatDuration(
+                              leg.durationSeconds,
+                              i18n.language,
+                              t,
+                            )}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {t("map.directionsMode.metricsUnavailable")}
+                </p>
+              )}
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               type="button"

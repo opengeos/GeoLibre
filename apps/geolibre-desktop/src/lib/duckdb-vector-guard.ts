@@ -38,6 +38,33 @@ export interface DuckDbVectorLoadOptions {
    * single-pass (the extra `COUNT(*)` is only run when a guard is attached).
    */
   onLargeDataset?: (dataset: LargeVectorDataset) => boolean | Promise<boolean>;
+  /**
+   * Read a specific OGR layer from a multi-layer source (e.g. a CAD DWG with
+   * several layers) by passing its name to `ST_Read(..., layer=...)`. When
+   * omitted, `ST_Read` reads the first layer, matching its default. Ignored for
+   * Parquet sources, which have no layer concept.
+   *
+   * Note: this selects which geometry is read, not which layer's CRS is
+   * discovered — `readSourceCrs` always inspects the first layer. Callers that
+   * need a non-first layer's CRS must supply {@link overrideSourceCrs}.
+   */
+  layer?: string;
+  /**
+   * Treat the source geometry as this CRS (an `AUTHORITY:CODE` string such as
+   * `EPSG:26915`) and reproject it to WGS84, overriding any CRS read from the
+   * file. Used for formats that carry no CRS metadata of their own (CAD
+   * DXF/DWG), where the user supplies the coordinate system. A blank value
+   * falls back to the file's own CRS.
+   */
+  overrideSourceCrs?: string;
+  /**
+   * Skip the KML/KMZ `<Model>` (COLLADA→GLB) conversion, returning only the
+   * vector features. Set by callers that discard models anyway — e.g. re-reading
+   * a referenced (not embedded) local layer's features on project reopen — so
+   * they don't pay for the expensive conversion (or a remote-mesh fetch) they
+   * never use.
+   */
+  skipModels?: boolean;
 }
 
 /**

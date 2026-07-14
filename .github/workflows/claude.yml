@@ -11,19 +11,72 @@ on:
     types: [submitted]
 
 jobs:
-  claude:
+  # First-line gate: only proceed on an explicit @claude mention, and resolve
+  # the invoking user's REAL repository permission level before any token is
+  # granted. `author_association == 'COLLABORATOR'` is not sufficient on its
+  # own -- read-only and triage-only collaborators also report COLLABORATOR, so
+  # gating on the enum alone would let a non-push user invoke the agent. This
+  # job runs with a read-only token and emits `trusted=true` only for users who
+  # can already push (write / maintain / admin roles).
+  check-access:
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
+    # This job only calls the REST API (via gh) and never checks out or reads
+    # repository content, so it needs no repository scopes. The
+    # collaborators/permission endpoint requires only metadata:read, which the
+    # GITHUB_TOKEN always retains even with an empty permissions block.
+    permissions: {}
+    outputs:
+      trusted: ${{ steps.check.outputs.trusted }}
+    steps:
+      - name: Resolve actor permission level
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          if role=$(gh api "repos/${REPO}/collaborators/${ACTOR}/permission" --jq '.role_name' 2>err.log); then
+            echo "Actor ${ACTOR} resolved to role: ${role}"
+            case "${role}" in
+              admin | maintain | write) echo "trusted=true" >> "${GITHUB_OUTPUT}" ;;
+              *) echo "trusted=false" >> "${GITHUB_OUTPUT}" ;;
+            esac
+          elif grep -q 'HTTP 404' err.log; then
+            # 404 = the actor is not a collaborator with any role: not trusted.
+            echo "Actor ${ACTOR} is not a repository collaborator; marking untrusted."
+            echo "trusted=false" >> "${GITHUB_OUTPUT}"
+          else
+            # Any other failure (auth, rate limit, network) must not be silently
+            # downgraded to "untrusted" -- surface it and fail the job instead.
+            echo "::error::Permission lookup for ${ACTOR} failed:"
+            cat err.log
+            exit 1
+          fi
+
+  claude:
+    needs: check-access
+    if: needs.check-access.outputs.trusted == 'true'
+    runs-on: ubuntu-latest
+    # Least-privilege token. Each scope maps to a concrete operation the agent
+    # performs, and this job only runs after check-access confirms the invoking
+    # user already has push access. `id-token: write` is intentionally omitted:
+    # this workflow authenticates with an OAuth token and has no OIDC use case.
+    #
+    # Residual risk: this gate controls WHO can invoke the agent, not WHAT it
+    # reads. A trusted maintainer invoking @claude on an issue/PR authored by an
+    # untrusted user still exposes the agent to attacker-controlled text (the
+    # diff or issue body) and thus to prompt injection while it holds a
+    # write-capable token. Review the target before invoking on untrusted input.
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      contents: write # commit and push changes on a branch when asked to edit code
+      pull-requests: write # open/update PRs and post review replies
+      issues: write # post replies on the triggering issue
+      actions: read # read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6

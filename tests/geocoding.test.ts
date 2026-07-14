@@ -5,11 +5,14 @@ import {
   buildReverseGeocodeUrl,
   csvRowsToGeocodeRequests,
   geocodeMatchToFeature,
+  geocodeForward,
   geocoderMinIntervalMs,
   geocoderNeedsApiKey,
+  geocodeReverse,
   GEOCODING_PROVIDERS,
   getGeocodingProvider,
   nextDelayMs,
+  setGeocodingFetch,
   nominatimResultToFeature,
   nominatimReverseResultToDisplay,
   normalizeGeocodingProviderId,
@@ -501,5 +504,70 @@ describe("geocodeMatchToFeature", () => {
       geocodeMatchToFeature({ lat: NaN, lon: 0, displayName: "", score: null }),
       null,
     );
+  });
+});
+
+describe("setGeocodingFetch", () => {
+  const NOMINATIM: GeocoderConfig = {
+    providerId: "nominatim",
+    forwardEndpoint: PUBLIC_FORWARD,
+    reverseEndpoint: PUBLIC_REVERSE,
+  };
+
+  it("routes forward geocoding through the injected fetch", async () => {
+    const seen: string[] = [];
+    const fake: typeof globalThis.fetch = (input) => {
+      seen.push(String(input));
+      return Promise.resolve(
+        new Response(JSON.stringify([{ lat: "48.85", lon: "2.35", display_name: "Paris" }]), {
+          status: 200,
+        }),
+      );
+    };
+    setGeocodingFetch(fake);
+    try {
+      const matches = await geocodeForward("Paris", { config: NOMINATIM });
+      assert.equal(matches.length, 1);
+      assert.equal(matches[0]?.displayName, "Paris");
+      assert.equal(seen.length, 1);
+      assert.ok(seen[0]?.startsWith(PUBLIC_FORWARD));
+    } finally {
+      setGeocodingFetch(null);
+    }
+  });
+
+  it("routes reverse geocoding through the injected fetch", async () => {
+    const seen: string[] = [];
+    const fake: typeof globalThis.fetch = (input) => {
+      seen.push(String(input));
+      return Promise.resolve(
+        new Response(JSON.stringify({ display_name: "Paris, France", address: {} }), {
+          status: 200,
+        }),
+      );
+    };
+    setGeocodingFetch(fake);
+    try {
+      const result = await geocodeReverse(2.35, 48.85, { config: NOMINATIM });
+      assert.equal(result?.displayName, "Paris, France");
+      assert.equal(seen.length, 1);
+      assert.ok(seen[0]?.startsWith(PUBLIC_REVERSE));
+    } finally {
+      setGeocodingFetch(null);
+    }
+  });
+
+  it("propagates a non-ok response from the injected fetch as an error", async () => {
+    setGeocodingFetch(() =>
+      Promise.resolve(new Response("nope", { status: 429 })),
+    );
+    try {
+      await assert.rejects(
+        () => geocodeForward("Paris", { config: NOMINATIM }),
+        /HTTP 429/,
+      );
+    } finally {
+      setGeocodingFetch(null);
+    }
   });
 });

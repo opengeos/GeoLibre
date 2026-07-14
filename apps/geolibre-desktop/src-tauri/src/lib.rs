@@ -1,4 +1,25 @@
 mod earth_engine_oauth;
+#[cfg(feature = "native-duckdb")]
+mod native_duckdb;
+#[cfg(not(feature = "native-duckdb"))]
+mod native_duckdb {
+    #[tauri::command]
+    pub async fn count_native_vector_file_features(
+        _path: String,
+        _layer: Option<String>,
+    ) -> Result<usize, String> {
+        Err("Native DuckDB is not enabled in this build.".to_string())
+    }
+
+    #[tauri::command]
+    pub async fn load_native_vector_file(
+        _path: String,
+        _layer: Option<String>,
+        _override_source_crs: Option<String>,
+    ) -> Result<serde_json::Value, String> {
+        Err("Native DuckDB is not enabled in this build.".to_string())
+    }
+}
 
 use earth_engine_oauth::{
     poll_earth_engine_oauth, start_earth_engine_oauth, EarthEngineOAuthState,
@@ -161,6 +182,19 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        // Must init after the fs plugin: it restores previously-granted fs
+        // scope (e.g. Browser-panel pinned folders) so they survive a restart.
+        //
+        // SECURITY / SCOPE NOTE (deliberate, maintainer-approved): this persists
+        // *every* dialog-granted fs scope for the life of the install, not just
+        // Browser-panel folder pins — "Open Vector File", "Open Raster", "Save
+        // Project As", etc. also extend fs scope to the picked path, and all of
+        // those now survive a restart. There is also no per-path "forget", so
+        // unpinning a folder in the Browser panel removes the UI pin but does
+        // not revoke its (persisted) read scope. Accepted for durable pins;
+        // revisit if a narrower per-source scope or a revoke path is wanted.
+        .plugin(tauri_plugin_persisted_scope::init())
+        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_opener::init())
         .manage(EarthEngineOAuthState::default())
         .manage(MartinServerState {
@@ -176,11 +210,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             close_oauth_popups,
+            native_duckdb::count_native_vector_file_features,
             ensure_martin_binary,
             fetch_url_bytes,
             install_external_plugin_archive,
+            native_duckdb::load_native_vector_file,
             load_external_plugin_bundles,
             read_admin_profile,
+            read_env_vars,
             read_local_file,
             read_project_file,
             read_shapefile_siblings,
@@ -204,9 +241,67 @@ pub fn run() {
         .expect("error while running GeoLibre Desktop");
 }
 
+/// Whether `read_project_file` may read `path`: an absolute local path (POSIX
+/// `/...` or a Windows drive-letter `C:\...`, never a UNC `\\host\share`), free
+/// of `..` traversal, ending in a GeoLibre project extension — `.geolibre` or
+/// `.geolibre.json`. These are the canonical formats `saveProject` writes and
+/// `isGeoLibreProjectPath` recognizes in `tauri-io.ts`.
+///
+/// Without this, the command was an arbitrary local-file reader: any webview JS
+/// or loaded plugin could `invoke("read_project_file", { path: "~/.ssh/id_rsa" })`
+/// and receive the contents. A bare `.json` extension is deliberately NOT
+/// accepted: plenty of real secrets are JSON (GCP service-account keys,
+/// `application_default_credentials.json`, editor/CLI configs with tokens), so
+/// requiring the `.geolibre` marker keeps those out while still reading every
+/// real project. Byte-oriented like `is_allowed_local_vector_path` so Windows
+/// paths behave the same on any host.
+pub(crate) fn is_allowed_project_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
+
+    // Reject UNC paths ("\\server\share" and "//server/share").
+    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
+        return false;
+    }
+
+    let is_posix_absolute = bytes.first() == Some(&b'/');
+    let is_windows_drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && is_separator(bytes[2]);
+    if !is_posix_absolute && !is_windows_drive {
+        return false;
+    }
+
+    if path.split(['/', '\\']).any(|segment| segment == "..") {
+        return false;
+    }
+
+    let lower = path.to_ascii_lowercase();
+    lower.ends_with(".geolibre") || lower.ends_with(".geolibre.json")
+}
+
 #[tauri::command]
 fn read_project_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|error| format!("Could not read project file: {error}"))
+    if !is_allowed_project_path(&path) {
+        return Err(format!(
+            "Refusing to read \"{path}\": not an absolute local project file path"
+        ));
+    }
+    // Resolve symlinks and re-check the extension, so a symlink named
+    // `*.geolibre`/`*.geolibre.json` can't redirect the read to an arbitrary
+    // target (e.g. `~/notes.geolibre.json -> ~/.ssh/id_rsa`). Only the resolved
+    // extension is re-checked (not the full guard): `canonicalize` yields a
+    // `\\?\C:\…` verbatim path on Windows, which the UNC check would reject.
+    let canonical =
+        fs::canonicalize(&path).map_err(|error| format!("Could not read project file: {error}"))?;
+    let resolved = canonical.to_string_lossy().to_ascii_lowercase();
+    if !(resolved.ends_with(".geolibre") || resolved.ends_with(".geolibre.json")) {
+        return Err(format!(
+            "Refusing to read \"{path}\": resolves to a non-project file"
+        ));
+    }
+    fs::read_to_string(&canonical).map_err(|error| format!("Could not read project file: {error}"))
 }
 
 /// Local vector file extensions the restore path may re-read (lowercased, no
@@ -250,32 +345,11 @@ const RESTORABLE_VECTOR_EXTENSIONS: [&str; 17] = [
 /// byte-oriented rather than `std::path` based so they behave identically for the
 /// Windows-style paths a project may carry regardless of the host the binary
 /// runs on.
-fn is_allowed_local_vector_path(path: &str) -> bool {
-    let bytes = path.as_bytes();
-    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
-
-    // Reject UNC paths first. Both the Windows form ("\\server\share") and the
-    // forward-slash form ("//server/share") start with two separators and can
-    // make Windows auto-authenticate against a remote host, so neither may slip
-    // through the POSIX-absolute check below.
-    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
-        return false;
-    }
-
-    // Absolute local path only: POSIX "/..." or a Windows drive-letter "C:\..."
-    // / "C:/...".
-    let is_posix_absolute = bytes.first() == Some(&b'/');
-    let is_windows_drive = bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && is_separator(bytes[2]);
-    if !is_posix_absolute && !is_windows_drive {
-        return false;
-    }
-
-    // Reject a "/../" or "\..\" traversal segment (but not a ".." inside a
-    // filename like "v1..2.gpkg"), matching `hasPathTraversal`.
-    if path.split(['/', '\\']).any(|segment| segment == "..") {
+pub(crate) fn is_allowed_local_vector_path(path: &str) -> bool {
+    // Absolute, non-UNC, no `..` traversal — split into `is_safe_absolute_path`
+    // so the security-relevant byte-parsing lives in one place rather than being
+    // duplicated.
+    if !is_safe_absolute_path(path) {
         return false;
     }
 
@@ -383,6 +457,28 @@ fn read_shapefile_siblings(path: String) -> Result<Vec<ShapefileSibling>, String
     Ok(siblings)
 }
 
+/// Whether `path` is a safe absolute local path: an absolute POSIX (`/...`) or
+/// Windows drive-letter (`C:\...`) path, never a UNC (`\\host\share`) share, and
+/// free of `..` traversal segments. The shared absolute/non-UNC/no-traversal
+/// guard behind [`is_allowed_local_vector_path`], kept separate so that
+/// byte-parsing lives in one place rather than being duplicated per caller.
+fn is_safe_absolute_path(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
+    if bytes.len() >= 2 && is_separator(bytes[0]) && is_separator(bytes[1]) {
+        return false;
+    }
+    let is_posix_absolute = bytes.first() == Some(&b'/');
+    let is_windows_drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && is_separator(bytes[2]);
+    if !is_posix_absolute && !is_windows_drive {
+        return false;
+    }
+    !path.split(['/', '\\']).any(|segment| segment == "..")
+}
+
 /// Read the optional admin UI-profile file (`<app_config_dir>/admin-profile.json`).
 ///
 /// Returns `Ok(None)` when the file is absent so a missing file is not an error;
@@ -400,6 +496,55 @@ fn read_admin_profile(app: tauri::AppHandle) -> Result<Option<String>, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("Could not read admin profile: {error}")),
     }
+}
+
+/// The only environment variable names `read_env_vars` will ever return. This
+/// is a hard, server-side boundary: external plugins and any other JavaScript
+/// run in the same (unsandboxed) webview can `invoke("read_env_vars", …)` with
+/// arbitrary names, so the allowlist cannot live in the frontend alone or a
+/// malicious caller could exfiltrate unrelated shell secrets (SSH_AUTH_SOCK,
+/// GITHUB_TOKEN, ambient cloud credentials, …). Kept in sync with
+/// `OS_ENV_VAR_NAMES` in `apps/geolibre-desktop/src/lib/assistant/provider.ts`
+/// — the `assistant-os-env` test parses this list and asserts the two match.
+const ALLOWED_ENV_VARS: &[&str] = &[
+    "GEOLIBRE_ASSISTANT_PROVIDER",
+    "GEOLIBRE_ASSISTANT_MODEL",
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_GENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
+    "OPENAI_COMPATIBLE_BASE_URL",
+    "OPENAI_COMPATIBLE_API_KEY",
+    "OPENAI_COMPATIBLE_MODEL",
+    "TAVILY_API_KEY",
+];
+
+/// Read the AI Assistant's allowlisted variables from the OS environment.
+///
+/// Only names in `ALLOWED_ENV_VARS` that the caller requests are returned,
+/// and only when present and non-empty, so the desktop app never leaks the full
+/// process environment — nor any variable outside the allowlist — into the
+/// webview. This lets the assistant source provider API keys from the user's
+/// system/shell environment instead of the project file (issue #1141), keeping
+/// secrets out of the saved `.geolibre.json`.
+#[tauri::command]
+fn read_env_vars(names: Vec<String>) -> std::collections::HashMap<String, String> {
+    names
+        .into_iter()
+        .filter(|name| ALLOWED_ENV_VARS.contains(&name.as_str()))
+        .filter_map(|name| {
+            let value = env::var(&name).ok()?;
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some((name, trimmed.to_string()))
+            }
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -420,6 +565,169 @@ fn close_oauth_popups(app: tauri::AppHandle) {
     }
 }
 
+/// Error surfaced when a fetch would reach a blocked address.
+const SSRF_BLOCKED_MESSAGE: &str =
+    "Refusing to fetch a link-local, unspecified, or multicast address";
+
+/// Whether an IP sits in a range a webview- or plugin-triggered fetch must not
+/// reach. This is the SSRF guard for [`fetch_url_bytes`] and
+/// [`resolve_url_redirect`]: those commands issue requests from the desktop
+/// process's network position and hand the body/redirect back to the webview, so
+/// without this a rogue plugin could read cloud metadata (169.254.169.254) — the
+/// classic SSRF target — that browser `fetch` cannot reach because of CORS.
+///
+/// Loopback and private/LAN ranges are deliberately NOT blocked: the app is
+/// built to load XYZ tiles, COGs, and PMTiles from a user's own
+/// `http://localhost:<port>` or LAN dev server (issue #387), and these commands
+/// are the desktop fetch path for that data. Blocking them would break a
+/// documented workflow. Sensitive loopback services (the Python sidecar, the
+/// Jupyter server) are individually token-gated, so the residual reachability of
+/// loopback/LAN is acceptable; link-local/metadata, which has no such guard, is
+/// blocked.
+fn is_disallowed_ip(ip: std::net::IpAddr) -> bool {
+    use std::net::IpAddr;
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_link_local() // 169.254.0.0/16 (incl. cloud metadata)
+                || v4.is_unspecified() // 0.0.0.0
+                || v4.is_broadcast()
+                || v4.is_multicast()
+        }
+        IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return is_disallowed_ip(IpAddr::V4(mapped));
+            }
+            let segments = v6.segments();
+            // Deprecated IPv4-compatible form `::a.b.c.d` (all-zero 96-bit
+            // prefix, no `ffff` marker, and not `::`/`::1`). `to_ipv4_mapped`
+            // only covers `::ffff:a.b.c.d`, so classify the embedded IPv4 here
+            // too — otherwise `::169.254.169.254` would slip past the guard.
+            if segments[..6].iter().all(|&s| s == 0) && !(segments[6] == 0 && segments[7] <= 1) {
+                let embedded = std::net::Ipv4Addr::new(
+                    (segments[6] >> 8) as u8,
+                    (segments[6] & 0xff) as u8,
+                    (segments[7] >> 8) as u8,
+                    (segments[7] & 0xff) as u8,
+                );
+                return is_disallowed_ip(IpAddr::V4(embedded));
+            }
+            // Not handled: 6to4 (2002::/16) and Teredo (2001::/32) also embed an
+            // IPv4 address, so e.g. 2002:a9fe:a9fe:: could reach 169.254.169.254.
+            // These transition mechanisms are effectively defunct and unrouted on
+            // modern hosts, so the practical risk is negligible; noted so this
+            // isn't mistaken for full coverage of every IPv4-embedding form.
+            v6.is_unspecified()
+                || v6.is_multicast()
+                // fe80::/10 link-local
+                || (segments[0] & 0xffc0) == 0xfe80
+        }
+    }
+}
+
+/// Reject a parsed URL that is non-HTTP(S) or whose host resolves to a
+/// private/loopback/link-local address. Hostname hosts are resolved and rejected
+/// if *any* resolved address is disallowed, so a name that points at an internal
+/// IP cannot slip through.
+fn url_is_fetchable(url: &reqwest::Url) -> Result<(), String> {
+    use std::net::ToSocketAddrs;
+    match url.scheme() {
+        "http" | "https" => {}
+        other => return Err(format!("Unsupported URL scheme: {other}")),
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| "URL has no host".to_string())?;
+    let bare = host.trim_start_matches('[').trim_end_matches(']');
+    if let Ok(ip) = bare.parse::<std::net::IpAddr>() {
+        return if is_disallowed_ip(ip) {
+            Err(SSRF_BLOCKED_MESSAGE.to_string())
+        } else {
+            Ok(())
+        };
+    }
+    let port = url.port_or_known_default().unwrap_or(0);
+    let mut resolved_any = false;
+    for addr in (bare, port)
+        .to_socket_addrs()
+        .map_err(|error| format!("Could not resolve host {bare}: {error}"))?
+    {
+        resolved_any = true;
+        if is_disallowed_ip(addr.ip()) {
+            return Err(SSRF_BLOCKED_MESSAGE.to_string());
+        }
+    }
+    if resolved_any {
+        Ok(())
+    } else {
+        Err(format!("Could not resolve host {bare}"))
+    }
+}
+
+/// Parse and SSRF-validate a URL string before a request is issued.
+fn ensure_fetchable_url(url: &str) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url).map_err(|error| format!("Invalid URL: {error}"))?;
+    url_is_fetchable(&parsed)
+}
+
+/// A redirect policy that re-applies [`url_is_fetchable`] to every hop, so a
+/// public URL that 3xx-redirects to an internal address is not followed.
+fn guarded_redirect_policy() -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= 10 {
+            return attempt.stop();
+        }
+        match url_is_fetchable(attempt.url()) {
+            Ok(()) => attempt.follow(),
+            Err(_) => attempt.stop(),
+        }
+    })
+}
+
+/// A DNS resolver that drops any address in a blocked range, so reqwest connects
+/// only to IPs that passed [`is_disallowed_ip`].
+///
+/// [`url_is_fetchable`] validates the host *before* the request, but reqwest
+/// re-resolves the name when it opens the connection, so a check-then-connect
+/// gap remains: an attacker controlling DNS (short TTL) could answer the
+/// pre-check with a public IP and the actual connection with `169.254.169.254`.
+/// Enforcing the filter inside the resolver reqwest actually uses — for the
+/// initial request and every redirect hop — closes that rebinding window.
+struct GuardedDnsResolver;
+
+impl reqwest::dns::Resolve for GuardedDnsResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        use std::net::ToSocketAddrs;
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            // std getaddrinfo blocks, but these are low-volume tile/URL fetches.
+            let resolved = (host.as_str(), 0u16).to_socket_addrs();
+            let addrs: Vec<std::net::SocketAddr> = match resolved {
+                Ok(iter) => iter.filter(|addr| !is_disallowed_ip(addr.ip())).collect(),
+                Err(error) => {
+                    return Err(Box::new(error) as Box<dyn std::error::Error + Send + Sync>);
+                }
+            };
+            if addrs.is_empty() {
+                return Err(SSRF_BLOCKED_MESSAGE.into());
+            }
+            Ok(Box::new(addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+/// Build a blocking HTTP client that enforces the SSRF guard at connect time
+/// (via [`GuardedDnsResolver`]) and re-validates redirect hops.
+fn guarded_http_client(timeout: Duration) -> Result<reqwest::blocking::Client, String> {
+    reqwest::blocking::Client::builder()
+        .timeout(timeout)
+        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
+        .redirect(guarded_redirect_policy())
+        .dns_resolver(std::sync::Arc::new(GuardedDnsResolver))
+        .user_agent("GeoLibre Desktop")
+        .build()
+        .map_err(|error| format!("Could not create HTTP client: {error}"))
+}
+
 #[tauri::command]
 async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
     tauri::async_runtime::spawn_blocking(move || fetch_url_bytes_blocking(url))
@@ -428,16 +736,9 @@ async fn fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
 }
 
 fn fetch_url_bytes_blocking(url: String) -> Result<Vec<u8>, String> {
-    if !url.starts_with("https://") && !url.starts_with("http://") {
-        return Err("Only HTTP and HTTPS URLs can be fetched".to_string());
-    }
+    ensure_fetchable_url(&url)?;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))
-        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client = guarded_http_client(Duration::from_secs(REMOTE_TILE_TIMEOUT_SECS))?;
 
     let response = client
         .get(&url)
@@ -909,16 +1210,9 @@ async fn resolve_url_redirect(url: String) -> Result<String, String> {
 }
 
 fn resolve_url_redirect_blocking(url: String) -> Result<String, String> {
-    if !url.starts_with("https://") && !url.starts_with("http://") {
-        return Err("Only HTTP and HTTPS URLs can be resolved".to_string());
-    }
+    ensure_fetchable_url(&url)?;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))
-        .connect_timeout(Duration::from_secs(REMOTE_TILE_CONNECT_TIMEOUT_SECS))
-        .user_agent("GeoLibre Desktop")
-        .build()
-        .map_err(|error| format!("Could not create HTTP client: {error}"))?;
+    let client = guarded_http_client(Duration::from_secs(URL_RESOLVE_TIMEOUT_SECS))?;
 
     if let Ok(head_response) = client.head(&url).send() {
         if has_xyz_placeholders(head_response.url().as_str()) {
@@ -1007,6 +1301,9 @@ struct MartinServerInfo {
 struct SidecarServerInfo {
     base_url: String,
     port: u16,
+    /// Per-launch bearer token the frontend must send on every sidecar request
+    /// (see [`sidecar_token`]).
+    token: String,
 }
 
 #[derive(Serialize)]
@@ -1129,6 +1426,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
                 return Ok(SidecarServerInfo {
                     base_url,
                     port: SIDECAR_PORT,
+                    token: sidecar_token().to_string(),
                 });
             }
             *process = None;
@@ -1136,10 +1434,23 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     }
 
     if sidecar_health_is_ready(&base_url) {
-        return Ok(SidecarServerInfo {
-            base_url,
-            port: SIDECAR_PORT,
-        });
+        if sidecar_accepts_token(&base_url, sidecar_token()) {
+            return Ok(SidecarServerInfo {
+                base_url,
+                port: SIDECAR_PORT,
+                token: sidecar_token().to_string(),
+            });
+        }
+        // A sidecar is listening but rejects this session's token — an orphan
+        // from a previous launch still holding the port. We can't reclaim it
+        // (no child handle here, and /shutdown is token-protected), so fail with
+        // a clear message rather than handing back a token that 401s every call.
+        return Err(
+            "A GeoLibre processing server from a previous session is still \
+             running on port 8765 but does not accept this session's token. \
+             Quit any stray GeoLibre processes and try again."
+                .to_string(),
+        );
     }
 
     let uv = ensure_managed_uv(&app)?;
@@ -1169,6 +1480,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
         .arg(SIDECAR_PORT.to_string())
         .current_dir(&project_dir)
         .env("GEOLIBRE_UV", &uv)
+        .env("GEOLIBRE_SIDECAR_TOKEN", sidecar_token())
         .env("GEOLIBRE_RUNTIME_DIR", &runtime_dir)
         .env("UV_CACHE_DIR", runtime_dir.join("uv-cache"))
         .env("UV_PYTHON_INSTALL_DIR", runtime_dir.join("uv-python"))
@@ -1204,6 +1516,7 @@ fn start_geolibre_sidecar_blocking(app: tauri::AppHandle) -> Result<SidecarServe
     Ok(SidecarServerInfo {
         base_url,
         port: SIDECAR_PORT,
+        token: sidecar_token().to_string(),
     })
 }
 
@@ -1508,7 +1821,7 @@ fn wait_for_jupyter_health(base_url: &str, token: &str, child: &mut Child) -> Re
 // anything derived from the clock/pid.
 fn generate_jupyter_token() -> String {
     let mut bytes = [0u8; 16];
-    getrandom::getrandom(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
+    getrandom::fill(&mut bytes).expect("OS CSPRNG (getrandom) unavailable");
     let mut token = String::with_capacity(32);
     for byte in bytes {
         use std::fmt::Write;
@@ -1519,6 +1832,21 @@ fn generate_jupyter_token() -> String {
 
 fn sidecar_base_url() -> String {
     format!("http://127.0.0.1:{SIDECAR_PORT}")
+}
+
+/// A per-launch shared secret the frontend must present on every sidecar
+/// request. The sidecar binds loopback and is CORS-restricted, but neither stops
+/// a cross-origin simple POST (CSRF) or a DNS-rebinding read; this token does.
+///
+/// Generated once per desktop process (128 CSPRNG bits) and reused for the
+/// process lifetime so the early-return paths of `start_geolibre_sidecar` (when
+/// the sidecar is already running) hand back the same token that was injected
+/// via `GEOLIBRE_SIDECAR_TOKEN` at spawn time. A sidecar started outside this
+/// process (e.g. a `python -m` dev run) leaves the env var unset and simply does
+/// not enforce the token, so those flows keep working.
+fn sidecar_token() -> &'static str {
+    static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TOKEN.get_or_init(generate_jupyter_token)
 }
 
 fn sidecar_health_is_ready(base_url: &str) -> bool {
@@ -1535,12 +1863,43 @@ fn sidecar_health_is_ready(base_url: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the sidecar already listening at `base_url` accepts `token`.
+///
+/// `/health` is token-exempt, so it cannot reveal a token mismatch. This probes
+/// `/algorithms` (a cheap authenticated endpoint) *with* the token so an orphan
+/// sidecar from a previous launch — started with a different per-launch token,
+/// and not killed because `Drop` doesn't run on `SIGKILL` — is detected rather
+/// than silently 401ing every later request. A tokenless dev sidecar
+/// (`GEOLIBRE_SIDECAR_TOKEN` unset) accepts any header and returns 200, so it is
+/// still reused.
+fn sidecar_accepts_token(base_url: &str, token: &str) -> bool {
+    let Ok(client) = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_millis(500))
+        .build()
+    else {
+        return false;
+    };
+    client
+        .get(format!("{base_url}/algorithms"))
+        .header("x-geolibre-token", token)
+        .send()
+        .map(|response| response.status().is_success())
+        .unwrap_or(false)
+}
+
 fn request_sidecar_shutdown(base_url: &str) {
     let client = reqwest::blocking::Client::builder()
         .timeout(Duration::from_millis(500))
         .build();
     if let Ok(client) = client {
-        let _ = client.post(format!("{base_url}/shutdown")).send();
+        // /shutdown is token-protected (only /health is exempt), so attach this
+        // session's token. This shuts down a sidecar we started or adopted (same
+        // token); a true cross-launch orphan (different token) 401s and falls
+        // through to the force-kill path, as before.
+        let _ = client
+            .post(format!("{base_url}/shutdown"))
+            .header("x-geolibre-token", sidecar_token())
+            .send();
     }
 }
 
@@ -1774,12 +2133,7 @@ fn sidecar_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     }
 
     if let Ok(resource_dir) = app.path().resource_dir() {
-        if let Ok(path) =
-            validate_sidecar_project_dir(resource_dir.join("backend").join("geolibre_server"))
-        {
-            return Ok(path);
-        }
-        if let Ok(path) = validate_sidecar_project_dir(resource_dir.join("geolibre_server")) {
+        if let Some(path) = resolve_sidecar_in_resource_dir(&resource_dir) {
             return Ok(path);
         }
     }
@@ -1792,6 +2146,34 @@ fn sidecar_project_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
             .join("backend")
             .join("geolibre_server"),
     )
+}
+
+/// Locate the bundled Python sidecar project under a Tauri resource directory.
+///
+/// Tauri bundles the `../../../backend/geolibre_server` resource by rewriting
+/// every leading `..` in the source path to an `_up_` directory, so in an
+/// installed build the project lands at
+/// `<resource_dir>/_up_/_up_/_up_/backend/geolibre_server` rather than directly
+/// under the resource dir (issue #1223). We probe the plain locations first,
+/// then a few `_up_` depths so the lookup keeps working if the number of `..`
+/// segments in the resource path ever changes.
+fn resolve_sidecar_in_resource_dir(resource_dir: &std::path::Path) -> Option<PathBuf> {
+    // Plain resource root plus a few `_up_` levels of margin over the observed
+    // 3-level bundle depth, so the lookup survives a change in Tauri's bundling.
+    const MAX_UP_DEPTH: usize = 4;
+    let mut prefix = resource_dir.to_path_buf();
+    for _ in 0..=MAX_UP_DEPTH {
+        if let Ok(path) =
+            validate_sidecar_project_dir(prefix.join("backend").join("geolibre_server"))
+        {
+            return Some(path);
+        }
+        if let Ok(path) = validate_sidecar_project_dir(prefix.join("geolibre_server")) {
+            return Some(path);
+        }
+        prefix = prefix.join("_up_");
+    }
+    None
 }
 
 fn validate_sidecar_project_dir(path: PathBuf) -> Result<PathBuf, String> {
@@ -2448,10 +2830,17 @@ fn create_oauth_popup_window(
 ) -> tauri::webview::NewWindowResponse<tauri::Wry> {
     let popup_id = POPUP_COUNTER.fetch_add(1, Ordering::Relaxed);
     let child_app_handle = app_handle.clone();
-    let window = tauri::WebviewWindowBuilder::new(
+    let blank_url: tauri::Url = match "about:blank".parse() {
+        Ok(parsed) => parsed,
+        Err(error) => {
+            eprintln!("OAuth popup: could not parse blank URL: {error}");
+            return tauri::webview::NewWindowResponse::Deny;
+        }
+    };
+    let window = match tauri::WebviewWindowBuilder::new(
         &app_handle,
         format!("oauthPopup{popup_id}"),
-        tauri::WebviewUrl::External("about:blank".parse().expect("valid blank URL")),
+        tauri::WebviewUrl::External(blank_url),
     )
     .window_features(features)
     .title(url.as_str())
@@ -2462,18 +2851,37 @@ fn create_oauth_popup_window(
         let _ = window.set_title(&title);
     })
     .build()
-    .expect("failed to create OAuth popup window");
+    {
+        Ok(window) => window,
+        Err(error) => {
+            eprintln!("OAuth popup: failed to create popup window: {error}");
+            return tauri::webview::NewWindowResponse::Deny;
+        }
+    };
 
     tauri::webview::NewWindowResponse::Create { window }
 }
 
 #[cfg(target_os = "linux")]
 fn configure_linux_webkit() {
-    // WebKitGTK's DMABUF renderer can fail to allocate GBM buffers on some
-    // Linux graphics stacks, leaving the Tauri window blank. Only set the
-    // default when unset so an explicit user/distributor value wins.
+    // WebKitGTK's DMABUF renderer could fail to allocate GBM buffers on older
+    // graphics stacks, leaving the Tauri window blank, so it used to be
+    // disabled here unconditionally. Disabling it also forces a slow readback
+    // compositing path that visibly drops MapLibre pan/zoom FPS, and the
+    // allocation bugs are fixed in current WebKitGTK, so keep the workaround
+    // only for versions older than 2.48. An explicit user/distributor value
+    // always wins (per WebKit semantics, "0" keeps DMABUF on and any other
+    // value disables it). Only set the default when unset.
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        let webkit_version = unsafe {
+            (
+                webkit2gtk_sys::webkit_get_major_version(),
+                webkit2gtk_sys::webkit_get_minor_version(),
+            )
+        };
+        if webkit_version < (2, 48) {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
     }
     // Prefer portal-backed native dialogs on Linux. This avoids GTK/GIO file
     // metadata warnings that can appear around file and folder pickers.
@@ -2487,8 +2895,148 @@ fn configure_linux_webkit() {}
 
 #[cfg(test)]
 mod tests {
-    use super::{find_zip_manifest_path, is_allowed_local_vector_path, plugin_archive_file_name};
+    use super::{
+        ensure_fetchable_url, find_zip_manifest_path, is_allowed_local_vector_path,
+        is_allowed_project_path, is_disallowed_ip, is_safe_absolute_path, plugin_archive_file_name,
+        resolve_sidecar_in_resource_dir,
+    };
     use std::io::{Cursor, Write};
+    use std::net::IpAddr;
+    use std::path::PathBuf;
+
+    // A throwaway directory tree under the system temp dir that removes itself
+    // on drop, so scratch dirs are cleaned up even when an assertion panics.
+    // Uses the process id (no rand dependency) and clears any leftover from a
+    // prior run at construction.
+    struct ScratchDir(PathBuf);
+
+    impl ScratchDir {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("geolibre-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Self(dir)
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
+    impl Drop for ScratchDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    // Regression for issue #1223: installed builds place the bundled sidecar at
+    // `<resource_dir>/_up_/_up_/_up_/backend/geolibre_server`, so the resolver
+    // must follow the `_up_` chain rather than only checking the resource root.
+    #[test]
+    fn resolves_bundled_sidecar_under_up_prefix() {
+        let root = ScratchDir::new("sidecar-up");
+        let project = root
+            .path()
+            .join("_up_")
+            .join("_up_")
+            .join("_up_")
+            .join("backend")
+            .join("geolibre_server");
+        std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join("pyproject.toml"), "[project]\n").unwrap();
+
+        let resolved =
+            resolve_sidecar_in_resource_dir(root.path()).expect("sidecar should be found");
+        assert_eq!(resolved, project.canonicalize().unwrap());
+
+        // The plain (0-level) layout used by portable builds, where the sidecar
+        // sits at `backend/geolibre_server` directly under the resource dir.
+        let plain_root = ScratchDir::new("sidecar-plain");
+        let plain_project = plain_root.path().join("backend").join("geolibre_server");
+        std::fs::create_dir_all(&plain_project).unwrap();
+        std::fs::write(plain_project.join("pyproject.toml"), "[project]\n").unwrap();
+        let plain_resolved = resolve_sidecar_in_resource_dir(plain_root.path())
+            .expect("plain sidecar should be found");
+        assert_eq!(plain_resolved, plain_project.canonicalize().unwrap());
+
+        // A resource dir without the project (and without a pyproject marker)
+        // resolves to nothing rather than a false positive.
+        let empty = ScratchDir::new("sidecar-empty");
+        assert!(resolve_sidecar_in_resource_dir(empty.path()).is_none());
+    }
+
+    #[test]
+    fn blocks_link_local_and_metadata_ips() {
+        for ip in [
+            "169.254.169.254",        // cloud metadata (link-local)
+            "169.254.0.1",            // link-local
+            "0.0.0.0",                // unspecified
+            "255.255.255.255",        // broadcast
+            "::",                     // unspecified
+            "fe80::1",                // link-local
+            "::ffff:169.254.169.254", // IPv4-mapped metadata
+            "::169.254.169.254",      // IPv4-compatible metadata (deprecated)
+        ] {
+            assert!(
+                is_disallowed_ip(ip.parse::<IpAddr>().unwrap()),
+                "expected {ip} to be blocked"
+            );
+        }
+    }
+
+    #[test]
+    fn allows_public_loopback_and_lan_ips() {
+        // Public plus loopback/LAN, which stay reachable for local tile/COG
+        // data (issue #387). Only link-local/metadata is blocked.
+        for ip in [
+            "8.8.8.8",
+            "1.1.1.1",
+            "93.184.216.34",
+            "2606:4700:4700::1111",
+            "127.0.0.1",    // loopback (local dev tile server)
+            "192.168.1.10", // LAN
+            "10.0.0.5",     // LAN
+            "::1",          // loopback
+        ] {
+            assert!(
+                !is_disallowed_ip(ip.parse::<IpAddr>().unwrap()),
+                "expected {ip} to be allowed"
+            );
+        }
+    }
+
+    #[test]
+    fn ensure_fetchable_url_blocks_metadata_and_bad_schemes() {
+        assert!(ensure_fetchable_url("http://169.254.169.254/latest/meta-data").is_err());
+        assert!(ensure_fetchable_url("file:///etc/passwd").is_err());
+        assert!(ensure_fetchable_url("ftp://example.com/x").is_err());
+        // Public and loopback/LAN literals are allowed (local data workflow).
+        assert!(ensure_fetchable_url("https://1.1.1.1/").is_ok());
+        assert!(ensure_fetchable_url("http://127.0.0.1:8081/tiles/0/0/0.png").is_ok());
+        assert!(ensure_fetchable_url("http://[::1]:8081/data.pmtiles").is_ok());
+    }
+
+    #[test]
+    fn project_path_guard_allows_projects_and_blocks_secrets() {
+        assert!(is_allowed_project_path("/home/u/map.geolibre.json"));
+        assert!(is_allowed_project_path("/home/u/map.geolibre"));
+        assert!(is_allowed_project_path("C:\\Users\\u\\map.geolibre.json"));
+        // Secrets and traversal are refused.
+        assert!(!is_allowed_project_path("/home/u/.ssh/id_rsa"));
+        assert!(!is_allowed_project_path("/home/u/.aws/credentials"));
+        assert!(!is_allowed_project_path(
+            "/home/u/../../etc/hosts.geolibre.json"
+        ));
+        assert!(!is_allowed_project_path("relative/map.geolibre.json"));
+        assert!(!is_allowed_project_path(
+            "\\\\server\\share\\map.geolibre.json"
+        ));
+        // A bare .json file (e.g. a JSON credential store) is NOT a project.
+        assert!(!is_allowed_project_path(
+            "/home/u/.config/gcloud/application_default_credentials.json"
+        ));
+        assert!(!is_allowed_project_path("C:\\Users\\u\\map.json"));
+    }
 
     #[test]
     fn allows_absolute_vector_paths() {
@@ -2592,5 +3140,30 @@ mod tests {
         assert_eq!(plugin_archive_file_name("..hidden"), "hidden.zip");
         // A name that sanitizes away entirely falls back to a fixed stem.
         assert_eq!(plugin_archive_file_name("..."), "plugin.zip");
+    }
+
+    #[test]
+    fn is_safe_absolute_path_accepts_absolute_local_dirs() {
+        assert!(is_safe_absolute_path("/home/user/data"));
+        assert!(is_safe_absolute_path("/data"));
+        assert!(is_safe_absolute_path("C:\\Users\\me\\gis"));
+        assert!(is_safe_absolute_path("C:/Users/me/gis"));
+        // A ".." inside a name (not a traversal segment) is fine.
+        assert!(is_safe_absolute_path("/home/user/v1..2"));
+    }
+
+    #[test]
+    fn is_safe_absolute_path_rejects_unc_traversal_and_relative() {
+        // UNC shares (both forms) can auto-authenticate against a remote host.
+        assert!(!is_safe_absolute_path("\\\\server\\share"));
+        assert!(!is_safe_absolute_path("//server/share"));
+        // `..` traversal segments.
+        assert!(!is_safe_absolute_path("/home/user/../etc"));
+        assert!(!is_safe_absolute_path("C:\\a\\..\\b"));
+        // Relative / non-absolute and empty input.
+        assert!(!is_safe_absolute_path("home/user"));
+        assert!(!is_safe_absolute_path("./data"));
+        assert!(!is_safe_absolute_path(""));
+        assert!(!is_safe_absolute_path("C:")); // drive letter without a separator
     }
 }

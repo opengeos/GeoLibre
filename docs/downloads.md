@@ -3,7 +3,7 @@
 GeoLibre desktop installers are published from GitHub Releases.
 
 [View releases](https://github.com/opengeos/GeoLibre/releases){ .md-button .md-button--primary }
-[Open live demo](https://viewer.geolibre.app/){ .md-button }
+[Launch GeoLibre Web](https://web.geolibre.app/){ .md-button }
 
 ## Release assets
 
@@ -73,21 +73,13 @@ xattr -dr com.apple.quarantine "/Applications/GeoLibre Desktop.app"
 
 ### Homebrew (recommended)
 
-GeoLibre is available as a [Homebrew Cask](https://docs.brew.sh/Cask-Cookbook)
-from a self-hosted tap:
+GeoLibre is available as an official
+[Homebrew Cask](https://github.com/Homebrew/homebrew-cask/blob/main/Casks/g/geolibre.rb),
+so no tap or trust step is needed — just install:
 
 ```bash
-brew tap opengeos/geolibre
-brew trust --cask opengeos/geolibre/geolibre
 brew install --cask geolibre
 ```
-
-The `brew trust` step is a one-time approval. Homebrew refuses to load casks
-from non-official taps until you trust them; this is enforced when
-`HOMEBREW_REQUIRE_TAP_TRUST=1` is set and becomes the default in a future
-Homebrew release. `brew trust opengeos/geolibre` trusts the whole tap instead of
-just this cask. The command exists in Homebrew 5.1 and later; on older versions
-skip it.
 
 The macOS DMGs are signed with an Apple Developer ID certificate and notarized
 by Apple, so Gatekeeper allows the app to launch normally with no quarantine
@@ -95,6 +87,12 @@ workaround. Upgrade later with:
 
 ```bash
 brew upgrade --cask geolibre
+```
+
+To remove it:
+
+```bash
+brew uninstall --cask geolibre
 ```
 
 ### Manual installation
@@ -182,5 +180,9 @@ cd GeoLibre
 npm install
 npm run tauri:build
 ```
+
+The default desktop build keeps the Linux binary small and uses DuckDB-WASM for
+DuckDB-backed browser features. To build a larger desktop binary with the native
+`duckdb-rs` vector loader enabled, run `npm run tauri:build:native-duckdb`.
 
 Desktop builds require the Rust toolchain and Tauri platform prerequisites.

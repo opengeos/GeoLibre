@@ -88,6 +88,22 @@ describe("diagnostics network info capture", () => {
     assert.equal(snapshot.warningCount, 1);
   });
 
+  it("redacts sensitive query params from a URL embedded in the detail", () => {
+    appendDiagnostic({
+      category: "network",
+      level: "error",
+      message: "GET fetch_url_bytes failed (network)",
+      // A native reqwest error embeds the full request URL, including secrets.
+      detail:
+        "error sending request for url (https://tiles.example.com/1/2/3.png?api_key=SECRET123): connection refused",
+    });
+    const [record] = getDiagnosticsSnapshot().records;
+    // The param value is replaced with the REDACTED marker (URL-encoded in the
+    // query string); the important guarantee is the secret no longer appears.
+    assert.ok(record.detail?.includes("REDACTED"));
+    assert.ok(!record.detail?.includes("SECRET123"));
+  });
+
   it("does not filter info-level entries from other categories", () => {
     appendDiagnostic({
       category: "console",
@@ -284,6 +300,19 @@ describe("diagnostics startup transient suppression", () => {
     assert.equal(getDiagnosticsSnapshot().totalCount, 0);
   });
 
+  it("keeps the benign three.js multiple-instances warning out of diagnostics but echoes it", () => {
+    let echoed: unknown[] | null = null;
+    console.warn = (...args: unknown[]) => {
+      echoed = args;
+    };
+    install();
+    const message = "WARNING: Multiple instances of Three.js being imported.";
+    console.warn(message);
+    // Echoed to the console for contributors, but not recorded in the panel.
+    assert.deepEqual(echoed, [message]);
+    assert.equal(getDiagnosticsSnapshot().totalCount, 0);
+  });
+
   it("flags an unmarked non-ok response as an error", async () => {
     win.fetch = (() =>
       Promise.resolve(
@@ -405,5 +434,35 @@ describe("diagnostics startup transient suppression", () => {
     const [record] = getDiagnosticsSnapshot().records;
     assert.equal(record.level, "error");
     assert.equal(getDiagnosticsSnapshot().errorCount, 1);
+  });
+
+  it("classifies a genuine fetch network failure with an actionable hint", async () => {
+    win.fetch = (() =>
+      Promise.reject(new TypeError("Failed to fetch"))) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "error");
+    // The opaque browser error is interpreted rather than left as a raw stack.
+    assert.match(record.message, /network\/TLS\/CORS/);
+    assert.ok(record.detail?.includes("CORS"));
+    // The raw error is still preserved after the hint.
+    assert.ok(record.detail?.includes("Failed to fetch"));
+  });
+
+  it("does not append a redundant label for an unclassified failure", async () => {
+    win.fetch = (() =>
+      Promise.reject(new Error("some opaque failure"))) as unknown as typeof fetch;
+    install();
+    await (win.fetch as typeof fetch)("https://example.com/data").catch(
+      () => {},
+    );
+    const [record] = getDiagnosticsSnapshot().records;
+    assert.equal(record.level, "error");
+    // An "unknown" classification must not render "request failed (request failed)".
+    assert.equal(record.message, "GET request failed");
+    assert.ok(!/\(request failed\)/.test(record.message));
   });
 });

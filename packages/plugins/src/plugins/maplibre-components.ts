@@ -76,6 +76,7 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   KerchunkReferenceStore,
   loadKerchunkReference,
@@ -180,6 +181,10 @@ const SPLATTING_SAMPLE_URL =
   "https://maplibre.org/maplibre-gl-js/docs/assets/34M_17/34M_17.gltf";
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 const GUI_PANEL_VIEWPORT_MARGIN = 16;
+// Poll interval / cap for re-measuring a just-expanded GUI panel while its
+// layout settles (see constrainGuiPanelToViewport).
+const GUI_PANEL_SETTLE_INTERVAL_MS = 100;
+const GUI_PANEL_SETTLE_MAX_TICKS = 20;
 
 const COMPONENT_CONTROL_NAMES = [
   "spinGlobe",
@@ -217,15 +222,9 @@ const COMPONENTS_OPTIONS = {
   collapsed: false,
   columns: 5,
   defaultControls: COMPONENT_CONTROL_NAMES,
-  excludeLayers: [
-    "usgs-lidar-*",
-    "lidar-*",
-    "mapbox-gl-draw-*",
-    "gl-draw-*",
-    "gm_*",
-    "inspect-highlight-*",
-    "measure-*",
-  ],
+  // Shared with Layer Swipe (and any other layer-list control) so the hidden
+  // "chrome" layer set stays consistent; see INTERNAL_HELPER_LAYER_PATTERNS.
+  excludeLayers: [...INTERNAL_HELPER_LAYER_PATTERNS],
   gap: 2,
   rows: 5,
   showRowColumnControls: true,
@@ -915,9 +914,7 @@ const DEFAULT_HTML_GUI_ENTRY: ComponentHtmlGuiEntryState = {
 };
 
 function constrainGuiPanelToViewport(panelSelector: string): void {
-  // Defer measurement until after the expanded panel has been laid out so
-  // getBoundingClientRect() reflects the fully expanded dimensions.
-  requestAnimationFrame(() => {
+  const apply = () => {
     const panel = document.querySelector<HTMLElement>(panelSelector);
     if (!panel) return;
 
@@ -927,20 +924,70 @@ function constrainGuiPanelToViewport(panelSelector: string): void {
     panel.style.maxWidth = "";
 
     const rect = panel.getBoundingClientRect();
+    // Constrain to the map container, not the window: the status bar is a
+    // sibling below the map, so the map's bottom edge already excludes it.
+    // Measuring against window.innerHeight would let a tall panel (e.g. a
+    // many-class legend) run under the status bar. Fall back to the window if
+    // the panel isn't inside a map for some reason.
+    const mapEl = panel.closest<HTMLElement>(".maplibregl-map");
+    const mapRect = mapEl?.getBoundingClientRect();
+    const viewportBottom = mapRect ? mapRect.bottom : window.innerHeight;
+    const viewportRight = mapRect ? mapRect.right : window.innerWidth;
+
     const availableHeight = Math.floor(
-      window.innerHeight - rect.top - GUI_PANEL_VIEWPORT_MARGIN
+      viewportBottom - rect.top - GUI_PANEL_VIEWPORT_MARGIN
     );
-    if (availableHeight > 160 && rect.bottom > window.innerHeight) {
+    if (availableHeight > 160 && rect.bottom > viewportBottom) {
       panel.style.maxHeight = `${availableHeight}px`;
     }
 
     const availableWidth = Math.floor(
-      window.innerWidth - rect.left - GUI_PANEL_VIEWPORT_MARGIN
+      viewportRight - rect.left - GUI_PANEL_VIEWPORT_MARGIN
     );
-    if (availableWidth > 220 && rect.right > window.innerWidth) {
+    if (availableWidth > 220 && rect.right > viewportRight) {
       panel.style.maxWidth = `${availableWidth}px`;
     }
-  });
+  };
+
+  // Opening + populating + expanding a control in the same tick (as the "Create
+  // legend from palette" flow does) leaves both the map container's bottom and
+  // the panel's own top offset shifting for a few hundred ms -- the map sits at
+  // the full window height and the panel starts higher until the status bar row
+  // and control stack claim their space, sometimes plateauing at an
+  // intermediate value before the final one. Measuring only on the first frame
+  // would cap the panel too tall and let it slip under the status bar. Poll the
+  // input geometry (panel top + map bottom) over a bounded window and re-cap
+  // each time it actually changes, so the last change -- the real settle --
+  // lands the cap on the final layout. Applying only on change keeps it from
+  // flickering the scroll position while idle.
+  let previousKey = "";
+  let ticks = 0;
+  const settle = () => {
+    const panel = document.querySelector<HTMLElement>(panelSelector);
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const mapRect = panel
+      .closest<HTMLElement>(".maplibregl-map")
+      ?.getBoundingClientRect();
+    // apply() constrains width as well as height, so the settle key tracks both
+    // axes: the panel's top-left corner and the map's bottom-right edge. A shift
+    // on either axis re-caps.
+    const key = [
+      Math.round(rect.top),
+      Math.round(rect.left),
+      Math.round(mapRect?.bottom ?? window.innerHeight),
+      Math.round(mapRect?.right ?? window.innerWidth),
+    ].join(":");
+    if (key !== previousKey) {
+      previousKey = key;
+      apply();
+    }
+    ticks += 1;
+    if (ticks < GUI_PANEL_SETTLE_MAX_TICKS) {
+      setTimeout(settle, GUI_PANEL_SETTLE_INTERVAL_MS);
+    }
+  };
+  requestAnimationFrame(settle);
 }
 
 export interface CogRasterLayerOptions {
@@ -1139,18 +1186,36 @@ interface StacCogTextureHelper {
   ) => string;
 }
 
-const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
-  // Load the splatting control from maplibre-gl-splat directly: the copy
-  // re-exported (and bundled) by maplibre-gl-components lags behind, so its
-  // sample-data dropdown would be missing if taken from there.
-  // Load the dedicated splat control separately, but do not let a failure here
-  // take down every other component control. Promise.all rejects the whole
-  // shared promise if any input rejects, so a single failed splat import (a
-  // code-split chunk network hiccup, a missing dev-checkout package) would have
-  // broken BookmarkControl, MeasureControl, etc. for the life of the page. On
-  // failure, fall back to the (older) GaussianSplatControl bundled in
-  // maplibre-gl-components so the rest of the controls still load.
-  componentsConstructorsPromise ??= Promise.all([
+type ComponentsModule = typeof import("maplibre-gl-components");
+type SplatModule = typeof import("maplibre-gl-splat");
+// Both elements can be `undefined` at runtime, not just rejected: a
+// `vite:preloadError` handler that calls preventDefault() makes a failed dynamic
+// import RESOLVE to `undefined` (see getComponentsConstructors). An `undefined`
+// splat is handled the same as a rejected one (null) - both fall back to the
+// bundled GaussianSplatControl via optional chaining - so only `components`
+// being absent is fatal.
+/** @internal The dynamic-import pair {@link getComponentsConstructors} builds from. */
+export type ComponentsModules = [
+  ComponentsModule | undefined,
+  SplatModule | null | undefined,
+];
+
+// The pair of dynamic imports getComponentsConstructors builds from. Split out
+// as an injectable seam so a test can simulate the vite:preloadError +
+// preventDefault() case (see getComponentsConstructors), where a failed import
+// RESOLVES to `undefined` instead of rejecting.
+//
+// Load the splatting control from maplibre-gl-splat directly: the copy
+// re-exported (and bundled) by maplibre-gl-components lags behind, so its
+// sample-data dropdown would be missing if taken from there. Do not let a
+// failure here take down every other component control. Promise.all rejects the
+// whole shared promise if any input rejects, so a single failed splat import (a
+// code-split chunk network hiccup, a missing dev-checkout package) would have
+// broken BookmarkControl, MeasureControl, etc. for the life of the page. On
+// failure, fall back to the (older) GaussianSplatControl bundled in
+// maplibre-gl-components so the rest of the controls still load.
+const defaultLoadComponentsModules = (): Promise<ComponentsModules> =>
+  Promise.all([
     import("maplibre-gl-components"),
     import("maplibre-gl-splat").catch((error: unknown) => {
       console.warn(
@@ -1159,7 +1224,39 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       );
       return null;
     }),
-  ]).then(([components, splat]) => {
+  ]);
+
+let loadComponentsModules = defaultLoadComponentsModules;
+
+/**
+ * Test-only seam: swap the component-module loader and reset the memoized
+ * singleton. Passing `null` restores the real dynamic imports.
+ *
+ * @internal
+ */
+export function __setComponentsModuleLoaderForTests(
+  loader: (() => Promise<ComponentsModules>) | null
+): void {
+  loadComponentsModules = loader ?? defaultLoadComponentsModules;
+  componentsConstructorsPromise = null;
+}
+
+/** @internal Exported so the lazy component-control loader can be unit-tested. */
+export const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
+  componentsConstructorsPromise ??= loadComponentsModules().then(([components, splat]) => {
+    // A `vite:preloadError` handler that calls preventDefault() makes the
+    // failed dynamic import RESOLVE to `undefined` instead of rejecting. The
+    // stale-chunk reload guard (installStaleChunkReload) does exactly this when
+    // it defers a reload to protect unsaved work: a chunk orphaned by a
+    // redeploy then fails, but the reload is withheld. Destructuring that
+    // `undefined` module throws the cryptic "Cannot destructure property
+    // 'AddVectorControl' of 'undefined'"; turn it into a clear, actionable
+    // error (the .catch below keeps it from poisoning the shared singleton).
+    if (!components) {
+      throw new Error(
+        "The map controls could not be loaded, most likely because the app was updated in the background. Reload the page to finish loading them."
+      );
+    }
     const {
       AddVectorControl: AddVectorControlClass,
       BookmarkControl: BookmarkControlClass,
@@ -1212,6 +1309,15 @@ const getComponentsConstructors = (): Promise<ComponentsConstructors> => {
       ViewStateControl: ViewStateControlClass,
       ZarrLayerControl: ZarrLayerControlClass,
     };
+  }).catch((error: unknown) => {
+    // Never memoize a failure. This shared singleton backs every component
+    // control (COG, FlatGeobuf, PMTiles, Zarr, Bookmark, Measure, Minimap,
+    // Search, Print, ...), so a cached rejection would break all of them for
+    // the life of the page. Clearing it lets the next action retry the import
+    // once the cause clears (a transient chunk-load hiccup, or a reload after a
+    // redeploy).
+    componentsConstructorsPromise = null;
+    throw error;
   });
   return componentsConstructorsPromise;
 };
@@ -1816,6 +1922,109 @@ export function subscribeColorbarPanel(listener: () => void): () => void {
 
 export function openLegendPanel(app: GeoLibreAppAPI): void {
   void openStandaloneLegendControl(app);
+}
+
+/**
+ * Opens the Legend control (creating and mounting it if needed) and fills the
+ * currently-selected legend entry with the given title and items, replacing
+ * whatever it held (the default placeholder entry on first open). Used to
+ * populate a legend from a paletted raster's color table.
+ *
+ * @param app - The live app API used to mount the control.
+ * @param options.title - Legend title (typically the raster layer name).
+ * @param options.items - Legend items (color swatch + label) to show.
+ * @param options.legendPosition - Map corner for the rendered on-map legend.
+ *   Defaults to the control's current position (or bottom-left). The editor
+ *   panel itself always docks top-left, so pass a right/other corner to keep
+ *   the on-map legend from overlapping it.
+ * @param options.signal - Abort signal checked just before the mutation. If the
+ *   caller supersedes this call (e.g. the user switches layers) the shared
+ *   Legend control is left untouched, not populated with stale data.
+ * @returns Whether the control was opened and populated.
+ */
+export async function openLegendPanelWithItems(
+  app: GeoLibreAppAPI,
+  options: {
+    title: string;
+    items: ComponentLegendItem[];
+    legendPosition?: GeoLibreMapControlPosition;
+    signal?: AbortSignal;
+  },
+): Promise<boolean> {
+  const opened = await openStandaloneLegendControl(app);
+  if (!opened) return false;
+  // openStandaloneLegendControl shows/expands on a 0ms timer; defer past it so
+  // the state we set is not clobbered by that deferred show, and so getState()
+  // reflects the freshly-created control.
+  return await new Promise<boolean>((resolve) => {
+    setTimeout(() => {
+      if (!legendControl) {
+        resolve(false);
+        return;
+      }
+      // A superseded call (the caller aborted after switching away) must not
+      // populate the shared control with the previous layer's data. Checked
+      // here, inside the deferred timer, because that is the first point after
+      // the caller could have aborted.
+      if (options.signal?.aborted) {
+        resolve(false);
+        return;
+      }
+      // Guard the whole mutation: if the vendor control throws in getState /
+      // setState / expand / show, resolve(false) instead of leaving the promise
+      // (and the caller's "pending" UI) hanging forever.
+      try {
+        const control = legendControl as RestorableLegendGuiControl;
+        const current =
+          legendControl.getState() as unknown as ComponentLegendGuiState;
+        const entry: ComponentLegendGuiEntryState = {
+          title: options.title,
+          items: options.items,
+          legendPosition:
+            options.legendPosition ?? current.legendPosition ?? "bottom-left",
+        };
+        // Mirror the replacement onto both the top-level fields and the selected
+        // slot of the `legends` array so the control's single- and multi-legend
+        // views stay consistent (matches how project restore round-trips state).
+        // `selectedIndex` clamps a stale index into range so the written-back
+        // `selectedLegendIndex` can never point past the array it indexes.
+        const baseLegends =
+          Array.isArray(current.legends) && current.legends.length > 0
+            ? current.legends
+            : [entry];
+        const index = Math.max(
+          0,
+          selectedIndex(current.selectedLegendIndex, baseLegends.length),
+        );
+        const legends = baseLegends.map((existing, i) =>
+          i === index ? entry : existing,
+        );
+        restoreGuiControlState(control, {
+          ...current,
+          title: entry.title,
+          items: entry.items,
+          legendPosition: entry.legendPosition,
+          hasLegend: true,
+          selectedLegendIndex: index,
+          legends,
+        });
+        control.expand();
+        control.show();
+        setLegendPanelVisible(true);
+        // The control was already expanded by openStandaloneLegendControl, so
+        // the expand() above is a no-op and its "expand" handler (which fits the
+        // panel to the viewport) never re-fires for this now-taller, populated
+        // panel. Run the constraint directly so a many-class legend doesn't
+        // overflow under the status bar.
+        constrainGuiPanelToViewport(
+          ".geolibre-legend-control .legend-gui-panel",
+        );
+        resolve(true);
+      } catch {
+        resolve(false);
+      }
+    }, 0);
+  });
 }
 
 export function closeLegendPanel(app: GeoLibreAppAPI): void {
@@ -5197,7 +5406,15 @@ function stacAssetFromLayerId(id: string): string | undefined {
 function layerNameFromUrl(url: string, fallback: string): string {
   try {
     const fileName = new URL(url).pathname.split("/").pop() ?? fallback;
-    return fileName.replace(/\.[^.]+$/, "") || fallback;
+    const base = fileName.replace(/\.[^.]+$/, "") || fallback;
+    // Decode percent-encoding for display, so a name like `air%20temperature`
+    // (e.g. a `local:` URL built from a file name with spaces/reserved chars)
+    // shows as `air temperature`. Guard against malformed escapes.
+    try {
+      return decodeURIComponent(base);
+    } catch {
+      return base;
+    }
   } catch {
     return fallback;
   }

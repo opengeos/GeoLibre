@@ -34,11 +34,13 @@ import {
   type StoryInsetPosition,
   type StoryLayerOpacityChange,
   type StoryMap,
+  type StorySlideMode,
 } from "./types";
 import {
   DEFAULT_LAYER_GROUP_OPACITY,
   normalizeGroupContiguity,
 } from "./layer-groups";
+import { getEllipsoid } from "./ellipsoids";
 
 /** Placeholder name a project carries before the user names it. */
 export const DEFAULT_PROJECT_NAME = "Untitled Project";
@@ -46,6 +48,8 @@ export const DEFAULT_PROJECT_NAME = "Untitled Project";
 export interface CreateProjectOptions {
   basemapStyleUrl?: string;
   mapView?: MapViewState;
+  /** Celestial body the project describes; defaults to Earth when omitted. */
+  ellipsoidId?: string;
 }
 
 export function createDefaultMapView(): MapViewState {
@@ -71,7 +75,15 @@ export function createEmptyProject(
     layers: [],
     layerGroups: [],
     styles: {},
-    preferences: DEFAULT_PROJECT_PREFERENCES,
+    preferences: options.ellipsoidId
+      ? {
+          ...DEFAULT_PROJECT_PREFERENCES,
+          map: {
+            ...DEFAULT_PROJECT_PREFERENCES.map,
+            ellipsoidId: getEllipsoid(options.ellipsoidId).id,
+          },
+        }
+      : DEFAULT_PROJECT_PREFERENCES,
     legend: { ...DEFAULT_LEGEND_CONFIG },
     metadata: {},
   };
@@ -259,6 +271,13 @@ export function normalizeStoryMap(storymap: unknown): StoryMap | null {
     )
       ? (candidate.insetPosition as StoryInsetPosition)
       : DEFAULT_STORY_MAP.insetPosition,
+    hideChapterNav: normalizeBoolean(candidate.hideChapterNav, false),
+    startSlide: STORY_SLIDE_MODES.has(candidate.startSlide as StorySlideMode)
+      ? (candidate.startSlide as StorySlideMode)
+      : DEFAULT_STORY_MAP.startSlide,
+    endSlide: STORY_SLIDE_MODES.has(candidate.endSlide as StorySlideMode)
+      ? (candidate.endSlide as StorySlideMode)
+      : DEFAULT_STORY_MAP.endSlide,
     chapters,
   };
 
@@ -280,7 +299,10 @@ export function storyMapHasContent(story: StoryMap): boolean {
     story.showMarkers !== DEFAULT_STORY_MAP.showMarkers ||
     story.markerColor !== DEFAULT_STORY_MAP.markerColor ||
     story.inset !== DEFAULT_STORY_MAP.inset ||
-    story.insetPosition !== DEFAULT_STORY_MAP.insetPosition
+    story.insetPosition !== DEFAULT_STORY_MAP.insetPosition ||
+    story.hideChapterNav !== DEFAULT_STORY_MAP.hideChapterNav ||
+    story.startSlide !== DEFAULT_STORY_MAP.startSlide ||
+    story.endSlide !== DEFAULT_STORY_MAP.endSlide
   );
 }
 
@@ -302,6 +324,14 @@ const STORY_INSET_POSITIONS = new Set<StoryInsetPosition>([
   "top-right",
   "bottom-left",
   "bottom-right",
+]);
+
+const STORY_SLIDE_MODES = new Set<StorySlideMode>([
+  "none",
+  "blank",
+  "black",
+  "global",
+  "adjacent",
 ]);
 
 function normalizeStoryChapter(chapter: unknown): StoryChapter | null {
@@ -509,10 +539,17 @@ export function normalizeSecondaryMapViews(
     if (!id || seen.has(id)) continue;
     seen.add(id);
     const label = normalizeString(candidate.label);
+    // Only the known engine ids survive; an absent/unknown value is omitted so
+    // the pane defaults to the 2D map (back-compat with pre-globe projects).
+    const viewKind =
+      candidate.viewKind === "cesium" || candidate.viewKind === "maplibre"
+        ? candidate.viewKind
+        : undefined;
     views.push({
       id,
       view: normalizeMapViewState(candidate.view),
       ...(label ? { label } : {}),
+      ...(viewKind ? { viewKind } : {}),
       layerVisibility: normalizeLayerVisibility(candidate.layerVisibility),
     });
   }
@@ -704,6 +741,10 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
         (map as Partial<ProjectPreferences["map"]>).projection === "mercator"
           ? "mercator"
           : "globe",
+      // Coerce unknown/missing bodies to Earth so measurements never break.
+      ellipsoidId: getEllipsoid(
+        (map as Partial<ProjectPreferences["map"]>).ellipsoidId,
+      ).id,
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables

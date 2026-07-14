@@ -1,0 +1,92 @@
+# Dependabot keeps dependencies and their security advisories current across the
+# monorepo's four ecosystems. Updates are grouped so a fast-moving repo gets a
+# few consolidated PRs per week rather than a flood of one-per-dependency PRs.
+version: 2
+updates:
+  # JavaScript — one npm workspaces lockfile at the root wires up every JS
+  # workspace, so a single npm entry covers apps/*, packages/*, and workers/*.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # Security fixes land on their own, immediately actionable PRs.
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      # Routine minor/patch bumps are batched into one PR to cut review noise.
+      npm-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # Python — the FastAPI sidecar.
+  - package-ecosystem: pip
+    directory: "/backend/geolibre_server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      backend-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # Python — the `geolibre` Jupyter anywidget package.
+  - package-ecosystem: pip
+    directory: "/python"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      widget-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      widget-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # Rust — the Tauri desktop crate.
+  - package-ecosystem: cargo
+    directory: "/apps/geolibre-desktop/src-tauri"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      cargo-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      cargo-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions used by the workflows in .github/workflows/.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      actions-minor-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch

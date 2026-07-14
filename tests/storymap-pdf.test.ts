@@ -4,7 +4,21 @@ import {
   buildStoryMapHandoutPdf,
   htmlToPlainText,
   type HandoutChapter,
+  type HandoutOptions,
 } from "../apps/geolibre-desktop/src/lib/storymap-pdf";
+
+/** Default handout options with empty running text, overridable per test. */
+function opts(overrides: Partial<HandoutOptions> = {}): HandoutOptions {
+  return {
+    paperSize: "a4",
+    orientation: "landscape",
+    title: "",
+    subtitle: "",
+    byline: "",
+    footer: "",
+    ...overrides,
+  };
+}
 
 // A valid 2x2 RGB PNG, enough for jsPDF to embed without a DOM canvas.
 const PNG_2X2 =
@@ -73,12 +87,10 @@ describe("htmlToPlainText", () => {
 
 describe("buildStoryMapHandoutPdf", () => {
   it("produces a valid PDF byte stream", () => {
-    const bytes = buildStoryMapHandoutPdf([chapter()], {
-      paperSize: "a4",
-      orientation: "landscape",
-      title: "My Story",
-      footer: "Footer",
-    });
+    const bytes = buildStoryMapHandoutPdf(
+      [chapter()],
+      opts({ title: "My Story", footer: "Footer" }),
+    );
     assert.ok(bytes instanceof Uint8Array);
     assert.ok(bytes.length > 0);
     // Every PDF starts with the "%PDF" magic header.
@@ -87,15 +99,13 @@ describe("buildStoryMapHandoutPdf", () => {
   });
 
   it("emits one page per chapter", () => {
-    const one = buildStoryMapHandoutPdf([chapter()], {
-      paperSize: "a4",
-      orientation: "portrait",
-      title: "",
-      footer: "",
-    });
+    const one = buildStoryMapHandoutPdf(
+      [chapter()],
+      opts({ orientation: "portrait" }),
+    );
     const three = buildStoryMapHandoutPdf(
       [chapter(), chapter(), chapter()],
-      { paperSize: "letter", orientation: "landscape", title: "T", footer: "F" },
+      opts({ paperSize: "letter", title: "T", footer: "F" }),
     );
     // The "/Count N" entry in the page tree reports the page count.
     const count = (bytes: Uint8Array): number => {
@@ -109,39 +119,55 @@ describe("buildStoryMapHandoutPdf", () => {
 
   it("throws when given no chapters", () => {
     assert.throws(
-      () =>
-        buildStoryMapHandoutPdf([], {
-          paperSize: "a4",
-          orientation: "portrait",
-          title: "",
-          footer: "",
-        }),
+      () => buildStoryMapHandoutPdf([], opts({ orientation: "portrait" })),
       /no chapters/,
     );
   });
 
   it("renders without a title or footer", () => {
-    const bytes = buildStoryMapHandoutPdf([chapter({ description: "" })], {
-      paperSize: "a4",
-      orientation: "portrait",
-      title: "",
-      footer: "",
-    });
+    const bytes = buildStoryMapHandoutPdf(
+      [chapter({ description: "" })],
+      opts({ orientation: "portrait" }),
+    );
     assert.ok(bytes.length > 0);
   });
 
   it("embeds a chapter photo alongside the map when present", () => {
     const withPhoto = buildStoryMapHandoutPdf(
       [chapter({ photo: { data: PNG_2X2, width: 400, height: 300 } })],
-      { paperSize: "a4", orientation: "landscape", title: "T", footer: "F" },
+      opts({ title: "T", footer: "F" }),
     );
-    const withoutPhoto = buildStoryMapHandoutPdf([chapter()], {
-      paperSize: "a4",
-      orientation: "landscape",
-      title: "T",
-      footer: "F",
-    });
+    const withoutPhoto = buildStoryMapHandoutPdf(
+      [chapter()],
+      opts({ title: "T", footer: "F" }),
+    );
     // The photo page embeds a second image, so its byte stream is larger.
     assert.ok(withPhoto.length > withoutPhoto.length);
+  });
+
+  it("renders a subtitle and byline without throwing", () => {
+    const bytes = buildStoryMapHandoutPdf(
+      [chapter()],
+      opts({
+        title: "Title",
+        subtitle: "A subtitle",
+        byline: "By GeoLibre",
+        footer: "Footer",
+      }),
+    );
+    assert.ok(bytes.length > 0);
+  });
+
+  it("renders a full-bleed slide page", () => {
+    // A full-bleed slide (start/closing screen) has no title or description and
+    // still produces a valid one-page document.
+    const bytes = buildStoryMapHandoutPdf(
+      [{ title: "", map: { data: PNG_2X2, width: 1200, height: 900 }, fullBleed: true }],
+      opts(),
+    );
+    assert.ok(bytes.length > 0);
+    const text = Buffer.from(bytes).toString("latin1");
+    const match = text.match(/\/Count (\d+)/);
+    assert.equal(match ? Number(match[1]) : -1, 1);
   });
 });

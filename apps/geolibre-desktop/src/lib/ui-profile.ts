@@ -86,6 +86,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "vector", section: "files", labelKey: "toolbar.item.vectorLayer", tier: "basic" },
   { id: "raster", section: "files", labelKey: "toolbar.item.rasterLayer", tier: "basic" },
   { id: "delimited-text", section: "files", labelKey: "toolbar.layerType.delimitedText", tier: "basic" },
+  { id: "cad", section: "files", labelKey: "toolbar.item.cadLayer", tier: "intermediate" },
   { id: "photos", section: "files", labelKey: "toolbar.layerType.photos", tier: "intermediate" },
   { id: "gpx", section: "files", labelKey: "toolbar.layerType.gpx", tier: "intermediate" },
   { id: "mbtiles", section: "files", labelKey: "toolbar.layerType.mbtiles", tier: "basic" },
@@ -95,6 +96,7 @@ export const DATA_SOURCE_CATALOG: readonly DataSourceCatalogEntry[] = [
   { id: "wms", section: "webServices", labelKey: "toolbar.layerType.wms", tier: "basic" },
   { id: "wfs", section: "webServices", labelKey: "toolbar.layerType.wfs", tier: "intermediate" },
   { id: "wmts", section: "webServices", labelKey: "toolbar.layerType.wmts", tier: "intermediate" },
+  { id: "ogc-vector-tiles", section: "webServices", labelKey: "toolbar.layerType.ogcVectorTiles", tier: "intermediate" },
   { id: "arcgis", section: "webServices", labelKey: "toolbar.layerType.arcgis", tier: "intermediate" },
   { id: "georss", section: "webServices", labelKey: "toolbar.layerType.georss", tier: "intermediate" },
   { id: "stac", section: "webServices", labelKey: "toolbar.item.stacLayer", tier: "advanced" },
@@ -223,6 +225,8 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "view.resetPitchBearing", menuId: "view", labelKey: "toolbar.item.resetPitchBearing", tier: "basic" },
   { id: "view.setView", menuId: "view", labelKey: "toolbar.item.setView", tier: "intermediate" },
   { id: "view.splitView", menuId: "view", labelKey: "toolbar.item.splitView", tier: "intermediate" },
+  { id: "view.googleMaps", menuId: "view", labelKey: "toolbar.item.viewInGoogleMaps", tier: "basic" },
+  { id: "view.googleEarth", menuId: "view", labelKey: "toolbar.item.viewInGoogleEarth", tier: "basic" },
   // Processing — ordered to mirror the Processing menu. The Whitebox toggle
   // also governs the per-category Whitebox submenus, so those categories have no
   // separate entries here. The conversion/vector/network/statistics/raster,
@@ -264,8 +268,15 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Basic so Beginners keep the toggle: Atmospheric Effects is activeByDefault,
   // so hiding it would leave the effect on with no way to turn it off.
   { id: "controls.atmosphereEffects", menuId: "controls", labelKey: "toolbar.item.atmosphereEffects", tier: "basic" },
+  { id: "controls.sun", menuId: "controls", labelKey: "toolbar.item.sun", tier: "intermediate" },
+  { id: "controls.routeAnimation", menuId: "controls", labelKey: "toolbar.item.routeAnimation", tier: "intermediate" },
   { id: "controls.spinGlobe", menuId: "controls", labelKey: "toolbar.item.spinGlobe", tier: "intermediate" },
   { id: "controls.graticule", menuId: "controls", labelKey: "toolbar.item.graticule", tier: "intermediate" },
+  // Id kept as `controls.clouds` (not renamed to `controls.weather`) so a
+  // persisted `hiddenMenuItems: ["controls.clouds"]` from before the Clouds →
+  // Weather rename keeps hiding this (now Weather) submenu instead of silently
+  // reappearing. Hiding it hides both weather overlays, which is the intent.
+  { id: "controls.clouds", menuId: "controls", labelKey: "toolbar.item.weather", tier: "intermediate" },
   { id: "controls.directions", menuId: "controls", labelKey: "toolbar.item.directions", tier: "intermediate" },
   { id: "controls.reverseGeocode", menuId: "controls", labelKey: "toolbar.item.reverseGeocode", tier: "intermediate" },
   { id: "controls.search", menuId: "controls", labelKey: "toolbar.item.search", tier: "basic" },
@@ -278,6 +289,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "controls.viewState", menuId: "controls", labelKey: "toolbar.item.viewState", tier: "advanced" },
   { id: "controls.fieldCollection", menuId: "controls", labelKey: "toolbar.item.fieldCollection", tier: "advanced" },
   { id: "controls.recordTour", menuId: "controls", labelKey: "toolbar.item.recordTour", tier: "advanced" },
+  { id: "controls.recordVideo", menuId: "controls", labelKey: "toolbar.item.recordVideo", tier: "advanced" },
   // Settings (the Settings menu and its Language/Layout/Interface entries always show)
   { id: "settings.mapPreferences", menuId: "settings", labelKey: "settings.menu.mapPreferences", tier: "intermediate" },
   { id: "settings.geocoding", menuId: "settings", labelKey: "settings.menu.geocoding", tier: "advanced" },
@@ -287,6 +299,8 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Help
   { id: "help.commandPalette", menuId: "help", labelKey: "toolbar.item.commandPalette", tier: "basic" },
   { id: "help.keyboardShortcuts", menuId: "help", labelKey: "toolbar.command.keyboardShortcuts", tier: "intermediate" },
+  { id: "help.website", menuId: "help", labelKey: "toolbar.command.website", tier: "basic" },
+  { id: "help.github", menuId: "help", labelKey: "toolbar.command.githubRepository", tier: "basic" },
   { id: "help.diagnostics", menuId: "help", labelKey: "toolbar.command.diagnostics", tier: "advanced" },
   { id: "help.feedback", menuId: "help", labelKey: "toolbar.command.giveFeedback", tier: "intermediate" },
   { id: "help.checkForUpdates", menuId: "help", labelKey: "toolbar.command.checkForUpdates", tier: "intermediate" },

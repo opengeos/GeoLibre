@@ -1,0 +1,55 @@
+name: Build Store MSIX
+
+# Manually builds the Windows MSIX package for a Microsoft Store submission and
+# uploads it as a workflow artifact. This does NOT touch any GitHub release; it
+# exists so a Store-ready package can be produced on demand (e.g. to fix a
+# rejected submission) without re-publishing a release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build MSIX
+    runs-on: windows-2025
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri release binary
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          VITE_GEE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GEE_OAUTH_CLIENT_ID }}
+          # Strip the in-app "Check for updates" flow from this Store-only build
+          # so the package updates solely through the Store (Microsoft policy
+          # 10.2.5). Set only here — the release.yml installers keep the updater.
+          GEOLIBRE_STORE_BUILD: "1"
+        run: npm run tauri:build -- --no-sign
+
+      - name: Build MSIX package
+        id: build_msix
+        shell: pwsh
+        run: ./packaging/msix/build-msix.ps1
+
+      - name: Upload MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geolibre-store-msix
+          path: ${{ steps.build_msix.outputs.msix_path }}
+          if-no-files-found: error

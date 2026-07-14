@@ -22,6 +22,12 @@ import {
   pluginAssetUrlFromSource,
   resolvePluginAssetUrl,
 } from "./plugin-asset-url";
+import {
+  computePluginBundleHash,
+  pinPluginBundle,
+  removePluginBundlePin,
+  verifyPluginBundleIntegrity,
+} from "./plugin-integrity";
 import { isTauri } from "./tauri-io";
 
 interface ExternalPluginBundleError {
@@ -37,6 +43,7 @@ interface ExternalPluginBundleLoadResult {
 
 export interface ExternalPluginLoadIssue {
   archiveName: string;
+  sourceUrl?: string;
   message: string;
 }
 
@@ -66,8 +73,18 @@ export async function loadExternalPlugins(
   manager: PluginManager,
   additionalPluginDirectories: string[] = [],
   pluginManifestUrls: string[] = [],
+  options: {
+    /**
+     * Manifest URLs of bundled drop-ins (public/plugins/<id>/). Only manifests
+     * fetched from these URLs may use `activeByDefault`; deployer-baked
+     * drop-ins are as trusted as built-ins, while runtime-installed zips and
+     * URL plugins must not force themselves active.
+     */
+    bundledManifestUrls?: readonly string[];
+  } = {},
 ): Promise<ExternalPluginLoadResult> {
   const issues: ExternalPluginLoadIssue[] = [];
+  const bundledUrls = new Set(options.bundledManifestUrls ?? []);
   // The filesystem scan (Tauri IPC + disk), the manifest URL fetches (network),
   // and the IndexedDB read (web-installed archives) are independent, so overlap
   // them. Web-installed archives are the browser counterpart of the desktop
@@ -109,6 +126,7 @@ export async function loadExternalPlugins(
         if (loadedFrom !== bundle.archiveName) {
           issues.push({
             archiveName: bundle.archiveName,
+            sourceUrl: bundle.sourceUrl,
             message: `Plugin id '${bundle.manifest.id}' is already loaded from '${loadedFrom}'. Restart GeoLibre to load this copy.`,
           });
         }
@@ -117,6 +135,7 @@ export async function loadExternalPlugins(
       if (registeredPluginIds.has(bundle.manifest.id)) {
         issues.push({
           archiveName: bundle.archiveName,
+          sourceUrl: bundle.sourceUrl,
           message: `Plugin id '${bundle.manifest.id}' is already registered.`,
         });
         continue;
@@ -124,6 +143,16 @@ export async function loadExternalPlugins(
 
       const plugin = await importExternalPlugin(bundle);
       manager.register(plugin);
+      // Manifest-level activeByDefault, honored for bundled drop-ins only
+      // (silently ignored elsewhere; see the manifest type doc). Marked after
+      // register() so the restore pass activates it with a real app API.
+      if (
+        bundle.manifest.activeByDefault === true &&
+        bundle.sourceUrl !== undefined &&
+        bundledUrls.has(bundle.sourceUrl)
+      ) {
+        manager.markDefaultActive(plugin.id);
+      }
       registeredPluginIds.add(plugin.id);
       externallyLoadedPluginSources.set(plugin.id, bundle.archiveName);
       // Inject the style only after registration succeeds; an orphaned
@@ -136,6 +165,7 @@ export async function loadExternalPlugins(
     } catch (error) {
       issues.push({
         archiveName: bundle.archiveName,
+        sourceUrl: bundle.sourceUrl,
         message:
           error instanceof Error
             ? error.message
@@ -186,10 +216,44 @@ async function loadPluginUrlBundles(
   );
   for (const [index, result] of results.entries()) {
     if (result.status === "fulfilled") {
-      bundles.push(result.value);
+      const bundle = result.value;
+      // Refuse to auto-execute a URL bundle whose code changed since it was
+      // last trusted (a silent-update / compromised-host vector). First sight
+      // pins it; a changed hash is held back until the user reloads it
+      // explicitly (which re-pins). Isolate a verification failure (e.g.
+      // crypto.subtle unavailable) to this one URL — letting it throw here would
+      // reject the whole loadExternalPlugins Promise.all and drop every plugin.
+      try {
+        const integrity = await verifyPluginBundleIntegrity(
+          manifestUrls[index],
+          bundle,
+        );
+        if (integrity.status === "changed") {
+          issues.push({
+            archiveName: bundle.archiveName,
+            sourceUrl: bundle.sourceUrl,
+            message:
+              `Plugin at '${bundle.sourceUrl}' changed since you last trusted it and was not loaded. ` +
+              "Open Settings → Plugins and reload it to review and accept the update.",
+          });
+          continue;
+        }
+      } catch (error) {
+        issues.push({
+          archiveName: bundle.archiveName,
+          sourceUrl: bundle.sourceUrl,
+          message:
+            error instanceof Error
+              ? `Could not verify plugin integrity: ${error.message}`
+              : "Could not verify plugin bundle integrity.",
+        });
+        continue;
+      }
+      bundles.push(bundle);
     } else {
       issues.push({
         archiveName: manifestUrls[index],
+        sourceUrl: manifestUrls[index],
         message:
           result.reason instanceof Error
             ? result.reason.message
@@ -241,6 +305,7 @@ async function loadPluginUrlBundle(
 
   return {
     archiveName: manifestUrl,
+    sourceUrl: manifestUrl,
     manifest,
     entrySource,
     styleSource,
@@ -549,13 +614,22 @@ export function unloadRemovedUrlPlugins(
   // synchronously, so removing entries in a separate pass avoids mutating the
   // map while iterating it.
   const toRemove: string[] = [];
+  const removedUrls = new Set<string>();
   for (const [pluginId, source] of externallyLoadedPluginSources) {
-    if (isManagedUrlSource(source) && !keep.has(source)) toRemove.push(pluginId);
+    if (isManagedUrlSource(source) && !keep.has(source)) {
+      toRemove.push(pluginId);
+      removedUrls.add(source);
+    }
   }
   for (const pluginId of toRemove) {
     manager.unregister(pluginId, app);
     removeExternalPluginStyle(pluginId);
     externallyLoadedPluginSources.delete(pluginId);
+  }
+  // Drop integrity pins for URLs no longer installed, so re-adding one later
+  // re-pins from a fresh review rather than silently matching a stale hash.
+  for (const url of removedUrls) {
+    removePluginBundlePin(url);
   }
   return toRemove;
 }
@@ -673,6 +747,9 @@ async function reloadExternalUrlPluginUncoalesced(
   externallyLoadedPluginSources.delete(existingId);
   manager.register(plugin);
   externallyLoadedPluginSources.set(plugin.id, manifestUrl);
+  // Explicit user reload: accept this version as the new trusted baseline so the
+  // next auto-scan doesn't flag it as changed.
+  pinPluginBundle(manifestUrl, await computePluginBundleHash(bundle));
   if (bundle.styleSource) {
     injectExternalPluginStyle(plugin.id, bundle.styleSource);
   }

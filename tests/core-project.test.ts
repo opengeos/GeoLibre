@@ -515,6 +515,51 @@ describe("multi-map grid persistence", () => {
     assert.equal(reparsed.primaryMapLabel, "2020");
   });
 
+  it("round-trips a secondary pane's 3D-globe viewKind", () => {
+    const secondaryMapViews = [
+      {
+        id: "globe",
+        view: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        viewKind: "cesium" as const,
+        layerVisibility: {},
+      },
+    ];
+    const project = projectFromStore({
+      projectName: "Globe",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+      basemapStyleUrl: DEFAULT_BASEMAP,
+      basemapVisible: true,
+      basemapOpacity: 1,
+      layers: [],
+      preferences: createEmptyProject().preferences,
+      mapLayout: { rows: 1, cols: 2, syncView: true },
+      secondaryMapViews,
+      primaryMapLabel: "",
+      metadata: {},
+    });
+    const reparsed = parseProject(serializeProject(project));
+    assert.equal(reparsed.secondaryMapViews?.[0].viewKind, "cesium");
+  });
+
+  it("drops an unknown viewKind so the pane defaults to the 2D map", () => {
+    const reparsed = parseProject(
+      JSON.stringify({
+        version: "0.2.0",
+        name: "Bad kind",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        mapLayout: { rows: 1, cols: 2, syncView: true },
+        secondaryMapViews: [
+          {
+            id: "a",
+            view: { center: [1, 1], zoom: 3, bearing: 0, pitch: 0 },
+            viewKind: "webgpu",
+          },
+        ],
+      }),
+    );
+    assert.equal(reparsed.secondaryMapViews?.[0].viewKind, undefined);
+  });
+
   it("reconciles surplus secondary panes down to rows * cols - 1", () => {
     const reparsed = parseProject(
       JSON.stringify({
@@ -753,6 +798,44 @@ describe("story maps", () => {
     );
     assert.equal(settingsOnly.storymap?.title, "My Story");
     assert.equal(settingsOnly.storymap?.chapters.length, 0);
+  });
+
+  it("normalizes hideChapterNav and start/closing slide settings", () => {
+    const base = {
+      version: "0.1.0",
+      name: "Story",
+      mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+    };
+    // Valid values round-trip; an invalid slide mode falls back to "none".
+    const project = parseProject(
+      JSON.stringify({
+        ...base,
+        storymap: {
+          hideChapterNav: true,
+          startSlide: "global",
+          endSlide: "warp",
+          chapters: [chapter()],
+        },
+      }),
+    );
+    assert.ok(project.storymap);
+    assert.equal(project.storymap.hideChapterNav, true);
+    assert.equal(project.storymap.startSlide, "global");
+    assert.equal(project.storymap.endSlide, "none");
+
+    // Defaults when omitted.
+    const defaults = parseProject(
+      JSON.stringify({ ...base, storymap: { chapters: [chapter()] } }),
+    );
+    assert.equal(defaults.storymap?.hideChapterNav, false);
+    assert.equal(defaults.storymap?.startSlide, "none");
+    assert.equal(defaults.storymap?.endSlide, "none");
+
+    // A settings-only story is kept when it only sets a non-default slide.
+    const settingsOnly = parseProject(
+      JSON.stringify({ ...base, storymap: { startSlide: "black", chapters: [] } }),
+    );
+    assert.equal(settingsOnly.storymap?.startSlide, "black");
   });
 
   it("round-trips a story map through the store and back to a project", () => {

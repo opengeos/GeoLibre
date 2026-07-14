@@ -17,6 +17,12 @@
 
 import type { Map as MapLibreMap } from "maplibre-gl";
 
+/** The active style object, as returned by MapLibre's `map.getStyle()`. */
+type StyleLike = ReturnType<MapLibreMap["getStyle"]>;
+
+/** Default glyph ranges warmed per fontstack (the common Latin coverage). */
+const DEFAULT_GLYPH_RANGES = ["0-255", "256-511"];
+
 /** [west, south, east, north] in degrees. */
 export type Bbox = [number, number, number, number];
 
@@ -341,11 +347,38 @@ async function resolveTileSources(
 }
 
 /**
+ * Enumerate the distinct, absolute tile URLs an offline download would warm for
+ * `bbox` across `[minZoom, maxZoom]`, per source and clamped to each source's
+ * coverage. The result is de-duplicated across sources (two sources sharing a
+ * tile template collapse to one URL), so it is the single source of truth for
+ * both the size preview and the actual download — counting a separate per-source
+ * sum could double-count shared URLs and drift from what really downloads (#992).
+ */
+async function collectTileUrls(
+  map: MapLibreMap,
+  bbox: Bbox,
+  minZoom: number,
+  maxZoom: number,
+  signal?: AbortSignal,
+): Promise<Set<string>> {
+  const urls = new Set<string>();
+  for (const src of await resolveTileSources(map, signal)) {
+    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
+    if (!range) continue;
+    for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
+      urls.add(absolute(expandTileUrl(src.template, tile, src.subdomains)));
+    }
+  }
+  return urls;
+}
+
+/**
  * Count the tiles an offline download would actually warm for `bbox` across
- * `[minZoom, maxZoom]`, per source and clamped to each source's coverage. This
- * is the preview-accurate count: it matches the tiles `collectOfflineUrls`
- * produces (so the dialog's estimate agrees with the final "Saved N of N"),
- * unlike a naive `countTiles` that ignores source maxzoom and over-counts.
+ * `[minZoom, maxZoom]`, clamped to each source's coverage and de-duplicated
+ * across sources. This is the preview-accurate count: it counts exactly the tile
+ * URLs `collectOfflineUrls` produces (so the dialog's estimate agrees with the
+ * download total), unlike a naive `countTiles` that ignores source maxzoom and
+ * over-counts.
  */
 export async function countOfflineTiles(
   map: MapLibreMap,
@@ -354,13 +387,8 @@ export async function countOfflineTiles(
   maxZoom: number,
   options: { signal?: AbortSignal } = {},
 ): Promise<number> {
-  let total = 0;
-  for (const src of await resolveTileSources(map, options.signal)) {
-    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
-    if (!range) continue;
-    total += countTiles(bbox, range.minZoom, range.maxZoom);
-  }
-  return total;
+  return (await collectTileUrls(map, bbox, minZoom, maxZoom, options.signal))
+    .size;
 }
 
 /**
@@ -397,23 +425,48 @@ export async function collectOfflineUrls(
   maxZoom: number,
   options: { glyphRanges?: string[]; signal?: AbortSignal } = {},
 ): Promise<{ urls: string[]; tileUrls: string[] }> {
-  const { glyphRanges = ["0-255", "256-511"], signal } = options;
+  const { glyphRanges = DEFAULT_GLYPH_RANGES, signal } = options;
   const style = map.getStyle();
-  const urls = new Set<string>();
-  const tileUrls = new Set<string>();
 
-  // Tile sources: enumerate each one only within its own coverage so we never
-  // request tiles past a source's maxzoom (those 404 and would fail the whole
-  // download — see clampZoomRange).
-  for (const src of await resolveTileSources(map, signal)) {
-    const range = clampZoomRange(minZoom, maxZoom, src.minzoom, src.maxzoom);
-    if (!range) continue;
-    for (const tile of enumerateTiles(bbox, range.minZoom, range.maxZoom)) {
-      const url = absolute(expandTileUrl(src.template, tile, src.subdomains));
-      urls.add(url);
-      tileUrls.add(url);
+  // Tiles: enumerated (and de-duplicated) by the same helper the size preview
+  // uses, so the estimate and the download can never disagree on the tile count.
+  const tileUrls = await collectTileUrls(map, bbox, minZoom, maxZoom, signal);
+
+  // Shared style assets (sprite + glyphs) are warmed too, but tracked only in
+  // `urls` (not `tileUrls`): they are common to every region and must not be
+  // deleted when one region is removed. Tiles and assets are served from
+  // distinct paths, so the two URL sets are disjoint and the dialog's
+  // `tiles + assets` preview equals `urls.length`. Warn if a style ever violates
+  // that (an asset URL colliding with a tile URL) — the Set would silently
+  // de-duplicate it and the preview would drift above the real download total.
+  const urls = new Set(tileUrls);
+  for (const url of collectStyleAssetUrls(style, glyphRanges)) {
+    if (tileUrls.has(url)) {
+      // `urls` still de-duplicates the collision, so the actual download count
+      // (urls.length) stays correct; only the dialog's `tiles + assets` size
+      // preview would over-count this URL by one asset.
+      console.warn(
+        `[GeoLibre] offline asset URL collides with a tile URL; the size preview over-counts it by one asset (the download itself is unaffected): ${url}`,
+      );
     }
+    urls.add(url);
   }
+
+  return { urls: [...urls], tileUrls: [...tileUrls] };
+}
+
+/**
+ * Enumerate the shared, non-tile style asset URLs that an offline download warms
+ * alongside the tiles: the sprite (json + png at 1x and 2x) and one glyph PBF per
+ * (fontstack, range) the style actually uses. Kept as the single source of truth
+ * for these URLs so the download (`collectOfflineUrls`) and the size preview
+ * (`countStyleAssets`) can never disagree about how many there are (#992).
+ */
+function collectStyleAssetUrls(
+  style: StyleLike,
+  glyphRanges: string[],
+): string[] {
+  const urls = new Set<string>();
 
   // Sprite (icons): json + png at 1x and 2x. MapLibre allows `sprite` to be a
   // string or an array of { id, url } objects (multi-sprite styles).
@@ -458,7 +511,28 @@ export async function collectOfflineUrls(
     }
   }
 
-  return { urls: [...urls], tileUrls: [...tileUrls] };
+  return [...urls];
+}
+
+/**
+ * Count the shared style asset URLs (sprite + glyphs) an offline download warms
+ * in addition to its tiles. Adding this to {@link countOfflineTiles} makes the
+ * dialog's size preview equal the live download total, which counts every URL
+ * (tiles + assets), so the estimate and the progress bar agree (#992).
+ *
+ * Args:
+ *   map: The live MapLibre map.
+ *   glyphRanges: Unicode glyph ranges warmed per fontstack; must match the value
+ *     passed to {@link collectOfflineUrls} (both default to the same ranges).
+ *
+ * Returns:
+ *   The number of distinct sprite/glyph URLs the download will fetch.
+ */
+export function countStyleAssets(
+  map: MapLibreMap,
+  glyphRanges: string[] = DEFAULT_GLYPH_RANGES,
+): number {
+  return collectStyleAssetUrls(map.getStyle(), glyphRanges).length;
 }
 
 export interface WarmProgress {

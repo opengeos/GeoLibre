@@ -1,0 +1,18 @@
+{
+  "name": "geolibre-tiles-worker",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "upng-js": "^2.1.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260707.1",
+    "@types/upng-js": "^2.1.5",
+    "wrangler": "^4.107.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  }
+}

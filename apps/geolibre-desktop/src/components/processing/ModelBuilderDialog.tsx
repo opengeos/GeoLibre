@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import {
   useAppStore,
   type GeoLibreLayer,
@@ -818,6 +819,7 @@ function StepCard({
   onRemove,
   onMove,
 }: StepCardProps): ReactElement {
+  const { t } = useTranslation();
   const tool = getVectorTool(step.toolId);
   const inputParam = step.inputParam ?? PRIMARY_INPUT_PARAM;
   const isFirst = index === 0;
@@ -856,7 +858,7 @@ function StepCard({
             className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
             onClick={() => onMove(-1)}
             disabled={index === 0}
-            aria-label="Move step up"
+            aria-label={t("processing.modelBuilder.moveStepUp")}
           >
             <ArrowUp className="h-3.5 w-3.5" />
           </button>
@@ -865,7 +867,7 @@ function StepCard({
             className="rounded p-1 text-muted-foreground hover:bg-accent disabled:opacity-30"
             onClick={() => onMove(1)}
             disabled={index === total - 1}
-            aria-label="Move step down"
+            aria-label={t("processing.modelBuilder.moveStepDown")}
           >
             <ArrowDown className="h-3.5 w-3.5" />
           </button>
@@ -873,7 +875,7 @@ function StepCard({
             type="button"
             className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             onClick={onRemove}
-            aria-label="Remove step"
+            aria-label={t("processing.modelBuilder.removeStep")}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>

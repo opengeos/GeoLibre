@@ -7,7 +7,9 @@ import {
   closeMinimapPanel,
   closePrintPanel,
   closeSearchPlacesPanel,
+  closeRouteAnimationPanel,
   closeSpinGlobePanel,
+  closeSunPanel,
   closeViewStatePanel,
   isBookmarkPanelVisible,
   isColorbarPanelVisible,
@@ -18,7 +20,9 @@ import {
   isMinimapPanelVisible,
   isPrintPanelVisible,
   isSearchPlacesPanelVisible,
+  isRouteAnimationPanelVisible,
   isSpinGlobePanelVisible,
+  isSunPanelVisible,
   isViewStatePanelVisible,
   openBookmarkPanel,
   openColorbarPanel,
@@ -28,7 +32,9 @@ import {
   openMinimapPanel,
   openPrintPanel,
   openSearchPlacesPanel,
+  openRouteAnimationPanel,
   openSpinGlobePanel,
+  openSunPanel,
   openViewStatePanel,
   subscribeBookmarkPanel,
   subscribeColorbarPanel,
@@ -39,7 +45,9 @@ import {
   subscribeMinimapPanel,
   subscribePrintPanel,
   subscribeSearchPlacesPanel,
+  subscribeRouteAnimationPanel,
   subscribeSpinGlobePanel,
+  subscribeSunPanel,
   subscribeViewStatePanel,
   toggleEarthEnginePanel,
 } from "@geolibre/plugins";
@@ -56,6 +64,8 @@ export interface ToolbarPanel {
 export interface ToolbarPanels {
   searchPlaces: ToolbarPanel;
   spinGlobe: ToolbarPanel;
+  sun: ToolbarPanel;
+  routeAnimation: ToolbarPanel;
   print: ToolbarPanel;
   colorbar: ToolbarPanel;
   legend: ToolbarPanel;
@@ -85,6 +95,16 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
     subscribeSpinGlobePanel,
     isSpinGlobePanelVisible,
     isSpinGlobePanelVisible,
+  );
+  const sunVisible = useSyncExternalStore(
+    subscribeSunPanel,
+    isSunPanelVisible,
+    isSunPanelVisible,
+  );
+  const routeAnimationVisible = useSyncExternalStore(
+    subscribeRouteAnimationPanel,
+    isRouteAnimationPanelVisible,
+    isRouteAnimationPanelVisible,
   );
   const printVisible = useSyncExternalStore(
     subscribePrintPanel,
@@ -151,6 +171,26 @@ export function useToolbarPanels(appApi: AppApi): ToolbarPanels {
           return;
         }
         openSpinGlobePanel(appApi);
+      },
+    },
+    sun: {
+      visible: sunVisible,
+      toggle: () => {
+        if (sunVisible) {
+          closeSunPanel(appApi);
+          return;
+        }
+        openSunPanel(appApi);
+      },
+    },
+    routeAnimation: {
+      visible: routeAnimationVisible,
+      toggle: () => {
+        if (routeAnimationVisible) {
+          closeRouteAnimationPanel(appApi);
+          return;
+        }
+        openRouteAnimationPanel(appApi);
       },
     },
     print: {

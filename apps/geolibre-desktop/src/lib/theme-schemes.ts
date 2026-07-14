@@ -111,6 +111,18 @@ function expandHex(hex: string): string {
 }
 
 /**
+ * Normalize free-form hex input to a canonical `#rrggbb` lowercase string, or
+ * `null` when it is not a valid 3- or 6-digit hex. A leading `#` is optional, so
+ * the Appearance pane can accept typed or pasted codes like `D58400` (#911).
+ */
+export function normalizeHexColor(value: string): string | null {
+  const trimmed = value.trim();
+  const candidate = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+  if (!isHexColor(candidate)) return null;
+  return `#${expandHex(candidate)}`;
+}
+
+/**
  * Convert a hex color to the bare HSL channels (`"H S% L%"`) the design tokens
  * expect. Returns null for invalid input.
  *

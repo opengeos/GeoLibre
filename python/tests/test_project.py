@@ -106,6 +106,35 @@ def test_wms_layer_shape_and_url():
     assert "WIDTH=256" in tile
 
 
+def test_wms_layer_version_1_3_0_uses_crs():
+    # A 1.3.0-only server (e.g. the IGN Géoplateforme raster endpoint) rejects
+    # a 1.1.1 GetMap, so the version must be honored and SRS renamed to CRS.
+    layer = project.wms_layer("x", "https://e/wms", "a", version="1.3.0")
+    tile = layer["source"]["tiles"][0]
+    assert "VERSION=1.3.0" in tile
+    assert "CRS=EPSG%3A3857" in tile
+    assert "SRS=" not in tile
+    assert "BBOX={bbox-epsg-3857}" in tile
+    assert layer["source"]["version"] == "1.3.0"
+
+
+def test_wms_layer_version_defaults_to_1_1_1():
+    layer = project.wms_layer("x", "https://e/wms", "a")
+    tile = layer["source"]["tiles"][0]
+    assert "VERSION=1.1.1" in tile
+    assert "SRS=EPSG%3A3857" in tile
+    assert "CRS=" not in tile
+    assert layer["source"]["version"] == "1.1.1"
+    # An unrecognized version falls back rather than emitting a bad request.
+    assert project.wms_layer("x", "https://e/wms", "a", version="2.0")[
+        "source"
+    ]["version"] == "1.1.1"
+    # A None from an untyped caller must not raise.
+    assert project.wms_layer("x", "https://e/wms", "a", version=None)[
+        "source"
+    ]["version"] == "1.1.1"
+
+
 def test_wms_layer_transparent_false():
     layer = project.wms_layer(
         "x", "https://e/wms", "a", transparent=False, tile_size=512

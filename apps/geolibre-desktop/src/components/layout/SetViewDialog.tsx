@@ -15,7 +15,7 @@ import {
 } from "@geolibre/ui";
 import type { MapController } from "@geolibre/map";
 import type { ParseKeys } from "i18next";
-import { ClipboardPaste, Info } from "lucide-react";
+import { ChevronDown, ClipboardPaste, Info } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { parseLatLon } from "../../lib/coordinates";
@@ -114,11 +114,11 @@ export function SetViewDialog({
   const [pasteStatus, setPasteStatus] = useState<"idle" | "ok" | "error">(
     "idle",
   );
-  // The smart-paste field is hidden until the user reveals it from the paste
-  // icon next to the heading (hover, click, or keyboard focus), so the dialog
-  // leads with the precise fields and the paste shortcut adds no clutter by
-  // default (#828). Once open it stays open so it never covers or shifts the
-  // controls below mid-interaction; it resets closed each time the dialog opens.
+  // The smart-paste field lives behind a clearly labeled, always-visible toggle
+  // button under the heading: the dialog still leads with the precise fields and
+  // the paste shortcut adds no clutter by default (#828), while the button gives
+  // the shortcut an obvious affordance instead of hiding it behind a hover-only
+  // icon (#1033). Collapsed each time the dialog opens; clicking toggles it.
   const [pasteOpen, setPasteOpen] = useState(false);
 
   // Fill all three center representations from one decimal lon/lat, so the value
@@ -478,34 +478,41 @@ export function SetViewDialog({
         <form className="space-y-5" noValidate onSubmit={handleSubmit}>
           {/* Segment A: coordinates, with a DD/DMS/DDM manual-entry toggle. */}
           <section className="space-y-3">
-            {/* Smart paste is tucked behind the paste icon next to the heading:
-                the field stays hidden so the dialog leads with the precise
-                fields. Hovering, clicking, or keyboard-focusing the icon reveals
-                it inline on demand (#828). Revealing inline (rather than as a
-                floating overlay) means the panel never covers or intercepts the
-                controls below it. */}
-            <div className="flex items-center gap-1.5">
-              <SectionHeading>
-                {t("toolbar.setView.sectionCoordinates")}
-              </SectionHeading>
-              <button
-                type="button"
-                aria-label={t("toolbar.setView.smartPaste")}
-                aria-expanded={pasteOpen}
-                aria-controls="set-view-paste-panel"
-                // Hover, click, and keyboard activation all simply reveal the
-                // panel; it then stays open (until the dialog reopens) rather
-                // than toggling, so a hover-then-click never closes it.
-                onClick={() => setPasteOpen(true)}
-                onMouseEnter={() => setPasteOpen(true)}
+            <SectionHeading>
+              {t("toolbar.setView.sectionCoordinates")}
+            </SectionHeading>
+            {/* Smart paste sits behind a clearly labeled, always-visible toggle
+                button: the panel stays collapsed so the dialog leads with the
+                precise fields (#828), but the button gives the shortcut an
+                obvious affordance rather than hiding it behind a hover-only icon
+                (#1033). Clicking toggles the panel, which expands inline (not as
+                a floating overlay) so it never covers the controls below it. */}
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={pasteOpen}
+              // Only reference the panel while it is actually mounted: it is
+              // conditionally rendered below, so pointing aria-controls at a
+              // missing id when collapsed would be a dangling reference.
+              aria-controls={pasteOpen ? "set-view-paste-panel" : undefined}
+              onClick={() => setPasteOpen((isOpen) => !isOpen)}
+              className={cn(
+                "w-full justify-start",
+                pasteOpen ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              <ClipboardPaste className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="flex-1 text-left">
+                {t("toolbar.setView.smartPaste")}
+              </span>
+              <ChevronDown
                 className={cn(
-                  "inline-flex cursor-pointer rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  pasteOpen ? "text-foreground" : "text-muted-foreground",
+                  "h-4 w-4 shrink-0 transition-transform",
+                  pasteOpen && "rotate-180",
                 )}
-              >
-                <ClipboardPaste className="h-3.5 w-3.5" aria-hidden="true" />
-              </button>
-            </div>
+                aria-hidden="true"
+              />
+            </Button>
             {pasteOpen && (
               <div
                 id="set-view-paste-panel"
@@ -513,7 +520,7 @@ export function SetViewDialog({
               >
                 <div className="flex items-center gap-1.5">
                   <Label htmlFor="set-view-paste">
-                    {t("toolbar.setView.smartPaste")}
+                    {t("toolbar.setView.smartPasteInputLabel")}
                   </Label>
                   <InfoTooltip
                     title={t("toolbar.setView.smartPasteInfoLabel")}

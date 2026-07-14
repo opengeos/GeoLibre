@@ -80,6 +80,11 @@ export interface GeoLibreWmsLayerOptions extends GeoLibreTileLayerOptions {
   format?: string;
   /** Request transparent tiles (default true). */
   transparent?: boolean;
+  /**
+   * WMS protocol version: `"1.1.1"` (default) or `"1.3.0"`. Version 1.3.0
+   * sends `CRS` instead of `SRS`; some servers accept only one version.
+   */
+  version?: string;
 }
 
 /**
@@ -173,6 +178,12 @@ export interface GeoLibrePickedVectorFile {
    * file when a saved project reopens.
    */
   sourcePath?: string;
+  /**
+   * FeatureCollection materialized by a desktop host's native vector reader.
+   * When present, the Add Vector Layer bridge can load it as GeoJSON while
+   * still persisting {@link sourcePath} for project restore.
+   */
+  nativeData?: FeatureCollection;
 }
 
 export interface GeoLibreAppAPI {
@@ -276,7 +287,11 @@ export interface GeoLibreAppAPI {
    */
   readLocalVectorFile?: (
     path: string,
-  ) => Promise<{ file: File; companionFiles: File[] } | null>;
+  ) => Promise<{
+    file: File;
+    companionFiles: File[];
+    nativeData?: FeatureCollection;
+  } | null>;
   /**
    * Save text content to a file chosen by the user. The host handles the
    * platform specifics (a native save dialog under Tauri, a browser download
@@ -332,6 +347,40 @@ export interface GeoLibreAppAPI {
    * deck.gl, so plugins should still call it with optional chaining.
    */
   getDeckGL?: () => Promise<GeoLibreDeckGL>;
+  /**
+   * Resolve GeoLibre's own `maplibre-gl-raster` module so an external plugin can
+   * render Cloud-Optimized GeoTIFFs through the host's instance instead of
+   * bundling its own. maplibre-gl-raster pulls in deck.gl and luma.gl, which
+   * throw on a second copy (luma.gl: "already initialized"); a bundled plugin
+   * copy therefore fails to activate. GeoLibre already ships maplibre-gl-raster
+   * (the built-in raster layer uses it), so it hands plugins the same instance.
+   * Always present on the GeoLibre desktop and web hosts; typed optional for
+   * forward-compatibility, so plugins should call it with optional chaining.
+   */
+  getMaplibreGlRaster?: () => Promise<typeof import("maplibre-gl-raster")>;
+  /**
+   * Set the map projection preference (persisted in app state, so the host's
+   * projection enforcement keeps it). deck.gl-backed plugins call this with
+   * `"mercator"` because deck.gl's tiled rendering does not support globe view;
+   * a raw `map.setProjection` is reverted on the next idle by the host.
+   *
+   * There is no automatic rollback: a plugin that forces a projection on
+   * activate should save the user's choice with {@link getMapProjection} first
+   * and restore it on `deactivate`, otherwise the user is left in the forced
+   * projection after the plugin is turned off. Fall back when the getter is
+   * absent on an older host so `deactivate` never passes `undefined` (the
+   * runtime guard ignores it, stranding the user in the forced projection):
+   *
+   * ```ts
+   * const saved = app.getMapProjection?.() ?? "globe";
+   * app.setMapProjection?.("mercator");
+   * // on deactivate:
+   * app.setMapProjection?.(saved);
+   * ```
+   */
+  setMapProjection?: (projection: "globe" | "mercator") => void;
+  /** Current map projection preference. */
+  getMapProjection?: () => "globe" | "mercator";
   /**
    * Register a plugin-owned right-sidebar panel that docks beside the built-in
    * Style panel and behaves like a first-class part of the workspace. Returns
@@ -478,6 +527,20 @@ export interface GeoLibreFloatingPanelRegistration {
   /** Preferred card width in px (the host clamps it to a sensible range). */
   defaultWidth?: number;
   /**
+   * Preferred card height in px. When set, the card opens at this height and its
+   * body fills it (so a `height:100%` plugin element grows with the card);
+   * omitted, the card sizes to its content. The host clamps it and lets the user
+   * resize from the corner handle.
+   */
+  defaultHeight?: number;
+  /**
+   * Which corner of the map the card first opens at (default `top-left`). The
+   * card stays freely draggable/resizable afterwards; a plugin can move it
+   * between corners by re-registering with a new position (used to back the
+   * Plugins-menu position submenu).
+   */
+  position?: GeoLibreMapControlPosition;
+  /**
    * Populate the card body. Called once with an empty container the plugin
    * fills with its own DOM. The container stays mounted while the card is open,
    * so plugin state persists. May return a cleanup function the host runs when
@@ -581,6 +644,13 @@ export interface GeoLibrePlugin {
    * that resolves to `false` (or rejects) when the mount ultimately fails; the
    * host then rolls back the optimistic active state so the Plugins menu does
    * not show a plugin that never came up.
+   *
+   * If a plugin auto-opens its control panel on activation, expand it with a
+   * `setTimeout(() => control.expand(), 0)` (the convention every built-in
+   * control follows). On a project restore the host re-collapses panels one
+   * tick after that expand so a loaded project does not bury the map (#952);
+   * deferring the expand by more than one tick would defeat that and leave the
+   * panel open after restore.
    */
   activate: (app: GeoLibreAppAPI) => boolean | void | Promise<boolean | void>;
   deactivate: (app: GeoLibreAppAPI) => void;
@@ -610,4 +680,12 @@ export interface GeoLibreExternalPluginManifest {
   entry: string;
   description?: string;
   style?: string;
+  /**
+   * Activate the plugin on startup when no saved plugin state overrides it.
+   * Honored only for bundled drop-ins (public/plugins/<id>/), which are baked
+   * into the build by the deployer and therefore as trusted as built-ins.
+   * Ignored for plugins installed at runtime from zips or manifest URLs, so
+   * third-party plugins cannot force themselves active.
+   */
+  activeByDefault?: boolean;
 }

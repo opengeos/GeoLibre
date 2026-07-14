@@ -1,4 +1,5 @@
 import { useAppStore } from "@geolibre/core";
+import type { Layer } from "@deck.gl/core";
 import type {
   RasterControl,
   RasterControlEventHandler,
@@ -6,6 +7,11 @@ import type {
 } from "maplibre-gl-raster";
 import type { GeoLibreAppAPI, GeoLibreMapControlPosition } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
+import {
+  ensureSharedDeckOverlay,
+  onSharedDeckDevice,
+  setSharedDeckLayers,
+} from "./shared-deck-overlay";
 import {
   isRasterControlStoreLayer,
   resetRasterStoreSyncSuspension,
@@ -20,6 +26,10 @@ import {
   disposeAllRasterClassification,
   disposeRasterClassification,
 } from "./raster-symbology-texture";
+import {
+  disposeAllPaletteLegends,
+  disposePaletteLegend,
+} from "./raster-palette";
 
 const rasterControlPosition: GeoLibreMapControlPosition = "top-left";
 const RASTER_PANEL_CLASS = "geolibre-raster-panel";
@@ -34,15 +44,32 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
   {
     label: "Land cover",
     url: "https://data.source.coop/giswqs/opengeos/nlcd_2021_land_cover_30m.tif",
+    attribution: "U.S. Geological Survey (USGS)",
   },
   {
     label: "Elevation (DEM)",
     url: "https://data.source.coop/giswqs/opengeos/dem.tif",
+    attribution: "U.S. Geological Survey (USGS)",
+  },
+  {
+    // Global ocean/land bathymetry: a single-band DEM good for the colormap
+    // and hillshade modes. Attribution feeds the map's attribution control
+    // while the layer is visible (upstream RasterSampleDataset.attribution).
+    label: "Bathymetry (GEBCO)",
+    url: "https://data.source.coop/giswqs/gebco-bathymetry/gebco_2026/gebco_2026.tif",
+    attribution: "GEBCO Compilation Group (2026)",
+  },
+  {
+    // A multiband Sentinel-2 L2A scene: good for RGB composites and the
+    // normalized-difference index mode (NDVI and friends).
+    label: "Sentinel-2 (multiband)",
+    url: "https://data.source.coop/opengeos/geoai/S2C-MSIL2A-20250920T162001-subset.tif",
+    attribution: "Copernicus Sentinel data (ESA)",
   },
 ];
 
 // This type mirrors undocumented private members of RasterControl from
-// maplibre-gl-raster (re-verified against v0.6.3). All access is optional (?.)
+// maplibre-gl-raster (re-verified against v0.10.1). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.
@@ -73,9 +100,11 @@ type RasterLayerManagerInternals = {
       map: MapControlHost,
       options: OverlayFactoryOptions,
     ) => OverlayLike;
+    removeOverlay?: (map: MapControlHost, overlay: OverlayLike) => void;
     loadGeoTIFF?: (url: string) => Promise<unknown>;
     geolibreTransparentOverlayPatched?: boolean;
     geolibreTauriNodataPatched?: boolean;
+    geolibreSharedOverlayPatched?: boolean;
   };
 };
 type RasterTileArray = {
@@ -100,21 +129,32 @@ let rasterControl: RasterControl | null = null;
 let rasterControlMounted = false;
 let restorePanelExpandTimeout: number | null = null;
 let rasterControlInterleaved = true;
+// Unsubscribes the web raster overlay proxy from the shared Deck's device
+// notifications when the control's overlay is torn down (see
+// patchWebRasterOverlayFactory).
+let rasterSharedOverlayDeviceUnsubscribe: (() => void) | null = null;
 
 /**
- * Details of a local raster that the panel could not render because it is a
- * striped (non-tiled) GeoTIFF rather than a tiled COG. Passed to a host handler
- * registered via {@link setNonTiledRasterHandler}, which can offer to convert it
- * to a COG (the conversion + UI live in the app layer, which has i18n and the
- * client-side converter; this framework-agnostic package only detects the case).
+ * Details of a raster that the panel could not render because it is a striped
+ * (non-tiled) GeoTIFF rather than a tiled COG. Covers both a local file and a
+ * remote URL. Passed to a host handler registered via
+ * {@link setNonTiledRasterHandler}, which can offer to convert it to a COG (the
+ * conversion + UI live in the app layer, which has i18n and the client-side
+ * converter; this framework-agnostic package only detects the case).
  */
 export interface NonTiledRasterRequest {
   /** The failed layer's id. */
   layerId: string;
   /** The failed layer's display name (used for the converted layer too). */
   name: string;
-  /** Reads the original uploaded bytes. Must be awaited before {@link dismiss},
-   * which revokes the underlying blob URL. */
+  /** Whether {@link readBytes} streams a full file over the network (a remote
+   * URL source) rather than resolving instantly from a local blob URL. The host
+   * uses this to confirm with the user *before* a potentially large download
+   * starts, instead of after. */
+  bytesAreRemote: boolean;
+  /** Reads the original bytes (a local file from its blob URL, or a remote URL
+   * fetched whole). Must be awaited before {@link dismiss}, which revokes a
+   * local file's blob URL. */
   readBytes: () => Promise<Uint8Array>;
   /** Removes the failed layer from the map and the store. */
   dismiss: () => void;
@@ -128,11 +168,20 @@ let nonTiledRasterHandler: NonTiledRasterHandler | null = null;
 // Layer ids currently being handled, so a repeated 'error' event for the same
 // failed layer does not prompt twice.
 const nonTiledInFlight = new Set<string>();
+// Cap the whole-file fetch of a remote striped GeoTIFF so a slow or stalled
+// server surfaces a clear conversion failure instead of hanging the handler
+// until the browser's (often minutes-long) global network timeout. A local
+// file's blob URL resolves instantly, so the bound only ever bites remote URLs.
+// Tuning knob: generous for the small striped GeoTIFFs this targets, but a very
+// large file on a slow link could hit it (the host then shows a download error);
+// raise it if that becomes common.
+const NON_TILED_FETCH_TIMEOUT_MS = 60_000;
 
 /**
- * Register (or clear, with `null`) a handler invoked when a local GeoTIFF fails
- * to load because it is striped rather than tiled. The app uses this to offer an
- * in-browser convert-to-COG flow. Only one handler is active at a time.
+ * Register (or clear, with `null`) a handler invoked when a GeoTIFF (local file
+ * or remote URL) fails to load because it is striped rather than tiled. The app
+ * uses this to offer an in-browser convert-to-COG flow. Only one handler is
+ * active at a time.
  *
  * @param handler - The handler, or `null` to unregister.
  */
@@ -143,7 +192,7 @@ export function setNonTiledRasterHandler(
 }
 
 /** Whether a raster load error is the upstream "striped, not tiled" failure.
- * maplibre-gl-raster (v0.6.3) rejects non-tiled GeoTIFFs with a message
+ * maplibre-gl-raster (re-verified against v0.10.1) rejects non-tiled GeoTIFFs with a message
  * containing "not tiled"; this is the only signal it exposes, so the match is
  * coupled to that wording. Re-verify it (and broaden if needed) when bumping the
  * dependency -- a reworded message degrades to the plain error, not a crash. */
@@ -425,6 +474,10 @@ async function ensureRasterControl(
     // The control mounts hidden: project restore must not surface a map
     // button the user never asked for. openRasterLayerPanel shows it.
     await patchTauriRasterOverlayFactory(rasterControl);
+    // On web the control renders interleaved, which shares deck.gl's per-map
+    // Deck with the other interleaved overlays; route it through the shared
+    // overlay so it coexists with them (#1149). No-op on Tauri (overlaid).
+    patchWebRasterOverlayFactory(app, rasterControl);
     // Patch the deck.gl render path so classified single-band rasters sample a
     // custom stepped colormap. Must run after addMapControl: the LayerManager
     // (and its _renderTileFor / _device) is created in the control's onAdd,
@@ -493,6 +546,7 @@ function createRasterControl(
   control.on("rasterremove", (event) => {
     if (!event.layerId) return;
     disposeRasterClassification(event.layerId);
+    disposePaletteLegend(event.layerId);
   });
   // A striped (non-tiled) GeoTIFF cannot be streamed as tiles, so the upstream
   // fails the layer with a "not tiled" error. Offer the registered host handler
@@ -503,12 +557,28 @@ function createRasterControl(
     const layerId = event.layerId;
     if (nonTiledInFlight.has(layerId)) return;
     const info = control.getRaster(layerId);
-    // Only local files can be re-read and converted in the browser; remote
-    // non-tiled URLs keep the plain error.
-    if (!info || !isNonTiledRasterError(info.error) || info.source.kind !== "file") {
-      return;
-    }
-    const objectUrl = info.source.objectUrl;
+    if (!info || !isNonTiledRasterError(info.error)) return;
+    // Re-read the original bytes so the host can convert them to a COG: a local
+    // file from its blob URL, a remote URL by fetching it whole. In the browser
+    // the remote fetch needs the server to allow CORS, which it normally has
+    // already (the panel range-fetched the header to detect "not tiled"); the
+    // Tauri build can patch the header read to go through Tauri commands, so a
+    // non-CORS URL can still reach here and the fetch below then fails -- it
+    // degrades safely to the host's download-failed message, not a crash. See
+    // opengeos/GeoLibre#916. The explicit per-kind check (rather than a file/else
+    // ternary) means a future source kind without a fetchable URL bails here
+    // instead of silently passing fetch(undefined), which would request the
+    // current page.
+    const bytesUrl =
+      info.source.kind === "file"
+        ? info.source.objectUrl
+        : info.source.kind === "url"
+          ? info.source.url
+          : undefined;
+    if (!bytesUrl) return;
+    // A remote URL streams the whole file over the network when read; a local
+    // file's blob URL resolves instantly. The host confirms before the download.
+    const bytesAreRemote = info.source.kind === "url";
     const handler = nonTiledRasterHandler;
     nonTiledInFlight.add(layerId);
     // Invoke inside the promise chain so even a synchronous throw from the
@@ -520,8 +590,16 @@ function createRasterControl(
         handler({
           layerId,
           name: info.name,
+          bytesAreRemote,
           readBytes: async () => {
-            const response = await fetch(objectUrl);
+            // Only bound the remote download; a local blob URL resolves from
+            // memory in microseconds, so a timeout timer there is pure overhead.
+            const response = await fetch(
+              bytesUrl,
+              bytesAreRemote
+                ? { signal: AbortSignal.timeout(NON_TILED_FETCH_TIMEOUT_MS) }
+                : undefined,
+            );
             if (!response.ok) {
               throw new Error(
                 `Failed to read raster bytes: ${response.status}`,
@@ -543,7 +621,7 @@ function createRasterControl(
   });
   // syncRasterLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
-  // _state.collapsed BEFORE emitting the event (verified against v0.6.3) --
+  // _state.collapsed BEFORE emitting the event (re-verified against v0.10.1) --
   // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: RasterControlEventHandler = () =>
     syncRasterLayersToStoreForRuntime(control);
@@ -600,6 +678,65 @@ async function patchTauriRasterOverlayFactory(
       patchGeoTiffNumericNodata(await loadGeoTIFF(url));
     deps.geolibreTauriNodataPatched = true;
   }
+}
+
+/**
+ * On web the raster control renders interleaved, so its deck.gl overlay reuses
+ * deck.gl's single per-map Deck (`map.__deck`) -- and each interleaved overlay's
+ * setProps overwrites that Deck's whole layer list with only its own layers, so
+ * a raster and a Google/deckgl-viz overlay silently erase each other
+ * (opengeos/GeoLibre#1149). This routes the control's interleaved layers through
+ * the single shared deck overlay (./shared-deck-overlay.ts) instead: createOverlay
+ * returns a lightweight proxy whose only job is to forward the control's setProps
+ * into the shared overlay under the "raster" source, and the shared Deck's luma
+ * device is fed to the control's onDeviceInitialized so its classification
+ * colormap textures still allocate against the right GPU context.
+ *
+ * No-op on Tauri, which renders overlaid (a separate deck canvas that owns its
+ * own Deck) and so never touches the shared interleaved Deck.
+ *
+ * @param app - The host application API (drives the shared overlay).
+ * @param control - The mounted maplibre-gl-raster control.
+ */
+function patchWebRasterOverlayFactory(
+  app: GeoLibreAppAPI,
+  control: RasterControl,
+): void {
+  if (isTauriRuntime()) return;
+
+  const manager = (control as unknown as RasterControlInternals)._layerManager;
+  const deps = manager?._deps;
+  if (!deps || deps.geolibreSharedOverlayPatched) return;
+
+  deps.createOverlay = (_map, options) => {
+    void ensureSharedDeckOverlay(app);
+    // Feed the shared Deck's device to the control so its GPU colormap textures
+    // allocate against the same context its COGLayers render in.
+    rasterSharedOverlayDeviceUnsubscribe?.();
+    rasterSharedOverlayDeviceUnsubscribe = onSharedDeckDevice((device) => {
+      options.onDeviceInitialized(device);
+    });
+    return {
+      setProps: (props: { layers?: unknown[] }) => {
+        setSharedDeckLayers("raster", (props.layers ?? []) as Layer[]);
+      },
+    };
+  };
+
+  // maplibre-gl-raster (re-verified against v0.10.1) calls `_deps.removeOverlay(this._map, this._overlay)`
+  // from its LayerManager teardown (after the last raster is removed / the
+  // control is destroyed); re-verify this hook exists when bumping the
+  // dependency. Even if a future version stopped calling it, the control still
+  // pushes an empty layer list through the proxy's setProps first, so the
+  // "raster" source is cleared regardless -- this only also drops the device
+  // subscription.
+  deps.removeOverlay = () => {
+    rasterSharedOverlayDeviceUnsubscribe?.();
+    rasterSharedOverlayDeviceUnsubscribe = null;
+    setSharedDeckLayers("raster", []);
+  };
+
+  deps.geolibreSharedOverlayPatched = true;
 }
 
 function patchGeoTiffNumericNodata(tiff: unknown): unknown {
@@ -676,6 +813,7 @@ function patchRasterControlOnRemove(
     }
     unwireRasterStoreSync();
     disposeAllRasterClassification();
+    disposeAllPaletteLegends();
     // A control torn down mid-restore must not leave its successor
     // permanently suppressing store sync events.
     resetRasterStoreSyncSuspension();

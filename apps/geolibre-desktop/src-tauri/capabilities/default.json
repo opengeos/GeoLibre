@@ -7,6 +7,7 @@
     "core:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-read-dir",
     "fs:allow-read-file",
     "fs:allow-read-text-file",
     "fs:allow-write-file",
@@ -16,6 +17,18 @@
       "allow": [
         { "url": "http://*" },
         { "url": "https://*" }
+      ]
+    },
+    {
+      "comment": "Hosts routed through the native HTTP client to bypass the WebView's CORS. Geocoding (place search / reverse geocode): public Nominatim's CDN intermittently omits the CORS header on cached responses (rejected as 'Search failed'), and the native client can send the User-Agent Nominatim's policy requires — keep the geocoder hosts in sync with the GEOCODING_PROVIDERS registry / lib/geocoding-fetch.ts. share.geolibre.app (project Share + gallery): its CORS policy allows the web origin but not the Tauri WebView origin, so browser fetches fail as 'Could not reach share.geolibre.app' — see lib/share-fetch.ts. Any other host (custom/self-hosted geocoder, third-party project URL) falls back to the browser fetch.",
+      "identifier": "http:default",
+      "allow": [
+        { "url": "https://nominatim.openstreetmap.org/*" },
+        { "url": "https://api.geocode.earth/*" },
+        { "url": "https://geocode.arcgis.com/*" },
+        { "url": "https://api.mapbox.com/*" },
+        { "url": "https://maps.googleapis.com/*" },
+        { "url": "https://share.geolibre.app/*" }
       ]
     }
   ]

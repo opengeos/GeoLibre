@@ -96,3 +96,66 @@ test("persists a story map across save and reopen", async ({ page }) => {
     dialog.locator('input:not([type="file"])').first(),
   ).toHaveValue("A Tour of Five Cities");
 });
+
+/**
+ * #917: the exported HTML must render in the same projection as the app (globe
+ * by default), not 2D Mercator. #921: with no native save picker, exporting
+ * must prompt for a file name first instead of auto-downloading a default.
+ */
+test("exports the story as a globe HTML page after a name prompt", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
+  });
+
+  await waitForMap(page);
+
+  const dialog = await openStoryMapPanel(page);
+  await dialog.getByRole("button", { name: "Load sample story" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Chapters (5)" }),
+  ).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Export HTML" }).click();
+
+  // No native save picker, so a name prompt appears first (#921). Confirm it.
+  const prompt = page.getByRole("dialog").filter({ hasText: "Save file as" });
+  await expect(prompt).toBeVisible();
+  await prompt.getByRole("button", { name: "Save", exact: true }).click();
+
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const html = Buffer.concat(chunks).toString("utf8");
+
+  // The exported page must carry and apply the globe projection (#917).
+  expect(html).toMatch(/"projection":\s*"globe"/);
+  expect(html).toMatch(/setProjection\(\{ type: config\.projection/);
+});
+
+/**
+ * #918: exiting a presentation that was launched from the editor must return to
+ * the editor, not drop the user onto the bare map.
+ */
+test("returns to the editor after exiting a presentation", async ({ page }) => {
+  await waitForMap(page);
+
+  const dialog = await openStoryMapPanel(page);
+  await dialog.getByRole("button", { name: "Load sample story" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Chapters (5)" }),
+  ).toBeVisible();
+
+  // Enter the presentation; the editor dialog closes.
+  await dialog.getByRole("button", { name: "Present" }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  // Exit the presentation; the editor must reopen (#918).
+  await page.getByRole("button", { name: "Exit" }).click();
+  await expect(
+    page.getByRole("dialog").getByRole("heading", { name: "Story Map" }),
+  ).toBeVisible();
+});

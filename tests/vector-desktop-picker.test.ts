@@ -10,17 +10,21 @@ function createSink() {
   const calls: Array<{
     name: string;
     companionFiles?: string[];
+    layerName?: string;
     sourcePath?: string;
+    text?: string;
   }> = [];
   const sink = {
     addData: async (
       source: File,
-      options?: { companionFiles?: File[]; sourcePath?: string },
+      options?: { companionFiles?: File[]; name?: string; sourcePath?: string },
     ) => {
       calls.push({
         name: source.name,
         companionFiles: options?.companionFiles?.map((file) => file.name),
+        layerName: options?.name,
         sourcePath: options?.sourcePath,
+        text: await source.text(),
       });
       return {} as never;
     },
@@ -61,6 +65,35 @@ describe("addPickedVectorFiles", () => {
     assert.equal(calls.length, 2);
     assert.equal(calls[0].companionFiles, undefined);
     assert.equal(calls[1].companionFiles, undefined);
+  });
+
+  it("loads native DuckDB results as GeoJSON while preserving sourcePath", async () => {
+    const { sink, calls } = createSink();
+
+    await addPickedVectorFiles(sink, [
+      {
+        file: new File(["parquet"], "places.parquet"),
+        companionFiles: [new File(["dbf"], "places.dbf")],
+        sourcePath: "/data/places.parquet",
+        nativeData: {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: { id: 1 },
+              geometry: { type: "Point", coordinates: [0, 1] },
+            },
+          ],
+        },
+      },
+    ]);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, "places.geojson");
+    assert.equal(calls[0].layerName, "places.parquet");
+    assert.equal(calls[0].sourcePath, "/data/places.parquet");
+    assert.equal(calls[0].companionFiles, undefined);
+    assert.match(calls[0].text ?? "", /"FeatureCollection"/);
   });
 
   it("loads nothing when the dialog was cancelled (empty list)", async () => {

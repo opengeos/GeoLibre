@@ -19,7 +19,7 @@ dev = [
 # `[dev]`-only install reports a misleadingly green, near-empty run. CI installs
 # this group; run it locally with `pip install -e "backend/geolibre_server[test]"`.
 test = [
-  "geolibre-server[dev,vector,raster,conversion,ml,sedona]",
+  "geolibre-server[dev,vector,raster,conversion,ml,sedona,postgis]",
 ]
 whitebox = [
   "whitebox-workflows>=2.0.2",
@@ -35,6 +35,12 @@ conversion = [
 vector = [
   "geopandas>=1.0",
   "shapely>=2.0",
+]
+# PostGIS editable layers and write-back (issue #1070 phase 2). psycopg is the
+# only requirement: geometries are read/written as GeoJSON via ST_AsGeoJSON /
+# ST_GeomFromGeoJSON, so no GeoPandas is involved on this path.
+postgis = [
+  "psycopg[binary]>=3.1",
 ]
 # Raster processing tools (hillshade, slope, reproject, polygonize, contour...).
 # rasterio + numpy already arrive via the `conversion` extra (rio-cogeo); they

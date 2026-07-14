@@ -1,4 +1,4 @@
-import { useAppStore } from "@geolibre/core";
+import { getGoogleMapsApiKey, useAppStore } from "@geolibre/core";
 import {
   BasemapControl,
   type BasemapChangeEvent,
@@ -44,7 +44,7 @@ function getTrafficOverlayCredentials(): {
 } {
   const env = getRuntimeEnvironment();
   return {
-    googleMapsApiKey: env.VITE_GOOGLE_MAPS_API_KEY?.trim() || "",
+    googleMapsApiKey: getGoogleMapsApiKey(env) || "",
     tomtomApiKey: env.VITE_TOMTOM_API_KEY?.trim() || "",
     hereApiKey: env.VITE_HERE_API_KEY?.trim() || "",
   };
@@ -102,9 +102,29 @@ let basemapControl: BasemapControl | null = null;
 // GeoLibre layer ids of registered raster basemaps, keyed by basemap id. In
 // multiple mode several raster basemaps can be registered at once.
 const registeredRasterLayers = new Map<string, string>();
+// The most recent style-basemap swap and the background style URL it replaced,
+// so a failed provider style (e.g. an Amazon Location basemap with an invalid
+// API key) can roll the background back instead of leaving a blank map. The
+// control restores the previous basemap itself when that was one of its own
+// style basemaps, but it cannot know GeoLibre's background style when the
+// previous basemap was a stacked raster, so GeoLibre keeps this fallback. See
+// opengeos/GeoLibre#913.
+let styleChangeFallback: { attemptedUrl: string; previousUrl: string } | null =
+  null;
+
+export const BASEMAP_CONTROL_PLUGIN_ID = "maplibre-gl-basemap-control";
+
+/**
+ * The live BasemapControl instance while the plugin is active, or null when it
+ * is deactivated. Mirrors getActiveTimeSliderControl; used by tests to assert
+ * the panel state seeded on (re)activation.
+ */
+export function getActiveBasemapControl(): BasemapControl | null {
+  return basemapControl;
+}
 
 export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
-  id: "maplibre-gl-basemap-control",
+  id: BASEMAP_CONTROL_PLUGIN_ID,
   name: "Basemaps",
   version: "0.3.0",
   activate: (app: GeoLibreAppAPI) => {
@@ -115,6 +135,9 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
       });
       basemapControl.on("basemapremove", (event) => {
         handleBasemapRemove(app, event);
+      });
+      basemapControl.on("error", (event) => {
+        handleBasemapError(app, event);
       });
       addRuntimeEnvListener();
     }
@@ -130,21 +153,47 @@ export const maplibreBasemapControlPlugin: GeoLibrePlugin = {
       basemapControl = null;
       return false;
     }
-    basemapControl.setState({
-      activeBasemapId: getBasemapIdForStyleUrl(app.getActiveBasemap()),
-    });
-    // Re-link raster basemap layers restored from a reopened project so that a
-    // later switch to a style basemap or a removal can unregister them (the
-    // module state does not survive a new session).
+    // Re-link raster basemap layers restored from a reopened project (or kept
+    // from a previous activation in this session) so that a later switch to a
+    // style basemap or a removal can unregister them (the module state does not
+    // survive a new session).
     relinkRestoredRasterBasemaps();
+    // Seed the fresh control instance with every basemap already on the map —
+    // the active style basemap plus any stacked rasters we just relinked — so
+    // the reopened panel highlights them as active and a re-click on a stacked
+    // raster removes it. Without the raster ids the new instance only knows the
+    // style basemap and shows restored overlays as inactive. When rasters are
+    // stacked the map is in overlay mode, so restore that too.
+    const activeStyleId = getBasemapIdForStyleUrl(app.getActiveBasemap());
+    const stackedRasterIds = [...registeredRasterLayers.keys()];
+    const activeBasemapIds = [
+      ...new Set(
+        [activeStyleId, ...stackedRasterIds].filter(
+          (id): id is string => typeof id === "string",
+        ),
+      ),
+    ];
+    basemapControl.setState({
+      activeBasemapId: activeStyleId,
+      activeBasemapIds,
+      ...(stackedRasterIds.length > 0 ? { allowMultiple: true } : {}),
+    });
     setTimeout(() => basemapControl?.expand(), 0);
   },
   deactivate: (app: GeoLibreAppAPI) => {
     if (!basemapControl) return;
     cleanupRuntimeEnvListener();
-    unregisterAllRasterBasemaps(app);
+    // Closing the control must not throw away the stacked raster basemaps the
+    // user assembled — they are real layers in the Layers panel. Keep them in
+    // the store and only drop the module-level link tracking; a later
+    // reactivation relinks them from the store via relinkRestoredRasterBasemaps
+    // (the same path a reopened project takes). See #1113 follow-up.
+    registeredRasterLayers.clear();
     app.removeMapControl(basemapControl);
     basemapControl = null;
+    // Drop any pending style-failure fallback so a later reactivation cannot
+    // act on it against a fresh control instance.
+    styleChangeFallback = null;
   },
   getMapControlPosition: () => basemapControlPosition,
   setMapControlPosition: (
@@ -239,6 +288,10 @@ function handleBasemapChange(
 ): void {
   // Narrows the BasemapControlEventPayload union so event.basemap is accessible.
   if (event.type !== "basemapchange") return;
+  // Any fresh user selection (a different style, or a raster overlay) supersedes
+  // a pending style-failure fallback, so drop it here before the early returns
+  // below. The control's own rollback carries `restored` and must keep it.
+  if (!event.restored) styleChangeFallback = null;
   const { source } = event.basemap;
   if (source.type === "raster") {
     registerRasterBasemap(app, event.basemap, event);
@@ -249,8 +302,46 @@ function handleBasemapChange(
   // before touching the layer manager, so an unrecognized future source type
   // does not evict the raster overlays without replacing the style.
   if (source.type !== "style" && source.type !== "vector-style") return;
+  // Provider style basemaps (Amazon Location, MapTiler, Mapbox, ...) carry a
+  // templated source.url with `{api-key}`/`{aws-region}` placeholders that the
+  // control substitutes from the user's credentials. Apply the resolved URL the
+  // control reports rather than the raw template, which would otherwise reach
+  // MapLibre unsubstituted and fail to load, blanking the map. Plain style
+  // basemaps have no placeholders and report no resolvedStyleUrl, so fall back
+  // to source.url. See opengeos/GeoLibre#913.
+  const styleUrl = event.resolvedStyleUrl ?? source.url;
+  // Remember the background to roll back to if this style fails to load, but not
+  // for the control's own rollback event (which carries `restored`), so a failed
+  // swap's fallback survives the rollback that follows it.
+  if (!event.restored) {
+    styleChangeFallback = {
+      attemptedUrl: styleUrl,
+      previousUrl: app.getActiveBasemap(),
+    };
+  }
   unregisterAllRasterBasemaps(app);
-  app.setBasemap(source.url);
+  app.setBasemap(styleUrl);
+}
+
+// Roll the background style back when a provider style basemap fails to load
+// (e.g. an invalid API key 403s its tiles). The control restores the previous
+// basemap itself when that was one of its own style basemaps; this backstop
+// covers the case it cannot — when the replaced background was a GeoLibre style
+// the control does not own (the user had a raster basemap stacked on top). Only
+// acts when the failed style is still applied, so it never clobbers a newer
+// successful change. See opengeos/GeoLibre#913.
+function handleBasemapError(
+  app: GeoLibreAppAPI,
+  event: BasemapControlEventPayload,
+): void {
+  if (event.type !== "error") return;
+  const fallback = styleChangeFallback;
+  if (!fallback) return;
+  styleChangeFallback = null;
+  if (app.getActiveBasemap() !== fallback.attemptedUrl) return;
+  if (fallback.previousUrl && fallback.previousUrl !== fallback.attemptedUrl) {
+    app.setBasemap(fallback.previousUrl);
+  }
 }
 
 function handleBasemapRemove(

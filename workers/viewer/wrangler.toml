@@ -2,9 +2,15 @@ name = "geolibre-viewer"
 main = "src/index.ts"
 compatibility_date = "2025-03-01"
 
-# Binds the custom domain on deploy. Because geolibre.app is managed in this
-# Cloudflare account, the DNS record and TLS certificate are provisioned
-# automatically on the first deploy.
+# Binds the custom domains on deploy. Because geolibre.app is managed in this
+# Cloudflare account, the DNS records and TLS certificates are provisioned
+# automatically on the first deploy. web.geolibre.app is the current hostname;
+# viewer.geolibre.app is the original one, kept as an alias so existing links
+# and embeds keep working.
+[[routes]]
+pattern = "web.geolibre.app"
+custom_domain = true
+
 [[routes]]
 pattern = "viewer.geolibre.app"
 custom_domain = true

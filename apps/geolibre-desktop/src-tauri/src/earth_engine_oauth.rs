@@ -309,10 +309,15 @@ fn auth_page(client_id: &str, state: &str) -> String {
   <script>
     const clientId = {client_id_json};
     const state = {state_json};
+    // Minimal Earth Engine scopes: tiles/thumbnails need `earthengine`, and the
+    // EE control's "Export" writes to Drive via the non-sensitive `drive.file`
+    // scope. `cloud-platform` is intentionally omitted (GeoLibre never uses it),
+    // keeping the app clear of Google's broad/restricted-scope verification. Keep
+    // in sync with EARTH_ENGINE_OAUTH_SCOPES in
+    // packages/plugins/src/plugins/earth-engine-auth.ts.
     const scope = [
       "https://www.googleapis.com/auth/earthengine",
-      "https://www.googleapis.com/auth/cloud-platform",
-      "https://www.googleapis.com/auth/drive"
+      "https://www.googleapis.com/auth/drive.file"
     ].join(" ");
     const button = document.getElementById("sign-in");
     const status = document.getElementById("status");

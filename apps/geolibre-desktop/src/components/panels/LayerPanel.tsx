@@ -11,22 +11,49 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
-import type { GeoLibreLayer, LayerGroup } from "@geolibre/core";
+import type { ParseKeys, TFunction } from "i18next";
+import {
+  DEFAULT_BASEMAP,
+  getPlanetaryBasemapById,
+  getPlanetaryBasemapByStyleUrl,
+  isDuckDBQueryLayer,
+  PLANET_SWITCHER_OPTIONS,
+  useAppStore,
+} from "@geolibre/core";
+import type {
+  EllipsoidId,
+  GeoLibreLayer,
+  LayerGroup,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import {
   buildTimeBinding,
   canEditLayerGeometry,
   detectTimeProperties,
   getLayerTimeBinding,
+  BASEMAP_CONTROL_PLUGIN_ID,
+  GEO_EDITOR_PLUGIN_ID,
   RASTER_SOURCE_KIND,
   reloadVectorControlLayer,
+  SKETCHES_SOURCE_KIND,
   TIME_SLIDER_PLUGIN_ID,
   type TimePropertyCandidate,
 } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
-import { isPlaceholderLayer, placeholderMessage } from "@geolibre/map";
+import {
+  applyMapboxStyleImport,
+  applyQmlImport,
+  applySldImport,
+  buildMapboxStyle,
+  buildQml,
+  buildSld,
+  isPlaceholderLayer,
+  mapboxStyleToJson,
+  parseMapboxStyle,
+  parseQml,
+  parseSld,
+  placeholderMessage,
+} from "@geolibre/map";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
@@ -39,8 +66,10 @@ import {
   DialogTitle,
   DialogDescription,
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -52,6 +81,7 @@ import {
   Separator,
   Select,
   Slider,
+  cn,
 } from "@geolibre/ui";
 import {
   CalendarClock,
@@ -68,18 +98,24 @@ import {
   GripVertical,
   Info,
   Layers,
+  Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
+  Orbit,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
   PencilRuler,
+  PenTool,
   RefreshCw,
+  Save,
+  SquarePen,
   Table2,
   TableProperties,
   Timer,
   Trash2,
+  Upload,
   ZoomIn,
 } from "lucide-react";
 import { clamp } from "../../lib/clamp";
@@ -95,6 +131,7 @@ import {
   canExportRasterLayer,
   exportRasterLayer,
 } from "../../lib/raster-export";
+import { canExtractRasterSubset } from "../../lib/raster-subset-export";
 import {
   exportVectorLayer,
   geojsonVectorSourceId,
@@ -103,6 +140,22 @@ import {
   shapefileFieldWarnings,
   type VectorExportFormat,
 } from "../../lib/vector-export";
+import {
+  openLocalDataFileWithFallback,
+  saveTextFileWithFallback,
+} from "../../lib/tauri-io";
+import {
+  readPostgisTable,
+  writePostgisTable,
+  writeVectorToSource,
+} from "@geolibre/processing";
+import {
+  postgisBaselineKeys,
+  postgisFeatureKeys,
+  resolvePostgisConnection,
+  unregisterPostgisConnection,
+} from "../../lib/postgis-connections";
+import { isTauri } from "../../lib/is-tauri";
 import { BasemapPickerDialog } from "./BasemapPickerDialog";
 import { LayerPanelPlaceSearch } from "./LayerPanelPlaceSearch";
 
@@ -119,6 +172,11 @@ interface LayerPanelProps {
   onMaterializeDuckDBLayer: (layer: GeoLibreLayer) => void;
   /** Open the floating Add Raster Layer panel for advanced raster styling. */
   onOpenRasterStylePanel: () => void;
+  /**
+   * Open the floating Extract Subset panel for a COG/WMS/XYZ layer, letting the
+   * user draw a bounding box and export a clipped GeoTIFF.
+   */
+  onOpenRasterSubset: (layer: GeoLibreLayer) => void;
   /**
    * When this flips to `true` the panel collapses to its thin rail (it is not
    * unmounted). Used to clear room for a story map presentation; the user can
@@ -145,16 +203,35 @@ interface LayerPanelProps {
 
 const BACKGROUND_SELECTION_ID = "__geolibre-background__";
 
-const REFRESH_INTERVAL_OPTIONS = [
-  { label: "Off", intervalMs: 0 },
-  { label: "15 seconds", intervalMs: 15_000 },
-  { label: "30 seconds", intervalMs: 30_000 },
-  { label: "1 minute", intervalMs: 60_000 },
-  { label: "5 minutes", intervalMs: 5 * 60_000 },
-  { label: "15 minutes", intervalMs: 15 * 60_000 },
+const REFRESH_INTERVAL_OPTIONS: ReadonlyArray<{
+  labelKey: ParseKeys;
+  intervalMs: number;
+}> = [
+  { labelKey: "layers.refreshIntervals.off", intervalMs: 0 },
+  { labelKey: "layers.refreshIntervals.s15", intervalMs: 15_000 },
+  { labelKey: "layers.refreshIntervals.s30", intervalMs: 30_000 },
+  { labelKey: "layers.refreshIntervals.m1", intervalMs: 60_000 },
+  { labelKey: "layers.refreshIntervals.m5", intervalMs: 5 * 60_000 },
+  { labelKey: "layers.refreshIntervals.m15", intervalMs: 15 * 60_000 },
 ];
 const CUSTOM_REFRESH_INTERVAL_VALUE = "custom";
 const REFRESH_STATUS_DURATION_MS = 4_000;
+
+/** Menu labels for the planet switcher, keyed by celestial body. */
+const PLANET_SWITCHER_LABEL_KEYS: Record<EllipsoidId, ParseKeys> = {
+  earth: "planetSwitcher.earth",
+  mercury: "planetSwitcher.mercury",
+  venus: "planetSwitcher.venus",
+  moon: "planetSwitcher.moon",
+  mars: "planetSwitcher.mars",
+  io: "planetSwitcher.io",
+  europa: "planetSwitcher.europa",
+  ganymede: "planetSwitcher.ganymede",
+  callisto: "planetSwitcher.callisto",
+  titan: "planetSwitcher.titan",
+  pluto: "planetSwitcher.pluto",
+  charon: "planetSwitcher.charon",
+};
 
 type LayerRefreshStatus = {
   type: "refreshing" | "success" | "error" | "warning";
@@ -177,6 +254,68 @@ function layerTypeLabel(
     return "vector";
   }
   return layer.type;
+}
+
+function sourceUrlsFromLayer(layer: GeoLibreLayer): string[] {
+  if (layer.type !== "video" || !Array.isArray(layer.source.urls)) {
+    return [];
+  }
+  return layer.source.urls.filter(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+}
+
+// Source formats whose in-place write-back the sidecar supports today. Kept in
+// sync with the backend gate in `app/vector.py` (_WRITABLE_EXTENSIONS).
+const WRITEBACK_EXTENSIONS = ["gpkg", "geojson", "json"];
+
+/**
+ * Whether the layer is an editable PostGIS table with a usable primary key
+ * (loaded via Add Data > PostgreSQL in editable mode). The sidecar diffs the
+ * features against the source table by that key on save.
+ */
+function isPostgisEditableLayer(layer: GeoLibreLayer): boolean {
+  return (
+    layer.type === "geojson" &&
+    layer.metadata.sourceKind === "postgis-table" &&
+    typeof layer.metadata.postgisTable === "string" &&
+    typeof layer.metadata.postgisPrimaryKey === "string"
+  );
+}
+
+/**
+ * Whether the layer's edits can be committed back to its source: a
+ * desktop-only, geojson-backed layer loaded either from a local file in a
+ * supported format or from a PostGIS table with a primary key. The sidecar
+ * needs real filesystem/database access, so this is false on the web build.
+ */
+function canWriteEditsToSource(layer: GeoLibreLayer): boolean {
+  if (!isTauri() || layer.type !== "geojson") return false;
+  if (isPostgisEditableLayer(layer)) return true;
+  const path =
+    typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+  if (!path) return false;
+  const ext = path.split(".").pop()?.toLowerCase();
+  return ext ? WRITEBACK_EXTENSIONS.includes(ext) : false;
+}
+
+function layerMetadataPayload(layer: GeoLibreLayer): Record<string, unknown> {
+  const videoSourceUrls = sourceUrlsFromLayer(layer);
+  return {
+    ...layer.metadata,
+    layerName: layer.name,
+    layerType: layer.type,
+    ...(videoSourceUrls.length > 0
+      ? {
+          sourceUrl: videoSourceUrls[0],
+          ...(videoSourceUrls[1]
+            ? { fallbackSourceUrl: videoSourceUrls[1] }
+            : {}),
+        }
+      : {}),
+    sourcePath: layer.sourcePath,
+  };
 }
 
 interface LayerOpacitySliderProps {
@@ -333,6 +472,7 @@ export function LayerPanel({
   onCancelGeometryEdit,
   onMaterializeDuckDBLayer,
   onOpenRasterStylePanel,
+  onOpenRasterSubset,
   autoCollapse = false,
   collapsed: controlledCollapsed,
   onCollapsedChange,
@@ -362,6 +502,27 @@ export function LayerPanel({
   const basemapOpacity = useAppStore((s) => s.basemapOpacity);
   const setBasemapVisible = useAppStore((s) => s.setBasemapVisible);
   const setBasemapOpacity = useAppStore((s) => s.setBasemapOpacity);
+  const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
+  const restoreEarthBasemap = useAppStore((s) => s.restoreEarthBasemap);
+  const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
+  // The body the switcher reflects, derived from the active *basemap* — not the
+  // ellipsoid, which Settings lets diverge from the basemap (e.g. Mars scale
+  // under an Earth style). Any planetary basemap resolves to its body: the
+  // Moon/Mars mosaics (from this switcher or the full picker) and Earth's own
+  // imagery. A normal Earth basemap (e.g. Liberty) resolves to nothing, so
+  // nothing is selected until a planetary basemap is applied.
+  const selectedPlanet =
+    getPlanetaryBasemapByStyleUrl(basemapStyleUrl)?.ellipsoidId;
+  // The Earth basemap to fall back to when a planet is deselected — the last one
+  // active while no planet was selected (e.g. Liberty). Tracked in a ref so it
+  // survives the planet round-trip. Starts undefined (not seeded from the mount
+  // value, which could be a planetary basemap if the panel mounted while off
+  // Earth) and is only ever set to a genuine Earth basemap by the guard below,
+  // so a deselect never restores a planetary sentinel.
+  const previousEarthBasemap = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!selectedPlanet) previousEarthBasemap.current = basemapStyleUrl;
+  }, [selectedPlanet, basemapStyleUrl]);
   const setLayerVisibility = useAppStore((s) => s.setLayerVisibility);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const reorderLayer = useAppStore((s) => s.reorderLayer);
@@ -369,15 +530,12 @@ export function LayerPanel({
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
+  const setLoadEditorFeaturesOpen = useAppStore(
+    (s) => s.setLoadEditorFeaturesOpen,
+  );
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
-  // Transient note shown when the user double-clicks the Background name (the
-  // rename gesture on every other layer). The background name is fixed, so
-  // instead of staying silent we surface a short-lived message explaining why
-  // (#838). The timer ref clears it after the standard status duration.
-  const [backgroundNameNotice, setBackgroundNameNotice] = useState(false);
-  const backgroundNoticeTimerRef = useRef<number | null>(null);
   const [metadataLayer, setMetadataLayer] = useState<GeoLibreLayer | null>(
     null,
   );
@@ -575,6 +733,20 @@ export function LayerPanel({
     if (group) beginGroupRename(group);
   };
 
+  // Toggle a celestial body in the switcher (like Google Earth's planet
+  // dropdown). Selecting a body applies its basemap and syncs the ellipsoid;
+  // deselecting the active body returns to Earth and restores the basemap that
+  // was showing before (e.g. Liberty).
+  const togglePlanet = (body: EllipsoidId, selected: boolean) => {
+    if (!selected) {
+      restoreEarthBasemap(previousEarthBasemap.current ?? DEFAULT_BASEMAP);
+      return;
+    }
+    const option = PLANET_SWITCHER_OPTIONS.find((o) => o.ellipsoidId === body);
+    const basemap = option && getPlanetaryBasemapById(option.basemapId);
+    if (basemap) applyPlanetaryBasemap(basemap);
+  };
+
   const beginRename = (layer: GeoLibreLayer) => {
     // Clear any flag left set by a prior cancel/commit whose blur never fired,
     // so it cannot swallow the first commit of this rename session.
@@ -605,26 +777,6 @@ export function LayerPanel({
     setEditingLayerId(null);
     setEditingName("");
   };
-
-  const showBackgroundNameNotice = useCallback(() => {
-    if (backgroundNoticeTimerRef.current !== null) {
-      window.clearTimeout(backgroundNoticeTimerRef.current);
-    }
-    setBackgroundNameNotice(true);
-    backgroundNoticeTimerRef.current = window.setTimeout(() => {
-      backgroundNoticeTimerRef.current = null;
-      setBackgroundNameNotice(false);
-    }, REFRESH_STATUS_DURATION_MS);
-  }, []);
-
-  useEffect(
-    () => () => {
-      if (backgroundNoticeTimerRef.current !== null) {
-        window.clearTimeout(backgroundNoticeTimerRef.current);
-      }
-    },
-    [],
-  );
 
   const clearRefreshStatusTimer = useCallback((layerId: string) => {
     const timer = refreshStatusTimersRef.current.get(layerId);
@@ -663,7 +815,9 @@ export function LayerPanel({
         ...current,
         [layer.id]: {
           type: "refreshing",
-          message: automatic ? "Auto refreshing..." : "Refreshing...",
+          message: automatic
+            ? t("layers.refreshingAuto")
+            : t("layers.refreshing"),
         },
       }));
 
@@ -685,9 +839,7 @@ export function LayerPanel({
               });
               return;
             }
-            throw new Error(
-              "Could not refresh this layer. Try re-opening the Add Vector Layer panel.",
-            );
+            throw new Error(t("layers.refreshVectorControlError"));
           }
           // reloadLayer fires `layerupdated`, which drives
           // syncVectorLayersToStore to persist the refreshed featureCount (and
@@ -703,8 +855,10 @@ export function LayerPanel({
               type: "success",
               message:
                 featureCount === null
-                  ? "Refreshed."
-                  : `Refreshed ${featureCount.toLocaleString()} features.`,
+                  ? t("layers.refreshed")
+                  : t("layers.refreshedCount", {
+                      count: featureCount.toLocaleString(),
+                    }),
             },
           }));
           scheduleStatusClear(layer.id);
@@ -728,7 +882,9 @@ export function LayerPanel({
           ...current,
           [layer.id]: {
             type: "success",
-            message: `Refreshed ${featureCount.toLocaleString()} features.`,
+            message: t("layers.refreshedCount", {
+              count: featureCount.toLocaleString(),
+            }),
           },
         }));
         scheduleStatusClear(layer.id);
@@ -736,7 +892,7 @@ export function LayerPanel({
         const message =
           error instanceof Error
             ? error.message
-            : "Could not refresh this layer.";
+            : t("layers.refreshError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: {
@@ -749,7 +905,7 @@ export function LayerPanel({
         refreshingLayerIdsRef.current.delete(layer.id);
       }
     },
-    [clearRefreshStatusTimer, scheduleStatusClear, updateLayer],
+    [clearRefreshStatusTimer, scheduleStatusClear, t, updateLayer],
   );
 
   const handleExportLayer = useCallback(
@@ -766,8 +922,8 @@ export function LayerPanel({
           // features, so the two cases get different diagnostics.
           const message =
             geojsonVectorSourceId(layer) !== null
-              ? "Layer data is not ready yet. Try again in a moment."
-              : "Export requires a vector layer with features.";
+              ? t("layers.exportStyleDataNotReady")
+              : t("layers.exportNeedsFeatures");
           setRefreshStatuses((current) => ({
             ...current,
             [layer.id]: { type: "error", message },
@@ -792,9 +948,11 @@ export function LayerPanel({
               warnings.length > 0
                 ? {
                     type: "warning",
-                    message: `Layer exported. ${warnings.join(" ")}`,
+                    message: t("layers.exportedWithWarnings", {
+                      warnings: warnings.join(" "),
+                    }),
                   }
-                : { type: "success", message: "Layer exported." },
+                : { type: "success", message: t("layers.exported") },
           }));
           scheduleStatusClear(layer.id);
         }
@@ -802,7 +960,7 @@ export function LayerPanel({
         const message =
           error instanceof Error
             ? error.message
-            : "Could not export this layer.";
+            : t("layers.exportLayerError");
         setRefreshStatuses((current) => ({
           ...current,
           [layer.id]: { type: "error", message },
@@ -810,7 +968,416 @@ export function LayerPanel({
         scheduleStatusClear(layer.id);
       }
     },
-    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear],
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
+  // Shared symbology-export flow: resolve the layer's features, build the style
+  // text via `build`, save it, and set the success/warning/error status. Each
+  // format (Mapbox GL / SLD / QML) supplies only its builder and file metadata,
+  // so the three export handlers stay in sync as more formats are added. A
+  // builder returns `{ error }` to abort with a message (e.g. the Mapbox
+  // exporter needs embedded features), or `{ text, warnings }` to save.
+  const exportLayerStyle = useCallback(
+    async (
+      layer: GeoLibreLayer,
+      build: (
+        geojson: FeatureCollection | null,
+      ) => { text: string; warnings: string[] } | { error: string },
+      fileMeta: {
+        defaultName: string;
+        filters: { name: string; extensions: string[] }[];
+        browserTypes: { description: string; accept: Record<string, string[]> }[];
+        mimeType: string;
+      },
+    ) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        const built = build(geojson ?? null);
+        if ("error" in built) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: { type: "error", message: built.error },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        const savedPath = await saveTextFileWithFallback(built.text, fileMeta);
+        // A null path means the user cancelled the save dialog, so no note.
+        if (savedPath !== null) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]:
+              built.warnings.length > 0
+                ? {
+                    type: "warning",
+                    message: `${t("layers.exportStyleSuccess")} ${built.warnings.join(" ")}`,
+                  }
+                : { type: "success", message: t("layers.exportStyleSuccess") },
+          }));
+          scheduleStatusClear(layer.id);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("layers.exportStyleError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, mapControllerRef, scheduleStatusClear, t],
+  );
+
+  // Export a vector layer's symbology as a self-contained Mapbox GL / MapLibre
+  // style document, so the cartography can be reused in another map or handed to
+  // a teammate instead of being locked inside the .geolibre.json project.
+  const handleExportStyle = useCallback(
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          if (!geojson) {
+            // A source-backed (Add Vector Layer) layer whose features are not
+            // readable yet is usually a not-yet-ready map source; the Mapbox
+            // export embeds the data, so it cannot proceed without it.
+            return {
+              error:
+                geojsonVectorSourceId(layer) !== null
+                  ? t("layers.exportStyleDataNotReady")
+                  : t("layers.exportStyleNeedsFeatures"),
+            };
+          }
+          const result = buildMapboxStyle(layer, geojson);
+          return { text: mapboxStyleToJson(result), warnings: result.warnings };
+        },
+        {
+          defaultName: `${sanitizeExportFileName(layer.name)}.style.json`,
+          filters: [{ name: "Mapbox GL style", extensions: ["json"] }],
+          browserTypes: [
+            {
+              description: "Mapbox GL style",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+          mimeType: "application/json",
+        },
+      ),
+    [exportLayerStyle, t],
+  );
+
+  // Export a vector layer's symbology as an OGC SLD document, the interchange
+  // format QGIS, GeoServer, MapServer, and ArcGIS speak. Unlike the Mapbox
+  // export, SLD carries no data, so a layer whose features are not readable can
+  // still export (geometry detection falls back to a symbolizer superset).
+  const handleExportSldStyle = useCallback(
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          const result = buildSld(layer, geojson);
+          return { text: result.sld, warnings: result.warnings };
+        },
+        {
+          defaultName: `${sanitizeExportFileName(layer.name)}.sld`,
+          filters: [{ name: "OGC SLD", extensions: ["sld", "xml"] }],
+          browserTypes: [
+            {
+              description: "OGC SLD",
+              accept: { "application/xml": [".sld", ".xml"] },
+            },
+          ],
+          mimeType: "application/xml",
+        },
+      ),
+    [exportLayerStyle],
+  );
+
+  // Export a vector layer's symbology as a QGIS QML style, the native style
+  // format QGIS users have on disk, so GeoLibre cartography can be opened in
+  // QGIS without rebuilding it by hand.
+  const handleExportQmlStyle = useCallback(
+    (layer: GeoLibreLayer) =>
+      exportLayerStyle(
+        layer,
+        (geojson) => {
+          const result = buildQml(layer, geojson);
+          return { text: result.qml, warnings: result.warnings };
+        },
+        {
+          defaultName: `${sanitizeExportFileName(layer.name)}.qml`,
+          filters: [{ name: "QGIS QML", extensions: ["qml"] }],
+          browserTypes: [
+            { description: "QGIS QML", accept: { "application/xml": [".qml"] } },
+          ],
+          mimeType: "application/xml",
+        },
+      ),
+    [exportLayerStyle],
+  );
+
+  // Import a symbology file (Mapbox GL / MapLibre style JSON or an OGC SLD) and
+  // apply it to a vector layer, so cartography authored elsewhere (QGIS,
+  // GeoServer, another map, or a style exported from GeoLibre) can be brought
+  // back in instead of being rebuilt by hand. The format is detected from the
+  // file content (XML vs JSON). Anything the style could not represent is
+  // surfaced as a warning rather than dropped silently.
+  const handleImportStyle = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      try {
+        const picked = await openLocalDataFileWithFallback({
+          filters: [
+            {
+              name: "Style (Mapbox GL / SLD / QML)",
+              extensions: ["json", "sld", "qml", "xml"],
+            },
+          ],
+          accept:
+            ".json,.sld,.qml,.xml,application/json,application/xml,text/xml",
+          readText: true,
+        });
+        // A null result means the user dismissed the file dialog; no note. Guard
+        // on `picked` itself (not `picked.text`) so an empty/whitespace file is
+        // still parsed and surfaces an "invalid" error rather than a silent
+        // no-op that looks like a cancel.
+        if (!picked || picked.text === undefined) return;
+
+        // Detect the format from the content, which is more reliable than the
+        // file extension (a `.xml` can hold either XML dialect): a QGIS QML has
+        // a `<qgis>`/`renderer-v2` root, an SLD a `StyledLayerDescriptor` root,
+        // and everything else is parsed as a Mapbox GL style JSON.
+        const trimmed = picked.text.trimStart();
+        const isXml = trimmed.startsWith("<");
+        const isQml = isXml && /<qgis[\s>]|<renderer-v2[\s>]/.test(picked.text);
+        const isSld = isXml && !isQml;
+
+        let result:
+          | ReturnType<typeof parseMapboxStyle>
+          | ReturnType<typeof parseSld>
+          | ReturnType<typeof parseQml>;
+        let matched: number;
+        let applyImport: (base: GeoLibreLayer["style"]) => GeoLibreLayer["style"];
+
+        if (isQml) {
+          const qmlResult = parseQml(picked.text);
+          result = qmlResult;
+          matched = qmlResult.matchedRuleCount;
+          applyImport = (base) => applyQmlImport(base, qmlResult);
+        } else if (isSld) {
+          const sldResult = parseSld(picked.text);
+          result = sldResult;
+          matched = sldResult.matchedRuleCount;
+          applyImport = (base) => applySldImport(base, sldResult);
+        } else {
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(picked.text);
+          } catch {
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.importStyleInvalid"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
+          const mapboxResult = parseMapboxStyle(parsed);
+          result = mapboxResult;
+          matched = mapboxResult.matchedLayerCount;
+          applyImport = (base) => applyMapboxStyleImport(base, mapboxResult);
+        }
+
+        if (matched === 0) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message: result.warnings[0] ?? t("layers.importStyleNoMatch"),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        // The file picker await can block while the user edits the Style panel,
+        // so merge onto the current store style (not the pre-await snapshot) to
+        // avoid clobbering a concurrent edit, matching handleRefreshLayer.
+        const latest = useAppStore
+          .getState()
+          .layers.find((candidate) => candidate.id === layer.id);
+        if (!latest) return;
+        updateLayer(layer.id, {
+          style: applyImport(latest.style),
+        });
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]:
+            result.warnings.length > 0
+              ? {
+                  type: "warning",
+                  message: `${t("layers.importStyleSuccess")} ${result.warnings.join(" ")}`,
+                }
+              : { type: "success", message: t("layers.importStyleSuccess") },
+        }));
+        scheduleStatusClear(layer.id);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : t("layers.importStyleError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [clearRefreshStatusTimer, scheduleStatusClear, t, updateLayer],
+  );
+
+  // Commit the layer's current (edited) features back to the source they were
+  // loaded from, via the sidecar: either overwriting the local file in place,
+  // or diffing against the PostGIS table by primary key. Unlike Export, there
+  // is no save dialog: write-back targets the known source.
+  const handleSaveEditsToSource = useCallback(
+    async (layer: GeoLibreLayer) => {
+      clearRefreshStatusTimer(layer.id);
+      const isPostgis = isPostgisEditableLayer(layer);
+      const path =
+        typeof layer.sourcePath === "string" ? layer.sourcePath.trim() : "";
+      if (!isPostgis && !path) return;
+      try {
+        const geojson = await resolveLayerGeojson(
+          layer,
+          mapControllerRef.current?.getMap() ?? undefined,
+        );
+        if (!geojson || geojson.features.length === 0) {
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "error",
+              message: t("layers.saveEditsNoFeatures"),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
+        let message: string;
+        if (isPostgis) {
+          const connection = resolvePostgisConnection(layer);
+          if (!connection) {
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.saveEditsPostgisNoConnection"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
+          const schema =
+            typeof layer.metadata.postgisSchema === "string"
+              ? layer.metadata.postgisSchema
+              : "public";
+          const table = layer.metadata.postgisTable as string;
+          const result = await writePostgisTable({
+            connection,
+            schema_name: schema,
+            table,
+            geojson,
+            // Scope deletions to the rows this session actually read so a
+            // save cannot sweep away rows inserted concurrently elsewhere.
+            // The baseline lives on the layer metadata, so it survives a
+            // project reload.
+            baseline_keys: postgisBaselineKeys(layer),
+          });
+          // Re-read the table so inserted features pick up their database-
+          // assigned primary keys; without this a second save would insert
+          // them again as duplicates.
+          let fresh;
+          try {
+            fresh = await readPostgisTable({
+              connection,
+              schema_name: schema,
+              table,
+            });
+          } catch {
+            // The write committed; only the refresh failed. Reporting this as
+            // a plain failure would invite a retry that re-inserts the still
+            // key-less new features, so surface a distinct warning instead.
+            setRefreshStatuses((current) => ({
+              ...current,
+              [layer.id]: {
+                type: "error",
+                message: t("layers.saveEditsPostgisRefreshWarning"),
+              },
+            }));
+            scheduleStatusClear(layer.id);
+            return;
+          }
+          // Merge into the store's current metadata, not the click-time
+          // closure: the write/re-read round trip is slow enough for other
+          // updates (auto-refresh, time-slider binding) to land in between.
+          const currentMetadata =
+            useAppStore.getState().layers.find((l) => l.id === layer.id)
+              ?.metadata ?? layer.metadata;
+          updateLayer(layer.id, {
+            geojson: fresh.geojson,
+            metadata: {
+              ...currentMetadata,
+              featureCount: fresh.feature_count,
+              postgisBaselineKeys: postgisFeatureKeys(fresh.geojson),
+            },
+          });
+          message = t("layers.saveEditsPostgisSuccess", {
+            table: `${schema}.${table}`,
+            inserted: result.inserted,
+            updated: result.updated,
+            deleted: result.deleted,
+          });
+          // The sidecar reports editor-added fields it could not persist
+          // (no matching table column); surface that so the drop is not
+          // silent behind a plain success toast.
+          if (result.skipped_fields?.length) {
+            message = `${message} ${t("layers.saveEditsPostgisSkippedFields", {
+              fields: result.skipped_fields.join(", "),
+            })}`;
+          }
+        } else {
+          const result = await writeVectorToSource({ path, geojson });
+          message = t("layers.saveEditsSuccess", {
+            count: result.feature_count,
+          });
+        }
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "success", message },
+        }));
+        scheduleStatusClear(layer.id);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : t("layers.saveEditsError");
+        setRefreshStatuses((current) => ({
+          ...current,
+          [layer.id]: { type: "error", message },
+        }));
+        scheduleStatusClear(layer.id);
+      }
+    },
+    [
+      clearRefreshStatusTimer,
+      mapControllerRef,
+      scheduleStatusClear,
+      t,
+      updateLayer,
+    ],
   );
 
   // Close the bind dialog and invalidate any in-flight scan/confirm so a late
@@ -1351,15 +1918,15 @@ export function LayerPanel({
     if (hideOwnRail) return null;
     return (
       <aside
-        aria-label="Layers (collapsed)"
+        aria-label={t("layers.panelCollapsedLabel")}
         className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-r md:py-2"
       >
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          title="Expand layers"
-          aria-label="Expand layers"
+          title={t("layers.expand")}
+          aria-label={t("layers.expand")}
           onClick={() => setIsCollapsed(false)}
         >
           <PanelLeftOpen className="h-4 w-4" />
@@ -1367,7 +1934,7 @@ export function LayerPanel({
         <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
           <Layers className="h-4 w-4" />
           <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
-            Layers
+            {t("sharedRail.layers")}
           </span>
         </div>
       </aside>
@@ -1376,19 +1943,92 @@ export function LayerPanel({
 
   return (
     <aside
-      aria-label="Layers"
+      aria-label={t("sharedRail.layers")}
       className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
     >
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize Layers panel"
+        aria-label={t("layers.resizePanel")}
         className="absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-r border-transparent hover:border-primary md:block"
         onPointerDown={onResizeStart}
       />
       <div className="flex items-center justify-between border-b px-3 py-1.5">
-        <span className="text-sm font-semibold">Layers</span>
+        <span className="text-sm font-semibold">{t("sharedRail.layers")}</span>
         <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                title={t("planetSwitcher.label")}
+                aria-label={t("planetSwitcher.label")}
+              >
+                <Orbit
+                  className={cn(
+                    "h-4 w-4",
+                    selectedPlanet &&
+                      selectedPlanet !== "earth" &&
+                      "text-primary",
+                  )}
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuLabel>{t("planetSwitcher.label")}</DropdownMenuLabel>
+              {PLANET_SWITCHER_OPTIONS.map((option) => (
+                <DropdownMenuCheckboxItem
+                  key={option.ellipsoidId}
+                  checked={selectedPlanet === option.ellipsoidId}
+                  onCheckedChange={(checked) =>
+                    togglePlanet(option.ellipsoidId, checked)
+                  }
+                >
+                  {t(PLANET_SWITCHER_LABEL_KEYS[option.ellipsoidId])}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("layers.basemaps")}
+            aria-label={t("layers.basemaps")}
+            aria-pressed={isPluginActive(BASEMAP_CONTROL_PLUGIN_ID)}
+            onClick={() =>
+              togglePlugin(
+                BASEMAP_CONTROL_PLUGIN_ID,
+                createAppAPI(mapControllerRef),
+              )
+            }
+          >
+            <MapIcon
+              className={cn(
+                "h-4 w-4",
+                isPluginActive(BASEMAP_CONTROL_PLUGIN_ID) && "text-primary",
+              )}
+            />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("layers.geoEditor")}
+            aria-label={t("layers.geoEditor")}
+            aria-pressed={isPluginActive(GEO_EDITOR_PLUGIN_ID)}
+            onClick={() =>
+              togglePlugin(GEO_EDITOR_PLUGIN_ID, createAppAPI(mapControllerRef))
+            }
+          >
+            <PenTool
+              className={cn(
+                "h-4 w-4",
+                isPluginActive(GEO_EDITOR_PLUGIN_ID) && "text-primary",
+              )}
+            />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -1403,9 +2043,15 @@ export function LayerPanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title={allLayersVisible ? "Hide all layers" : "Show all layers"}
+            title={
+              allLayersVisible
+                ? t("layers.hideAllLayers")
+                : t("layers.showAllLayers")
+            }
             aria-label={
-              allLayersVisible ? "Hide all layers" : "Show all layers"
+              allLayersVisible
+                ? t("layers.hideAllLayers")
+                : t("layers.showAllLayers")
             }
             onClick={toggleAllLayers}
           >
@@ -1419,8 +2065,8 @@ export function LayerPanel({
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title="Collapse layers"
-            aria-label="Collapse layers"
+            title={t("layers.collapse")}
+            aria-label={t("layers.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelLeftClose className="h-4 w-4" />
@@ -1486,6 +2132,20 @@ export function LayerPanel({
                   : t("layers.identifyFeatures")
               : t("layers.identifyUnavailable");
             const canEditGeometry = canEditLayerGeometry(layer);
+            // A vector layer whose in-view features can be loaded into the
+            // GeoEditor (a copy, not in-place): geojson and vector tile layers
+            // (vector-tiles, and PMTiles/MBTiles carrying vector tiles),
+            // excluding the editor's own Sketches layer. Tile layers are
+            // included here (unlike Edit geometry) because loading grabs a copy
+            // of what is rendered rather than editing the source in place;
+            // raster PMTiles/MBTiles have no vector features so are excluded.
+            const canLoadIntoEditor =
+              layer.metadata.sourceKind !== SKETCHES_SOURCE_KIND &&
+              layer.metadata.tileType !== "raster" &&
+              (layer.type === "geojson" ||
+                layer.type === "vector-tiles" ||
+                layer.type === "pmtiles" ||
+                layer.type === "mbtiles");
             const geometryEditActive = geometryEditLayerId === layer.id;
             const geometryEditElsewhere =
               geometryEditLayerId !== null && !geometryEditActive;
@@ -1499,6 +2159,15 @@ export function LayerPanel({
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
+            // Importing a style (Mapbox GL or SLD) only writes the layer's
+            // vector symbology, so it applies to any vector-styled layer (local
+            // GeoJSON and vector tiles), not just the export-capable GeoJSON
+            // layers.
+            const canImportStyle =
+              layer.type === "geojson" || layer.type === "vector-tiles";
+            // Write-back commits edits to the layer's local source file in place
+            // (desktop only, supported formats); Export writes a new file.
+            const canWriteBack = canWriteEditsToSource(layer);
             // Vector layers with a date/timestamp property can be driven by the
             // Time Slider; the binding (if any) lives on the layer metadata.
             const canBindTimeSlider = layer.type === "geojson";
@@ -1506,6 +2175,9 @@ export function LayerPanel({
             // Raster/COG layers backed by a downloadable file (a retained
             // local-bytes blob URL or a source URL) export to GeoTIFF.
             const canExportRaster = canExportRasterLayer(layer);
+            // COG/WMS/XYZ layers can also export a bounding-box subset (a clip)
+            // via the in-browser geolibre-wasm extractors, drawn on the map.
+            const canExtractSubset = canExtractRasterSubset(layer);
             // Rasters added through the floating Add Raster Layer panel are
             // styled there; offer a shortcut to reopen that panel since it is
             // dismissed (and its on-map icon removed) when closed.
@@ -1554,8 +2226,10 @@ export function LayerPanel({
                     role="button"
                     tabIndex={0}
                     draggable
-                    title="Drag to reorder"
-                    aria-label={`Drag ${layer.name} to reorder`}
+                    title={t("layers.dragToReorder")}
+                    aria-label={t("layers.dragNamedToReorder", {
+                      name: layer.name,
+                    })}
                     className="cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted active:cursor-grabbing"
                     onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                     onDragStart={(e) => handleLayerDragStart(e, layer.id)}
@@ -1565,8 +2239,16 @@ export function LayerPanel({
                   <button
                     type="button"
                     className="rounded p-0.5 hover:bg-muted"
-                    title={layer.visible ? "Hide layer" : "Show layer"}
-                    aria-label={layer.visible ? "Hide layer" : "Show layer"}
+                    title={
+                      layer.visible
+                        ? t("layers.hideLayer")
+                        : t("layers.showLayer")
+                    }
+                    aria-label={
+                      layer.visible
+                        ? t("layers.hideLayer")
+                        : t("layers.showLayer")
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerVisibility(layer.id, !layer.visible);
@@ -1584,7 +2266,7 @@ export function LayerPanel({
                       type="text"
                       className="flex-1 min-w-0 rounded border border-input bg-background px-1 py-0.5 text-sm font-medium outline-none focus:ring-1 focus:ring-ring"
                       value={editingName}
-                      aria-label={`Rename ${layer.name}`}
+                      aria-label={t("layers.renameNamed", { name: layer.name })}
                       onChange={(e) => setEditingName(e.target.value)}
                       onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                       onFocus={(e) => e.currentTarget.select()}
@@ -1646,31 +2328,31 @@ export function LayerPanel({
                   <div className="mt-1 flex items-center gap-1 rounded-sm bg-primary/10 px-1.5 py-1">
                     <PencilRuler className="h-3 w-3 text-primary" />
                     <span className="flex-1 text-[10px] font-medium text-primary">
-                      Editing geometry
+                      {t("layers.editingGeometry")}
                     </span>
                     <Button
                       variant="default"
                       size="sm"
                       className="h-6 px-2 text-[10px]"
-                      title="Save geometry edits"
+                      title={t("layers.saveGeometryEdits")}
                       onClick={(e) => {
                         e.stopPropagation();
                         onToggleGeometryEdit(layer.id);
                       }}
                     >
-                      Save
+                      {t("common.save")}
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="h-6 px-2 text-[10px]"
-                      title="Discard geometry edits"
+                      title={t("layers.discardGeometryEdits")}
                       onClick={(e) => {
                         e.stopPropagation();
                         onCancelGeometryEdit();
                       }}
                     >
-                      Cancel
+                      {t("common.cancel")}
                     </Button>
                   </div>
                 )}
@@ -1685,8 +2367,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Move up"
-                    aria-label="Move up"
+                    title={t("layers.moveUp")}
+                    aria-label={t("layers.moveUp")}
                     onClick={(e) => {
                       e.stopPropagation();
                       reorderLayer(layer.id, "up");
@@ -1698,8 +2380,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Move down"
-                    aria-label="Move down"
+                    title={t("layers.moveDown")}
+                    aria-label={t("layers.moveDown")}
                     onClick={(e) => {
                       e.stopPropagation();
                       reorderLayer(layer.id, "down");
@@ -1711,8 +2393,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Zoom to layer"
-                    aria-label="Zoom to layer"
+                    title={t("layers.zoomToLayer")}
+                    aria-label={t("layers.zoomToLayer")}
                     onClick={(e) => {
                       e.stopPropagation();
                       mapControllerRef.current?.fitLayer(layer);
@@ -1750,8 +2432,8 @@ export function LayerPanel({
                             ? "border border-primary text-primary"
                             : ""
                         }`}
-                        title="Layer actions"
-                        aria-label="Layer actions"
+                        title={t("layers.layerActions")}
+                        aria-label={t("layers.layerActions")}
                         onClick={(e: ReactMouseEvent) => e.stopPropagation()}
                       >
                         <MoreHorizontal className="h-3.5 w-3.5" />
@@ -1772,7 +2454,7 @@ export function LayerPanel({
                         }}
                       >
                         <Pencil className="mr-2 h-3.5 w-3.5" />
-                        Rename
+                        {t("layers.rename")}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       {/* The Rename item above keeps preventDefault so the
@@ -1828,7 +2510,7 @@ export function LayerPanel({
                             }}
                           >
                             <Table2 className="mr-2 h-3.5 w-3.5" />
-                            Materialize to editable layer
+                            {t("layers.materializeToEditable")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                         </>
@@ -1844,8 +2526,19 @@ export function LayerPanel({
                         >
                           <PencilRuler className="mr-2 h-3.5 w-3.5" />
                           {geometryEditActive
-                            ? "Finish editing geometry"
-                            : "Edit geometry"}
+                            ? t("layers.finishEditingGeometry")
+                            : t("layers.editGeometry")}
+                        </DropdownMenuItem>
+                      )}
+                      {canLoadIntoEditor && (
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            selectLayer(layer.id);
+                            setLoadEditorFeaturesOpen(true, layer.id);
+                          }}
+                        >
+                          <SquarePen className="mr-2 h-3.5 w-3.5" />
+                          {t("loadEditorFeatures.menuItem")}
                         </DropdownMenuItem>
                       )}
                       {canOpenAttributeTable && (
@@ -1856,7 +2549,7 @@ export function LayerPanel({
                           }}
                         >
                           <TableProperties className="mr-2 h-3.5 w-3.5" />
-                          Open attribute table
+                          {t("layers.openAttributeTable")}
                         </DropdownMenuItem>
                       )}
                       {canBindTimeSlider && (
@@ -1879,7 +2572,7 @@ export function LayerPanel({
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Download className="h-3.5 w-3.5" />
-                            Export
+                            {t("layers.export")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
                             <DropdownMenuItem
@@ -1920,6 +2613,71 @@ export function LayerPanel({
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
+                      {/* Symbology import/export live in their own Styles menu,
+                          separate from the feature-data Export menu above. */}
+                      {(canExportLayer || canImportStyle) && (
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Palette className="h-3.5 w-3.5" />
+                            {t("layers.stylesMenu")}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {canExportLayer && (
+                              <>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportStyle(layer);
+                                  }}
+                                >
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  {t("layers.exportMapboxStyle")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportSldStyle(layer);
+                                  }}
+                                >
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  {t("layers.exportSldStyle")}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    void handleExportQmlStyle(layer);
+                                  }}
+                                >
+                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  {t("layers.exportQmlStyle")}
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            {canExportLayer && canImportStyle && (
+                              <DropdownMenuSeparator />
+                            )}
+                            {canImportStyle && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleImportStyle(layer);
+                                }}
+                              >
+                                <Upload className="mr-2 h-3.5 w-3.5" />
+                                {t("layers.importStyle")}
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      )}
+                      {canWriteBack && (
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            void handleSaveEditsToSource(layer);
+                          }}
+                        >
+                          <Save className="mr-2 h-3.5 w-3.5" />
+                          {isPostgisEditableLayer(layer)
+                            ? t("layers.saveEditsToPostgis")
+                            : t("layers.saveEditsToSource")}
+                        </DropdownMenuItem>
+                      )}
                       {canEditRasterStyle && (
                         <DropdownMenuItem
                           onSelect={() => {
@@ -1931,20 +2689,32 @@ export function LayerPanel({
                           {t("layers.openRasterStylePanel")}
                         </DropdownMenuItem>
                       )}
-                      {canExportRaster && (
+                      {(canExportRaster || canExtractSubset) && (
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Download className="h-3.5 w-3.5" />
-                            Export
+                            {t("layers.export")}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                void handleExportRasterLayer(layer);
-                              }}
-                            >
-                              {t("layers.exportGeoTiff")}
-                            </DropdownMenuItem>
+                            {canExportRaster && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  void handleExportRasterLayer(layer);
+                                }}
+                              >
+                                {t("layers.exportGeoTiff")}
+                              </DropdownMenuItem>
+                            )}
+                            {canExtractSubset && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  selectLayer(layer.id);
+                                  onOpenRasterSubset(layer);
+                                }}
+                              >
+                                {t("layers.extractSubset")}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                       )}
@@ -1959,7 +2729,7 @@ export function LayerPanel({
                             isRefreshing ? "animate-spin" : ""
                           }`}
                         />
-                        Refresh
+                        {t("layers.refresh")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         disabled={!canRefresh}
@@ -1969,14 +2739,14 @@ export function LayerPanel({
                       >
                         <Timer className="mr-2 h-3.5 w-3.5" />
                         {refreshConfig.enabled
-                          ? "Auto refresh on"
-                          : "Auto refresh"}
+                          ? t("layers.autoRefreshOn")
+                          : t("layers.autoRefresh")}
                       </DropdownMenuItem>
                       {!canRefresh && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem disabled>
-                            WFS and GeoJSON URLs only
+                            {t("layers.refreshWfsGeojsonOnly")}
                           </DropdownMenuItem>
                         </>
                       )}
@@ -1986,8 +2756,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    title="Metadata"
-                    aria-label="Metadata"
+                    title={t("layers.metadata")}
+                    aria-label={t("layers.metadata")}
                     onClick={(e) => {
                       e.stopPropagation();
                       setMetadataLayer(layer);
@@ -1999,8 +2769,8 @@ export function LayerPanel({
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-destructive"
-                    title="Remove layer"
-                    aria-label="Remove layer"
+                    title={t("layers.removeLayer")}
+                    aria-label={t("layers.removeLayer")}
                     onClick={(e) => {
                       e.stopPropagation();
                       setLayerPendingRemoval(layer);
@@ -2068,28 +2838,13 @@ export function LayerPanel({
                 )}
               </button>
               <Layers className="h-3.5 w-3.5 text-muted-foreground" />
-              <span
-                className="flex-1 truncate text-sm font-medium"
-                title={t("layers.backgroundNameFixed")}
-                onDoubleClick={(e: ReactMouseEvent) => {
-                  // The card's own onDoubleClick opens the basemap picker; on
-                  // the name we instead explain that the name is fixed, since
-                  // that is where users attempt the rename gesture (#838).
-                  e.stopPropagation();
-                  showBackgroundNameNotice();
-                }}
-              >
+              <span className="flex-1 truncate text-sm font-medium">
                 {t("layers.background")}
               </span>
               <span className="text-[10px] uppercase text-muted-foreground">
                 {t("layers.typeBasemap")}
               </span>
             </div>
-            {backgroundNameNotice && (
-              <p className="mt-1 text-[10px] text-amber-600">
-                {t("layers.backgroundNameFixed")}
-              </p>
-            )}
             <LayerOpacitySlider
               label={t("layers.opacity")}
               ariaLabel={t("layers.basemapOpacity")}
@@ -2200,15 +2955,19 @@ export function LayerPanel({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {refreshSettingsLayer?.name ?? "Layer"} Auto Refresh
+              {t("layers.autoRefreshDialogTitle", {
+                name: refreshSettingsLayer?.name ?? t("layers.layerFallback"),
+              })}
             </DialogTitle>
             <DialogDescription>
-              Reload this layer from its source on a fixed interval.
+              {t("layers.autoRefreshDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           {refreshSettingsLayer && (
             <div className="space-y-3">
-              <Label htmlFor="layer-refresh-interval">Interval</Label>
+              <Label htmlFor="layer-refresh-interval">
+                {t("layers.interval")}
+              </Label>
               <Select
                 id="layer-refresh-interval"
                 value={refreshIntervalChoice}
@@ -2228,15 +2987,17 @@ export function LayerPanel({
               >
                 {REFRESH_INTERVAL_OPTIONS.map((option) => (
                   <option key={option.intervalMs} value={option.intervalMs}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </option>
                 ))}
-                <option value={CUSTOM_REFRESH_INTERVAL_VALUE}>Custom</option>
+                <option value={CUSTOM_REFRESH_INTERVAL_VALUE}>
+                  {t("layers.custom")}
+                </option>
               </Select>
               {refreshIntervalChoice === CUSTOM_REFRESH_INTERVAL_VALUE && (
                 <div className="space-y-2">
                   <Label htmlFor="layer-refresh-custom-seconds">
-                    Custom interval (seconds)
+                    {t("layers.customIntervalSeconds")}
                   </Label>
                   <div className="flex gap-2">
                     <Input
@@ -2273,12 +3034,12 @@ export function LayerPanel({
                         );
                       }}
                     >
-                      Apply
+                      {t("layers.apply")}
                     </Button>
                   </div>
                   {!customRefreshIntervalMs && customRefreshSeconds.trim() && (
                     <p className="text-xs text-destructive">
-                      Enter a positive number of seconds.
+                      {t("layers.enterPositiveSeconds")}
                     </p>
                   )}
                 </div>
@@ -2291,7 +3052,7 @@ export function LayerPanel({
               variant="ghost"
               onClick={() => setRefreshSettingsLayerId(null)}
             >
-              Close
+              {t("common.close")}
             </Button>
           </div>
         </DialogContent>
@@ -2304,22 +3065,17 @@ export function LayerPanel({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{metadataLayer?.name} Metadata</DialogTitle>
+            <DialogTitle>
+              {t("layers.metadataDialogTitle", { name: metadataLayer?.name })}
+            </DialogTitle>
             <DialogDescription>
-              Layer metadata and source information
+              {t("layers.metadataDialogDescription")}
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-80">
             <pre className="whitespace-pre-wrap break-all text-xs">
               {metadataLayer &&
-                JSON.stringify(
-                  {
-                    ...metadataLayer.metadata,
-                    sourcePath: metadataLayer.sourcePath,
-                  },
-                  null,
-                  2,
-                )}
+                JSON.stringify(layerMetadataPayload(metadataLayer), null, 2)}
             </pre>
           </ScrollArea>
         </DialogContent>
@@ -2332,10 +3088,11 @@ export function LayerPanel({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove layer?</DialogTitle>
+            <DialogTitle>{t("layers.removeLayerConfirmTitle")}</DialogTitle>
             <DialogDescription>
-              This removes {layerPendingRemoval?.name ?? "this layer"} from the
-              project and map.
+              {t("layers.removeLayerConfirmBody", {
+                name: layerPendingRemoval?.name ?? t("layers.thisLayerFallback"),
+              })}
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -2344,18 +3101,21 @@ export function LayerPanel({
               variant="ghost"
               onClick={() => setLayerPendingRemoval(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
               variant="destructive"
               onClick={() => {
                 if (!layerPendingRemoval) return;
+                // Drop the removed layer's PostGIS session state (connection
+                // string, baseline keys) so credentials don't outlive it.
+                unregisterPostgisConnection(layerPendingRemoval.id);
                 removeLayer(layerPendingRemoval.id);
                 setLayerPendingRemoval(null);
               }}
             >
-              Remove
+              {t("common.remove")}
             </Button>
           </div>
         </DialogContent>

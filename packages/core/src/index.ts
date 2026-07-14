@@ -1,4 +1,7 @@
 export * from "./types";
+export * from "./photo";
+export * from "./ellipsoids";
+export * from "./geojson-z";
 export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";
@@ -62,6 +65,7 @@ export {
   csvRowsToGeocodeRequests,
   geocodeForward,
   geocodeReverse,
+  setGeocodingFetch,
   type GeocoderConfig,
   type GeocodingProvider,
   type GeocodingProviderId,
@@ -73,8 +77,19 @@ export {
   type ReverseGeocodeDisplay,
 } from "./geocoding";
 export {
+  getCesiumIonToken,
+  getGoogleMapsApiKey,
   getProtomapsApiKey,
   getProtomapsStyleUrl,
   getRuntimeEnvironment,
   getSpatialExtensionPath,
 } from "./runtime-env";
+export {
+  GOOGLE_MAPS_API_KEY_HEADER,
+  googleMapsApiKeyHeaderValue,
+  isGooglePhotorealisticTilesetUrl,
+  nonEmptyRecord,
+  persistedThreeDTilesRequestHeaders,
+  resolveThreeDTilesRequestHeaders,
+  stripGoogleMapsApiKeyHeader,
+} from "./three-d-tiles";

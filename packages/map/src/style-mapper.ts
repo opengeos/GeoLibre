@@ -103,6 +103,13 @@ export function circlePaint(style: LayerStyle, opacity: number) {
     ),
     "circle-stroke-color": styleValue(style, "strokeColor"),
     "circle-stroke-width": styleValue(style, "strokeWidth"),
+    // Fade the outline with the layer opacity (and let it be set explicitly)
+    // so story playback can fully hide a point instead of leaving a hollow
+    // ring, and so the stroke is restored when playback ends (#934).
+    "circle-stroke-opacity": scaleByOpacity(
+      simpleStyleNumberValue(style, "stroke-opacity", 1),
+      opacity,
+    ),
   };
 }
 
@@ -150,6 +157,12 @@ export function clusterCirclePaint(style: LayerStyle, opacity: number) {
     "circle-opacity": styleValue(style, "fillOpacity") * opacity,
     "circle-stroke-color": styleValue(style, "strokeColor"),
     "circle-stroke-width": styleValue(style, "strokeWidth"),
+    // Keep the cluster outline in step with its fill so the layer opacity (and
+    // story fades) hide the whole bubble, mirroring {@link circlePaint} (#934).
+    "circle-stroke-opacity": scaleByOpacity(
+      simpleStyleNumberValue(style, "stroke-opacity", 1),
+      opacity,
+    ),
   };
 }
 

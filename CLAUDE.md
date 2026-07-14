@@ -34,8 +34,12 @@ npm run check:rust                                 # cargo check the Tauri crate
 ```
 
 The `:coverage` variants run the same suites and print a coverage summary; CI
-runs them so every build reports coverage. They are **not** gated on a threshold
-yet (the report is informational, so a low number never fails CI). The frontend
+runs them so every build reports coverage. They are now **gated on a floor**:
+`test:frontend:coverage` fails below 78% lines / 78% branches / 63% functions,
+and `test:backend:coverage` fails below 55% (`--cov-fail-under`). The floors sit
+a few points under the current numbers as a **ratchet** — regressions fail CI,
+and when coverage rises comfortably above a floor, raise the floor to lock in the
+gain. The frontend
 report only counts files a test actually imports, so a module with no test does
 not appear at all rather than as 0%. The backend coverage run (and `npm run ci`,
 which calls the `:coverage` variants) needs `pytest-cov` from the backend `dev`
@@ -48,6 +52,11 @@ tests skip themselves and CI is green but hollow:
 it with Playwright (`@playwright/test`). First run: `npx playwright install
 chromium`. The webServer reuses an already-running preview locally and rebuilds
 in CI; add specs under `e2e/`.
+
+Dependencies are watched two ways: **Dependabot** (`.github/dependabot.yml`)
+opens grouped weekly update PRs for npm, pip (backend + `python/`), cargo, and
+Actions, and the CI **`audit` job** runs `npm audit --audit-level=high`
+(blocking) plus a non-blocking `pip-audit` of the resolved backend environment.
 
 The `python/` package has its own pytest suite (`cd python && pytest`) and is built into a wheel via `npm run build:embed` (produces `apps/geolibre-desktop/dist-embed`, consumed by `python/hatch_build.py`). Its version is dynamic, sourced from `python/src/geolibre/__init__.py`.
 
@@ -80,5 +89,6 @@ The browser build proxies the sidecar at `/sidecar` (same-origin, no CORS); conf
 - Tauri CSP allowlists tile/style hosts (OpenFreeMap, CARTO) — new external map/tile hosts must be added there.
 - Map/tile-host CORS for selected release assets is handled by a dev-server raster proxy.
 - For MapLibre control styling fixes, add scoped overrides in `apps/geolibre-desktop/src/index.css`, never edit `node_modules`.
+- The Processing **menu** (`ProcessingMenu.tsx`) renders from a checked-in, auto-generated catalog, `apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts` (do not hand-edit). Whenever `geolibre-wasm` is bumped (in `packages/processing/package.json`) — including Dependabot PRs — run `node scripts/gen-whitebox-menu-catalog.mjs` and commit the result, or new/renamed WASM tools silently miss the menu (the Processing **dialog** lists them dynamically, so the gap only shows in the menu).
 - UI strings are translatable via **react-i18next**; catalogs live in `apps/geolibre-desktop/src/i18n/locales/*.json` (`en.json` is the source of truth, typed by `i18next.d.ts`). Use `t()` for new user-facing strings; a `?locale`/`?lang` query param sets the embed language. See `docs/i18n.md`.
 - Reference docs: `docs/architecture.md`, `docs/project-format.md`, `docs/plugin-api.md`, `docs/python.md`, `docs/i18n.md`, `docs/contributing.md`.

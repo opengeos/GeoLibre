@@ -3,12 +3,17 @@ import { describe, it } from "node:test";
 import {
   clearDirectionsWaypoints,
   DIRECTIONS_PLUGIN_ID,
+  extractDirectionsRouteMetrics,
+  getDirectionsRouteMetrics,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
+  isDirectionsRouteLoading,
   maplibreDirectionsPlugin,
   removeLastDirectionsWaypoint,
   subscribeDirectionsState,
 } from "../packages/plugins/src/plugins/maplibre-directions";
+
+type DirectionsResponse = Parameters<typeof extractDirectionsRouteMetrics>[0];
 
 describe("maplibreDirectionsPlugin", () => {
   it("is a Controls toggle that is off by default", () => {
@@ -29,12 +34,19 @@ describe("directions control surface (inactive)", () => {
     assert.equal(getDirectionsWaypointCount(), 0);
   });
 
+  it("reports no route metrics when the tool is inactive", () => {
+    assert.equal(getDirectionsRouteMetrics(), null);
+    assert.equal(isDirectionsRouteLoading(), false);
+  });
+
   it("treats remove-last and clear as no-ops when inactive", () => {
     assert.doesNotThrow(() => removeLastDirectionsWaypoint());
     assert.doesNotThrow(() => clearDirectionsWaypoints());
     assert.equal(getDirectionsWaypointCount(), 0);
     // A no-op removal must not leave the in-flight flag stuck on.
     assert.equal(isDirectionsRemovalInFlight(), false);
+    assert.equal(getDirectionsRouteMetrics(), null);
+    assert.equal(isDirectionsRouteLoading(), false);
   });
 
   it("returns an idempotent unsubscribe from subscribeDirectionsState", () => {
@@ -49,5 +61,108 @@ describe("directions control surface (inactive)", () => {
       unsubscribe();
       unsubscribe();
     });
+  });
+});
+
+describe("directions route metrics extraction", () => {
+  it("reads route totals and leg metrics from an OSRM response", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          distance: 1234,
+          duration: 456,
+          geometry: "",
+          legs: [
+            { distance: 1000, duration: 300 },
+            { distance: 234, duration: 156 },
+          ],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.deepEqual(metrics, {
+      totalDistanceMeters: 1234,
+      totalDurationSeconds: 456,
+      legs: [
+        { distanceMeters: 1000, durationSeconds: 300 },
+        { distanceMeters: 234, durationSeconds: 156 },
+      ],
+    });
+  });
+
+  it("falls back to complete leg totals when route totals are absent", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          geometry: "",
+          legs: [
+            { distance: 1000, duration: 300 },
+            { distance: 500, duration: 120 },
+          ],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.deepEqual(metrics, {
+      totalDistanceMeters: 1500,
+      totalDurationSeconds: 420,
+      legs: [
+        { distanceMeters: 1000, durationSeconds: 300 },
+        { distanceMeters: 500, durationSeconds: 120 },
+      ],
+    });
+  });
+
+  it("rejects incomplete leg fallback totals", () => {
+    const metrics = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          geometry: "",
+          legs: [
+            { distance: 1000, duration: 300 },
+            { distance: 500 },
+          ],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.equal(metrics, null);
+  });
+
+  it("rejects degenerate zero route totals", () => {
+    const zeroDistance = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          distance: 0,
+          duration: 30,
+          geometry: "",
+          legs: [{ distance: 0, duration: 30 }],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    const zeroDuration = extractDirectionsRouteMetrics({
+      code: "Ok",
+      routes: [
+        {
+          distance: 30,
+          duration: 0,
+          geometry: "",
+          legs: [{ distance: 30, duration: 0 }],
+        },
+      ],
+      waypoints: [],
+    } as DirectionsResponse);
+
+    assert.equal(zeroDistance, null);
+    assert.equal(zeroDuration, null);
   });
 });

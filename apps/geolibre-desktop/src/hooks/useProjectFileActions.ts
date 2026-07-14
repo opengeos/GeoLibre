@@ -24,6 +24,7 @@ import {
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { buildProjectHtml } from "../lib/html-export";
+import { ensureHtmlFileName, ensureProjectFileName } from "../lib/file-names";
 import { mergeStringLists } from "../lib/string-lists";
 import { fetchProjectFromUrl } from "../lib/project-url";
 import { resolveShareBaseUrl } from "../lib/share-geolibre";
@@ -58,27 +59,21 @@ export interface EmbedVectorDataPrompt {
 }
 
 /**
- * A pending "name this project file" prompt, shown when Save As (or a first
- * Save) runs in a browser that can only download under a fixed name.
+ * A pending "name this file" prompt, shown when a save runs in a browser that
+ * can only download under a fixed name. Used by Save As (or a first Save) and by
+ * Export as Interactive HTML; the dialog copy is carried on the prompt so the
+ * same component serves both.
  */
 export interface SaveNamePrompt {
   resolve: (name: string | null) => void;
-}
-
-/**
- * Ensure a user-entered project file name carries a recognized extension,
- * defaulting to `.geolibre.json` when none is present so the downloaded file
- * opens cleanly again later. Falls back to the default project name when blank.
- *
- * @param name - The raw file name the user typed.
- * @returns A sanitized file name ending in a project extension.
- */
-function ensureProjectFileName(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return `${DEFAULT_PROJECT_NAME}.geolibre.json`;
-  return /\.(geolibre\.json|geolibre|json)$/i.test(trimmed)
-    ? trimmed
-    : `${trimmed}.geolibre.json`;
+  /** Dialog title. */
+  title: string;
+  /** Dialog description, explaining the browser-download behaviour. */
+  description: string;
+  /** Label for the file-name input. */
+  label: string;
+  /** Placeholder for the file-name input. */
+  placeholder: string;
 }
 
 /**
@@ -267,7 +262,11 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     }
   };
 
-  const handleOpenRecent = async (path: string) => {
+  // Returns an error message to surface, or null on success/abort. It does not
+  // set the shared `actionError` itself, so each caller can route the failure to
+  // its own surface (the toolbar's modal vs. the Browser panel's inline banner)
+  // now that a single instance is shared across both.
+  const handleOpenRecent = async (path: string): Promise<string | null> => {
     // Cancel any previous in-flight open so rapid clicks cannot race and let a
     // stale fetch win by resolving last.
     recentAbortRef.current?.abort();
@@ -279,19 +278,16 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     try {
       result = await openRecentProjectFile(path, controller.signal);
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       // Only drop the entry when the project is permanently gone; preserve it
       // for transient failures (network timeout, 5xx, momentary IO error).
       if (error instanceof RecentProjectGoneError) {
         forgetRecentProject(path);
       }
       console.error("Failed to open recent project", error);
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : t("toolbar.error.couldNotOpenRecentProject"),
-      );
-      return;
+      return error instanceof Error
+        ? error.message
+        : t("toolbar.error.couldNotOpenRecentProject");
     }
 
     try {
@@ -299,16 +295,15 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         result.project,
         controller.signal,
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       loadProject(project, result.path);
+      return null;
     } catch (error) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return null;
       console.error("Failed to load recent project", error);
-      setActionError(
-        error instanceof Error
-          ? error.message
-          : t("toolbar.error.couldNotLoadRecentProject"),
-      );
+      return error instanceof Error
+        ? error.message
+        : t("toolbar.error.couldNotLoadRecentProject");
     } finally {
       if (recentAbortRef.current === controller) {
         recentAbortRef.current = null;
@@ -519,13 +514,18 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     return buildCurrentProject(nameOverride, layers);
   };
 
-  // Ask the user to name the project file. Used only when saving falls back to
-  // a browser download (no File System Access picker), where the name is the
-  // only thing the user can control. Resolves with the name, or null if cancelled.
-  const askSaveName = (defaultName: string) =>
+  // Ask the user to name the file. Used only when saving falls back to a browser
+  // download (no File System Access picker), where the name is the only thing
+  // the user can control. The caller supplies the dialog copy so the same prompt
+  // serves both project saves and HTML exports. Resolves with the name, or null
+  // if cancelled.
+  const askSaveName = (
+    defaultName: string,
+    labels: Omit<SaveNamePrompt, "resolve">,
+  ) =>
     new Promise<string | null>((resolve) => {
       setSaveNameInput(defaultName);
-      setSaveNamePrompt({ resolve });
+      setSaveNamePrompt({ resolve, ...labels });
     });
 
   const submitSaveNamePrompt = (event?: FormEvent<HTMLFormElement>) => {
@@ -579,7 +579,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       browserSaveFallsBackToDownload() &&
       (options?.saveAs === true || !existingLocalPath);
     if (promptForName) {
-      const chosen = await askSaveName(saveName);
+      const chosen = await askSaveName(saveName, {
+        title: t("toolbar.item.saveProjectAsTitle"),
+        description: t("toolbar.item.saveProjectAsDesc"),
+        label: t("toolbar.item.saveProjectFileName"),
+        placeholder: t("toolbar.item.saveProjectFileNamePlaceholder"),
+      });
       if (chosen === null) return false;
       saveName = ensureProjectFileName(chosen);
     }
@@ -634,9 +639,42 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     if (isSavingRef.current) return false;
     isSavingRef.current = true;
     try {
-      // Embed local vector data (self-contained, like Share), then strip env
-      // vars: secrets that serve no purpose in a static, shareable viewer.
-      const { project, defaultProjectName } = await buildEmbeddedProject();
+      // Derive the default file name from the project name in the store first,
+      // without materializing embedded data, so the prompt can appear right away
+      // and a cancel discards no work. This snapshot is passed to
+      // buildEmbeddedProject as the name override below, so the file-name slug
+      // and the HTML title stay consistent even if the project is renamed while
+      // the name prompt is open.
+      const projectName =
+        useAppStore.getState().projectName.trim() || DEFAULT_PROJECT_NAME;
+      const slug =
+        projectName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "geolibre-map";
+      // Browsers without the File System Access save picker (Firefox, Safari)
+      // would otherwise download immediately under the generated name, with no
+      // chance to rename the file (issue #991). Prompt for the name first;
+      // desktop and Chromium hosts get a native save dialog from
+      // saveTextFileWithFallback below instead.
+      let defaultName = `${slug}.html`;
+      if (browserSaveFallsBackToDownload()) {
+        const chosen = await askSaveName(defaultName, {
+          title: t("toolbar.item.exportHtmlAsTitle"),
+          description: t("toolbar.item.exportHtmlAsDesc"),
+          label: t("toolbar.item.exportHtmlFileName"),
+          placeholder: t("toolbar.item.exportHtmlFileNamePlaceholder"),
+        });
+        if (chosen === null) return false;
+        defaultName = ensureHtmlFileName(chosen, slug);
+      }
+      // Only now embed local vector data (self-contained, like Share) and strip
+      // env vars (secrets serve no purpose in a static viewer): this can be
+      // costly on a project with many local layers, so it runs after the user
+      // has committed to the export rather than before the prompt. Reuse the
+      // name snapshot so the title matches the slug computed above.
+      const { project, defaultProjectName } =
+        await buildEmbeddedProject(projectName);
       const safeProject = {
         ...project,
         preferences: { ...project.preferences, environmentVariables: [] },
@@ -645,15 +683,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
         project: safeProject,
         title: defaultProjectName,
       });
-      const slug =
-        defaultProjectName
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "") || "geolibre-map";
       // Returns null when the user cancels the save dialog; report that as a
       // no-op rather than a successful export.
       const savedPath = await saveTextFileWithFallback(html, {
-        defaultName: `${slug}.html`,
+        defaultName,
         filters: [{ name: t("toolbar.item.htmlFile"), extensions: ["html"] }],
         browserTypes: [
           {
@@ -720,3 +753,10 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
     handleExportHtml,
   };
 }
+
+/**
+ * The handlers and state returned by {@link useProjectFileActions}. Exported so
+ * a single hoisted instance can be shared as a prop across the toolbar and the
+ * Browser panel (two instances don't coordinate their in-flight open aborts).
+ */
+export type ProjectFileActions = ReturnType<typeof useProjectFileActions>;

@@ -1,7 +1,7 @@
 /**
  * Recovery for stale lazy-loaded chunks after a redeploy.
  *
- * On a static host (the GitHub Pages web demo behind viewer.geolibre.app), each
+ * On a static host (the GitHub Pages web demo behind web.geolibre.app), each
  * deployment writes content-hashed JS chunks and deletes the previous build's
  * chunks. Browsers cache hashed assets for hours, so a tab that loaded an
  * earlier build keeps a cached lazy chunk whose dynamic `import()` targets a

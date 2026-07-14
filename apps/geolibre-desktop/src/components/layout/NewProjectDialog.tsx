@@ -2,6 +2,8 @@ import {
   BLANK_BASEMAP,
   createDefaultMapView,
   OPENFREEMAP_BASEMAPS,
+  PLANETARY_BASEMAP_GROUPS,
+  PLANETARY_BASEMAPS,
   PROTOMAPS_BASEMAPS,
   useAppStore,
   type MapViewState,
@@ -11,6 +13,11 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
+import {
+  planetaryBasemapLabel,
+  planetaryBasemapSectionKey,
+} from "../../lib/planetary-sections";
+import { CollapsibleSection } from "../CollapsibleSection";
 import {
   Button,
   cn,
@@ -23,7 +30,13 @@ import {
   Label,
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 const DEFAULT_BASEMAP_ID = "liberty";
@@ -44,6 +57,7 @@ const THREE_D_MAP_VIEW: MapViewState = {
 type BasemapChoice =
   | (typeof OPENFREEMAP_BASEMAPS)[number]["id"]
   | (typeof PROTOMAPS_BASEMAPS)[number]["id"]
+  | (typeof PLANETARY_BASEMAPS)[number]["id"]
   | typeof CUSTOM_BASEMAP_ID
   | typeof BLANK_BASEMAP_ID;
 
@@ -60,7 +74,7 @@ function BasemapButton({ id, name, selected, onSelect }: BasemapButtonProps) {
       type="button"
       aria-pressed={selected}
       className={cn(
-        "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
+        "flex min-h-10 items-center justify-center rounded-md border px-3 py-1.5 text-center text-sm font-medium leading-tight transition-colors",
         "hover:bg-accent hover:text-accent-foreground",
         selected
           ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
@@ -88,7 +102,6 @@ export function NewProjectDialog({
 }: NewProjectDialogProps) {
   const { t } = useTranslation();
   const newProject = useAppStore((s) => s.newProject);
-  const isDirty = useAppStore((s) => s.isDirty);
   const [selectedBasemapId, setSelectedBasemapId] =
     useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
@@ -120,12 +133,28 @@ export function NewProjectDialog({
   useEffect(() => {
     if (isCustomSelected) customUrlRef.current?.focus();
   }, [isCustomSelected]);
+  // Prioritize data preservation: when the dialog opens with unsaved changes,
+  // ask to save the current project before showing the new-project form (#990),
+  // matching standard desktop and web GIS conventions. With no unsaved changes,
+  // go straight to the configuration form. Read the dirty flag once on open
+  // (not as a reactive dep) so "Do not save" doesn't re-trigger the prompt while
+  // the project is still dirty. useLayoutEffect (not useEffect) commits this
+  // before paint, so a dirty open never flashes the config form first.
+  useLayoutEffect(() => {
+    if (open) setShowSavePrompt(useAppStore.getState().isDirty);
+  }, [open]);
   const selectedPreset = useMemo<PresetBasemap | undefined>(
     () =>
       [...OPENFREEMAP_BASEMAPS, ...protomapsPresets].find(
         (basemap) => basemap.id === selectedBasemapId,
       ),
     [protomapsPresets, selectedBasemapId],
+  );
+  // Planetary basemaps are a separate list because selecting one also sets the
+  // project's celestial body (so measurements use that body's radius).
+  const selectedPlanetary = useMemo(
+    () => PLANETARY_BASEMAPS.find((basemap) => basemap.id === selectedBasemapId),
+    [selectedBasemapId],
   );
   const isCustomUrlValid = useMemo(() => {
     if (!customStyleUrl) return false;
@@ -138,7 +167,7 @@ export function NewProjectDialog({
   }, [customStyleUrl]);
   const canCreate = isCustomSelected
     ? isCustomUrlValid
-    : isBlankSelected || Boolean(selectedPreset);
+    : isBlankSelected || Boolean(selectedPreset) || Boolean(selectedPlanetary);
 
   const resetForm = () => {
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
@@ -160,12 +189,15 @@ export function NewProjectDialog({
       ? customStyleUrl
       : isBlankSelected
         ? BLANK_BASEMAP
-        : selectedPreset?.styleUrl;
+        : (selectedPreset ?? selectedPlanetary)?.styleUrl;
     if (basemapStyleUrl == null) return;
 
     newProject({
       name: projectName.trim() || DEFAULT_PROJECT_NAME,
       basemapStyleUrl,
+      // A planetary basemap seeds the matching celestial body; other basemaps
+      // leave the project on the default Earth ellipsoid.
+      ellipsoidId: selectedPlanetary?.ellipsoidId,
       mapView:
         selectedBasemapId === LIBERTY_3D_ID
           ? THREE_D_MAP_VIEW
@@ -178,21 +210,19 @@ export function NewProjectDialog({
 
   const handleCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canCreate) return;
-
-    if (isDirty) {
-      setShowSavePrompt(true);
-      return;
-    }
-
+    // Any unsaved changes were already resolved by the save prompt shown when
+    // the dialog opened, so creating here is safe. createProject() still guards
+    // on canCreate internally, so the removed call-site check is not a regression.
     createProject();
   };
 
-  const handleSaveThenCreate = async () => {
+  const handleSaveThenContinue = async () => {
     setIsSaving(true);
     try {
       const saved = await onSaveCurrentProject();
-      if (saved) createProject();
+      // Advance to the configuration form only once the current project is
+      // safely saved; a cancelled or failed save keeps the prompt up.
+      if (saved) setShowSavePrompt(false);
     } catch (error) {
       console.error("Failed to save project", error);
     } finally {
@@ -206,10 +236,9 @@ export function NewProjectDialog({
         {showSavePrompt ? (
           <>
             <DialogHeader>
-              <DialogTitle>Save current project?</DialogTitle>
+              <DialogTitle>{t("newProject.savePromptTitle")}</DialogTitle>
               <DialogDescription>
-                The current project has unsaved changes. Save them before
-                creating a new project?
+                {t("newProject.savePromptDescription")}
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-2">
@@ -217,24 +246,24 @@ export function NewProjectDialog({
                 type="button"
                 variant="outline"
                 disabled={isSaving}
-                onClick={() => setShowSavePrompt(false)}
+                onClick={() => handleOpenChange(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
                 variant="secondary"
                 disabled={isSaving}
-                onClick={createProject}
+                onClick={() => setShowSavePrompt(false)}
               >
-                Do not save
+                {t("newProject.doNotSave")}
               </Button>
               <Button
                 type="button"
                 disabled={isSaving}
-                onClick={handleSaveThenCreate}
+                onClick={handleSaveThenContinue}
               >
-                {isSaving ? "Saving..." : "Save"}
+                {isSaving ? t("newProject.saving") : t("common.save")}
               </Button>
             </div>
           </>
@@ -297,6 +326,44 @@ export function NewProjectDialog({
                     </div>
                   </div>
                 ) : null}
+
+                {PLANETARY_BASEMAP_GROUPS.map((group) => {
+                  const heading = t(planetaryBasemapSectionKey(group.id));
+                  const grid = (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {group.basemaps.map((basemap) => (
+                        <BasemapButton
+                          key={basemap.id}
+                          id={basemap.id}
+                          name={planetaryBasemapLabel(basemap, group.id)}
+                          selected={selectedBasemapId === basemap.id}
+                          onSelect={setSelectedBasemapId}
+                        />
+                      ))}
+                    </div>
+                  );
+                  // Collapse the long "other bodies" section; keep Moon/Mars open.
+                  return group.id === "other" ? (
+                    <CollapsibleSection
+                      key={group.id}
+                      title={heading}
+                      // Collapsed by default, but auto-expanded when the selected
+                      // basemap is one of these, so the selection stays visible.
+                      defaultOpen={group.basemaps.some(
+                        (b) => b.id === selectedBasemapId,
+                      )}
+                    >
+                      {grid}
+                    </CollapsibleSection>
+                  ) : (
+                    <div key={group.id} className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {heading}
+                      </p>
+                      {grid}
+                    </div>
+                  );
+                })}
 
                 <div className="space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">

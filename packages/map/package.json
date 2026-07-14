@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/map",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -10,12 +10,14 @@
   },
   "dependencies": {
     "@geolibre/core": "*",
-    "@maplibre/geojson-vt": "^6.1.0",
-    "@maplibre/vt-pbf": "^4.3.0",
+    "@maplibre/geojson-vt": "^6.1.1",
+    "@maplibre/vt-pbf": "^4.3.2",
     "@turf/bbox": "^7.3.5",
     "@turf/helpers": "^7.3.5",
+    "cesium": "^1.143.0",
+    "fast-xml-parser": "^5.9.3",
     "maplibre-gl": "^5.24.0",
-    "maplibre-gl-layer-control": "^0.17.3",
+    "maplibre-gl-layer-control": "^0.17.4",
     "pmtiles": "^4.4.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

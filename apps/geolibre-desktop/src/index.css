@@ -109,9 +109,22 @@ body,
   font-size: 18px;
 }
 
+/*
+ * Historical Imagery (Esri Wayback) control. The upstream package ships a
+ * light-only stylesheet of hardcoded literal colors with no `.dark` /
+ * prefers-color-scheme rules, so pin its `color-scheme` per theme and remap the
+ * toggle icon and expanded panel onto the app's design tokens under `.dark` so
+ * it tracks GeoLibre's in-app light/dark toggle in both directions. index.css is
+ * imported after the component stylesheet, so these rules win the cascade.
+ */
 .geolibre-esri-wayback-control,
 .esri-wayback-control-panel {
   color-scheme: light;
+}
+
+.dark .geolibre-esri-wayback-control,
+.dark .esri-wayback-control-panel {
+  color-scheme: dark;
 }
 
 .esri-wayback-control-panel .esri-wayback-range {
@@ -125,6 +138,137 @@ body,
 
 .esri-wayback-control-panel .esri-wayback-input::placeholder {
   color: #6b7280 !important;
+}
+
+/* Collapsed toggle button and its icon (the icon glyph inherits currentColor). */
+.dark .esri-wayback-control,
+.dark .esri-wayback-control-toggle {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .esri-wayback-control-toggle:hover {
+  background-color: hsl(var(--accent));
+}
+
+.dark .esri-wayback-control-icon svg {
+  stroke: hsl(var(--popover-foreground));
+}
+
+/* Expanded panel surface and chrome. */
+.dark .esri-wayback-control-panel {
+  background: hsl(var(--popover));
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .esri-wayback-control-header {
+  border-bottom-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .esri-wayback-control-close {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .esri-wayback-control-close:hover {
+  color: hsl(var(--foreground));
+}
+
+/* Secondary/muted text throughout the panel. */
+.dark .esri-wayback-status,
+.dark .esri-wayback-summary-label,
+.dark .esri-wayback-summary-detail,
+.dark .esri-wayback-release-count,
+.dark .esri-wayback-local-changes-status,
+.dark .esri-wayback-slider-endpoints,
+.dark .esri-wayback-persistent-status,
+.dark .esri-wayback-metadata dt {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .esri-wayback-status-error {
+  color: hsl(var(--destructive));
+}
+
+/* Primary/strong text throughout the panel. */
+.dark .esri-wayback-summary-value,
+.dark .esri-wayback-label,
+.dark .esri-wayback-local-changes-label,
+.dark .esri-wayback-metadata h3,
+.dark .esri-wayback-metadata dd {
+  color: hsl(var(--foreground));
+}
+
+/* Grouped sub-panels (summary card, slider, persistent-layer box, metadata). */
+.dark .esri-wayback-summary {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+.dark .esri-wayback-slider,
+.dark .esri-wayback-persistent {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+}
+
+.dark .esri-wayback-metadata {
+  border-top-color: hsl(var(--border));
+}
+
+/* Slider step buttons. */
+.dark .esri-wayback-slider-button {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.dark .esri-wayback-slider-button:hover:not(:disabled) {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--ring));
+}
+
+.dark .esri-wayback-slider-button:disabled {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Retarget the native range/checkbox accent (a fixed light-blue above) onto the
+   theme so the slider control itself tracks dark mode, not just its container. */
+.dark .esri-wayback-range,
+.dark .esri-wayback-local-changes-checkbox {
+  accent-color: hsl(var(--primary));
+}
+
+/* Persistent-layer name input (higher specificity + !important beats the
+   forced-light rule above). */
+.dark .esri-wayback-control-panel .esri-wayback-input {
+  background-color: hsl(var(--background)) !important;
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark .esri-wayback-control-panel .esri-wayback-input::placeholder {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+.dark .esri-wayback-input:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+}
+
+/* "Add layer" primary button. */
+.dark .esri-wayback-add-layer-button {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.dark .esri-wayback-add-layer-button:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.9);
+}
+
+.dark .esri-wayback-add-layer-button:disabled {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
 }
 
 .geolibre-components-control .maplibregl-ctrl-group,
@@ -793,7 +937,7 @@ body,
 }
 
 #deckgl-overlay {
-  z-index: 1;
+  z-index: 5;
 }
 
 /*
@@ -1610,6 +1754,11 @@ body,
   box-shadow: 0 0 0 2px hsl(var(--ring) / 0.16) !important;
 }
 
+.geolibre-3d-tiles-panel .geolibre-google-tiles-key-toggle {
+  align-self: flex-start;
+  margin-top: 6px;
+}
+
 .geolibre-3d-tiles-panel .three-d-tiles-checkbox input,
 .geolibre-3d-tiles-panel .three-d-tiles-list-actions input[type="checkbox"],
 .geolibre-3d-tiles-panel .three-d-tiles-opacity {
@@ -2000,7 +2149,48 @@ body,
   max-width: 100vw;
   max-height: 100vh;
   object-fit: contain;
-  cursor: zoom-out;
+  /* Honor the source's EXIF orientation when showing the original bytes so a
+     portrait photo isn't displayed sideways. */
+  image-orientation: from-image;
+  transform-origin: center center;
+  cursor: zoom-in;
+  /* Wheel/double-click zoom animates; panning drags update transform live. */
+  transition: transform 0.12s ease-out;
+  touch-action: none;
+  will-change: transform;
+}
+
+/* Once magnified past the fit, the cursor invites panning. */
+.geolibre-photo-fullscreen-img.is-zoomed {
+  cursor: grab;
+  /* Panning should track the pointer with no lag, so drop the zoom transition. */
+  transition: none;
+}
+
+.geolibre-photo-fullscreen-img.is-zoomed:active {
+  cursor: grabbing;
+}
+
+/* Badge reporting the current zoom as a percentage of native resolution plus
+   the source pixel dimensions. */
+.geolibre-photo-fullscreen-badge {
+  position: fixed;
+  bottom: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+}
+
+.geolibre-photo-fullscreen-badge:empty {
+  display: none;
 }
 
 .geolibre-photo-fullscreen-close {
@@ -2256,6 +2446,143 @@ body,
 
 .dark .pc-control-content::-webkit-scrollbar-thumb {
   background: hsl(var(--border));
+}
+
+/* Basemaps plugin (maplibre-gl-basemap-control) — the package ships a
+   hard-coded light theme with `color-scheme: light`, so map its own classes
+   onto the app design tokens when the app is in dark mode. Scoped to the
+   package's own root/child classes, mirroring the STAC `.pc-control-*` block
+   above. Never edit the package's stylesheet in node_modules. */
+.dark .basemap-control {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  color-scheme: dark;
+  box-shadow: 0 0 0 2px rgb(0 0 0 / 0.4);
+}
+
+.dark .basemap-control-toggle {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-toggle:hover {
+  background-color: hsl(var(--muted));
+}
+
+.dark .basemap-control-icon svg {
+  stroke: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-panel {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.55), 0 0 0 1px hsl(var(--border));
+}
+
+.dark .basemap-control-header {
+  border-bottom-color: hsl(var(--border));
+}
+
+.dark .basemap-control-title,
+.dark .basemap-control-result-name,
+.dark .basemap-control-settings-heading,
+.dark .basemap-control-multiple-toggle {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-settings-toggle,
+.dark .basemap-control-close,
+.dark .basemap-control-status,
+.dark .basemap-control-empty,
+.dark .basemap-control-result-meta,
+.dark .basemap-control-result-attribution,
+.dark .basemap-control-settings-intro,
+.dark .basemap-control-provider-group-label {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .basemap-control-settings-toggle:hover,
+.dark .basemap-control-close:hover {
+  color: hsl(var(--popover-foreground));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-settings-toggle.is-active {
+  color: hsl(var(--accent-foreground));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-status.is-error {
+  color: hsl(var(--destructive));
+}
+
+.dark .basemap-control-input,
+.dark .basemap-control-select,
+.dark .basemap-control-settings-back {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+}
+
+.dark .basemap-control-input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.dark .basemap-control-select option {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-input:focus,
+.dark .basemap-control-select:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+}
+
+.dark .basemap-control-multiple-checkbox {
+  accent-color: hsl(var(--ring));
+}
+
+.dark .basemap-control-result {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-result:hover {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-result.is-active {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-result-type {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.dark .basemap-control-settings-back:hover {
+  border-color: hsl(var(--ring));
+  background: hsl(var(--accent));
+}
+
+.dark .basemap-control-status-link {
+  color: hsl(var(--popover-foreground));
+}
+
+.dark .basemap-control-results::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+}
+
+.dark .basemap-control-resize-handle::after {
+  border-color: hsl(var(--border));
+}
+
+.dark .basemap-control-resize-handle:hover::after {
+  border-color: hsl(var(--muted-foreground));
 }
 
 .geolibre-earth-engine-control .plugin-control-toggle {
@@ -2691,4 +3018,576 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
 ):is(:hover, :focus-visible, :active) {
   background-color: hsl(var(--accent)) !important;
   color: hsl(var(--accent-foreground)) !important;
+}
+
+/*
+ * GeoEditor control (maplibre-gl-geo-editor). The component stylesheet
+ * hardcodes light-theme colors (#fff surfaces, #333 text, #e5e5e5 borders)
+ * with no theme hooks, so the toolbar, dialogs, and attribute panel stay
+ * light when the app is in dark mode. Remap every neutral surface, text, and
+ * border color onto the app's design tokens (which switch with the `.dark`
+ * class on <html>) so the control tracks the in-app theme. The blue
+ * active-tool/primary color (#3388ff) is left as upstream ships it — it is
+ * legible on both themes. index.css is imported after the component
+ * stylesheet, so these same-specificity rules win the cascade.
+ */
+.geo-editor-toolbar {
+  background: hsl(var(--background));
+  box-shadow: 0 0 0 2px hsl(var(--border));
+}
+
+.geo-editor-tool-group:not(:last-child) {
+  border-bottom-color: hsl(var(--border));
+}
+
+.geo-editor-toolbar--horizontal .geo-editor-tool-group:not(:last-child) {
+  border-right-color: hsl(var(--border));
+}
+
+.geo-editor-tool-group-label {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Inside the ctrl-group, MapLibre's `.maplibregl-ctrl button` (higher
+   specificity than the component's `.geo-editor-tool-button`) already forces
+   a transparent button background, so only the icon color needs remapping.
+   MapLibre's hover tint (rgba(0,0,0,.05)) is invisible on a dark toolbar, so
+   out-specificity it with a token-based highlight. */
+.geo-editor-tool-button {
+  color: hsl(var(--foreground));
+}
+
+.geo-editor-control button.geo-editor-tool-button:not(:disabled):hover {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Dialogs (save/open/clear confirmations). */
+.geo-editor-dialog {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.geo-editor-dialog-header,
+.geo-editor-dialog-footer {
+  border-color: hsl(var(--border));
+}
+
+.geo-editor-dialog-title,
+.geo-editor-label {
+  color: hsl(var(--foreground));
+}
+
+.geo-editor-dialog-close {
+  color: hsl(var(--muted-foreground));
+}
+
+.geo-editor-dialog-close:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+/* Text inputs, selects, and textareas default to the UA's light chrome. */
+.geo-editor-input,
+.geo-editor-rotate-popup-input,
+.geo-editor-rotate-popup-select,
+.geo-editor-attribute-input,
+.geo-editor-attribute-select,
+.geo-editor-attribute-textarea {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.geo-editor-attribute-input:disabled,
+.geo-editor-attribute-select:disabled,
+.geo-editor-attribute-textarea:disabled {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.geo-editor-slider {
+  background: hsl(var(--muted));
+}
+
+.geo-editor-btn--secondary,
+.geo-editor-rotate-popup-cancel {
+  background: hsl(var(--secondary));
+  border-color: hsl(var(--border));
+  color: hsl(var(--secondary-foreground));
+}
+
+.geo-editor-btn--secondary:hover,
+.geo-editor-rotate-popup-cancel:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.geo-editor-stats {
+  background: hsl(var(--muted));
+}
+
+.geo-editor-stat-value {
+  color: hsl(var(--foreground));
+}
+
+.geo-editor-stat-label {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Feature-properties and numeric-rotation popups rendered on the map. Their
+   content sits in MapLibre's always-white `.maplibregl-popup-content`, so the
+   popup surface (and its anchor tip) must be themed along with the text —
+   otherwise the token-mapped text goes light-on-white in dark mode. Mirrors
+   the `.geolibre-identify-popup` treatment above. */
+.geo-editor-properties-popup .maplibregl-popup-content,
+.geo-editor-rotate-popup .maplibregl-popup-content {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--popover-foreground));
+}
+
+.geo-editor-properties-popup .maplibregl-popup-close-button,
+.geo-editor-rotate-popup .maplibregl-popup-close-button {
+  color: hsl(var(--muted-foreground));
+}
+
+:is(.geo-editor-properties-popup, .geo-editor-rotate-popup):is(
+    .maplibregl-popup-anchor-top,
+    .maplibregl-popup-anchor-top-left,
+    .maplibregl-popup-anchor-top-right
+  )
+  .maplibregl-popup-tip {
+  border-bottom-color: hsl(var(--popover));
+}
+
+:is(.geo-editor-properties-popup, .geo-editor-rotate-popup):is(
+    .maplibregl-popup-anchor-bottom,
+    .maplibregl-popup-anchor-bottom-left,
+    .maplibregl-popup-anchor-bottom-right
+  )
+  .maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover));
+}
+
+:is(.geo-editor-properties-popup, .geo-editor-rotate-popup).maplibregl-popup-anchor-left
+  .maplibregl-popup-tip {
+  border-right-color: hsl(var(--popover));
+}
+
+:is(.geo-editor-properties-popup, .geo-editor-rotate-popup).maplibregl-popup-anchor-right
+  .maplibregl-popup-tip {
+  border-left-color: hsl(var(--popover));
+}
+
+.geo-editor-popup-table td {
+  border-bottom-color: hsl(var(--border));
+}
+
+.geo-editor-popup-key,
+.geo-editor-rotate-popup-title {
+  color: hsl(var(--foreground));
+}
+
+.geo-editor-popup-value,
+.geo-editor-popup-empty,
+.geo-editor-rotate-popup-row span {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Attribute editing panel. */
+.geo-editor-attribute-panel {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.geo-editor-attribute-panel-header,
+.geo-editor-attribute-panel-footer {
+  background: hsl(var(--muted));
+  border-color: hsl(var(--border));
+}
+
+.geo-editor-attribute-panel-title,
+.geo-editor-attribute-label,
+.geo-editor-attribute-checkbox-label {
+  color: hsl(var(--foreground));
+}
+
+.geo-editor-attribute-panel-close {
+  color: hsl(var(--muted-foreground));
+}
+
+.geo-editor-attribute-panel-close:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.geo-editor-attribute-readonly {
+  background-color: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+}
+
+.geo-editor-attribute-readonly-null,
+.geo-editor-attribute-empty {
+  color: hsl(var(--muted-foreground));
+}
+
+.geo-editor-attribute-extra-section {
+  border-top-color: hsl(var(--border));
+}
+
+.geo-editor-attribute-extra-section-title {
+  color: hsl(var(--muted-foreground));
+}
+
+/* Native widgets (date pickers, selects, checkboxes) follow the app theme,
+   not the OS, inside GeoEditor surfaces. */
+.geo-editor-control,
+.geo-editor-dialog,
+.geo-editor-attribute-panel,
+.geo-editor-rotate-popup-form {
+  color-scheme: light;
+}
+
+.dark .geo-editor-control,
+.dark .geo-editor-dialog,
+.dark .geo-editor-attribute-panel,
+.dark .geo-editor-rotate-popup-form {
+  color-scheme: dark;
+}
+
+/* The pastel info/warning/error/success fills would glare on dark surfaces;
+   swap them for translucent tints of the same hues. */
+.dark .geo-editor-message--info,
+.dark .geo-editor-attribute-geometry-badge {
+  background: rgba(51, 136, 255, 0.15);
+  border-color: rgba(51, 136, 255, 0.4);
+  color: #9cc7ff;
+}
+
+.dark .geo-editor-message--warning {
+  background: rgba(255, 193, 7, 0.12);
+  border-color: rgba(255, 193, 7, 0.35);
+  color: #ffd75e;
+}
+
+.dark .geo-editor-message--error {
+  background: rgba(220, 53, 69, 0.15);
+  border-color: rgba(220, 53, 69, 0.4);
+  color: #f1919c;
+}
+
+.dark .geo-editor-message--success {
+  background: rgba(40, 167, 69, 0.15);
+  border-color: rgba(40, 167, 69, 0.4);
+  color: #7fd493;
+}
+
+/* ---------------------------------------------------------------------------
+ * Elevation Profile plugin (packages/plugins/.../elevation-profile).
+ *
+ * Ported in-house from the external plugin, whose styles shipped in their own
+ * bundle; built-in plugins do not import CSS, so the control's styles live here
+ * instead. The tokens resolve to GeoLibre's design tokens (--background,
+ * --foreground, ...) which already switch with the `.dark` class, so the panel
+ * background/text/borders follow the in-app toggle automatically. The `.dark`
+ * block below mirrors the plugin's `prefers-color-scheme: dark` values for the
+ * few decorative tokens that are not derived from a switching design token
+ * (shadow, accent-text, area fill, hover tint), so those track the in-app
+ * toggle rather than the OS preference (see the note near line 909).
+ * ------------------------------------------------------------------------- */
+.elevation-profile,
+.elevation-profile-panel {
+  --ep-bg: hsl(var(--background, 0 0% 100%));
+  --ep-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  --ep-text: hsl(var(--foreground, 222 47% 11%));
+  --ep-muted: hsl(var(--muted-foreground, 220 9% 46%));
+  --ep-border: hsl(var(--border, 220 13% 91%));
+  --ep-hover-bg: hsl(var(--foreground, 222 47% 11%) / 0.06);
+  --ep-surface: hsl(var(--secondary, 220 14% 96%));
+  --ep-accent: #f97316;
+  --ep-accent-text: #fff;
+  --ep-area: rgba(249, 115, 22, 0.18);
+}
+
+.dark .elevation-profile,
+.dark .elevation-profile-panel {
+  --ep-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+  --ep-hover-bg: hsl(var(--foreground, 210 20% 92%) / 0.1);
+  --ep-accent-text: #1f2937;
+  --ep-area: rgba(249, 115, 22, 0.22);
+}
+
+/* Container / toggle button */
+.maplibregl-ctrl-group.elevation-profile {
+  background: var(--ep-bg);
+  border-radius: 4px;
+  box-shadow: var(--ep-shadow);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Scoped under the container class so these win over GeoLibre's own
+   `.maplibregl-ctrl-group button` rules (which otherwise offset the icon). */
+.elevation-profile .elevation-profile-toggle {
+  box-sizing: border-box;
+  width: 29px;
+  height: 29px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  color: var(--ep-text);
+}
+
+.elevation-profile .elevation-profile-toggle:hover {
+  background: var(--ep-hover-bg);
+}
+
+.elevation-profile .elevation-profile-toggle svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+/* Floating panel. Resizable in every dock: it is always positioned by its
+   top-left corner (see _updatePanelPosition), so the bottom-right resize handle
+   grows it down and to the right consistently. */
+.elevation-profile-panel {
+  position: absolute;
+  display: none;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--ep-bg);
+  color: var(--ep-text);
+  border-radius: 6px;
+  box-shadow: var(--ep-shadow);
+  padding: 10px;
+  z-index: 1000;
+  font-size: 12px;
+  line-height: 1.4;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  overflow: auto;
+  resize: both;
+  min-width: 260px;
+  min-height: 170px;
+  max-width: 90vw;
+  max-height: 85vh;
+}
+
+.elevation-profile-panel.expanded {
+  display: flex;
+}
+
+/* Right-docked panels: render the resize grip in the bottom-left corner (so it
+   grows toward the map interior) by flipping the panel to RTL, then restore the
+   content's natural left-to-right flow on its children. */
+.elevation-profile-panel--anchor-right {
+  direction: rtl;
+}
+
+.elevation-profile-panel--anchor-right > * {
+  direction: ltr;
+}
+
+.elevation-profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--ep-border);
+}
+
+.elevation-profile-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.elevation-profile-close {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--ep-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.elevation-profile-close:hover {
+  color: var(--ep-text);
+}
+
+/* Actions */
+.elevation-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.elevation-profile-button {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ep-text);
+  background: var(--ep-surface);
+  border: 1px solid var(--ep-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.elevation-profile-button:hover:not(:disabled) {
+  border-color: var(--ep-accent);
+}
+
+.elevation-profile-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.elevation-profile-primary,
+.elevation-profile-button.is-active {
+  color: var(--ep-accent-text);
+  background: var(--ep-accent);
+  border-color: var(--ep-accent);
+}
+
+.elevation-profile-unit {
+  margin-left: auto;
+}
+
+/* Status line */
+.elevation-profile-status {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--ep-muted);
+  overflow-wrap: break-word;
+}
+
+.elevation-profile-status:empty {
+  display: none;
+}
+
+/* Stats grid */
+.elevation-profile-stats {
+  display: none;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.elevation-profile-stats.has-data {
+  display: grid;
+}
+
+.elevation-profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 4px 2px;
+  background: var(--ep-surface);
+  border-radius: 4px;
+}
+
+.elevation-profile-stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ep-text);
+}
+
+.elevation-profile-stat-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ep-muted);
+}
+
+/* Chart. Flex-grows so a taller panel produces a taller chart. Its display is
+   toggled from JS (hidden when there is no profile) rather than via :empty, so
+   the host keeps a measurable width while the chart is being (re)drawn. */
+.elevation-profile-chart {
+  margin-top: 10px;
+  flex: 1 1 auto;
+  min-height: 130px;
+}
+
+.elevation-profile-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  background: var(--ep-surface);
+  border-radius: 4px;
+}
+
+.elevation-profile-area {
+  fill: var(--ep-area);
+  stroke: none;
+}
+
+.elevation-profile-line {
+  fill: none;
+  stroke: var(--ep-accent);
+  stroke-width: 1.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.elevation-profile-axis {
+  fill: var(--ep-muted);
+  font-size: 9px;
+}
+
+.elevation-profile-hover-line {
+  stroke: var(--ep-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.elevation-profile-hover-dot {
+  fill: var(--ep-accent);
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+
+/* Hover readout */
+.elevation-profile-readout {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ep-text);
+  min-height: 14px;
+}
+
+.elevation-profile-readout:empty {
+  visibility: hidden;
+}
+
+/* Export row (shown only when a profile exists; toggled to flex from JS) */
+.elevation-profile-export {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.elevation-profile-export-label {
+  font-size: 11px;
+  color: var(--ep-muted);
+}
+
+.elevation-profile-button-sm {
+  padding: 4px 10px;
+  font-size: 11px;
 }

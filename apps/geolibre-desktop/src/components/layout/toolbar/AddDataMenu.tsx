@@ -59,6 +59,7 @@ export function AddDataMenu({
     vector: { onSelect: addLayer.vector },
     raster: { onSelect: addLayer.raster },
     "delimited-text": { onSelect: () => onSetAddDataKind("delimited-text") },
+    cad: { onSelect: () => onSetAddDataKind("cad") },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },
@@ -67,6 +68,9 @@ export function AddDataMenu({
     wms: { onSelect: () => onSetAddDataKind("wms") },
     wfs: { onSelect: () => onSetAddDataKind("wfs") },
     wmts: { onSelect: () => onSetAddDataKind("wmts") },
+    "ogc-vector-tiles": {
+      onSelect: () => onSetAddDataKind("ogc-vector-tiles"),
+    },
     arcgis: { onSelect: () => onSetAddDataKind("arcgis") },
     georss: { onSelect: () => onSetAddDataKind("georss") },
     stac: { onSelect: addLayer.stac },

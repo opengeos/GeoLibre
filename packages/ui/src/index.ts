@@ -1,7 +1,12 @@
 export { cn } from "./lib/utils";
 export { Button, type ButtonProps } from "./components/button";
 export { Input } from "./components/input";
-export { ColorField, type ColorFieldProps } from "./components/color-field";
+export {
+  ColorField,
+  type ColorFieldProps,
+  TRANSPARENT_COLOR,
+  isTransparentColor,
+} from "./components/color-field";
 export {
   ColorRampSelect,
   type ColorRampSelectProps,

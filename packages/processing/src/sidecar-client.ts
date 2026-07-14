@@ -43,6 +43,43 @@ function resolveSidecarBaseUrl(): string {
 }
 
 const DEFAULT_SIDECAR_URL = resolveSidecarBaseUrl();
+
+/**
+ * Per-launch sidecar auth token. The desktop shell mints it when it spawns the
+ * sidecar and hands it back through `start_geolibre_sidecar`; {@link
+ * setSidecarAuthToken} stashes it here so {@link sidecarFetch} can attach it to
+ * every request. Null in the browser/Docker build, where the same-origin nginx
+ * proxy injects the token instead and the sidecar is unreachable directly.
+ */
+let sidecarAuthToken: string | null = null;
+
+/**
+ * Record (or clear) the sidecar auth token. Call after `startGeoLibreSidecar()`
+ * returns. Passing an empty/nullish value clears it.
+ *
+ * @param token - The per-launch token from the desktop backend, or null.
+ */
+export function setSidecarAuthToken(token: string | null | undefined): void {
+  sidecarAuthToken = token && token.trim() ? token.trim() : null;
+}
+
+/**
+ * `fetch` wrapper for sidecar requests that attaches the per-launch auth token
+ * (as `X-GeoLibre-Token`) when one is set. Used for every sidecar endpoint call;
+ * external fetches (e.g. the Whitebox catalog snapshot on GitHub) use plain
+ * `fetch` so the token is never sent off-host.
+ *
+ * @param input - The sidecar request URL.
+ * @param init - Optional fetch init; its headers are preserved.
+ * @returns The fetch response promise.
+ */
+function sidecarFetch(input: string, init?: RequestInit): Promise<Response> {
+  if (!sidecarAuthToken) return fetch(input, init);
+  const headers = new Headers(init?.headers);
+  headers.set("X-GeoLibre-Token", sidecarAuthToken);
+  return fetch(input, { ...init, headers });
+}
+
 const WHITEBOX_CATALOG_SNAPSHOT_URL =
   "https://raw.githubusercontent.com/opengeos/Whitebox-Next-Gen-ArcGIS/main/WNG/data/catalog_snapshot.json";
 
@@ -131,6 +168,48 @@ export interface WhiteboxLayerInput {
   bytes?: Uint8Array;
 }
 
+/**
+ * Output format for the in-browser WASM runner's `vector_out` parameters.
+ * `"geojson"` (the default) is reprojected to WGS84 (RFC 7946) and returned as a
+ * `FeatureCollection` for a map layer; the other formats preserve the tool's
+ * target-CRS coordinates and CRS metadata and are returned as bytes to download
+ * (a reprojection result would otherwise lose its projection, since GeoLibre and
+ * MapLibre only render EPSG:4326). Ignored by the Python sidecar.
+ */
+export type VectorOutputFormat =
+  | "geojson"
+  | "geoparquet"
+  | "flatgeobuf"
+  | "shapefile";
+
+/** Every valid {@link VectorOutputFormat}, for validating untrusted values. */
+export const VECTOR_OUTPUT_FORMATS: readonly VectorOutputFormat[] = [
+  "geojson",
+  "geoparquet",
+  "flatgeobuf",
+  "shapefile",
+];
+
+/**
+ * Coerce an arbitrary value to a {@link VectorOutputFormat}, falling back to
+ * `"geojson"`. Guards against a stale `vector_out` value: in sidecar mode the
+ * param holds a free-text output path, which persists in the form state after
+ * toggling "Run locally (WASM)" (the form only resets on tool change). Without
+ * this, that path string would be force-cast to a format and produce a broken
+ * output filename such as `..._output.undefined`.
+ *
+ * @param value - An arbitrary value that may or may not be a known format.
+ * @returns The value if it is a known format, otherwise `"geojson"`.
+ */
+export function normalizeVectorOutputFormat(
+  value: unknown,
+): VectorOutputFormat {
+  return typeof value === "string" &&
+    (VECTOR_OUTPUT_FORMATS as readonly string[]).includes(value)
+    ? (value as VectorOutputFormat)
+    : "geojson";
+}
+
 export interface RunWhiteboxToolRequest {
   tool_id: string;
   parameters: Record<string, unknown>;
@@ -138,6 +217,8 @@ export interface RunWhiteboxToolRequest {
   layer_inputs?: Record<string, WhiteboxLayerInput>;
   include_pro?: boolean;
   tier?: string;
+  /** WASM runner only: format for `vector_out` outputs (default `"geojson"`). */
+  vector_output_format?: VectorOutputFormat;
 }
 
 interface WhiteboxCatalogResponse {
@@ -155,7 +236,7 @@ export async function checkSidecarHealth(
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<SidecarHealth | null> {
   try {
-    const res = await fetch(`${baseUrl}/health`);
+    const res = await sidecarFetch(`${baseUrl}/health`);
     if (!res.ok) return null;
     return (await res.json()) as SidecarHealth;
   } catch {
@@ -167,7 +248,7 @@ export async function fetchSidecarAlgorithms(
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<SidecarAlgorithm[]> {
   try {
-    const res = await fetch(`${baseUrl}/algorithms`);
+    const res = await sidecarFetch(`${baseUrl}/algorithms`);
     if (!res.ok) return [];
     const data = (await res.json()) as { algorithms: SidecarAlgorithm[] };
     return data.algorithms ?? [];
@@ -183,7 +264,7 @@ export async function fetchWhiteboxStatus(
 ): Promise<WhiteboxStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/whitebox/status`);
+    res = await sidecarFetch(`${baseUrl}/whitebox/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -198,7 +279,7 @@ export async function fetchWhiteboxTools(
 ): Promise<WhiteboxTool[]> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/whitebox/tools`);
+    res = await sidecarFetch(`${baseUrl}/whitebox/tools`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -273,7 +354,7 @@ export async function fetchWhiteboxTool(
   toolId: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<unknown> {
-  const res = await fetch(`${baseUrl}/whitebox/tools/${encodeURIComponent(toolId)}`);
+  const res = await sidecarFetch(`${baseUrl}/whitebox/tools/${encodeURIComponent(toolId)}`);
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not load Whitebox tool"));
   }
@@ -284,7 +365,7 @@ export async function runWhiteboxTool(
   request: RunWhiteboxToolRequest,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<WhiteboxJob> {
-  const res = await fetch(`${baseUrl}/whitebox/run`, {
+  const res = await sidecarFetch(`${baseUrl}/whitebox/run`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(request),
@@ -299,7 +380,7 @@ export async function fetchWhiteboxJob(
   jobId: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<WhiteboxJob> {
-  const res = await fetch(`${baseUrl}/whitebox/jobs/${encodeURIComponent(jobId)}`);
+  const res = await sidecarFetch(`${baseUrl}/whitebox/jobs/${encodeURIComponent(jobId)}`);
   if (!res.ok) {
     throw new Error(await responseErrorMessage(res, "Could not load Whitebox job"));
   }
@@ -310,7 +391,7 @@ export async function fetchWhiteboxJsonOutput(
   path: string,
   baseUrl = DEFAULT_SIDECAR_URL,
 ): Promise<unknown> {
-  const res = await fetch(
+  const res = await sidecarFetch(
     `${baseUrl}/whitebox/output?path=${encodeURIComponent(path)}`,
   );
   if (!res.ok) {
@@ -334,6 +415,16 @@ export interface ConversionJob {
   outputs: Record<string, unknown>;
   result?: unknown;
   error?: string | null;
+}
+
+export interface VectorToVectorRequest {
+  input_path: string;
+  /**
+   * Output file path. Its extension selects the output format (`.gpkg`, `.fgb`,
+   * `.shp`/`.zip`, `.geojson`, `.kml`, `.parquet`, ...); the backend maps it to
+   * the matching DuckDB spatial driver.
+   */
+  output_path: string;
 }
 
 export interface VectorToGeoParquetRequest {
@@ -397,7 +488,7 @@ export async function fetchConversionStatus(
 ): Promise<ConversionStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/conversion/status`);
+    res = await sidecarFetch(`${baseUrl}/conversion/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -405,6 +496,17 @@ export async function fetchConversionStatus(
     throw new Error(`Conversion status failed: HTTP ${res.status}`);
   }
   return (await res.json()) as ConversionStatus;
+}
+
+export async function runVectorToVector(
+  request: VectorToVectorRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-to-vector`,
+    request,
+    baseUrl,
+  );
 }
 
 export async function runVectorToGeoParquet(
@@ -499,7 +601,7 @@ export async function fetchRasterStatus(
 ): Promise<RasterStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/raster/status`);
+    res = await sidecarFetch(`${baseUrl}/raster/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -521,6 +623,7 @@ export async function runRasterTool(
 }
 
 type ConversionRequest =
+  | VectorToVectorRequest
   | VectorToGeoParquetRequest
   | VectorToFlatGeobufRequest
   | VectorToShapefileRequest
@@ -537,7 +640,7 @@ async function startConversion(
 ): Promise<ConversionJob> {
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await sidecarFetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -557,7 +660,7 @@ export async function fetchConversionJob(
 ): Promise<ConversionJob> {
   let res: Response;
   try {
-    res = await fetch(
+    res = await sidecarFetch(
       `${baseUrl}/conversion/jobs/${encodeURIComponent(jobId)}`,
     );
   } catch (error) {
@@ -596,7 +699,7 @@ export async function fetchVectorStatus(
 ): Promise<VectorStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/vector/status`);
+    res = await sidecarFetch(`${baseUrl}/vector/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -612,7 +715,7 @@ export async function runVectorTool(
 ): Promise<VectorToolResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/vector/run`, {
+    res = await sidecarFetch(`${baseUrl}/vector/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
@@ -624,6 +727,199 @@ export async function runVectorTool(
     throw new Error(await responseErrorMessage(res, "Could not run vector tool"));
   }
   return (await res.json()) as VectorToolResult;
+}
+
+export interface WriteVectorToSourceRequest {
+  /** Absolute local path of the source file to overwrite (`.gpkg`/`.geojson`). */
+  path: string;
+  /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
+  geojson: FeatureCollection;
+  /** Target table within a multi-layer GeoPackage; omit for single-layer files. */
+  layer?: string;
+}
+
+export interface WriteVectorToSourceResult {
+  /** The resolved path that was written. */
+  path: string;
+  /** The GeoPackage table that was written, or null for single-layer formats. */
+  layer: string | null;
+  /** Number of features committed. */
+  feature_count: number;
+  /** Human-readable log lines describing what was saved. */
+  messages: string[];
+}
+
+/**
+ * Commit an edited layer back to its local source file via the sidecar.
+ *
+ * Overwrites the original GeoPackage or GeoJSON file in place (CRS- and
+ * sibling-table-preserving, atomic). Desktop only: the sidecar needs real
+ * filesystem access to the layer's `sourcePath`.
+ */
+export async function writeVectorToSource(
+  request: WriteVectorToSourceRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<WriteVectorToSourceResult> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/vector/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not save edits to source"));
+  }
+  return (await res.json()) as WriteVectorToSourceResult;
+}
+
+// --- PostGIS editable layers (issue #1070 phase 2) --------------------------
+
+export interface PostgisStatus {
+  available: boolean;
+  message: string;
+}
+
+export interface PostgisTableInfo {
+  schema: string;
+  table: string;
+  geometry_column: string;
+  srid: number;
+  geometry_type: string;
+  /** Single-column primary key, or null when the table has none (read-only). */
+  primary_key: string | null;
+}
+
+export interface ReadPostgisTableRequest {
+  /** libpq connection string (URI or keyword/value form). */
+  connection: string;
+  schema_name?: string;
+  table: string;
+}
+
+export interface ReadPostgisTableResult {
+  /** The table's features as a WGS84 FeatureCollection (pk kept as feature.id). */
+  geojson: FeatureCollection;
+  schema: string;
+  table: string;
+  geometry_column: string;
+  srid: number;
+  primary_key: string | null;
+  feature_count: number;
+}
+
+export interface WritePostgisTableRequest {
+  connection: string;
+  schema_name?: string;
+  table: string;
+  /** The edited layer as a GeoJSON FeatureCollection (WGS84). */
+  geojson: FeatureCollection;
+  /**
+   * Primary-key values the edit session started from. When set, deletions are
+   * scoped to these keys so rows inserted concurrently by another session
+   * survive the save; when omitted the sidecar diffs the whole table.
+   */
+  baseline_keys?: Array<string | number>;
+}
+
+export interface WritePostgisTableResult {
+  schema: string;
+  table: string;
+  feature_count: number;
+  inserted: number;
+  updated: number;
+  deleted: number;
+  messages: string[];
+  /** Editor-added fields skipped because no table column matches them. */
+  skipped_fields: string[];
+}
+
+/** Return PostGIS runtime (psycopg) availability in the sidecar. */
+export async function fetchPostgisStatus(
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<PostgisStatus> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/postgis/status`);
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not check PostGIS runtime"));
+  }
+  return (await res.json()) as PostgisStatus;
+}
+
+/** List the spatial tables of a PostGIS database with write-back readiness. */
+export async function listPostgisTables(
+  connection: string,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<PostgisTableInfo[]> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/postgis/tables`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ connection }),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not list PostGIS tables"));
+  }
+  const payload = (await res.json()) as { tables: PostgisTableInfo[] };
+  return payload.tables;
+}
+
+/** Read one PostGIS table as an editable WGS84 GeoJSON FeatureCollection. */
+export async function readPostgisTable(
+  request: ReadPostgisTableRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ReadPostgisTableResult> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/postgis/read`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not read PostGIS table"));
+  }
+  return (await res.json()) as ReadPostgisTableResult;
+}
+
+/**
+ * Commit edited features back to their source PostGIS table via the sidecar.
+ *
+ * The sidecar diffs the collection against the table by primary key and issues
+ * parameterized INSERT/UPDATE/DELETE statements in one transaction.
+ */
+export async function writePostgisTable(
+  request: WritePostgisTableRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<WritePostgisTableResult> {
+  let res: Response;
+  try {
+    res = await sidecarFetch(`${baseUrl}/postgis/write`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw sidecarConnectionError(baseUrl, error);
+  }
+  if (!res.ok) {
+    throw new Error(await responseErrorMessage(res, "Could not save edits to PostGIS"));
+  }
+  return (await res.json()) as WritePostgisTableResult;
 }
 
 // --- AI segmentation (SamGeo / SAM3) ---------------------------------------
@@ -669,7 +965,7 @@ export async function fetchMlStatus(
 ): Promise<MlStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/ml/status`);
+    res = await sidecarFetch(`${baseUrl}/ml/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -720,7 +1016,7 @@ export async function mlSegment(
 
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/ml/segment/${mode}`, {
+    res = await sidecarFetch(`${baseUrl}/ml/segment/${mode}`, {
       method: "POST",
       body: form,
     });
@@ -769,7 +1065,7 @@ export async function fetchSqlStatus(
 ): Promise<SqlEngineStatus> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/sql/status`);
+    res = await sidecarFetch(`${baseUrl}/sql/status`);
   } catch (error) {
     throw sidecarConnectionError(baseUrl, error);
   }
@@ -786,7 +1082,7 @@ export async function runSedonaSql(
 ): Promise<SedonaSqlResult> {
   let res: Response;
   try {
-    res = await fetch(`${baseUrl}/sql/run`, {
+    res = await sidecarFetch(`${baseUrl}/sql/run`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),

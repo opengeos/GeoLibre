@@ -15,6 +15,7 @@ import {
 } from "@geolibre/ui";
 import { Download } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { downloadChartPng, downloadChartSvg } from "../../lib/chart-export";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 import {
@@ -51,6 +52,7 @@ export function AttributeChartDialog({
   columns,
   layerName,
 }: AttributeChartDialogProps) {
+  const { t } = useTranslation();
   const numericCols = useMemo(
     () => numericColumns(rows, columns),
     [rows, columns],
@@ -189,7 +191,7 @@ export function AttributeChartDialog({
                 chartType === "box") && (
                 <FieldSelect
                   id="chart-field"
-                  label="Field"
+                  label={t("attributeTable.chart.field")}
                   value={field}
                   options={numericCols}
                   onChange={setField}
@@ -236,14 +238,14 @@ export function AttributeChartDialog({
                 <>
                   <FieldSelect
                     id="chart-x"
-                    label="X axis"
+                    label={t("attributeTable.chart.xAxis")}
                     value={xField}
                     options={numericCols}
                     onChange={setXField}
                   />
                   <FieldSelect
                     id="chart-y"
-                    label="Y axis"
+                    label={t("attributeTable.chart.yAxis")}
                     value={yField}
                     options={numericCols}
                     onChange={setYField}
@@ -255,7 +257,7 @@ export function AttributeChartDialog({
                 <>
                   <FieldSelect
                     id="chart-category"
-                    label="Category"
+                    label={t("attributeTable.chart.category")}
                     value={catField}
                     options={categoryCols}
                     onChange={setCatField}
@@ -285,7 +287,7 @@ export function AttributeChartDialog({
                   {barAgg !== "count" && (
                     <FieldSelect
                       id="chart-value"
-                      label="Value"
+                      label={t("attributeTable.chart.value")}
                       value={barValueField}
                       options={numericCols}
                       onChange={setBarValueField}

@@ -1,6 +1,6 @@
 {
   "name": "@geolibre/core",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "uuid": "^14.0.0",
+    "uuid": "^14.0.1",
     "zundo": "^2.3.0",
     "zustand": "^5.0.14"
   },

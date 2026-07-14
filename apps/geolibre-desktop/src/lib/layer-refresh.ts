@@ -29,6 +29,60 @@ export interface LayerRefreshConfig {
   intervalMs: number;
 }
 
+// Raised when a GetFeature response is XML rather than the requested GeoJSON.
+// Exported so the output-format fallback (fetchWfsGeoJson) can recognize this
+// specific failure and retry with a different outputFormat token.
+export const WFS_XML_RESPONSE_ERROR =
+  "The service returned XML instead of GeoJSON. Check the layer name and output format.";
+
+/**
+ * Error thrown when a GetFeature response body is XML instead of GeoJSON.
+ * Carries `isHtml` so the output-format fallback can tell a genuine WFS/OWS/GML
+ * response (a real format rejection worth retrying with another outputFormat)
+ * apart from an HTML error page — a corporate proxy block, a WAF challenge, an
+ * auth-redirect login page, or a load-balancer 5xx page — which no outputFormat
+ * would fix and which should fail immediately rather than drive pointless
+ * retries. The message stays `WFS_XML_RESPONSE_ERROR` for backward compatibility
+ * with callers that match on it.
+ */
+export class WfsXmlResponseError extends Error {
+  readonly isHtml: boolean;
+  constructor(isHtml: boolean) {
+    super(WFS_XML_RESPONSE_ERROR);
+    this.name = "WfsXmlResponseError";
+    this.isHtml = isHtml;
+  }
+}
+
+/**
+ * True when an XML-ish response looks like an HTML page (a proxy/WAF/auth/error
+ * page) rather than a genuine WFS/OWS/GML document. A `text/html` content type
+ * is decisive; otherwise the head of the body is sniffed for HTML structure
+ * tags, tolerating a leading XML prolog, doctype, comment, or `<head>`-only
+ * fragment before the real markup. WFS/OWS/GML responses never contain
+ * `<html>`/`<head>`/`<body>`/`<title>`, so this does not misclassify them.
+ */
+function looksLikeHtmlResponse(text: string, contentType: string | null): boolean {
+  if (contentType && /text\/html/i.test(contentType)) return true;
+  const head = text.slice(0, 512);
+  return /<\s*(?:!doctype\s+html|html[\s>]|head[\s>]|body[\s>]|title[\s>])/i.test(
+    head,
+  );
+}
+
+// Output-format tokens that commonly yield GeoJSON across WFS implementations.
+// GeoServer/MapServer honor "application/json"; ArcGIS Server advertises its
+// GeoJSON output as "GEOJSON" (uppercase) and answers "application/json" with a
+// GML ExceptionReport instead. Trying these in turn lets an ArcGIS WFS load
+// without the user having to know its exact format token.
+const WFS_GEOJSON_OUTPUT_FORMATS = [
+  "application/json",
+  "GEOJSON",
+  "json",
+  "geojson",
+  "application/geo+json",
+];
+
 export function createWfsGetFeatureUrl(options: {
   endpoint: string;
   typeName: string;
@@ -83,12 +137,98 @@ export async function fetchGeoJsonFeatureCollection(
     return parseGeoJsonFeatureCollection(JSON.parse(text));
   } catch (error) {
     if (/^\s*</.test(text)) {
-      throw new Error(
-        "The service returned XML instead of GeoJSON. Check the layer name and output format.",
+      throw new WfsXmlResponseError(
+        looksLikeHtmlResponse(text, response.headers.get("content-type")),
       );
     }
     throw error;
   }
+}
+
+/**
+ * Fetches a WFS GetFeature response as GeoJSON, retrying with alternate
+ * GeoJSON output-format tokens when the server answers the requested format
+ * with XML (a GML `ExceptionReport` or a GML feature dump). ArcGIS Server, for
+ * example, does not honor the usual `application/json` and instead advertises
+ * its GeoJSON output as `GEOJSON`; a plain fetch of `application/json` returns
+ * XML and the layer fails to load. Retrying the known GeoJSON aliases makes
+ * such services load transparently.
+ *
+ * Only a genuine WFS/OWS/GML XML response triggers a retry. A network error,
+ * timeout, or malformed JSON body is re-thrown immediately (a different
+ * outputFormat would not fix it), and so is an HTML error page (a proxy/WAF/auth
+ * page), so a server whose problem is unrelated to the output format is not
+ * hammered with the full alias list. The resolved request URL and the output
+ * format that succeeded are returned so the caller can persist them (so a later
+ * layer refresh reuses the working format rather than the rejected one).
+ *
+ * All attempts share a single {@link FETCH_TIMEOUT_MS} budget rather than each
+ * getting a fresh timeout, so a server that is slow to reject each format cannot
+ * stack up N × 30s of hang before the error surfaces. The budget is the same
+ * ceiling a single non-fallback fetch already has, so a legitimately large
+ * GeoJSON download is not penalized relative to today.
+ *
+ * @param params - The GetFeature parameters. The requested outputFormat is
+ *   tried first, then the remaining GeoJSON aliases; an empty requested format
+ *   is skipped so no `outputFormat=` request is issued.
+ * @param options - WFS proxy routing and an optional abort signal.
+ * @returns The parsed FeatureCollection plus the URL and outputFormat that worked.
+ */
+export async function fetchWfsGeoJson(
+  params: {
+    endpoint: string;
+    typeName: string;
+    version: string;
+    outputFormat: string;
+    srsName: string;
+    maxFeatures?: string;
+  },
+  options: { useWfsProxy?: boolean; signal?: AbortSignal } = {},
+): Promise<{ data: FeatureCollection; url: string; outputFormat: string }> {
+  const requested = params.outputFormat.trim();
+  // Try the user's requested format first (when non-empty), then the remaining
+  // GeoJSON aliases (case-insensitively deduped so a token is not requested
+  // twice). An empty requested format is dropped rather than sent as
+  // `outputFormat=`.
+  const candidates = [
+    ...(requested ? [requested] : []),
+    ...WFS_GEOJSON_OUTPUT_FORMATS.filter(
+      (format) => format.toLowerCase() !== requested.toLowerCase(),
+    ),
+  ];
+
+  // One deadline shared across every attempt, so N slow rejections cannot stack
+  // N separate timeouts. Combined with the caller's signal (if any) and passed
+  // down; fetchGeoJsonFeatureCollection ANDs its own per-call timeout on top,
+  // but this budget is what bounds the total wall time.
+  const budget = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, budget])
+    : budget;
+
+  let lastError: unknown;
+  for (const outputFormat of candidates) {
+    const url = createWfsGetFeatureUrl({ ...params, outputFormat });
+    try {
+      const data = await fetchGeoJsonFeatureCollection(url, {
+        ...options,
+        signal,
+      });
+      return { data, url, outputFormat };
+    } catch (error) {
+      lastError = error;
+      // Keep trying other formats only when the server returned a WFS/OWS/GML
+      // XML body (a real format rejection). Any other failure — network,
+      // timeout, bad JSON, or an HTML error page — is not fixable by a
+      // different outputFormat, so surface it immediately.
+      if (!(error instanceof WfsXmlResponseError) || error.isHtml) {
+        throw error;
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new WfsXmlResponseError(false);
 }
 
 export async function refreshGeoJsonLayer(

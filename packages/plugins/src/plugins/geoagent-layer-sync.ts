@@ -7,9 +7,10 @@ import type { FeatureCollection } from "geojson";
 
 /**
  * Mirrors the private `Overlay` record kept by MapLibreAgentTools in
- * maplibre-gl-geoagent (verified against v0.4.2). The tools instance exposes
- * these through its `overlays` Map; re-verify the shape when bumping the
- * dependency.
+ * maplibre-gl-geoagent (verified against v0.5.0). The tools instance exposes
+ * these through its `overlays` Map; re-verify the shape — especially the
+ * `kind` union, since a new value falls through to the raster branch in
+ * `createGeoAgentStoreLayer` with no type error — when bumping the dependency.
  */
 export type GeoAgentOverlayRecord = {
   kind: "geojson" | "raster" | "basemap" | "marker" | "native" | "gee";

@@ -4,9 +4,11 @@ import {
   addCloudNetcdfLayer,
   listKerchunkVariables,
   loadKerchunkReference,
+  openLocalNetcdf,
   type GeoLibreAppAPI,
   type KerchunkRefs,
   type KerchunkVariable,
+  type LocalNetcdfFile,
 } from "@geolibre/plugins";
 import {
   Button,
@@ -19,7 +21,8 @@ import {
   Label,
   Select,
 } from "@geolibre/ui";
-import { Boxes } from "lucide-react";
+import { Boxes, FileUp } from "lucide-react";
+import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { SampleDataSelect } from "./add-data/shared";
 
 // A real sample: NOAA NCEP/NCAR Reanalysis surface air temperature, stored as a
@@ -29,6 +32,14 @@ import { SampleDataSelect } from "./add-data/shared";
 const SAMPLE_URL =
   "https://data.source.coop/giswqs/opengeos/netcdf/air-temperature.kerchunk.json";
 
+// Extensions accepted for a local file: classic NetCDF-3 (.nc/.cdf, via
+// netcdfjs) and HDF5-backed NetCDF-4/HDF5 (.nc/.nc4/.h5/.hdf5, via h5wasm).
+// `.hdf` (usually HDF4) is omitted since neither backend reads it.
+const LOCAL_EXTENSIONS = ["nc", "nc4", "cdf", "h5", "hdf5"];
+
+/** A renderable variable, shared shape across the cloud and local readers. */
+type RenderableVariable = KerchunkVariable;
+
 interface AddNetcdfDialogProps {
   open: boolean;
   appApi: GeoLibreAppAPI;
@@ -36,10 +47,11 @@ interface AddNetcdfDialogProps {
 }
 
 /**
- * Dialog for adding a Cloud-Optimized NetCDF/HDF5 layer via a kerchunk
- * reference. The user supplies the reference URL, loads its renderable
- * variables, picks one (and any leading dimension index), and the layer is
- * rendered through the shared Zarr control with a kerchunk reference store.
+ * Dialog for adding a NetCDF/HDF5 layer. Two sources are supported: a remote
+ * Cloud-Optimized NetCDF via a kerchunk reference URL (read over HTTP range
+ * requests), or a local HDF5/NetCDF-4 file decoded in-browser with h5wasm. In
+ * both cases the user picks a renderable variable (and any leading dimension
+ * index), and the layer renders through the shared Zarr control.
  */
 export function AddNetcdfDialog({
   open,
@@ -47,11 +59,16 @@ export function AddNetcdfDialog({
   onOpenChange,
 }: AddNetcdfDialogProps) {
   const { t } = useTranslation();
+  const [source, setSource] = useState<"url" | "file">("url");
   const [url, setUrl] = useState("");
-  const [variables, setVariables] = useState<KerchunkVariable[]>([]);
+  // The local file opened in the WASM filesystem, kept between "Load variables"
+  // and submit so the (potentially large) decode happens once. Closed on reset.
+  const [localFile, setLocalFile] = useState<LocalNetcdfFile | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [variables, setVariables] = useState<RenderableVariable[]>([]);
   const [variable, setVariable] = useState("");
-  // The normalized reference from the last successful load, reused on submit so
-  // the (potentially large) manifest is not fetched a second time.
+  // The normalized reference from the last successful URL load, reused on submit
+  // so the (potentially large) manifest is not fetched a second time.
   const [loadedRefs, setLoadedRefs] = useState<KerchunkRefs | null>(null);
   const [dimIndex, setDimIndex] = useState<Record<string, string>>({});
   const [climMin, setClimMin] = useState("");
@@ -63,6 +80,9 @@ export function AddNetcdfDialog({
   // Incremented on every reset; lets in-flight async handlers detect that the
   // dialog was closed/reopened and bail out before stomping fresh state.
   const opGen = useRef(0);
+  // Holds the currently-open local file so it can be closed synchronously on
+  // reset even if the latest setLocalFile has not flushed to state yet.
+  const openFileRef = useRef<LocalNetcdfFile | null>(null);
 
   const selectedVar = variables.find((v) => v.name === variable);
   // Dimensions other than the trailing two (lat/lon) need a fixed index.
@@ -70,9 +90,18 @@ export function AddNetcdfDialog({
     ? selectedVar.dims.slice(0, Math.max(0, selectedVar.dims.length - 2))
     : [];
 
+  const closeOpenFile = () => {
+    openFileRef.current?.close();
+    openFileRef.current = null;
+  };
+
   const reset = () => {
     opGen.current += 1;
+    closeOpenFile();
+    setSource("url");
     setUrl("");
+    setLocalFile(null);
+    setFileName("");
     setVariables([]);
     setVariable("");
     setLoadedRefs(null);
@@ -85,13 +114,16 @@ export function AddNetcdfDialog({
     setAdding(false);
   };
 
-  // Invalidate everything tied to the previously loaded manifest when the URL
-  // changes (sample pick or manual edit), and bump opGen so an in-flight
-  // variable load for the old URL cannot write back into state. Bumping opGen
-  // makes that load's finally skip its own setLoadingVars(false), so the flags
-  // are cleared here too (otherwise Load variables stays disabled).
-  const invalidateLoadedManifest = () => {
+  // Invalidate everything tied to the previously loaded source (URL manifest or
+  // local file) when the input changes, and bump opGen so an in-flight load for
+  // the old source cannot write back into state. Bumping opGen makes that load's
+  // finally skip its own setLoadingVars(false), so the flags are cleared here
+  // too (otherwise Load variables stays disabled).
+  const invalidateLoadedSource = () => {
     opGen.current += 1;
+    closeOpenFile();
+    setLocalFile(null);
+    setFileName("");
     setVariables([]);
     setVariable("");
     setLoadedRefs(null);
@@ -102,6 +134,12 @@ export function AddNetcdfDialog({
     setError(null);
     setLoadingVars(false);
     setAdding(false);
+  };
+
+  const applyLoadedVariables = (vars: RenderableVariable[]) => {
+    setVariables(vars);
+    setVariable(vars[0].name);
+    setStatus(`Found ${vars.length} variable${vars.length > 1 ? "s" : ""}.`);
   };
 
   const handleLoadVariables = async () => {
@@ -109,7 +147,7 @@ export function AddNetcdfDialog({
     setError(null);
     setStatus(null);
     // Clear any prior result so the picker hides and "Add layer" disables while
-    // a new URL is loading (avoids submitting a variable from the old manifest).
+    // a new source loads (avoids submitting a variable from the old dataset).
     setVariables([]);
     setVariable("");
     setLoadedRefs(null);
@@ -123,14 +161,59 @@ export function AddNetcdfDialog({
           "No renderable (2-D or higher) variables found in the reference."
         );
       }
-      setVariables(vars);
-      setVariable(vars[0].name);
       setLoadedRefs(refs);
-      setStatus(`Found ${vars.length} variable${vars.length > 1 ? "s" : ""}.`);
+      applyLoadedVariables(vars);
     } catch (err) {
       if (gen !== opGen.current) return;
       setVariables([]);
       setVariable("");
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (gen === opGen.current) setLoadingVars(false);
+    }
+  };
+
+  const handleChooseLocalFile = async () => {
+    setError(null);
+    setStatus(null);
+    let selected: { data?: ArrayBuffer; path: string } | null;
+    try {
+      selected = await openLocalDataFileWithFallback({
+        filters: [{ name: "NetCDF / HDF5", extensions: LOCAL_EXTENSIONS }],
+        accept: LOCAL_EXTENSIONS.map((ext) => `.${ext}`).join(","),
+        readBinary: true,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (!selected?.data) return; // dialog dismissed
+
+    // Any prior open file (or URL result) is now stale; bump opGen and close it.
+    invalidateLoadedSource();
+    const gen = opGen.current;
+    setFileName(selected.path);
+    setLoadingVars(true);
+    // Held outside the try so a throw after open (e.g. listVariables on a
+    // corrupt dataset) still closes the WASM file handle in the catch.
+    let file: LocalNetcdfFile | null = null;
+    try {
+      file = await openLocalNetcdf(selected.data);
+      const vars = file.listVariables();
+      if (gen !== opGen.current) {
+        file.close(); // dialog was closed/reopened while decoding
+        return;
+      }
+      if (vars.length === 0) {
+        throw new Error(t("addData.netcdf.errorNoVariables"));
+      }
+      openFileRef.current = file;
+      setLocalFile(file);
+      applyLoadedVariables(vars);
+    } catch (err) {
+      // Close the just-opened handle unless it was stored for later use.
+      if (file && openFileRef.current !== file) file.close();
+      if (gen !== opGen.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       if (gen === opGen.current) setLoadingVars(false);
@@ -161,13 +244,33 @@ export function AddNetcdfDialog({
           ? ([min, max] as [number, number])
           : undefined;
 
-      await addCloudNetcdfLayer(appApi, {
-        url: url.trim(),
-        refs: loadedRefs ?? undefined,
-        variable,
-        selector: leadingDims.length > 0 ? selector : undefined,
-        clim,
-      });
+      if (source === "file") {
+        const file = localFile;
+        if (!file) throw new Error(t("addData.netcdf.errorNoFile"));
+        // Yield once so the "Adding..." state paints before the synchronous,
+        // CPU-heavy decode/base64-encode of a potentially large local grid.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const { refs } = file.buildLayerRefs(variable, selector);
+        // Use just the file's base name (fileName is a full path on desktop) so
+        // the derived layer name is clean on every platform. Encode it so a name
+        // with URL-special chars (#, ?, %) survives layerNameFromUrl's new
+        // URL(...) parse; that helper decodes it again for the display name.
+        const baseName = fileName.split(/[\\/]/).pop() || "netcdf";
+        await addCloudNetcdfLayer(appApi, {
+          url: `local:${encodeURIComponent(baseName)}`,
+          refs,
+          variable,
+          clim,
+        });
+      } else {
+        await addCloudNetcdfLayer(appApi, {
+          url: url.trim(),
+          refs: loadedRefs ?? undefined,
+          variable,
+          selector: leadingDims.length > 0 ? selector : undefined,
+          clim,
+        });
+      }
       if (gen !== opGen.current) return; // dialog was closed/reopened
       onOpenChange(false);
       reset();
@@ -191,51 +294,100 @@ export function AddNetcdfDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Boxes className="h-4 w-4" />
-            Add Cloud-Optimized NetCDF / HDF
+            {t("addData.netcdf.title")}
           </DialogTitle>
           <DialogDescription>
-            Render a NetCDF or HDF5 dataset through a kerchunk reference. The
-            data is read directly over HTTP range requests, with no conversion.
+            {t("addData.netcdf.description")}
           </DialogDescription>
         </DialogHeader>
 
         <form className="space-y-4" onSubmit={handleSubmit}>
-          <SampleDataSelect
-            samples={[{ label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL }]}
-            onSelect={(sampleUrl) => {
-              invalidateLoadedManifest();
-              setUrl(sampleUrl);
-            }}
-          />
+          {/* The title/description and the local-file cohort of strings added
+              here are routed through t(). The older Cloud-URL prose (kerchunk
+              URL label, variable/color inputs, buttons) predates the Add Data
+              i18n catalog and remains English pre-existing debt, out of scope
+              for this change. */}
           <div className="space-y-1.5">
-            <Label htmlFor="netcdf-url">Kerchunk reference URL</Label>
-            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-              <Input
-                id="netcdf-url"
-                placeholder="https://example.com/data.kerchunk.json"
-                value={url}
-                onChange={(event) => {
-                  invalidateLoadedManifest();
-                  setUrl(event.target.value);
+            <Label htmlFor="netcdf-source">
+              {t("addData.netcdf.sourceLabel")}
+            </Label>
+            <Select
+              id="netcdf-source"
+              value={source}
+              onChange={(event) => {
+                // Reset the loaded-manifest/file state, but keep any typed URL
+                // so switching to "Local file" and back doesn't discard it.
+                invalidateLoadedSource();
+                setSource(event.target.value as "url" | "file");
+              }}
+            >
+              <option value="url">{t("addData.netcdf.sourceCloud")}</option>
+              <option value="file">{t("addData.netcdf.sourceLocal")}</option>
+            </Select>
+          </div>
+
+          {source === "url" ? (
+            <>
+              <SampleDataSelect
+                samples={[
+                  { label: t("addData.netcdf.sampleLabel"), value: SAMPLE_URL },
+                ]}
+                onSelect={(sampleUrl) => {
+                  invalidateLoadedSource();
+                  setUrl(sampleUrl);
                 }}
               />
+              <div className="space-y-1.5">
+                <Label htmlFor="netcdf-url">Kerchunk reference URL</Label>
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                  <Input
+                    id="netcdf-url"
+                    placeholder="https://example.com/data.kerchunk.json"
+                    value={url}
+                    onChange={(event) => {
+                      invalidateLoadedSource();
+                      setUrl(event.target.value);
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleLoadVariables}
+                    disabled={!url.trim() || loadingVars}
+                  >
+                    {loadingVars ? "Loading..." : "Load variables"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Choose a sample dataset above, or paste your own kerchunk
+                  reference URL, then click Load variables.
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1.5">
+              <Label>{t("addData.netcdf.localFileLabel")}</Label>
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleLoadVariables}
-                disabled={!url.trim() || loadingVars}
+                onClick={handleChooseLocalFile}
+                disabled={loadingVars}
               >
-                {loadingVars ? "Loading..." : "Load variables"}
+                <FileUp className="mr-2 h-3.5 w-3.5" />
+                {loadingVars
+                  ? t("addData.netcdf.readingFile")
+                  : fileName
+                  ? t("addData.netcdf.chooseDifferentFile")
+                  : t("addData.common.chooseFile")}
               </Button>
+              {fileName && (
+                <p className="text-xs text-muted-foreground">{fileName}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {t("addData.netcdf.localFileHelp")}
+              </p>
             </div>
-            {/* This dialog's prose is intentionally left in English for now:
-                it predates the Add Data i18n catalog and is out of scope for
-                this PR (only the new sample label is routed through t()). */}
-            <p className="text-xs text-muted-foreground">
-              Choose a sample dataset above, or paste your own kerchunk
-              reference URL, then click Load variables.
-            </p>
-          </div>
+          )}
 
           {variables.length > 0 && (
             <div className="space-y-1.5">

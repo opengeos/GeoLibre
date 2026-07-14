@@ -53,8 +53,15 @@ import {
   type StoryMap,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
+import {
+  DEFAULT_ELLIPSOID_ID,
+  getPlanetaryBasemapByStyleUrl,
+  setActiveEllipsoidId,
+} from "./ellipsoids";
+import type { PlanetaryBasemap } from "./ellipsoids";
 
 export type ConversionToolKind =
+  | "vector-to-vector"
   | "vector-to-geoparquet"
   | "vector-to-flatgeobuf"
   | "vector-to-shapefile"
@@ -166,6 +173,14 @@ export interface AppState {
   primaryMapLabel: string;
   selectedLayerId: string | null;
   selectedFeatureId: string | null;
+  /**
+   * Full set of selected feature ids. The attribute table extends the single
+   * selection to many rows via Ctrl/Cmd (toggle) and Shift (range). The anchor
+   * — `selectedFeatureId` — is the primary/last-clicked feature used for map
+   * fit, DuckDB highlight, and scripting, and is always one of these ids (or
+   * `null` when the set is empty). A single click leaves exactly one id here.
+   */
+  selectedFeatureIds: string[];
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
   metadata: Record<string, unknown>;
@@ -192,6 +207,10 @@ export interface AppState {
     objectDetectionOpen: boolean;
     geocodeOpen: boolean;
     sqlWorkspaceOpen: boolean;
+    loadEditorFeaturesOpen: boolean;
+    // Store layer preselected in the "Load Features into Editor" dialog when it
+    // is opened from a layer's context menu, or null when opened without a target.
+    loadEditorFeaturesLayerId: string | null;
     pythonConsoleOpen: boolean;
     notebookOpen: boolean;
     assistantOpen: boolean;
@@ -199,6 +218,10 @@ export interface AppState {
     dashboardOpen: boolean;
     storymapPanelOpen: boolean;
     storymapPresenting: boolean;
+    // True when the active presentation was launched from the editor, so exiting
+    // it reopens the Story Map editor instead of dropping to the bare map
+    // (#918). Auto-presented projects (opened for viewing) leave this false.
+    storymapReturnToEditor: boolean;
     // Id of the chapter currently being composed on the live map. When set, the
     // Story Map dialog is hidden so the user can pan/zoom/tilt the real map and
     // save the resulting camera back into this chapter (issue #775).
@@ -249,9 +272,29 @@ export interface AppState {
   setPrimaryMapLabel: (label: string) => void;
   /** Set one secondary pane's custom label (no-op if the id is unknown). */
   setSecondaryMapLabel: (id: string, label: string) => void;
+  /**
+   * Switch one secondary pane between the 2D map and the 3D globe (no-op if the
+   * id is unknown or the kind is unchanged).
+   */
+  setSecondaryViewKind: (
+    id: string,
+    viewKind: NonNullable<SecondaryMapView["viewKind"]>
+  ) => void;
   /** Remove one secondary pane and collapse the grid back toward 1x1. */
   removeSecondaryMapView: (id: string) => void;
   setBasemapStyleUrl: (url: string) => void;
+  /**
+   * Apply a planetary basemap and sync the project's ellipsoid to the body it
+   * depicts, so measurements and the globe control use that body's radius. Used
+   * by both the basemap picker and the Layers-panel planet switcher.
+   */
+  applyPlanetaryBasemap: (basemap: PlanetaryBasemap) => void;
+  /**
+   * Return to Earth: apply `styleUrl` (typically the Earth basemap that was
+   * active before a planet was selected, e.g. Liberty) and reset the ellipsoid
+   * to Earth. Used when a planet is deselected in the switcher.
+   */
+  restoreEarthBasemap: (styleUrl: string) => void;
   setBasemapVisible: (visible: boolean) => void;
   setBasemapOpacity: (opacity: number) => void;
   setPreferences: (preferences: ProjectPreferences) => void;
@@ -262,6 +305,12 @@ export interface AppState {
   ) => void;
   selectLayer: (id: string | null) => void;
   selectFeature: (id: string | null) => void;
+  /**
+   * Replace the multi-selection with `ids`. The anchor (`selectedFeatureId`)
+   * becomes `anchorId` when provided, otherwise the last id in the list (or
+   * `null` when the list is empty).
+   */
+  selectFeatures: (ids: string[], anchorId?: string | null) => void;
   setIdentifyLayer: (id: string | null) => void;
   setAttributeFilter: (filter: string) => void;
   setProcessingOpen: (open: boolean) => void;
@@ -275,13 +324,17 @@ export interface AppState {
   setObjectDetectionOpen: (open: boolean) => void;
   setGeocodeOpen: (open: boolean) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
+  setLoadEditorFeaturesOpen: (open: boolean, layerId?: string | null) => void;
   setPythonConsoleOpen: (open: boolean) => void;
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
   setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
-  setStorymapPresenting: (presenting: boolean) => void;
+  setStorymapPresenting: (
+    presenting: boolean,
+    returnToEditor?: boolean,
+  ) => void;
   setStorymapComposing: (chapterId: string | null) => void;
   setModelBuilderOpen: (open: boolean) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
@@ -338,6 +391,29 @@ export interface AppState {
     name: string,
     geojson: FeatureCollection,
     sourcePath?: string,
+    beforeLayerId?: string | null
+  ) => string;
+  /**
+   * Add a georeferenced image overlay (a MapLibre `image` source rendered as a
+   * raster layer) from an image URL and its four corner coordinates, and return
+   * its id. Used for KML/KMZ `<GroundOverlay>` imports; the layer persists and
+   * renders exactly like a Raster Georeferencer overlay. Corners are `[lng,
+   * lat]` in top-left, top-right, bottom-right, bottom-left order.
+   */
+  addImageOverlayLayer: (
+    name: string,
+    source: { url: string; coordinates: [number, number][] },
+    options?: {
+      opacity?: number;
+      bounds?: [number, number, number, number];
+      sourcePath?: string;
+      /** Initial visibility (default true); a time-slider frame past the first
+       * starts hidden. */
+      visible?: boolean;
+      /** Epoch-ms time bounds of a KML `<TimeSpan>`/`<TimeStamp>` frame; the
+       * Time Slider toggles this frame's visibility by the current date. */
+      timeSpan?: { begin: number | null; end: number | null };
+    },
     beforeLayerId?: string | null
   ) => string;
   /**
@@ -569,6 +645,7 @@ export const useAppStore = create<AppState>()(
       primaryMapLabel: "",
       selectedLayerId: null,
       selectedFeatureId: null,
+      selectedFeatureIds: [],
       identifyLayerId: null,
       pointerCoords: null,
       metadata: {},
@@ -587,6 +664,8 @@ export const useAppStore = create<AppState>()(
         objectDetectionOpen: false,
         geocodeOpen: false,
         sqlWorkspaceOpen: false,
+        loadEditorFeaturesOpen: false,
+        loadEditorFeaturesLayerId: null,
         pythonConsoleOpen: false,
         notebookOpen: false,
         assistantOpen: false,
@@ -594,6 +673,7 @@ export const useAppStore = create<AppState>()(
         dashboardOpen: false,
         storymapPanelOpen: false,
         storymapPresenting: false,
+        storymapReturnToEditor: false,
         storymapComposingId: null,
         modelBuilderOpen: false,
         zoomToSelectedFeature: false,
@@ -723,6 +803,20 @@ export const useAppStore = create<AppState>()(
           if (!changed) return s;
           return { secondaryMapViews, isDirty: true };
         }),
+      setSecondaryViewKind: (id, viewKind) =>
+        set((s) => {
+          let changed = false;
+          const secondaryMapViews = s.secondaryMapViews.map((pane) => {
+            if (pane.id !== id) return pane;
+            // Treat an absent viewKind as "maplibre" so switching a legacy pane
+            // to maplibre is a no-op rather than a churned array.
+            if ((pane.viewKind ?? "maplibre") === viewKind) return pane;
+            changed = true;
+            return { ...pane, viewKind };
+          });
+          if (!changed) return s;
+          return { secondaryMapViews, isDirty: true };
+        }),
       removeSecondaryMapView: (id) =>
         set((s) => {
           const secondaryMapViews = s.secondaryMapViews.filter(
@@ -742,6 +836,36 @@ export const useAppStore = create<AppState>()(
           };
         }),
       setBasemapStyleUrl: (url) => set({ basemapStyleUrl: url, isDirty: true }),
+      applyPlanetaryBasemap: (basemap) =>
+        set((state) => ({
+          basemapStyleUrl: basemap.styleUrl,
+          preferences:
+            state.preferences.map.ellipsoidId === basemap.ellipsoidId
+              ? state.preferences
+              : {
+                  ...state.preferences,
+                  map: {
+                    ...state.preferences.map,
+                    ellipsoidId: basemap.ellipsoidId,
+                  },
+                },
+          isDirty: true,
+        })),
+      restoreEarthBasemap: (styleUrl) =>
+        set((state) => ({
+          basemapStyleUrl: styleUrl,
+          preferences:
+            state.preferences.map.ellipsoidId === DEFAULT_ELLIPSOID_ID
+              ? state.preferences
+              : {
+                  ...state.preferences,
+                  map: {
+                    ...state.preferences.map,
+                    ellipsoidId: DEFAULT_ELLIPSOID_ID,
+                  },
+                },
+          isDirty: true,
+        })),
       setBasemapVisible: (visible) =>
         set({ basemapVisible: visible, isDirty: true }),
       setBasemapOpacity: (opacity) =>
@@ -756,8 +880,21 @@ export const useAppStore = create<AppState>()(
           isDirty: shouldMarkDirty || s.isDirty,
         })),
       selectLayer: (id) =>
-        set({ selectedLayerId: id, selectedFeatureId: null }),
-      selectFeature: (id) => set({ selectedFeatureId: id }),
+        set({ selectedLayerId: id, selectedFeatureId: null, selectedFeatureIds: [] }),
+      selectFeature: (id) =>
+        set({ selectedFeatureId: id, selectedFeatureIds: id ? [id] : [] }),
+      selectFeatures: (ids, anchorId) =>
+        set({
+          selectedFeatureIds: ids,
+          // Enforce the documented invariant for every caller: the anchor is
+          // always a member of the set (or null when empty). A supplied anchor
+          // that isn't in `ids` falls back to the last id rather than pointing
+          // the map fit / calculator sample at an unselected feature.
+          selectedFeatureId:
+            anchorId != null && ids.includes(anchorId)
+              ? anchorId
+              : (ids.at(-1) ?? null),
+        }),
       setIdentifyLayer: (id) => set({ identifyLayerId: id }),
       setAttributeFilter: (filter) => set({ attributeFilter: filter }),
       setProcessingOpen: (open) =>
@@ -782,6 +919,14 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, geocodeOpen: open } })),
       setSqlWorkspaceOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, sqlWorkspaceOpen: open } })),
+      setLoadEditorFeaturesOpen: (open, layerId) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            loadEditorFeaturesOpen: open,
+            loadEditorFeaturesLayerId: open ? (layerId ?? null) : null,
+          },
+        })),
       setPythonConsoleOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, pythonConsoleOpen: open } })),
       setNotebookOpen: (open) =>
@@ -803,8 +948,16 @@ export const useAppStore = create<AppState>()(
             ...(open ? { storymapComposingId: null } : {}),
           },
         })),
-      setStorymapPresenting: (presenting) =>
-        set((s) => ({ ui: { ...s.ui, storymapPresenting: presenting } })),
+      setStorymapPresenting: (presenting, returnToEditor = false) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            storymapPresenting: presenting,
+            // Track whether exiting should reopen the editor; only meaningful
+            // while presenting, so it clears once the presentation ends (#918).
+            storymapReturnToEditor: presenting ? returnToEditor : false,
+          },
+        })),
       setStorymapComposing: (chapterId) =>
         set((s) => ({ ui: { ...s.ui, storymapComposingId: chapterId } })),
       setModelBuilderOpen: (open) =>
@@ -995,6 +1148,8 @@ export const useAppStore = create<AppState>()(
               : s.selectedLayerId,
           selectedFeatureId:
             s.selectedLayerId === id ? null : s.selectedFeatureId,
+          selectedFeatureIds:
+            s.selectedLayerId === id ? [] : s.selectedFeatureIds,
           identifyLayerId: s.identifyLayerId === id ? null : s.identifyLayerId,
           isDirty: true,
         })),
@@ -1059,6 +1214,27 @@ export const useAppStore = create<AppState>()(
           metadata: {},
           geojson,
           sourcePath,
+        };
+        get().addLayer(layer, beforeLayerId);
+        return id;
+      },
+
+      addImageOverlayLayer: (name, source, options, beforeLayerId = null) => {
+        const id = uuidv4();
+        const layer: GeoLibreLayer = {
+          id,
+          name,
+          type: "image",
+          source: { type: "image", url: source.url, coordinates: source.coordinates },
+          visible: options?.visible ?? true,
+          opacity: options?.opacity ?? 1,
+          style: { ...DEFAULT_LAYER_STYLE },
+          metadata: {
+            sourceKind: "kml-ground-overlay",
+            ...(options?.bounds ? { bounds: options.bounds } : {}),
+            ...(options?.timeSpan ? { timeSpan: options.timeSpan } : {}),
+          },
+          ...(options?.sourcePath ? { sourcePath: options.sourcePath } : {}),
         };
         get().addLayer(layer, beforeLayerId);
         return id;
@@ -1174,6 +1350,7 @@ export const useAppStore = create<AppState>()(
               ? layers[layers.length - 1]?.id ?? null
               : s.selectedLayerId,
             selectedFeatureId: selectionRemoved ? null : s.selectedFeatureId,
+            selectedFeatureIds: selectionRemoved ? [] : s.selectedFeatureIds,
             identifyLayerId:
               s.identifyLayerId !== null && removedIds.has(s.identifyLayerId)
                 ? null
@@ -1283,6 +1460,7 @@ export const useAppStore = create<AppState>()(
           isDirty: false,
           selectedLayerId: null,
           selectedFeatureId: null,
+          selectedFeatureIds: [],
           identifyLayerId: null,
           pointerCoords: null,
           attributeFilter: "",
@@ -1290,6 +1468,7 @@ export const useAppStore = create<AppState>()(
           ui: {
             ...s.ui,
             storymapPresenting: false,
+            storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
           },
@@ -1312,12 +1491,16 @@ export const useAppStore = create<AppState>()(
           isDirty: false,
           selectedLayerId: applied.layers[0]?.id ?? null,
           selectedFeatureId: null,
+          selectedFeatureIds: [],
           identifyLayerId: null,
           // Present a bundled story on load; otherwise drop any presentation
           // carried over from the previous project.
           ui: {
             ...s.ui,
             storymapPresenting: presentStory,
+            // A bundled story auto-presents for viewing, so exiting it should
+            // not pop open the editor (#918).
+            storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
           },
@@ -1383,20 +1566,61 @@ export const useAppStore = create<AppState>()(
   )
 );
 
+// Mirror the project's ellipsoid into the module-level singleton the
+// measurement helpers read. One subscription covers every path that changes
+// preferences (setPreferences, load/new project, undo/redo) without threading
+// the value through each call site. The subscription runs on every store
+// mutation (e.g. setPointerCoords on each mousemove), so guard on the id to skip
+// the redundant work for a value that changes at most once per session.
+let lastEllipsoidId = useAppStore.getState().preferences.map.ellipsoidId;
+setActiveEllipsoidId(lastEllipsoidId);
+useAppStore.subscribe((state) => {
+  const id = state.preferences.map.ellipsoidId;
+  if (id === lastEllipsoidId) return;
+  lastEllipsoidId = id;
+  setActiveEllipsoidId(id);
+});
+
 /**
  * After an undo/redo restores the tracked slice, mark the project dirty and
  * drop a `selectedLayerId` that no longer points at an existing layer (selection
  * is intentionally not tracked in history, so it can dangle after a restore).
  */
-function finishHistoryStep(): void {
+function finishHistoryStep(previousBasemapStyleUrl: string): void {
   const s = useAppStore.getState();
   const selectionDangling =
     s.selectedLayerId !== null &&
     !s.layers.some((layer) => layer.id === s.selectedLayerId);
+  // The basemap is in the undo history but the ellipsoid preference is not, so a
+  // step that restores a *different* basemap can leave the two out of sync (e.g.
+  // undoing a switch to Mars would keep the Mars radius under an Earth basemap).
+  // Re-derive the ellipsoid from the restored basemap's body — Earth for a
+  // non-planetary basemap — but only when this step actually changed the
+  // basemap. Steps that leave the basemap untouched must not touch the ellipsoid,
+  // which the user can set independently of the basemap in Settings.
+  const restoredEllipsoidId =
+    getPlanetaryBasemapByStyleUrl(s.basemapStyleUrl)?.ellipsoidId ??
+    DEFAULT_ELLIPSOID_ID;
+  const ellipsoidPatch =
+    s.basemapStyleUrl !== previousBasemapStyleUrl &&
+    s.preferences.map.ellipsoidId !== restoredEllipsoidId
+      ? {
+          preferences: {
+            ...s.preferences,
+            map: { ...s.preferences.map, ellipsoidId: restoredEllipsoidId },
+          },
+        }
+      : {};
   useAppStore.setState(
     selectionDangling
-      ? { isDirty: true, selectedLayerId: null, selectedFeatureId: null }
-      : { isDirty: true },
+      ? {
+          isDirty: true,
+          selectedLayerId: null,
+          selectedFeatureId: null,
+          selectedFeatureIds: [],
+          ...ellipsoidPatch,
+        }
+      : { isDirty: true, ...ellipsoidPatch },
   );
   // The setState above must not leave a coalesce window open for the next edit.
   cancelHistoryCoalesce();
@@ -1412,8 +1636,9 @@ export function undo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.pastStates.length === 0) return; // nothing to undo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
+  const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
   temporal.undo();
-  finishHistoryStep();
+  finishHistoryStep(previousBasemapStyleUrl);
 }
 
 /** Step the history forward one entry and mark the project dirty. */
@@ -1421,8 +1646,9 @@ export function redo(): void {
   const temporal = useAppStore.temporal.getState();
   if (temporal.futureStates.length === 0) return; // nothing to redo; stay clean
   cancelHistoryCoalesce(); // break any in-flight burst so the next edit records
+  const previousBasemapStyleUrl = useAppStore.getState().basemapStyleUrl;
   temporal.redo();
-  finishHistoryStep();
+  finishHistoryStep(previousBasemapStyleUrl);
 }
 
 /** Empty both the undo and redo stacks (e.g. on new/loaded project). */

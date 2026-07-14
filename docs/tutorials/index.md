@@ -4,7 +4,7 @@ These tutorials walk through common GeoLibre workflows end to end. Each one is s
 
 ## Before you start
 
-- You can follow most tutorials in the **live viewer** at [viewer.geolibre.app](https://viewer.geolibre.app/), which is the browser build of GeoLibre. No installation required.
+- You can follow most tutorials in the **live viewer** at [web.geolibre.app](https://web.geolibre.app/), which is the browser build of GeoLibre. No installation required.
 - A few steps need the **desktop app**: opening and saving project files, reading local MBTiles and rasters, and the Python sidecar tools (raster processing, sidecar conversions, and Whitebox). These are called out where they appear. See [Downloads](../downloads.md) to install.
 - The sample dataset used in several tutorials is a public GeoParquet file of world countries: `https://data.source.coop/giswqs/opengeos/countries.parquet`.
 

@@ -6,6 +6,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
+  readDir,
   readFile,
   readTextFile,
   readTextFileLines,
@@ -15,7 +16,7 @@ import {
 import { unzip } from "fflate";
 import type { FeatureCollection } from "geojson";
 import i18next from "i18next";
-import shp from "shpjs";
+import { combine, parseDbf, parseShp } from "shpjs";
 import {
   DELIMITER_CANDIDATES,
   NO_VALID_COORDINATES_MESSAGE,
@@ -25,7 +26,11 @@ import {
   parseDelimitedTextLayer,
 } from "./delimited-text";
 import type { DuckDbVectorFile } from "./duckdb-vector-loader";
-import type { DuckDbVectorLoadOptions } from "./duckdb-vector-guard";
+import {
+  confirmLargeDataset,
+  type DuckDbVectorLoadOptions,
+  type LargeVectorDataset,
+} from "./duckdb-vector-guard";
 import type { GeotaggedPhotoResult } from "./geotagged-photos";
 import {
   PHOTO_IMAGE_EXTENSIONS,
@@ -34,7 +39,19 @@ import {
 } from "./geotagged-photos";
 import { parseGpxLayer } from "./gpx";
 import { isTauri } from "./is-tauri";
-import { parseKmlText } from "./kml";
+import {
+  parseKmlGroundOverlays,
+  parseKmlModels,
+  parseKmlText,
+  type KmlGroundOverlay,
+  type KmlModel,
+} from "./kml";
+import {
+  findArchiveEntry,
+  findArchiveEntryKey,
+  imageMimeFromName,
+  normalizeArchivePath,
+} from "./kml-overlays";
 
 // Re-exported so existing `import { isTauri } from "./tauri-io"` consumers keep
 // working; the implementation lives in the lightweight ./is-tauri module.
@@ -161,6 +178,57 @@ export function isRestorableVectorPath(path: string): boolean {
   return RESTORABLE_VECTOR_PATH.test(path);
 }
 
+/**
+ * Whether a file name is a geospatial format the Browser panel's Files tree can
+ * add with one click — vectors and GeoTIFF/COG rasters. Deliberately stricter
+ * than the lenient drop-path filter (which accepts anything explicitly dropped).
+ * MBTiles are excluded for now: vector MBTiles need source-layer selection, so
+ * they go through the Add Data dialog rather than a one-click tree add.
+ *
+ * @param name - The file name (or path) to test.
+ * @returns True when the extension is a one-click-loadable geospatial format.
+ */
+export function isLoadableFilePath(name: string): boolean {
+  return isRestorableVectorPath(name) || isRasterFileName(name);
+}
+
+/** One entry of a local directory listing (from {@link listDirectory}). */
+export interface LocalDirectoryEntry {
+  name: string;
+  /** Absolute path of the entry. */
+  path: string;
+  isDirectory: boolean;
+}
+
+/**
+ * List a local directory's immediate entries via the `fs` plugin's `readDir`
+ * (desktop only; resolves to `[]` off-desktop). This works only within the fs
+ * scope the OS folder dialog grants for a picked directory (and its subtree),
+ * so the Browser panel only lists folders the user added via the picker — no
+ * new unbounded filesystem-read primitive. `readDir` returns names + type flags
+ * only, so the absolute path of each entry is joined here. Filtering to loadable
+ * file types is the caller's job.
+ *
+ * @param path - Absolute directory path to list (a picker-granted folder or a
+ *   descendant of one).
+ * @returns The directory's entries (folders and files).
+ */
+export async function listDirectory(
+  path: string,
+): Promise<LocalDirectoryEntry[]> {
+  if (!isTauri()) return [];
+  const entries = await readDir(path);
+  // Join with the parent's own separator style so a Windows path stays
+  // all-backslash (readDir returns names only, no path).
+  const sep = path.includes("\\") ? "\\" : "/";
+  const base = /[/\\]$/.test(path) ? path : `${path}${sep}`;
+  return entries.map((entry) => ({
+    name: entry.name,
+    path: `${base}${entry.name}`,
+    isDirectory: entry.isDirectory,
+  }));
+}
+
 // Built at call time so the filter-group label shown in the native file dialog
 // is translated (a module-level constant would freeze the English string).
 function vectorFileDialogFilters(): FileDialogFilter[] {
@@ -176,6 +244,93 @@ export interface LoadedVectorLayer {
   data: FeatureCollection;
   name?: string;
   path: string;
+}
+
+/**
+ * A georeferenced image overlay produced by a KML/KMZ `<GroundOverlay>`. Unlike
+ * {@link LoadedVectorLayer} it carries no `FeatureCollection`; the caller turns
+ * it into an `image`-type store layer via `addImageOverlayLayer`. The `kind`
+ * tag distinguishes it from a vector layer in a mixed load result.
+ */
+export interface LoadedImageOverlay {
+  kind: "image-overlay";
+  name: string;
+  path: string;
+  /** Image data URL (from a KMZ archive) or an absolute URL (from a KML). */
+  url: string;
+  /** Four `[lng, lat]` corners: top-left, top-right, bottom-right, bottom-left. */
+  coordinates: [number, number][];
+  /** Overlay extent as `[west, south, east, north]` in WGS84 degrees. */
+  bounds: [number, number, number, number];
+  /** Overlay opacity in [0, 1]. */
+  opacity: number;
+  /**
+   * Epoch-ms time bounds when the overlay is a `<TimeSpan>`/`<TimeStamp>` frame
+   * in a time-animated sequence. Set (with `groupId`/`visible`) by
+   * {@link sequenceTimeOverlays}; the Time Slider animates these frames.
+   */
+  timeSpan?: { begin: number | null; end: number | null };
+  /** Shared group id linking the frames of one animation. */
+  groupId?: string;
+  /** Initial visibility: only the first frame of a sequence starts visible. */
+  visible?: boolean;
+}
+
+/**
+ * A 3D model produced by a KML/KMZ `<Model>` (a COLLADA `.dae` converted to a
+ * self-contained GLB). The caller turns it into a deck.gl scenegraph layer. The
+ * `kind` tag distinguishes it from a vector layer in a mixed load result.
+ */
+export interface LoadedModel {
+  kind: "model";
+  name: string;
+  path: string;
+  /** GLB model as a `data:` URL (textures embedded), renderable as glTF. */
+  url: string;
+  /** Model location in WGS84 degrees and meters. */
+  longitude: number;
+  latitude: number;
+  altitude: number;
+  /** `<Orientation>` heading/tilt/roll in degrees. */
+  heading: number;
+  tilt: number;
+  roll: number;
+  /** `<Scale>` factors along the model's x/y/z axes. */
+  scale: { x: number; y: number; z: number };
+  /**
+   * The model's extent in meters (max distance from its anchored origin to any
+   * bounding-box corner), used to frame it on load. `0` when unknown.
+   */
+  radiusMeters: number;
+  /** Model-space vertical bounds after COLLADA unit/up-axis handling. */
+  verticalMinMeters: number;
+  verticalMaxMeters: number;
+}
+
+/**
+ * A single result from a vector-file load: a vector layer, an image overlay, or
+ * a 3D model. A KMZ/KML file can yield a mix (placemarks plus ground overlays
+ * plus models), mirroring how a GPX file yields several vector layers.
+ */
+export type LoadedLayer = LoadedVectorLayer | LoadedImageOverlay | LoadedModel;
+
+/** Narrow a {@link LoadedLayer} to its image-overlay variant. */
+export function isLoadedImageOverlay(
+  layer: LoadedLayer,
+): layer is LoadedImageOverlay {
+  return "kind" in layer && layer.kind === "image-overlay";
+}
+
+/** Narrow a {@link LoadedLayer} to its 3D-model variant. */
+export function isLoadedModel(layer: LoadedLayer): layer is LoadedModel {
+  return "kind" in layer && layer.kind === "model";
+}
+
+/** Narrow a {@link LoadedLayer} to its vector variant. */
+export function isLoadedVectorLayer(
+  layer: LoadedLayer,
+): layer is LoadedVectorLayer {
+  return !("kind" in layer);
 }
 
 // Auxiliary files that accompany Shapefiles (spatial indexes, metadata, etc.)
@@ -431,10 +586,135 @@ function parseDelimitedTextFile(
   }
 }
 
-async function parseShapefileZip(
+/** ESRI shape type for MultiPatch (3D surfaces), read from a `.shp` header. */
+const SHAPEFILE_MULTIPATCH_TYPE = 31;
+
+/**
+ * True for the metadata entries macOS Finder adds to a zip: the `__MACOSX/`
+ * resource-fork tree and AppleDouble `._<name>` files that shadow every real
+ * entry (an AppleDouble `._x.shp` otherwise looks like the shapefile).
+ */
+function isMacOsMetadataEntry(entryName: string): boolean {
+  const baseName = entryName.slice(entryName.lastIndexOf("/") + 1);
+  return entryName.startsWith("__MACOSX/") || baseName.startsWith("._");
+}
+
+/** The ESRI shape type from a `.shp` header (byte 32, little-endian), or -1. */
+export function shapefileShapeType(shp: Uint8Array): number {
+  if (shp.byteLength < 36) return -1;
+  return new DataView(shp.buffer, shp.byteOffset, shp.byteLength).getInt32(
+    32,
+    true,
+  );
+}
+
+/** A zipped shapefile unzipped once: the DuckDB file, its raw sidecar bytes
+ *  (keyed by lowercase extension), and whether it is a 3D MultiPatch. */
+export interface UnzippedShapefile {
+  file: DuckDbVectorFile;
+  /** Sidecar bytes keyed by lowercase extension (`dbf`, `prj`, `cpg`, ...). */
+  sidecar: Record<string, Uint8Array>;
+  isMultiPatch: boolean;
+}
+
+/**
+ * Unzip a shapefile archive **once** into a {@link DuckDbVectorFile} (the `.shp`
+ * plus its sidecars, registered under one flat base name) and the raw sidecar
+ * bytes, skipping macOS `__MACOSX` / AppleDouble entries. Returns null when the
+ * archive has no `.shp` (a corrupt archive rejects, so the caller does not
+ * silently fall through to a mis-parse).
+ *
+ * The `isMultiPatch` flag marks 3D MultiPatch (shape type 31) shapefiles: shpjs
+ * mis-reads those as points, so they must be loaded through DuckDB, which
+ * decodes the TIN surfaces (issue #1121).
+ */
+export async function readShapefileZipForDuckDb(
   data: ArrayBuffer | Uint8Array,
+): Promise<UnzippedShapefile | null> {
+  const entries = await unzipArchive(data);
+  const shpEntry = Object.keys(entries).find(
+    (name) => /\.shp$/i.test(name) && !isMacOsMetadataEntry(name),
+  );
+  if (!shpEntry) return null;
+  const baseName = browserSafeFileName(shpEntry) || "layer.shp";
+  const stem = baseName.replace(/\.shp$/i, "");
+  const entryBase = shpEntry.replace(/\.[^./]+$/, "");
+  const shpBytes = entries[shpEntry];
+  const siblingFiles: DuckDbVectorFile[] = [];
+  const sidecar: Record<string, Uint8Array> = {};
+  for (const [entry, bytes] of Object.entries(entries)) {
+    if (entry === shpEntry || isMacOsMetadataEntry(entry)) continue;
+    // Same base path (any extension): the shapefile's sidecars (.dbf, .shx, ...).
+    if (entry.replace(/\.[^./]+$/, "") !== entryBase) continue;
+    const extension = entry.slice(entry.lastIndexOf(".") + 1).toLowerCase();
+    siblingFiles.push({
+      name: `${stem}.${extension}`,
+      extension,
+      data: toDuckDbVectorData(bytes),
+    });
+    sidecar[extension] = bytes;
+  }
+  return {
+    file: {
+      name: baseName,
+      extension: "shp",
+      data: toDuckDbVectorData(shpBytes),
+      siblingFiles,
+    },
+    sidecar,
+    isMultiPatch: shapefileShapeType(shpBytes) === SHAPEFILE_MULTIPATCH_TYPE,
+  };
+}
+
+/**
+ * Parse an already-unzipped shapefile with shpjs's low-level parsers, so the
+ * archive is not unzipped a second time (shpjs's `shp(zip)` re-inflates every
+ * entry). The `.prj` drives reprojection to WGS84 and the `.cpg` the DBF
+ * encoding, mirroring `shp(zip)`. Requires the `.dbf`; without it the caller
+ * falls back to DuckDB.
+ */
+function parseShapefileComponents({
+  file,
+  sidecar,
+}: UnzippedShapefile): FeatureCollection {
+  if (!sidecar.dbf) {
+    throw new Error("Shapefile archive is missing its .dbf sidecar.");
+  }
+  const decoder = new TextDecoder();
+  const prj = sidecar.prj ? decoder.decode(sidecar.prj) : undefined;
+  const cpg = sidecar.cpg ? decoder.decode(sidecar.cpg).trim() : undefined;
+  const geometries = parseShp(toArrayBuffer(file.data), prj);
+  const attributes = parseDbf(toArrayBuffer(sidecar.dbf), cpg);
+  return normalizeShapefileResult(combine([geometries, attributes]));
+}
+
+/**
+ * Load a zipped shapefile. Unzips once, then reads a 3D MultiPatch shapefile
+ * through DuckDB (shpjs mis-parses its surfaces as points; DuckDB decodes the
+ * TIN as a MultiPolygon, issue #1121) or parses an ordinary shapefile from the
+ * already-extracted buffers, retrying through DuckDB if shpjs cannot read it. A
+ * corrupt archive or one without a `.shp` throws, since GeoLibre reads only
+ * shapefile `.zip`s.
+ */
+async function loadShapefileZip(
+  data: ArrayBuffer | Uint8Array,
+  options?: DuckDbVectorLoadOptions,
 ): Promise<FeatureCollection> {
-  return normalizeShapefileResult(await shp(data));
+  const unzipped = await readShapefileZipForDuckDb(data);
+  if (!unzipped) {
+    throw new Error("The zip archive does not contain a .shp file.");
+  }
+  if (unzipped.isMultiPatch) {
+    return loadDuckDbVector(unzipped.file, options);
+  }
+  try {
+    return parseShapefileComponents(unzipped);
+  } catch {
+    // shpjs could not read it; retry through DuckDB with the registered
+    // components (a raw `.zip` is not a GDAL dataset, so the `.shp` and its
+    // sidecars must be registered individually).
+    return loadDuckDbVector(unzipped.file, options);
+  }
 }
 
 function unzipArchive(
@@ -456,10 +736,9 @@ function toDuckDbVectorData(data: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(data);
 }
 
-async function readKmzKmlFiles(
-  data: ArrayBuffer | Uint8Array,
-): Promise<DuckDbVectorFile[]> {
-  const entries = await unzipArchive(data);
+function readKmlEntries(
+  entries: Record<string, Uint8Array>,
+): DuckDbVectorFile[] {
   const kmlEntries = Object.entries(entries)
     .filter(([entryName]) => entryName.toLowerCase().endsWith(".kml"))
     .sort(([leftName], [rightName]) => {
@@ -484,6 +763,581 @@ async function readKmzKmlFiles(
       data: toDuckDbVectorData(data),
     };
   });
+}
+
+async function readKmzKmlFiles(
+  data: ArrayBuffer | Uint8Array,
+): Promise<DuckDbVectorFile[]> {
+  return readKmlEntries(await unzipArchive(data));
+}
+
+/**
+ * Encode raw image bytes as a `data:` URL. Uses a `Blob` + `FileReader` (rather
+ * than `btoa`) so a large overlay image cannot overflow the argument stack.
+ */
+function bytesToDataUrl(bytes: Uint8Array, mime: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Could not read overlay image."));
+    reader.readAsDataURL(new Blob([bytes as BlobPart], { type: mime }));
+  });
+}
+
+function imageOverlayLayer(
+  overlay: KmlGroundOverlay,
+  url: string,
+  path: string,
+): LoadedImageOverlay {
+  return {
+    kind: "image-overlay",
+    // Strip the file extension for the fallback name (e.g. "tour.kmz" ->
+    // "tour overlay"), matching how the vector layers are named.
+    name: overlay.name?.trim() || `${pathWithoutExtension(fileBaseName(path))} overlay`,
+    path,
+    url,
+    coordinates: overlay.coordinates,
+    bounds: overlay.bounds,
+    opacity: overlay.opacity,
+    ...(overlay.time ? { timeSpan: overlay.time } : {}),
+  };
+}
+
+/**
+ * Turn the time-tagged overlays in a set into an animation: sort them by start
+ * time, fill an open `<TimeStamp>`/`<TimeSpan>` end with the next frame's start
+ * (a step function), give them a shared group id, and leave only the first
+ * frame visible so the others do not all stack at once before the Time Slider
+ * is opened.
+ *
+ * Only overlays with a numeric start (`timeSpan.begin`) are treated as frames,
+ * matching what the Time Slider can animate; an overlay with an open-start span
+ * (or a lone time-tagged overlay that is not part of a sequence) has its
+ * transient `timeSpan` dropped so it stays a normal static overlay the slider
+ * never hides.
+ *
+ * @param overlays - The resolved overlays for one file, mutated in place.
+ * @returns The same array, for chaining.
+ */
+function sequenceTimeOverlays(
+  overlays: LoadedImageOverlay[],
+): LoadedImageOverlay[] {
+  const frames = overlays
+    .filter(
+      (overlay): overlay is LoadedImageOverlay & {
+        timeSpan: { begin: number; end: number | null };
+      } => typeof overlay.timeSpan?.begin === "number",
+    )
+    .sort((a, b) => a.timeSpan.begin - b.timeSpan.begin);
+
+  // An animation needs at least two frames with distinct start times. A lone
+  // time-tagged overlay, or several sharing one time (e.g. a single inherited
+  // Folder `<TimeSpan>`), is not a sequence; strip every transient timeSpan so
+  // the Time Slider treats these overlays as ordinary static layers.
+  const distinctBegins = new Set(frames.map((frame) => frame.timeSpan.begin));
+  if (distinctBegins.size < 2) {
+    for (const overlay of overlays) delete overlay.timeSpan;
+    return overlays;
+  }
+
+  const inSequence = new Set<LoadedImageOverlay>(frames);
+  const groupId = crypto.randomUUID();
+  frames.forEach((frame, index) => {
+    frame.groupId = groupId;
+    frame.visible = index === 0;
+    // A frame with an open end runs until the next frame begins (or stays open
+    // for the last frame), so an instant-tagged sequence steps cleanly.
+    if (frame.timeSpan.end === null) {
+      const next = frames[index + 1]?.timeSpan.begin;
+      if (typeof next === "number") frame.timeSpan.end = next;
+    }
+  });
+  // Any time-tagged overlay left out of the sequence (e.g. an open-start span)
+  // should not be animated, so drop its timeSpan too.
+  for (const overlay of overlays) {
+    if (!inSequence.has(overlay)) delete overlay.timeSpan;
+  }
+  return overlays;
+}
+
+// A ground-overlay image is inlined as a base64 `data:` URL on the layer and
+// persisted in the project file (and every collaboration snapshot) at ~4/3 its
+// byte size, so cap it like the Raster Georeferencer does to avoid bloating
+// projects and memory.
+const MAX_OVERLAY_IMAGE_BYTES = 8 * 1024 * 1024;
+
+// A `<GroundOverlay>` together with the archive directory of the KML that
+// declared it, so a relative `href` can be resolved against that directory
+// first.
+interface KmzOverlay {
+  overlay: KmlGroundOverlay;
+  baseDir: string;
+}
+
+// The directory prefix (with trailing slash) of an archive entry name, or "".
+function archiveDirname(entryName: string): string {
+  const slash = entryName.lastIndexOf("/");
+  return slash >= 0 ? entryName.slice(0, slash + 1) : "";
+}
+
+// Resolve every GroundOverlay in the archive's KML documents to an image layer,
+// pulling each overlay's image bytes out of the archive (or using an absolute
+// URL directly). Overlays whose image is missing, oversized, or in a format
+// browsers cannot render are skipped with a warning.
+async function groundOverlaysFromKmz(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: { name: string; text: string }[],
+  path: string,
+): Promise<LoadedImageOverlay[]> {
+  // Prefilter (case-insensitively, matching kml.ts's tolerant element matching)
+  // so a KML with no overlay is not DOM-parsed a second time.
+  const parsed: KmzOverlay[] = kmlDocs
+    .filter((doc) => /groundoverlay/i.test(doc.text))
+    .flatMap((doc) =>
+      parseKmlGroundOverlays(doc.text).map((overlay) => ({
+        overlay,
+        baseDir: archiveDirname(doc.name),
+      })),
+    )
+    .sort((a, b) => a.overlay.drawOrder - b.overlay.drawOrder);
+
+  const overlays: LoadedImageOverlay[] = [];
+  for (const { overlay, baseDir } of parsed) {
+    // Applies to every href type (archive-embedded or absolute URL): browsers
+    // cannot decode TIFF for a MapLibre image source.
+    if (isUnrenderableOverlayImage(overlay.href)) {
+      warnUnrenderableOverlay(overlay.href);
+      continue;
+    }
+    if (isHttpUrl(overlay.href)) {
+      overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
+      continue;
+    }
+    // Try the href relative to its KML's directory first (a KMZ nesting
+    // `folder/doc.kml` referencing `images/x.png` means `folder/images/x.png`),
+    // then fall back to the global archive lookup.
+    const data =
+      findArchiveEntry(entries, baseDir + overlay.href) ??
+      findArchiveEntry(entries, overlay.href);
+    if (!data) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" was not found in the KMZ archive.`,
+      );
+      continue;
+    }
+    if (data.length > MAX_OVERLAY_IMAGE_BYTES) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB inline limit.`,
+      );
+      continue;
+    }
+    const url = await bytesToDataUrl(data, imageMimeFromName(overlay.href));
+    overlays.push(imageOverlayLayer(overlay, url, path));
+  }
+  return sequenceTimeOverlays(overlays);
+}
+
+// Browsers cannot decode TIFF into an <img>/canvas/createImageBitmap, which is
+// what a MapLibre image source paints from, so a TIFF overlay would fail to
+// render with no feedback. Detected from the href extension.
+function isUnrenderableOverlayImage(href: string): boolean {
+  return imageMimeFromName(href) === "image/tiff";
+}
+
+function warnUnrenderableOverlay(href: string): void {
+  console.warn(
+    `Skipping a KML ground overlay: browsers cannot render the TIFF image "${href}".`,
+  );
+}
+
+// Order overlays by KML `<drawOrder>` ascending. Layers added later render on
+// top (higher store index sits above), so emitting the lowest drawOrder first
+// makes the highest drawOrder end up on top, matching Google Earth's stacking.
+function sortByDrawOrder(overlays: KmlGroundOverlay[]): KmlGroundOverlay[] {
+  return [...overlays].sort((a, b) => a.drawOrder - b.drawOrder);
+}
+
+// GroundOverlays in a standalone (non-archived) KML can only be resolved when
+// their href is an absolute URL; a relative path needs the sibling image files
+// a browser load does not have.
+function groundOverlaysFromKml(
+  text: string,
+  path: string,
+): LoadedImageOverlay[] {
+  // Cheap prefilter so a KML with no overlays is not DOM-parsed a second time
+  // (its placemarks are already parsed by the vector loader). Matched
+  // case-insensitively, like kml.ts's element matching, so non-conformant
+  // casing is not dropped.
+  if (!/groundoverlay/i.test(text)) return [];
+  const overlays: LoadedImageOverlay[] = [];
+  for (const overlay of sortByDrawOrder(parseKmlGroundOverlays(text))) {
+    if (!isHttpUrl(overlay.href)) {
+      console.warn(
+        `Skipping a KML ground overlay: its image "${overlay.href}" is a relative path, which a standalone KML (unlike a KMZ) cannot resolve. Only absolute URLs are supported.`,
+      );
+      continue;
+    }
+    if (isUnrenderableOverlayImage(overlay.href)) {
+      warnUnrenderableOverlay(overlay.href);
+      continue;
+    }
+    overlays.push(imageOverlayLayer(overlay, overlay.href.trim(), path));
+  }
+  return sequenceTimeOverlays(overlays);
+}
+
+// A KML `<Model>` GLB is inlined as a base64 `data:` URL on the layer (textures
+// embedded) and persisted in the project file at ~4/3 its byte size, so cap it
+// to avoid bloating projects and memory.
+const MAX_MODEL_GLB_BYTES = 24 * 1024 * 1024;
+
+// Cap the raw `.dae` source too, so an enormous mesh is rejected up front rather
+// than after the expensive parse/normal-compute/export. COLLADA is verbose XML,
+// so the source limit is more generous than the GLB output limit.
+const MAX_DAE_SOURCE_BYTES = 64 * 1024 * 1024;
+
+// The display name for a model layer. An unnamed `<Model>` falls back to a
+// path-derived name; when a file has several such models the 1-based `index`
+// disambiguates them so they are not all named identically. This resolves the
+// name once here at load time; `kmlModelDisplayName` (kml-model.ts) is the
+// downstream reader whose own fallback is only a defensive/test-time path.
+function kmlModelName(
+  model: KmlModel,
+  path: string,
+  index: number,
+  total: number,
+): string {
+  const named = model.name?.trim();
+  if (named) return named;
+  const base = `${pathWithoutExtension(fileBaseName(path))} model`;
+  return total > 1 ? `${base} ${index + 1}` : base;
+}
+
+function kmlModelLayer(
+  model: KmlModel,
+  converted: {
+    url: string;
+    radiusMeters: number;
+    verticalMinMeters: number;
+    verticalMaxMeters: number;
+  },
+  path: string,
+  index: number,
+  total: number,
+): LoadedModel {
+  return {
+    kind: "model",
+    name: kmlModelName(model, path, index, total),
+    path,
+    url: converted.url,
+    longitude: model.longitude,
+    latitude: model.latitude,
+    altitude: model.altitude,
+    heading: model.heading,
+    tilt: model.tilt,
+    roll: model.roll,
+    scale: model.scale,
+    radiusMeters: converted.radiusMeters,
+    verticalMinMeters: converted.verticalMinMeters,
+    verticalMaxMeters: converted.verticalMaxMeters,
+  };
+}
+
+// Convert a COLLADA `.dae` (as text) to a self-contained GLB data URL, resolving
+// any textures the DAE references. `resolveTexture` maps a raw texture path to a
+// blob URL of an archive entry (for a KMZ); the created blob URLs are revoked
+// once the GLTF exporter has embedded the pixels. Returns null on failure so one
+// bad model does not abort the rest of the load.
+async function daeToGlbDataUrl(
+  daeText: string,
+  href: string,
+  resolveTexture?: (path: string) => Uint8Array | undefined,
+  basePath = "",
+): Promise<{
+  url: string;
+  radiusMeters: number;
+  verticalMinMeters: number;
+  verticalMaxMeters: number;
+} | null> {
+  const blobUrls: string[] = [];
+  const modifier = resolveTexture
+    ? (url: string): string | undefined => {
+        const bytes = resolveTexture(url);
+        if (!bytes) return undefined;
+        const blob = URL.createObjectURL(
+          new Blob([bytes as BlobPart], { type: imageMimeFromName(url) }),
+        );
+        blobUrls.push(blob);
+        return blob;
+      }
+    : undefined;
+  try {
+    const { convertDaeToGlb } = await import("./collada-to-glb");
+    const { glb, radiusMeters, verticalMinMeters, verticalMaxMeters } =
+      await convertDaeToGlb(
+        daeText,
+        modifier,
+        basePath,
+      );
+    if (glb.length > MAX_MODEL_GLB_BYTES) {
+      console.warn(
+        `Skipping a KML model: "${href}" converts to ${Math.round(glb.length / (1024 * 1024))} MB, over the ${Math.round(MAX_MODEL_GLB_BYTES / (1024 * 1024))} MB inline limit.`,
+      );
+      return null;
+    }
+    const url = await bytesToDataUrl(glb, "model/gltf-binary");
+    return { url, radiusMeters, verticalMinMeters, verticalMaxMeters };
+  } catch (error) {
+    console.warn(`Could not convert the KML model "${href}" to glTF.`, error);
+    return null;
+  } finally {
+    for (const url of blobUrls) URL.revokeObjectURL(url);
+  }
+}
+
+// Resolve the `<Model>` 3D models in an archive's KML documents. Each model's
+// `.dae` is read from the archive (relative to its KML's directory) or fetched
+// from an absolute URL, converted to a self-contained GLB, and returned as an
+// image-free model descriptor. Models that cannot be resolved are skipped.
+async function modelsFromKmz(
+  entries: Record<string, Uint8Array>,
+  kmlDocs: { name: string; text: string }[],
+  path: string,
+): Promise<LoadedModel[]> {
+  const parsed = kmlDocs
+    // `(?:\w+:)?` so a namespace-prefixed `<kml:Model>` (valid but rare) isn't
+    // filtered out before `parseKmlModels` (which matches by localName) runs.
+    .filter((doc) => /<(?:\w+:)?model[\s/>]/i.test(doc.text))
+    .flatMap((doc) =>
+      parseKmlModels(doc.text).map((model) => ({
+        model,
+        baseDir: archiveDirname(doc.name),
+      })),
+    );
+
+  const models: LoadedModel[] = [];
+  const total = parsed.length;
+  for (const [index, { model, baseDir }] of parsed.entries()) {
+    if (isHttpUrl(model.href)) {
+      const converted = await fetchDaeAsGlbDataUrl(model.href);
+      if (converted)
+        models.push(kmlModelLayer(model, converted, path, index, total));
+      continue;
+    }
+    const daeKey =
+      findArchiveEntryKey(entries, baseDir + model.href) ??
+      findArchiveEntryKey(entries, model.href);
+    if (daeKey === undefined) {
+      console.warn(
+        `Skipping a KML model: its mesh "${model.href}" was not found in the KMZ archive.`,
+      );
+      continue;
+    }
+    const data = entries[daeKey];
+    if (data.length > MAX_DAE_SOURCE_BYTES) {
+      console.warn(
+        `Skipping a KML model: its mesh "${model.href}" is ${Math.round(data.length / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+      );
+      continue;
+    }
+    // Resolve textures relative to where the `.dae` was actually found (its
+    // matched key), not the guessed `baseDir + href` — the basename fallback in
+    // findArchiveEntryKey can match a differently-nested entry. Fall back to a
+    // bare basename for textures stored elsewhere in the archive.
+    const daeDir = archiveDirname(normalizeArchivePath(daeKey));
+    const resolveTexture = (texturePath: string): Uint8Array | undefined => {
+      const bytes =
+        findArchiveEntry(entries, daeDir + texturePath) ??
+        findArchiveEntry(entries, texturePath);
+      // Cap a single packaged texture (same limit as ground-overlay images) so
+      // an oversized bundled image can't blow up the decode/GPU upload before
+      // the GLB-size cap ever measures the result; skip it (untextured) instead.
+      if (bytes && bytes.length > MAX_OVERLAY_IMAGE_BYTES) {
+        console.warn(
+          `Skipping a KML model texture "${texturePath}": ${Math.round(bytes.length / (1024 * 1024))} MB, over the ${Math.round(MAX_OVERLAY_IMAGE_BYTES / (1024 * 1024))} MB limit.`,
+        );
+        return undefined;
+      }
+      return bytes;
+    };
+    const converted = await daeToGlbDataUrl(
+      new TextDecoder("utf-8").decode(data),
+      model.href,
+      resolveTexture,
+    );
+    if (converted)
+      models.push(kmlModelLayer(model, converted, path, index, total));
+  }
+  return models;
+}
+
+// Fetch an absolute-URL `.dae`, convert it to a GLB data URL. Textures resolve
+// against the mesh's URL directory (best effort; a CORS-blocked fetch is
+// skipped). Returns null on any failure.
+async function fetchDaeAsGlbDataUrl(
+  href: string,
+): Promise<{
+  url: string;
+  radiusMeters: number;
+  verticalMinMeters: number;
+  verticalMaxMeters: number;
+} | null> {
+  try {
+    // Bound the fetch so an unresponsive host can't hang the whole KML/KMZ load
+    // (models are resolved sequentially), mirroring the texture-load timeout.
+    const response = await fetch(href, { signal: AbortSignal.timeout(15000) });
+    if (!response.ok) {
+      console.warn(
+        `Skipping a KML model: fetching "${href}" returned ${response.status}.`,
+      );
+      return null;
+    }
+    // Best-effort size guard before buffering the whole body (mirrors the
+    // Content-Length pre-check in `openRecentProjectFile`). A chunked response
+    // with no Content-Length still falls through to the post-read check below.
+    const contentLength = response.headers.get("content-length");
+    if (contentLength !== null && Number(contentLength) > MAX_DAE_SOURCE_BYTES) {
+      console.warn(
+        `Skipping a KML model: "${href}" is ${Math.round(Number(contentLength) / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+      );
+      return null;
+    }
+    const daeText = await response.text();
+    // Measure real byte size (not UTF-16 code units) so the cap matches the
+    // archive path's `Uint8Array.length` check.
+    const daeBytes = new Blob([daeText]).size;
+    if (daeBytes > MAX_DAE_SOURCE_BYTES) {
+      console.warn(
+        `Skipping a KML model: "${href}" is ${Math.round(daeBytes / (1024 * 1024))} MB, over the ${Math.round(MAX_DAE_SOURCE_BYTES / (1024 * 1024))} MB limit.`,
+      );
+      return null;
+    }
+    const basePath = href.slice(0, href.lastIndexOf("/") + 1);
+    return await daeToGlbDataUrl(daeText, href, undefined, basePath);
+  } catch (error) {
+    console.warn(`Skipping a KML model: could not fetch "${href}".`, error);
+    return null;
+  }
+}
+
+// Models in a standalone (non-archived) KML can only be resolved when the mesh
+// href is an absolute URL; a relative path needs the archive's packaged files.
+async function modelsFromKml(
+  text: string,
+  path: string,
+): Promise<LoadedModel[]> {
+  // `(?:\w+:)?` so a namespace-prefixed `<kml:Model>` isn't skipped before
+  // `parseKmlModels` (which matches by localName) runs.
+  if (!/<(?:\w+:)?model[\s/>]/i.test(text)) return [];
+  const parsed = parseKmlModels(text);
+  const models: LoadedModel[] = [];
+  for (const [index, model] of parsed.entries()) {
+    if (!isHttpUrl(model.href)) {
+      console.warn(
+        `Skipping a KML model: its mesh "${model.href}" is a relative path, which a standalone KML (unlike a KMZ) cannot resolve. Only absolute URLs are supported.`,
+      );
+      continue;
+    }
+    const converted = await fetchDaeAsGlbDataUrl(model.href);
+    if (converted)
+      models.push(kmlModelLayer(model, converted, path, index, parsed.length));
+  }
+  return models;
+}
+
+// Merge the vector placemarks from every KML in an archive, tolerating entries
+// with no readable vector content (returning an empty collection) so an
+// overlay-only archive still loads its overlays. Declining an oversized entry
+// drops just that entry, matching `parseKmz`; the cancellation only propagates
+// (skipping the whole archive) when every entry was declined and nothing else
+// loaded.
+async function kmzVectorFeatures(
+  kmlFiles: DuckDbVectorFile[],
+  options?: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection> {
+  let cancellation: unknown;
+  const settled = await Promise.all(
+    kmlFiles.map((file) =>
+      loadKmlFile(file, options).then(
+        (collection): FeatureCollection | null => collection,
+        (error): null => {
+          if (isVectorLoadCancelled(error)) {
+            cancellation = error;
+            return null;
+          }
+          console.warn(
+            "Could not read vector features from a KML entry in the KMZ archive.",
+            error,
+          );
+          return null;
+        },
+      ),
+    ),
+  );
+  const collections = settled.filter(
+    (collection): collection is FeatureCollection => collection !== null,
+  );
+  if (collections.length === 0 && cancellation) throw cancellation;
+  return mergeFeatureCollections(collections);
+}
+
+/**
+ * Load a KMZ archive into its layers: the merged vector placemarks (when any)
+ * plus every resolvable `<GroundOverlay>` as an image overlay. Throws only when
+ * the archive yields neither, so a placemark-only, overlay-only, or mixed KMZ
+ * all load correctly.
+ */
+async function loadKmzLayers(
+  data: ArrayBuffer | Uint8Array,
+  path: string,
+  options?: DuckDbVectorLoadOptions,
+): Promise<LoadedLayer[]> {
+  const entries = await unzipArchive(data);
+  const kmlFiles = readKmlEntries(entries);
+
+  // Decode the KML text up front, keeping each entry's full archive name so an
+  // overlay href can resolve relative to its KML's directory. Reading from
+  // `entries` (not the copies in `kmlFiles`) also avoids the DuckDB-WASM
+  // fallback transferring/detaching a KML buffer before overlays are parsed.
+  const kmlDocs = Object.entries(entries)
+    .filter(([name]) => name.toLowerCase().endsWith(".kml"))
+    .map(([name, bytes]) => ({
+      name,
+      text: new TextDecoder("utf-8").decode(bytes),
+    }));
+
+  // Ground overlays are drawn under vector placemarks (as in Google Earth), so
+  // they are added first: a later store index renders on top. 3D models render
+  // in the deck.gl overlay (always above MapLibre layers), so their array order
+  // does not affect stacking.
+  const layers: LoadedLayer[] = [
+    ...(await groundOverlaysFromKmz(entries, kmlDocs, path)),
+    // Skip the expensive COLLADA→GLB conversion when the caller only wants
+    // vector features (e.g. re-reading a referenced local layer on reopen).
+    ...(options?.skipModels ? [] : await modelsFromKmz(entries, kmlDocs, path)),
+  ];
+
+  // Declining the oversized-vector prompt must not throw away the archive's
+  // ground overlays, so catch the cancellation and keep them; it is only
+  // re-thrown at the end when nothing else loaded (so the caller still skips a
+  // purely-declined file rather than surfacing a generic error).
+  let cancellation: unknown;
+  try {
+    const features = await kmzVectorFeatures(kmlFiles, options);
+    if (features.features.length > 0) layers.push({ data: features, path });
+  } catch (error) {
+    if (!isVectorLoadCancelled(error)) throw error;
+    cancellation = error;
+  }
+
+  if (layers.length === 0) {
+    if (cancellation) throw cancellation;
+    throw new Error(
+      "The KMZ archive did not contain readable placemarks, ground overlays, or 3D models.",
+    );
+  }
+  return layers;
 }
 
 async function parseKmz(
@@ -522,6 +1376,81 @@ async function loadDuckDbVector(
 ) {
   const { loadDuckDbVectorFile } = await import("./duckdb-vector-loader");
   return loadDuckDbVectorFile(file, options);
+}
+
+interface NativeDuckDbVectorInvokeOptions {
+  layer?: string;
+  overrideSourceCrs?: string;
+}
+
+interface NativeDuckDbVectorAttempt {
+  data: FeatureCollection | null;
+  featureCountChecked: boolean;
+}
+
+function nativeDuckDbInvokeOptions(
+  options?: DuckDbVectorLoadOptions,
+): NativeDuckDbVectorInvokeOptions {
+  return {
+    ...(options?.layer?.trim() ? { layer: options.layer.trim() } : {}),
+    ...(options?.overrideSourceCrs?.trim()
+      ? { overrideSourceCrs: options.overrideSourceCrs.trim() }
+      : {}),
+  };
+}
+
+async function tryLoadNativeDuckDbVectorPath(
+  path: string,
+  options?: DuckDbVectorLoadOptions,
+): Promise<NativeDuckDbVectorAttempt> {
+  if (!isTauri()) return { data: null, featureCountChecked: false };
+
+  const invokeOptions = nativeDuckDbInvokeOptions(options);
+  let featureCountChecked = false;
+  try {
+    if (options?.onLargeDataset) {
+      const featureCount = await invoke<number>(
+        "count_native_vector_file_features",
+        {
+          path,
+          ...invokeOptions,
+        },
+      );
+      await confirmLargeDataset(
+        { name: browserSafeFileName(path), featureCount },
+        options.onLargeDataset,
+      );
+      featureCountChecked = true;
+    }
+
+    const value = await invoke<unknown>("load_native_vector_file", {
+      path,
+      ...invokeOptions,
+    });
+    return {
+      data: assertFeatureCollection(value),
+      featureCountChecked,
+    };
+  } catch (error) {
+    if (isVectorLoadCancelled(error)) throw error;
+    console.warn(
+      "[GeoLibre] Native DuckDB vector load failed; falling back to DuckDB-WASM.",
+      error,
+    );
+    return { data: null, featureCountChecked };
+  }
+}
+
+function confirmPickedNativeVectorDataset({
+  name,
+  featureCount,
+}: LargeVectorDataset): boolean {
+  return window.confirm(
+    i18next.t("toolbar.item.largeVectorDesc", {
+      name,
+      count: featureCount.toLocaleString(),
+    }),
+  );
 }
 
 /**
@@ -580,14 +1509,10 @@ async function loadBrowserVectorFile(
   }
 
   if (extension === "zip") {
-    try {
-      return {
-        data: await parseShapefileZip(await file.arrayBuffer()),
-        path: file.name,
-      };
-    } catch {
-      // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
-    }
+    return {
+      data: await loadShapefileZip(await file.arrayBuffer(), options),
+      path: file.name,
+    };
   }
 
   if (extension === "kmz") {
@@ -688,6 +1613,11 @@ export interface PickedVectorFile {
   companionFiles: File[];
   /** Absolute filesystem path the main file was read from. */
   sourcePath: string;
+  /**
+   * GeoJSON materialized by native duckdb-rs for formats that would otherwise
+   * make the Add Vector Layer panel load DuckDB-WASM.
+   */
+  nativeData?: FeatureCollection;
 }
 
 /**
@@ -729,7 +1659,14 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
               (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
             )
           : [];
-      picked.push({ file, companionFiles, sourcePath: path });
+      picked.push({
+        file,
+        companionFiles,
+        sourcePath: path,
+        nativeData: await tryLoadPickedNativeVectorPath(path, {
+          onLargeDataset: confirmPickedNativeVectorDataset,
+        }),
+      });
     } catch (error) {
       console.warn(`Could not read the selected file "${path}".`, error);
     }
@@ -749,7 +1686,11 @@ export async function pickVectorFilesWithSidecars(): Promise<PickedVectorFile[]>
  */
 export async function readVectorFileWithSidecars(
   path: string,
-): Promise<{ file: File; companionFiles: File[] } | null> {
+): Promise<{
+  file: File;
+  companionFiles: File[];
+  nativeData?: FeatureCollection;
+} | null> {
   // Reject `..` segments as well as relative paths: the path comes from a
   // (possibly hand-edited) project file, so a traversal must not reach outside
   // wherever Tauri's filesystem scope allows. The scope is the real boundary;
@@ -771,10 +1712,45 @@ export async function readVectorFileWithSidecars(
             (sibling) => new File([toArrayBuffer(sibling.data)], sibling.name),
           )
         : [];
-    return { file, companionFiles };
+    return {
+      file,
+      companionFiles,
+      nativeData: await tryLoadPickedNativeVectorPath(path, {
+        onLargeDataset: ({ name, featureCount }) => {
+          console.warn(
+            `[GeoLibre] Skipping native vector restore for "${name}" because it contains ${featureCount.toLocaleString()} features; re-add the file to confirm loading it as GeoJSON.`,
+          );
+          return false;
+        },
+      }),
+    };
   } catch (error) {
     console.warn(`Could not read local vector file "${path}".`, error);
     return null;
+  }
+}
+
+async function tryLoadPickedNativeVectorPath(
+  path: string,
+  options: DuckDbVectorLoadOptions,
+): Promise<FeatureCollection | undefined> {
+  const extension = fileExtension(path);
+  if (
+    extension === "geojson" ||
+    extension === "json" ||
+    extension === "kml" ||
+    extension === "kmz" ||
+    extension === "gpx" ||
+    extension === "zip"
+  ) {
+    return undefined;
+  }
+  try {
+    const result = await tryLoadNativeDuckDbVectorPath(path, options);
+    return result.data ?? undefined;
+  } catch (error) {
+    if (isVectorLoadCancelled(error)) return undefined;
+    throw error;
   }
 }
 
@@ -809,14 +1785,10 @@ async function loadTauriVectorFile(
   }
 
   if (extension === "zip") {
-    try {
-      return {
-        data: await parseShapefileZip(await readLocalFileBytes(path)),
-        path,
-      };
-    } catch {
-      // DuckDB Spatial may be able to read zipped vector data that shpjs cannot.
-    }
+    return {
+      data: await loadShapefileZip(await readLocalFileBytes(path), options),
+      path,
+    };
   }
 
   if (extension === "kmz") {
@@ -864,6 +1836,18 @@ async function loadTauriVectorFile(
     }
   }
 
+  const nativeAttempt = await tryLoadNativeDuckDbVectorPath(path, options);
+  if (nativeAttempt.data) {
+    return {
+      data: nativeAttempt.data,
+      path,
+    };
+  }
+  const wasmOptions =
+    nativeAttempt.featureCountChecked && options
+      ? { ...options, onLargeDataset: undefined }
+      : options;
+
   try {
     const siblingFiles =
       extension === "shp" ? await readShapefileSiblings(path) : [];
@@ -875,7 +1859,7 @@ async function loadTauriVectorFile(
           data: await readLocalFileBytes(path),
           siblingFiles,
         },
-        options,
+        wasmOptions,
       ),
       path,
     };
@@ -1141,6 +2125,24 @@ export async function pickLocalPathWithFallback(
   // require a real path. Return null so callers surface the desktop-only
   // message rather than passing a non-resolvable bare file name.
   return null;
+}
+
+/**
+ * Open the native folder picker and return the chosen directory (desktop only;
+ * null off-desktop or on cancel). `recursive: true` extends the granted fs scope
+ * to the picked directory's subtree, so the Browser panel can lazily {@link
+ * listDirectory} subfolders within it — not just its top level.
+ *
+ * @returns The picked absolute directory path, or null.
+ */
+export async function pickLocalDirectory(): Promise<string | null> {
+  if (!isTauri()) return null;
+  const selected = await open({
+    directory: true,
+    multiple: false,
+    recursive: true,
+  });
+  return typeof selected === "string" ? selected : null;
 }
 
 export async function pickSavePathWithFallback(
@@ -1430,7 +2432,7 @@ export async function openVectorFileWithFallback(
 export async function loadDroppedVectorFiles(
   droppedFiles: FileList | File[],
   options?: DuckDbVectorLoadOptions,
-): Promise<LoadedVectorLayer[]> {
+): Promise<LoadedLayer[]> {
   const droppedFileArray = Array.from(droppedFiles);
   const files = droppedFileArray.filter((file) => isVectorFileName(file.name));
   if (!files.length) return [];
@@ -1444,13 +2446,59 @@ export async function loadDroppedVectorFiles(
     ]);
   }
 
-  const layers: LoadedVectorLayer[] = [];
+  const layers: LoadedLayer[] = [];
   for (const file of files) {
     const extension = fileExtension(file.name);
     if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
 
     if (extension === "gpx") {
       layers.push(...parseGpxTextLayers(await file.text(), file.name));
+      continue;
+    }
+
+    if (extension === "kmz") {
+      try {
+        layers.push(
+          ...(await loadKmzLayers(await file.arrayBuffer(), file.name, options)),
+        );
+      } catch (error) {
+        if (isVectorLoadCancelled(error)) continue;
+        throw error;
+      }
+      continue;
+    }
+
+    if (extension === "kml") {
+      // Load the vector placemarks and the ground overlays independently so an
+      // overlay-only KML still adds its overlays even when it has no readable
+      // placemarks (which makes the vector load throw).
+      const text = await file.text();
+      const overlays = groundOverlaysFromKml(text, file.name);
+      const models = options?.skipModels
+        ? []
+        : await modelsFromKml(text, file.name);
+      // Overlays go under the placemarks (added first), matching the KMZ path.
+      layers.push(...overlays, ...models);
+      try {
+        // Only add a vector layer when it actually has features: the DuckDB
+        // fallback for an overlay-only KML can return an empty collection, and
+        // an empty vector layer alongside the overlay is just clutter.
+        const vector = await loadBrowserVectorFile(file, [], options);
+        if (vector.data.features.length > 0) layers.push(vector);
+      } catch (error) {
+        // Declining the oversized-vector prompt, or a genuine parse failure,
+        // still leaves any ground overlays/models already added above (a real
+        // non-cancellation failure with nothing to salvage is rethrown).
+        // Cancellation is not surfaced; other failures are logged so they are
+        // not fully invisible.
+        if (!isVectorLoadCancelled(error)) {
+          if (!overlays.length && !models.length) throw error;
+          console.warn(
+            `Loaded ground overlays/models from "${file.name}" but could not read its vector placemarks.`,
+            error,
+          );
+        }
+      }
       continue;
     }
 
@@ -1619,11 +2667,11 @@ export async function loadDroppedPhotoPaths(
 export async function loadDroppedVectorPaths(
   paths: string[],
   options?: DuckDbVectorLoadOptions,
-): Promise<LoadedVectorLayer[]> {
+): Promise<LoadedLayer[]> {
   const vectorPaths = paths.filter(isVectorFileName);
   if (!vectorPaths.length) return [];
 
-  const layers: LoadedVectorLayer[] = [];
+  const layers: LoadedLayer[] = [];
   for (const path of vectorPaths) {
     const extension = fileExtension(path);
     if (SHAPEFILE_SIDECAR_EXTENSIONS.includes(extension)) continue;
@@ -1636,6 +2684,49 @@ export async function loadDroppedVectorPaths(
         // "Unknown error" when the fs-plugin fallback fails.
         const detail = error instanceof Error ? error.message : String(error);
         throw new Error(`Could not read this GPX file. ${detail}`);
+      }
+      continue;
+    }
+    if (extension === "kmz") {
+      try {
+        layers.push(
+          ...(await loadKmzLayers(await readLocalFileBytes(path), path, options)),
+        );
+      } catch (error) {
+        if (isVectorLoadCancelled(error)) continue;
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Could not read this KMZ file. ${detail}`);
+      }
+      continue;
+    }
+    if (extension === "kml") {
+      // Load placemarks and ground overlays independently so an overlay-only
+      // KML still contributes its overlays when the vector load throws.
+      const kmlText = await readLocalFileText(path);
+      const overlays = groundOverlaysFromKml(kmlText, path);
+      const models = options?.skipModels
+        ? []
+        : await modelsFromKml(kmlText, path);
+      // Overlays go under the placemarks (added first), matching the KMZ path.
+      layers.push(...overlays, ...models);
+      try {
+        // Only add a vector layer when it actually has features (an overlay-only
+        // KML's DuckDB fallback can return an empty collection).
+        const vector = await loadTauriVectorFile(path, options);
+        if (vector.data.features.length > 0) layers.push(vector);
+      } catch (error) {
+        // Declining the oversized-vector prompt, or a genuine parse failure,
+        // still leaves any ground overlays/models already added above (a real
+        // non-cancellation failure with nothing to salvage is rethrown).
+        // Cancellation is not surfaced; other failures are logged so they are
+        // not fully invisible.
+        if (!isVectorLoadCancelled(error)) {
+          if (!overlays.length && !models.length) throw error;
+          console.warn(
+            `Loaded ground overlays/models from "${path}" but could not read its vector placemarks.`,
+            error,
+          );
+        }
       }
       continue;
     }

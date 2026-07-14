@@ -30,6 +30,10 @@ import {
   runConsoleCode,
 } from "../../lib/pyodide/pyodide-console";
 import { usePyCompletion } from "../../lib/pyodide/usePyCompletion";
+import {
+  PANEL_RESIZE_END_EVENT,
+  PANEL_RESIZE_START_EVENT,
+} from "../../lib/panel-resize";
 import { PythonEditorPane } from "./PythonEditorPane";
 
 const DEFAULT_CONSOLE_HEIGHT = 240;
@@ -40,8 +44,6 @@ const MAX_CONSOLE_HEIGHT = 560;
 const DEFAULT_EDITOR_FRACTION = 0.5;
 const MIN_EDITOR_FRACTION = 0.2;
 const MAX_EDITOR_FRACTION = 0.8;
-const PANEL_RESIZE_START_EVENT = "geolibre:panel-resize-start";
-const PANEL_RESIZE_END_EVENT = "geolibre:panel-resize-end";
 
 type EntryKind = "input" | "output" | "error" | "marker";
 interface Entry {

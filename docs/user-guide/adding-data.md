@@ -42,7 +42,7 @@ Vector files are reprojected to EPSG:4326 on load. In the browser, vector import
 | --- | --- |
 | **LiDAR Layer** | Point-cloud visualization, rendered with deck.gl. |
 | **Splatting Layer** | Gaussian splat scenes. |
-| **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. |
+| **3D Tiles Layer** | OGC 3D Tiles, restored when reopening a project. Includes a Google Photorealistic 3D Tiles sample that reads `VITE_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` from the runtime environment. |
 
 ## Databases
 
@@ -58,6 +58,12 @@ Drag a vector file (GeoJSON, zipped Shapefile, KMZ, and similar) or a GeoTIFF/CO
 ## Basemaps
 
 The basemap sits at the bottom of the [Layers panel](layers.md) as the **Background** entry. Activate the **Basemaps** plugin from the [Plugins menu](plugins.md) to switch between OpenFreeMap styles (Liberty, Positron, Bright, Dark, Fiord, 3D), a blank background, or a custom style URL. You can toggle basemap visibility and adjust its opacity from the Layers panel.
+
+### Other celestial bodies
+
+GeoLibre can map worlds beyond Earth. The **Change basemap** dialog and the **New project** dialog group planetary basemaps into sections for **The Moon**, **Mars**, and a collapsible **Other celestial bodies** section covering **Mercury, Venus, the Galilean moons** (Io, Europa, Ganymede, Callisto), **Titan, Pluto,** and **Charon**. The Moon and Mars mosaics come from [OpenPlanetaryMap](https://www.openplanetary.org/opm); the other bodies come from [USGS Astrogeology](https://astrogeology.usgs.gov/) and are reprojected to Web Mercator on the fly so MapLibre can render them.
+
+For quick switching, use the **planet switcher** (the orbit icon) in the Layers panel header. Selecting a body sets the project's **ellipsoid**, so distance, area, and scale-bar measurements use that body's radius instead of Earth's.
 
 ## More data sources
 

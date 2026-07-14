@@ -25,7 +25,9 @@ import { getRuntimeEnvironment } from "./runtime-env";
  *
  * Browser fetch cannot set `User-Agent`/`Referer`, so the app is identified to
  * Nominatim via the optional `email` query parameter plus the automatically
- * sent `Referer`. See docs/user-guide/data-integrations.md#geocoding.
+ * sent `Referer`. The desktop build overrides this with a native (Tauri) fetch
+ * via {@link setGeocodingFetch} — see the note there. See
+ * docs/user-guide/data-integrations.md#geocoding.
  */
 
 export const DEFAULT_FORWARD_GEOCODE_ENDPOINT =
@@ -805,6 +807,40 @@ export function csvRowsToGeocodeRequests(
 }
 
 /**
+ * The fetch implementation used by {@link geocodeForward}/{@link geocodeReverse}.
+ * Null means "use the global browser `fetch`" (the default for the web and
+ * embedded builds).
+ */
+let geocodingFetch: typeof globalThis.fetch | null = null;
+
+/**
+ * Override the fetch used for geocoding requests, or pass null to restore the
+ * global browser `fetch`.
+ *
+ * The desktop shell sets this to Tauri's native HTTP fetch so geocoding requests
+ * are made from the Rust side, which:
+ *   - bypasses the WebView's CORS enforcement. Public Nominatim's CDN
+ *     intermittently omits the `Access-Control-Allow-Origin` header on cached
+ *     responses, which the browser then rejects — surfacing to the user as
+ *     "Search failed. Try again." (the symptom that failed Microsoft Store
+ *     certification); and
+ *   - can send a `User-Agent` identifying the app, as Nominatim's usage policy
+ *     requires (browser fetch cannot set that header).
+ *
+ * Safe to call multiple times; only the most recent implementation is used.
+ */
+export function setGeocodingFetch(
+  fetchImpl: typeof globalThis.fetch | null,
+): void {
+  geocodingFetch = fetchImpl;
+}
+
+/** The active geocoding fetch: the injected override, else the global fetch. */
+function geocodeFetch(): typeof globalThis.fetch {
+  return geocodingFetch ?? fetch;
+}
+
+/**
  * Forward-geocode a single query through the configured provider, returning
  * normalized matches.
  */
@@ -818,7 +854,7 @@ export async function geocodeForward(
     email: config.email,
     limit: options.limit,
   });
-  const response = await fetch(url, {
+  const response = await geocodeFetch()(url, {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });
@@ -844,7 +880,7 @@ export async function geocodeReverse(
     email: config.email,
     zoom: options.zoom,
   });
-  const response = await fetch(url, {
+  const response = await geocodeFetch()(url, {
     signal: options.signal,
     headers: { Accept: "application/json" },
   });

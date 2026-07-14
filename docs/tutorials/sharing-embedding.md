@@ -27,7 +27,7 @@ The shared file captures the same layers, styles, plugin state, and map view as 
 Anyone can open the shared project in the live viewer by passing it as the `url` parameter:
 
 ```text
-https://viewer.geolibre.app/?url=https://share.geolibre.app/you/my-map.geolibre.json
+https://web.geolibre.app/?url=https://share.geolibre.app/you/my-map.geolibre.json
 ```
 
 ## 4. Embed it in a page
@@ -36,7 +36,7 @@ Use an `<iframe>` and the embed parameters to control the chrome. For a clean, m
 
 ```html
 <iframe
-  src="https://viewer.geolibre.app/?url=https://share.geolibre.app/you/my-map.geolibre.json&amp;maponly"
+  src="https://web.geolibre.app/?url=https://share.geolibre.app/you/my-map.geolibre.json&amp;maponly"
   title="GeoLibre map"
   width="100%"
   height="600"

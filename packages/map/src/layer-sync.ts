@@ -1,6 +1,7 @@
 import {
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
+  geojsonHasZCoordinates,
   type LayerStyle,
   shouldUseTiledRendering,
   styleValue,
@@ -304,6 +305,21 @@ export function syncLayer(
   if (isPlaceholderLayer(layer)) return;
 
   if (layer.type === "geojson" && layer.geojson) {
+    // 3D Z-value rendering hands the layer to the shared deck.gl overlay
+    // (deckgl-viz plugin), which honors coordinate Z values that MapLibre's
+    // flat 2D layers ignore. Drop any MapLibre rendering so the layer is not
+    // drawn twice; toggling back off re-adds it through the paths below.
+    // Data without real Z coordinates keeps the normal 2D render even if the
+    // flag is set (e.g. a saved flag after a tool dropped the Z values), so
+    // the flag never leaves a layer invisible; the Z scan is cached per
+    // GeoJSON object.
+    if (
+      styleValue(layer.style, "elevation3dEnabled") === true &&
+      geojsonHasZCoordinates(layer.geojson)
+    ) {
+      removeLayerFromMap(map, layer.id, layer);
+      return;
+    }
     if (shouldUseTiledRendering(layer.geojson)) {
       syncGeoJsonVtLayer(map, layer, beforeId);
     } else {
@@ -2187,9 +2203,34 @@ function syncVectorTileLayer(
 ): void {
   const src = sourceId(layer.id);
   const url = layer.source.url as string | undefined;
-  if (!url) return;
+  // OGC API tilesets (and any raw tile template) are added from `tiles` when no
+  // TileJSON URL is available; MapLibre then needs the zoom range up front so it
+  // does not request tiles outside the tileset's advertised levels.
+  const tiles = Array.isArray(layer.source.tiles)
+    ? (layer.source.tiles as unknown[]).filter(
+        (tile): tile is string => typeof tile === "string" && tile.length > 0,
+      )
+    : undefined;
+  if (!url && !(tiles && tiles.length > 0)) return;
   if (!map.getSource(src)) {
-    map.addSource(src, { type: "vector", url });
+    if (url) {
+      map.addSource(src, { type: "vector", url });
+    } else {
+      const bounds = layer.source.bounds;
+      map.addSource(src, {
+        type: "vector",
+        tiles: tiles as string[],
+        ...(typeof layer.source.minzoom === "number"
+          ? { minzoom: layer.source.minzoom }
+          : {}),
+        ...(typeof layer.source.maxzoom === "number"
+          ? { maxzoom: layer.source.maxzoom }
+          : {}),
+        ...(Array.isArray(bounds) && bounds.length === 4
+          ? { bounds: bounds as [number, number, number, number] }
+          : {}),
+      });
+    }
   }
   const visibility = layer.visible ? "visible" : "none";
   const sourceLayers = getVectorTileSourceLayers(layer);

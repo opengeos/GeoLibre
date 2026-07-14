@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -8,9 +8,11 @@ import type {
   RollupOptions,
   WarningHandlerWithDefault,
 } from "rollup";
-import { defineConfig, type Plugin } from "vite";
+import { fileURLToPath } from "node:url";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { bundledPlugins } from "./vite-plugins/bundled-plugins";
+import { copyCesiumAssets } from "./vite-plugins/copy-cesium-assets";
 import { copyRtlText } from "./vite-plugins/copy-rtl-text";
 import { copyVectorOps } from "./vite-plugins/copy-vector-ops";
 
@@ -22,6 +24,68 @@ const APP_BASE = process.env.GEOLIBRE_APP_BASE;
 const APP_VERSION = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf8"),
 ).version as string;
+
+// Vite resolves `mode` from the `--mode` CLI flag (defaulting to `development`
+// for `vite`/`vite dev` and `production` for `vite build`). This shim runs at
+// module load, before `defineConfig` receives the resolved mode, so read
+// `--mode` from argv directly and fall back to NODE_ENV (which Vite's CLI sets
+// from the command). This lets `loadEnv` pick up mode-specific files such as
+// `.env.staging.local` under `vite build --mode staging`, not just NODE_ENV.
+function resolveViteMode(): string {
+  const argv = process.argv;
+  const inline = argv.find((arg) => arg.startsWith("--mode="));
+  if (inline) return inline.slice("--mode=".length);
+  const flagIndex = argv.findIndex((arg) => arg === "--mode" || arg === "-m");
+  if (flagIndex !== -1 && argv[flagIndex + 1]) return argv[flagIndex + 1];
+  return process.env.NODE_ENV || "development";
+}
+
+// Vite only exposes `VITE_`-prefixed vars to the client, so the Google Maps key
+// is surfaced as `VITE_GOOGLE_MAPS_API_KEY`. Accept a bare `GOOGLE_MAPS_API_KEY`
+// too (handy for local shell/CI testing) and copy it into the prefixed name.
+// `loadEnv(mode, dir, "")` reads the app's `.env*` files with no prefix filter,
+// so a key placed in `apps/geolibre-desktop/.env.local` also works, not just a
+// real shell env var (process.env alone would miss the file).
+const CONFIG_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FILE_ENV = loadEnv(resolveViteMode(), CONFIG_DIR, "");
+if (!process.env.VITE_GOOGLE_MAPS_API_KEY) {
+  const googleMapsApiKey =
+    process.env.GOOGLE_MAPS_API_KEY ||
+    FILE_ENV.VITE_GOOGLE_MAPS_API_KEY ||
+    FILE_ENV.GOOGLE_MAPS_API_KEY;
+  if (googleMapsApiKey) {
+    process.env.VITE_GOOGLE_MAPS_API_KEY = googleMapsApiKey;
+  }
+}
+
+// Cesium Ion token for the 3D-globe view: same bare→prefixed bridge as the
+// Google Maps key. A bare `CESIUM_TOKEN` (shell or .env file) is surfaced as
+// `VITE_CESIUM_TOKEN` so `import.meta.env` exposes it, and getCesiumIonToken()
+// then lets a runtime Settings override win over this build-time value.
+if (!process.env.VITE_CESIUM_TOKEN) {
+  const cesiumToken =
+    process.env.CESIUM_TOKEN ||
+    FILE_ENV.VITE_CESIUM_TOKEN ||
+    FILE_ENV.CESIUM_TOKEN;
+  if (cesiumToken) {
+    process.env.VITE_CESIUM_TOKEN = cesiumToken;
+  }
+}
+
+// Earth Engine OAuth client ID: same bare→prefixed bridge as the Google Maps
+// and Cesium keys. The app reads `import.meta.env.VITE_GEE_OAUTH_CLIENT_ID`, so
+// a bare `GEE_OAUTH_CLIENT_ID` (shell/.zshrc or an .env file) is surfaced under
+// the prefixed name here; otherwise Vite ignores the unprefixed var and the
+// plugin falls back to its hardcoded DEFAULT_GEE_OAUTH_CLIENT_ID.
+if (!process.env.VITE_GEE_OAUTH_CLIENT_ID) {
+  const geeOauthClientId =
+    process.env.GEE_OAUTH_CLIENT_ID ||
+    FILE_ENV.VITE_GEE_OAUTH_CLIENT_ID ||
+    FILE_ENV.GEE_OAUTH_CLIENT_ID;
+  if (geeOauthClientId) {
+    process.env.VITE_GEE_OAUTH_CLIENT_ID = geeOauthClientId;
+  }
+}
 
 // Tauri sets TAURI_ENV_* env vars while running its beforeBuildCommand
 // (`npm run build`), so their presence flags a desktop build. Used below to drop
@@ -53,6 +117,15 @@ const PGLITE_CDN = process.env.GEOLIBRE_PGLITE_CDN !== "0";
 // PGlite yet still ships a service worker.
 const IS_EMBED = process.env.GEOLIBRE_EMBED === "1";
 const PWA_DISABLED = IS_TAURI_BUILD || IS_EMBED;
+
+// Microsoft Store MSIX build. Strips the in-app "Check for updates" flow (Help
+// menu, command palette, About dialog, and the automated startup check) so the
+// Store package updates only through the Store — Microsoft policy 10.2.5 rejects
+// a Store app that updates itself outside the Store. Set ONLY by the dedicated
+// Store build path (.github/workflows/msix-store.yml); every other build (the
+// GitHub .exe/winget installer, the sideload MSIX, portable, macOS, Linux, web,
+// and the Jupyter embed) leaves it unset, so their update checker is untouched.
+const IS_STORE_BUILD = process.env.GEOLIBRE_STORE_BUILD === "1";
 
 const pgliteCdnRequire = createRequire(import.meta.url);
 // The ESM entry of a package's manifest. Prefer the `module` field and the
@@ -217,6 +290,18 @@ function manualChunks(id: string): string | undefined {
   // `maplibre` chunk and force DuckDB into boot. Give it its own lazy chunk.
   if (id.includes("maplibre-gl-duckdb")) return "maplibre-duckdb";
   if (id.includes("maplibre-gl")) return "maplibre";
+  // Cesium is large (~several MB) and only loads when the user opens the 3D
+  // globe view; keep it in its own lazily-fetched chunk, off the boot graph.
+  // `@cesium/engine`/`@cesium/widgets` (which the `cesium` wrapper re-exports)
+  // are only reachable through the lazy `import("cesium")`, so Rollup already
+  // groups them into this chunk; matching them explicitly keeps that intent
+  // even if some future eager import would otherwise pull them onto the boot
+  // graph.
+  if (
+    id.includes("/node_modules/cesium/") ||
+    id.includes("/node_modules/@cesium/")
+  )
+    return "cesium";
   // Returning undefined hands remaining node_modules back to Rollup's default
   // chunking. We intentionally do not group them into a single "vendor" chunk:
   // that produced a circular manual-chunks warning. Do not re-add a catch-all
@@ -469,6 +554,38 @@ function cereusCdnLoaderPlugin(): Plugin {
   };
 }
 
+function duckdbWasmBundlesPlugin(): Plugin {
+  const modulePath = path.resolve(
+    __dirname,
+    IS_TAURI_BUILD
+      ? "src/lib/duckdb-wasm-bundles.tauri.ts"
+      : "src/lib/duckdb-wasm-bundles.ts",
+  );
+  return {
+    name: "geolibre-duckdb-wasm-bundles",
+    enforce: "pre",
+    resolveId(source) {
+      return /(?:^|\/)duckdb-wasm-bundles(?:\.ts)?$/.test(source)
+        ? modulePath
+        : null;
+    },
+  };
+}
+
+function removeJupyterLiteFromTauriDistPlugin(): Plugin {
+  return {
+    name: "geolibre-remove-jupyterlite-from-tauri-dist",
+    apply: "build",
+    closeBundle() {
+      if (!IS_TAURI_BUILD) return;
+      rmSync(path.resolve(__dirname, "dist/jupyterlite"), {
+        recursive: true,
+        force: true,
+      });
+    },
+  };
+}
+
 function projectUrlQueryPlugin(): Plugin {
   return {
     name: "geolibre-project-url-query",
@@ -580,6 +697,17 @@ function pwaPlugin(): Plugin[] {
     // its first runtime fetch and is CacheFirst-cached thereafter.
     "**/maplibre-*",
     "**/duckdb-*",
+    // CesiumJS (~4.8 MB) for the 3D-globe view. Lazily imported only when a pane
+    // switches to the globe, so it is CacheFirst-cached on first use rather than
+    // bloating the app-shell precache. The `Cesium-*` (capital) glob catches the
+    // Rollup facade chunk for the dynamic `import("cesium")` boundary, which the
+    // lowercase glob misses on case-sensitive matchers.
+    "**/cesium-*",
+    "**/Cesium-*",
+    // h5wasm's ~5.6 MB single-file chunk (embedded libhdf5) for the local
+    // NetCDF/HDF reader. Lazily imported when a user opens a local file, so it
+    // is CacheFirst-cached on first use rather than bloating the precache.
+    "**/hdf5_hl-*",
     "**/pglite-*",
     "**/earth-engine-browser-*",
     "**/mapillary-*",
@@ -590,6 +718,11 @@ function pwaPlugin(): Plugin[] {
     // its own service worker scoped to /jupyterlite/. Keep it entirely out of
     // the app shell precache, or first visit would balloon by thousands of files.
     "**/jupyterlite/**",
+    // Bundled drop-in plugins (public/plugins/<id>/) load at runtime through
+    // the external-plugin path (fetch → blob import), so they never need to be
+    // in the app-shell precache — and a large private plugin bundle would
+    // otherwise trip workbox's maximumFileSizeToCacheInBytes and fail the build.
+    "**/plugins/**",
   ];
   // Note: the 4 KB public/pyodide/pyodide-worker.js shim is intentionally left
   // in the precache (revisioned, so no stale-after-deploy risk). The heavy
@@ -728,6 +861,7 @@ export default defineConfig({
   plugins: [
     ...(PGLITE_CDN ? [pgliteCdnLoaderPlugin()] : []),
     ...(CEREUS_CDN ? [cereusCdnLoaderPlugin()] : []),
+    duckdbWasmBundlesPlugin(),
     stripDuckDbWorkerSourcemapPlugin(),
     projectUrlQueryPlugin(),
     bundledPlugins(path.resolve(__dirname, "public/plugins")),
@@ -741,14 +875,17 @@ export default defineConfig({
     copyRtlText(
       path.resolve(__dirname, "src/lib/vendor/mapbox-gl-rtl-text.generated.js"),
     ),
+    copyCesiumAssets(path.resolve(__dirname, "public/cesium")),
     react(),
     wmsProxyPlugin(),
     selectiveJsMinifyPlugin(),
+    removeJupyterLiteFromTauriDistPlugin(),
     ...pwaPlugin(),
   ],
   clearScreen: false,
   define: {
     __GEOLIBRE_VERSION__: JSON.stringify(APP_VERSION),
+    __GEOLIBRE_STORE_BUILD__: JSON.stringify(IS_STORE_BUILD),
     __PGLITE_CDN_URL__: JSON.stringify(PGLITE_CDN_URL),
     __PGLITE_POSTGIS_CDN_URL__: JSON.stringify(PGLITE_POSTGIS_CDN_URL),
     __CEREUS_WASM_CDN_URL__: JSON.stringify(CEREUS_WASM_CDN_URL),
@@ -786,6 +923,16 @@ export default defineConfig({
       // pre-bundled via the deck.gl-geotiff static import.)
       "proj4",
       "geotiff-geokeys-to-proj4",
+      // Cesium (the 3D-globe view). Pre-bundle it up front so esbuild applies
+      // CJS→ESM interop to its CommonJS transitive deps (e.g. mersenne-twister,
+      // which has no ESM entry): without this, the dev server serves those raw
+      // and the `import x from "mersenne-twister"` default import throws. It is
+      // reached only through the lazy `import("cesium")` in CesiumCanvas, so
+      // without pre-bundling Vite would also discover it on first open and do a
+      // full-page reload to re-optimize. Cesium locates its Workers/Assets via
+      // the CESIUM_BASE_URL global (never `import.meta.url`), so pre-bundling
+      // does not mangle any asset reference.
+      "cesium",
     ],
     // PGlite ships its own WASM + filesystem bundles and must not be pre-bundled
     // by esbuild, which mangles those asset references (per PGlite's Vite guide).
@@ -810,6 +957,11 @@ export default defineConfig({
       // breaks that asset reference so the tiler stops rendering. Serve it
       // as-is. (Its plain-JS deps are pre-bundled via optimizeDeps.include.)
       "cog-tiler-wasm",
+      // h5wasm (local NetCDF/HDF5 reader) loads its libhdf5 .wasm via
+      // `new URL(..., import.meta.url)`; esbuild pre-bundling mangles that
+      // asset reference, so serve it as-is. Only reached through the lazy
+      // dynamic import in local-netcdf.ts when a user opens a local file.
+      "h5wasm",
     ],
   },
   build: {

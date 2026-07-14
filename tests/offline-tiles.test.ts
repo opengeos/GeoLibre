@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   clampZoomRange,
+  collectOfflineUrls,
+  countOfflineTiles,
+  countStyleAssets,
   countTiles,
   enumerateTiles,
   expandTileUrl,
@@ -216,6 +220,118 @@ describe("warmUrls", () => {
     // An abort short-circuits counting, so nothing is recorded as done/failed.
     assert.equal(result.done, 0);
     assert.equal(result.failed, 0);
+  });
+});
+
+describe("countStyleAssets / count consistency (#992)", () => {
+  // A fake map exposing only what these functions read: a style with an inline
+  // raster source (no TileJSON `url`, so no fetch), a sprite, glyphs, and a
+  // labelled layer. This lets us assert the preview count equals the download
+  // total without a real MapLibre instance or network.
+  function fakeMap(): MapLibreMap {
+    const style = {
+      sources: {
+        base: {
+          type: "raster",
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      },
+      sprite: "https://style.example.com/sprite",
+      glyphs: "https://style.example.com/glyphs/{fontstack}/{range}.pbf",
+      layers: [
+        { id: "bg", type: "background" },
+        {
+          id: "labels",
+          type: "symbol",
+          layout: { "text-font": ["Noto Sans Regular"] },
+        },
+      ],
+    };
+    return { getStyle: () => style } as unknown as MapLibreMap;
+  }
+
+  it("counts the sprite (1x/2x json+png) and one glyph PBF per fontstack range", () => {
+    // 4 sprite URLs + 1 fontstack * 2 default ranges = 6 assets.
+    assert.equal(countStyleAssets(fakeMap()), 6);
+  });
+
+  it("preview total (tiles + assets) equals the download URL count", async () => {
+    const map = fakeMap();
+    const bbox: Bbox = [-122.5, 37.7, -122.3, 37.9];
+    const minZoom = 8;
+    const maxZoom = 11;
+    const tiles = await countOfflineTiles(map, bbox, minZoom, maxZoom);
+    const assets = countStyleAssets(map);
+    const { urls } = await collectOfflineUrls(map, bbox, minZoom, maxZoom);
+    // The "Resources to download" estimate must mirror the "Downloading N / M"
+    // progress total exactly, with no asset-overhead drift. This identity
+    // assumes tile URLs and style-asset URLs are disjoint (tiles and sprite/glyph
+    // assets are served from different paths) — `collectOfflineUrls` would
+    // otherwise de-duplicate an overlap into one URL while `tiles + assets`
+    // counts it twice. The fixture uses separate hosts, mirroring real styles.
+    assert.equal(tiles + assets, urls.length);
+  });
+
+  // A map with two sources sharing one tile template (overlapping zoom range).
+  // The download de-duplicates these into a single URL; the estimate must do the
+  // same, or it would over-count and drift from the live total again.
+  function twoSourceFakeMap(): MapLibreMap {
+    const style = {
+      sources: {
+        a: {
+          type: "raster",
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          minzoom: 0,
+          maxzoom: 19,
+        },
+        b: {
+          type: "raster",
+          tiles: ["https://tiles.example.com/{z}/{x}/{y}.png"],
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      },
+      sprite: "https://style.example.com/sprite",
+      glyphs: "https://style.example.com/glyphs/{fontstack}/{range}.pbf",
+      layers: [
+        {
+          id: "labels",
+          type: "symbol",
+          layout: { "text-font": ["Noto Sans Regular"] },
+        },
+      ],
+    };
+    return { getStyle: () => style } as unknown as MapLibreMap;
+  }
+
+  it("counts sprite URLs for a multi-sprite (array) style", () => {
+    const map = {
+      getStyle: () => ({
+        sources: {},
+        sprite: [
+          { id: "icons", url: "https://style.example.com/icons" },
+          { id: "extra", url: "https://style.example.com/extra" },
+        ],
+        glyphs: "https://style.example.com/glyphs/{fontstack}/{range}.pbf",
+        layers: [],
+      }),
+    } as unknown as MapLibreMap;
+    // 2 sprites × 4 URLs each (json/png at 1x/2x) = 8; no labelled layers → 0
+    // glyph URLs.
+    assert.equal(countStyleAssets(map), 8);
+  });
+
+  it("de-duplicates tiles across sources so the estimate still matches", async () => {
+    const map = twoSourceFakeMap();
+    const bbox: Bbox = [-122.5, 37.7, -122.3, 37.9];
+    const minZoom = 8;
+    const maxZoom = 11;
+    const tiles = await countOfflineTiles(map, bbox, minZoom, maxZoom);
+    const assets = countStyleAssets(map);
+    const { urls } = await collectOfflineUrls(map, bbox, minZoom, maxZoom);
+    assert.equal(tiles + assets, urls.length);
   });
 });
 

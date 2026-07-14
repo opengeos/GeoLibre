@@ -12,6 +12,7 @@ import {
   type VectorStyleStop,
   createEqualIntervalBreaks,
   createQuantileBreaks,
+  geojsonHasZCoordinates,
   interpolateRampColors,
   parseJsonExpression,
   styleValue,
@@ -33,7 +34,7 @@ import {
 } from "@geolibre/ui";
 import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
-import type { ParseKeys } from "i18next";
+import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
@@ -362,17 +363,23 @@ const VECTOR_STYLE_CLASS_COUNTS = Array.from({ length: 12 }, (_, index) =>
   index + 1,
 );
 
-const GRADUATED_CLASSIFICATION_SCHEMES = [
-  { value: "equal-interval", label: "Equal interval" },
-  { value: "quantile", label: "Quantile" },
-  { value: "natural-breaks", label: "Natural breaks" },
-] as const;
+const GRADUATED_CLASSIFICATION_SCHEMES: ReadonlyArray<{
+  value: string;
+  labelKey: ParseKeys;
+}> = [
+  { value: "equal-interval", labelKey: "style.symbology.schemeEqualInterval" },
+  { value: "quantile", labelKey: "style.symbology.schemeQuantile" },
+  { value: "natural-breaks", labelKey: "style.symbology.schemeNaturalBreaks" },
+];
 
-const CATEGORIZED_CLASSIFICATION_SCHEMES = [
-  { value: "top-values", label: "Most frequent" },
-  { value: "alphabetical", label: "Alphabetical" },
-  { value: "first-values", label: "First values" },
-] as const;
+const CATEGORIZED_CLASSIFICATION_SCHEMES: ReadonlyArray<{
+  value: string;
+  labelKey: ParseKeys;
+}> = [
+  { value: "top-values", labelKey: "style.symbology.schemeTopValues" },
+  { value: "alphabetical", labelKey: "style.symbology.schemeAlphabetical" },
+  { value: "first-values", labelKey: "style.symbology.schemeFirstValues" },
+];
 
 function createGraduatedStops(
   layer: Parameters<typeof getPropertyValues>[0],
@@ -685,26 +692,32 @@ function nextStopColor(index: number): string {
   return VECTOR_STYLE_COLORS[index % VECTOR_STYLE_COLORS.length];
 }
 
-function validateExpressionJson(value: string, label: string): string | null {
+function validateExpressionJson(
+  value: string,
+  label: string,
+  t: TFunction,
+): string | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
 
   try {
     const parsed = JSON.parse(removeTrailingJsonCommas(trimmed));
     if (!Array.isArray(parsed)) {
-      return `${label} must be a JSON array expression.`;
+      return t("style.expressionErrors.notArray", { label });
     }
     // Every MapLibre expression starts with a string operator. Reject e.g.
     // `["to-number", …]` used as a filter or a bare value array, which parses as
     // JSON but compiles to an expression MapLibre rejects at runtime.
     if (typeof parsed[0] !== "string") {
-      return `${label} must start with an operator, e.g. ["==", ["get", "field"], value].`;
+      return t("style.expressionErrors.notOperator", { label });
     }
     return null;
   } catch (error) {
-    return `${label} is not valid JSON: ${
-      error instanceof Error ? error.message : "unknown parse error"
-    }`;
+    return t("style.expressionErrors.notJson", {
+      label,
+      message:
+        error instanceof Error ? error.message : "unknown parse error",
+    });
   }
 }
 
@@ -779,6 +792,7 @@ function NumericStyleInput({
   onChange,
   tooltip,
 }: NumericStyleInputProps) {
+  const { t } = useTranslation();
   const normalize = (next: number) =>
     Number(clamp(next, min, max).toFixed(stepPrecision(step)));
 
@@ -823,7 +837,7 @@ function NumericStyleInput({
           <button
             type="button"
             className="flex h-1/2 items-center justify-center text-foreground hover:bg-accent"
-            aria-label={`Increase ${label}`}
+            aria-label={t("style.increaseValue", { label })}
             onClick={() => stepValue(1)}
           >
             <ChevronUp className="h-4 w-4" />
@@ -831,7 +845,7 @@ function NumericStyleInput({
           <button
             type="button"
             className="flex h-1/2 items-center justify-center border-t text-foreground hover:bg-accent"
-            aria-label={`Decrease ${label}`}
+            aria-label={t("style.decreaseValue", { label })}
             onClick={() => stepValue(-1)}
           >
             <ChevronDown className="h-4 w-4" />
@@ -855,7 +869,8 @@ function StopValueInput({
   value,
   onChange,
 }: StopValueInputProps) {
-  const label = `Class ${index + 1} value`;
+  const { t } = useTranslation();
+  const label = t("style.symbology.classValue", { index: index + 1 });
 
   if (!isNumeric) {
     return (
@@ -888,7 +903,7 @@ function StopValueInput({
         <button
           type="button"
           className="flex h-1/2 items-center justify-center text-foreground hover:bg-accent"
-          aria-label={`Increase ${label}`}
+          aria-label={t("style.increaseValue", { label })}
           onClick={() => stepValue(1)}
         >
           <ChevronUp className="h-4 w-4" />
@@ -896,7 +911,7 @@ function StopValueInput({
         <button
           type="button"
           className="flex h-1/2 items-center justify-center border-t text-foreground hover:bg-accent"
-          aria-label={`Decrease ${label}`}
+          aria-label={t("style.decreaseValue", { label })}
           onClick={() => stepValue(-1)}
         >
           <ChevronDown className="h-4 w-4" />
@@ -972,7 +987,7 @@ function RasterStyleSlider({
             max={max}
             step={step}
             autoFocus
-            aria-label={`${label} value`}
+            aria-label={t("style.raster.valueAria", { label })}
             className="h-6 w-20 px-1.5 py-0 text-right font-mono text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -992,7 +1007,7 @@ function RasterStyleSlider({
             type="button"
             className="shrink-0 cursor-text font-mono text-xs text-muted-foreground hover:text-foreground"
             title={t("style.raster.exactValueHint")}
-            aria-label={`Edit ${label} value`}
+            aria-label={t("style.raster.editValueAria", { label })}
             onDoubleClick={startEditing}
           >
             {format(value)}
@@ -1232,12 +1247,25 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
+  // Whether the layer's coordinates carry real Z values (e.g. GPX track
+  // elevations), which unlocks the "3D (Z values)" visualization mode.
+  // Memoized on the geojson reference (not the layer object, which is
+  // recreated on every style edit) because the scan touches every coordinate
+  // when no Z is present. Kept before the early returns below so the hook
+  // order stays stable.
+  const supportsElevation3d = useMemo(
+    () =>
+      layer?.type === "geojson" && layer.geojson
+        ? geojsonHasZCoordinates(layer.geojson)
+        : false,
+    [layer?.type, layer?.geojson],
+  );
 
   const resizeHandle = (
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize Style panel"
+      aria-label={t("style.resizePanel")}
       className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-l border-transparent hover:border-primary md:block"
       onPointerDown={onResizeStart}
     />
@@ -1250,15 +1278,15 @@ export function StylePanel({
     if (hideOwnRail) return null;
     return (
       <aside
-        aria-label="Layer style (collapsed)"
+        aria-label={t("style.panelLabelCollapsed")}
         className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2"
       >
         <Button
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          title="Expand style"
-          aria-label="Expand style"
+          title={t("style.expand")}
+          aria-label={t("style.expand")}
           onClick={() => setIsCollapsed(false)}
         >
           <PanelRightOpen className="h-4 w-4" />
@@ -1266,7 +1294,7 @@ export function StylePanel({
         <div className="flex items-center gap-2 text-muted-foreground md:mt-3 md:flex-col">
           <SlidersHorizontal className="h-4 w-4" />
           <span className="text-[10px] font-semibold uppercase tracking-wide md:[writing-mode:vertical-rl] md:rotate-180">
-            Style
+            {t("sharedRail.style")}
           </span>
         </div>
       </aside>
@@ -1275,23 +1303,23 @@ export function StylePanel({
 
   if (!layer) {
     return (
-      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between border-b px-3 py-1.5">
-          <span className="text-sm font-semibold">Style</span>
+          <span className="text-sm font-semibold">{t("style.heading")}</span>
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            title="Collapse style"
-            aria-label="Collapse style"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
         <p className="p-4 text-xs text-muted-foreground">
-          Select a layer to edit its style.
+          {t("style.selectLayerHint")}
         </p>
       </aside>
     );
@@ -1347,6 +1375,12 @@ export function StylePanel({
     strokeWidthUnit === "meters" && !supportsPointRenderer;
   const pointRenderer = styleValue(style, "pointRenderer");
   const extrusionEnabled = styleValue(style, "extrusionEnabled");
+  const elevation3dEnabled = styleValue(style, "elevation3dEnabled");
+  // Effective 3D Z-value mode: the saved flag can outlive the data's Z values
+  // (e.g. a processing tool rewrote the geometry), in which case the renderer
+  // falls back to 2D — the panel must match so a Visualization radio is
+  // always selected and 2D controls stay usable.
+  const elevation3dActive = elevation3dEnabled && supportsElevation3d;
   const extrusionHeightPropertyOptions = getAttributePropertyNames(layer);
   const vectorStylePropertyOptions = extrusionHeightPropertyOptions;
   const labels: LabelStyle = {
@@ -1521,7 +1555,8 @@ export function StylePanel({
     if (draftVectorStyleMode === "expression") {
       const expressionError = validateExpressionJson(
         draftVectorStyleExpression,
-        "Style expression",
+        t("style.expressionLabels.style"),
+        t,
       );
       if (expressionError) {
         setVectorStyleError(expressionError);
@@ -1538,17 +1573,15 @@ export function StylePanel({
         draftVectorStyleMode === "categorized") &&
       !draftVectorStyleProperty
     ) {
-      setVectorStyleError("Choose an attribute for this style mode.");
+      setVectorStyleError(t("style.symbology.errorChooseAttribute"));
       return;
     }
     if (draftVectorStyleMode === "graduated" && stops.length < 2) {
-      setVectorStyleError(
-        "Graduated style requires at least two numeric stops.",
-      );
+      setVectorStyleError(t("style.symbology.errorGraduatedStops"));
       return;
     }
     if (draftVectorStyleMode === "categorized" && stops.length === 0) {
-      setVectorStyleError("Categorized style requires at least one category.");
+      setVectorStyleError(t("style.symbology.errorCategorizedStops"));
       return;
     }
 
@@ -1586,7 +1619,8 @@ export function StylePanel({
     if (draftAdvancedExtrusionEnabled) {
       const colorError = validateExpressionJson(
         draftColorExpression,
-        "Color expression",
+        t("style.expressionLabels.color"),
+        t,
       );
       if (colorError) {
         setExtrusionError(colorError);
@@ -1595,7 +1629,8 @@ export function StylePanel({
 
       const heightError = validateExpressionJson(
         draftHeightExpression,
-        "Height expression",
+        t("style.expressionLabels.height"),
+        t,
       );
       if (heightError) {
         setExtrusionError(heightError);
@@ -1620,10 +1655,16 @@ export function StylePanel({
   const basemapStyleLayerIds =
     mapControllerRef.current?.getBasemapStyleLayerIds() ?? [];
   const otherLayers = layers.filter((l) => l.id !== layer.id);
+  // While 3D (Z values) is active the basemap group below is hidden, so a
+  // saved basemap target surfaces under "Saved (unavailable)" instead of
+  // leaving the select pointing at a missing option.
+  const beforeIdHiddenByElevation3d =
+    elevation3dActive && basemapStyleLayerIds.includes(draftBeforeId);
   const orphanedBeforeId =
     draftBeforeId &&
-    !basemapStyleLayerIds.includes(draftBeforeId) &&
-    !otherLayers.some((l) => l.id === draftBeforeId)
+    (beforeIdHiddenByElevation3d ||
+      (!basemapStyleLayerIds.includes(draftBeforeId) &&
+        !otherLayers.some((l) => l.id === draftBeforeId)))
       ? draftBeforeId
       : null;
   // The basemap style exposes dozens of internal layer ids that overwhelm the
@@ -1635,20 +1676,20 @@ export function StylePanel({
     showBasemapStyleLayers || valueIsBasemapStyleLayer;
   const beforeIdControl = (
     <div className="space-y-2">
-      <Label htmlFor="beforeId">Insert before</Label>
+      <Label htmlFor="beforeId">{t("addData.shared.insertBelow")}</Label>
       <Select
         id="beforeId"
         value={draftBeforeId}
         onChange={(event) => applyBeforeId(event.target.value)}
       >
-        <option value="">Layer order (default)</option>
+        <option value="">{t("style.layerOrderDefault")}</option>
         {orphanedBeforeId && (
-          <optgroup label="Saved (unavailable)">
+          <optgroup label={t("style.beforeIdSavedUnavailable")}>
             <option value={orphanedBeforeId}>{orphanedBeforeId}</option>
           </optgroup>
         )}
         {otherLayers.length > 0 && (
-          <optgroup label="Layers">
+          <optgroup label={t("addData.shared.layersGroup")}>
             {[...otherLayers].reverse().map((otherLayer) => (
               <option key={otherLayer.id} value={otherLayer.id}>
                 {otherLayer.name}
@@ -1656,8 +1697,14 @@ export function StylePanel({
             ))}
           </optgroup>
         )}
-        {basemapStyleLayerIds.length > 0 && basemapStyleLayersVisible && (
-          <optgroup label="Basemap layers">
+        {/* The 3D Z-value render (deck.gl overlay) honors store order for
+            user layers but has no MapLibre layer to insert below a basemap
+            style layer, so hide that group rather than offer a silently
+            ignored setting. */}
+        {basemapStyleLayerIds.length > 0 &&
+          basemapStyleLayersVisible &&
+          !elevation3dActive && (
+          <optgroup label={t("addData.shared.basemapLayersGroup")}>
             {basemapStyleLayerIds.map((styleLayerId) => (
               <option key={styleLayerId} value={styleLayerId}>
                 {styleLayerId}
@@ -1666,7 +1713,9 @@ export function StylePanel({
           </optgroup>
         )}
       </Select>
-      {basemapStyleLayerIds.length > 0 && !valueIsBasemapStyleLayer && (
+      {basemapStyleLayerIds.length > 0 &&
+        !valueIsBasemapStyleLayer &&
+        !elevation3dActive && (
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -1814,7 +1863,7 @@ export function StylePanel({
   const vectorSymbologyControls = (
     <div className="space-y-3">
       <div className="space-y-2">
-        <Label htmlFor="vectorStyleMode">Style type</Label>
+        <Label htmlFor="vectorStyleMode">{t("style.symbology.styleType")}</Label>
         <Select
           id="vectorStyleMode"
           value={draftVectorStyleMode}
@@ -1837,7 +1886,9 @@ export function StylePanel({
       </div>
       {usesAttributeSymbology && (
         <div className="space-y-2">
-          <Label htmlFor="vectorStyleProperty">Attribute</Label>
+          <Label htmlFor="vectorStyleProperty">
+            {t("style.symbology.attribute")}
+          </Label>
           <Select
             id="vectorStyleProperty"
             value={draftVectorStyleProperty}
@@ -1847,7 +1898,7 @@ export function StylePanel({
             disabled={vectorStylePropertyOptions.length === 0}
           >
             {vectorStylePropertyOptions.length === 0 ? (
-              <option value="">No attributes found</option>
+              <option value="">{t("style.labels.noAttributes")}</option>
             ) : (
               vectorStylePropertyOptions.map((property) => (
                 <option key={property} value={property}>
@@ -1861,7 +1912,9 @@ export function StylePanel({
       {usesAttributeSymbology && (
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
-            <Label htmlFor="vectorStyleClassCount">Classes</Label>
+            <Label htmlFor="vectorStyleClassCount">
+              {t("style.symbology.classes")}
+            </Label>
             <Select
               id="vectorStyleClassCount"
               value={String(draftVectorStyleClassCount)}
@@ -1877,7 +1930,9 @@ export function StylePanel({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="vectorStyleClassificationScheme">Scheme</Label>
+            <Label htmlFor="vectorStyleClassificationScheme">
+              {t("style.symbology.scheme")}
+            </Label>
             <Select
               id="vectorStyleClassificationScheme"
               value={draftVectorStyleClassificationScheme}
@@ -1887,7 +1942,7 @@ export function StylePanel({
             >
               {vectorClassificationSchemeOptions.map((scheme) => (
                 <option key={scheme.value} value={scheme.value}>
-                  {scheme.label}
+                  {t(scheme.labelKey)}
                 </option>
               ))}
             </Select>
@@ -1912,15 +1967,17 @@ export function StylePanel({
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <Label>
-              {draftVectorStyleMode === "graduated" ? "Stops" : "Categories"}
+              {draftVectorStyleMode === "graduated"
+                ? t("style.symbology.stops")
+                : t("style.symbology.categories")}
             </Label>
             <Button
               type="button"
               variant="outline"
               size="icon"
               className="h-7 w-7"
-              title="Add class"
-              aria-label="Add class"
+              title={t("style.addClass")}
+              aria-label={t("style.addClass")}
               onClick={addDraftVectorStyleStop}
             >
               <Plus className="h-3.5 w-3.5" />
@@ -1934,8 +1991,12 @@ export function StylePanel({
               >
                 <ColorField
                   fill={false}
-                  aria-label={`Class ${index + 1} color`}
-                  eyedropperLabel={`Pick class ${index + 1} color from the screen`}
+                  aria-label={t("style.symbology.classColor", {
+                    index: index + 1,
+                  })}
+                  eyedropperLabel={t("style.symbology.classColorPick", {
+                    index: index + 1,
+                  })}
                   className="h-9 w-9 p-1"
                   buttonClassName="h-9 w-9"
                   value={stop.color}
@@ -1960,8 +2021,8 @@ export function StylePanel({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
-                  title="Remove class"
-                  aria-label="Remove class"
+                  title={t("style.removeClass")}
+                  aria-label={t("style.removeClass")}
                   onClick={() => removeDraftVectorStyleStop(index)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1973,7 +2034,9 @@ export function StylePanel({
       )}
       {draftVectorStyleMode === "expression" && (
         <div className="space-y-2">
-          <Label htmlFor="vectorStyleExpression">Color expression</Label>
+          <Label htmlFor="vectorStyleExpression">
+            {t("style.symbology.colorExpression")}
+          </Label>
           <textarea
             id="vectorStyleExpression"
             className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
@@ -2091,7 +2154,7 @@ export function StylePanel({
         disabled={!vectorStyleSettingsChanged}
         onClick={applyVectorStyleSettings}
       >
-        Apply style type
+        {t("style.symbology.applyStyleType")}
       </Button>
       {draftVectorStyleMode === "rule-based" &&
         draftVectorStyleMode !== styleValue(style, "vectorStyleMode") && (
@@ -2675,7 +2738,9 @@ export function StylePanel({
       {supportsPointRenderer ? (
         <>
           <div className="space-y-2">
-            <Label htmlFor="pointRenderer">Point renderer</Label>
+            <Label htmlFor="pointRenderer">
+              {t("style.symbology.pointRenderer")}
+            </Label>
             <Select
               id="pointRenderer"
               value={pointRenderer}
@@ -2685,16 +2750,22 @@ export function StylePanel({
                 })
               }
             >
-              <option value="single">Single symbol</option>
-              <option value="heatmap">Heatmap</option>
-              <option value="cluster">Clustered</option>
+              <option value="single">
+                {t("style.symbology.pointRendererSingle")}
+              </option>
+              <option value="heatmap">
+                {t("style.symbology.pointRendererHeatmap")}
+              </option>
+              <option value="cluster">
+                {t("style.symbology.pointRendererClustered")}
+              </option>
             </Select>
           </div>
           {pointRenderer === "heatmap" ? (
             <>
               <NumericStyleInput
                 id="heatmapRadius"
-                label="Heatmap radius"
+                label={t("style.symbology.heatmapRadius")}
                 min={1}
                 max={100}
                 step={1}
@@ -2705,7 +2776,7 @@ export function StylePanel({
               />
               <NumericStyleInput
                 id="heatmapIntensity"
-                label="Heatmap intensity"
+                label={t("style.symbology.heatmapIntensity")}
                 min={0.1}
                 max={5}
                 step={0.1}
@@ -2720,7 +2791,7 @@ export function StylePanel({
             <>
               <NumericStyleInput
                 id="clusterRadius"
-                label="Cluster radius (px)"
+                label={t("style.symbology.clusterRadius")}
                 min={10}
                 max={200}
                 step={5}
@@ -2731,7 +2802,7 @@ export function StylePanel({
               />
               <NumericStyleInput
                 id="clusterMaxZoom"
-                label="Cluster max zoom"
+                label={t("style.symbology.clusterMaxZoom")}
                 min={0}
                 max={24}
                 step={1}
@@ -2751,25 +2822,39 @@ export function StylePanel({
         <>
       {draftVectorStyleMode === "single" ? (
         <div className="space-y-2">
-          <Label htmlFor="fillColor">Fill color</Label>
+          <Label htmlFor="fillColor">{t("style.elevation3d.fillColor")}</Label>
           <ColorField
             id="fillColor"
             value={style.fillColor}
             onChange={(fillColor) => setLayerStyle(layer.id, { fillColor })}
+            allowTransparent
+            fallbackColor={DEFAULT_LAYER_STYLE.fillColor}
+            transparentLabel={t("style.symbology.transparent")}
+            transparentSwatchLabel={t("style.symbology.transparentSwatch")}
           />
         </div>
       ) : null}
       <div className="space-y-2">
-        <Label htmlFor="strokeColor">Outline color</Label>
+        <Label htmlFor="strokeColor">
+          {t("style.elevation3d.outlineColor")}
+        </Label>
         <ColorField
           id="strokeColor"
           value={style.strokeColor}
           onChange={(strokeColor) => setLayerStyle(layer.id, { strokeColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.strokeColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
         />
       </div>
       <NumericStyleInput
         id="strokeWidth"
-        label={strokeWidthInMeters ? "Stroke width (meters)" : "Stroke width"}
+        label={
+          strokeWidthInMeters
+            ? t("style.elevation3d.strokeWidthMeters")
+            : t("style.elevation3d.strokeWidth")
+        }
         min={0}
         max={strokeWidthInMeters ? 100000 : 20}
         step={strokeWidthInMeters ? 1 : 0.5}
@@ -2778,7 +2863,9 @@ export function StylePanel({
       />
       {supportsPointRenderer ? null : (
         <div className="space-y-2">
-          <Label htmlFor="strokeWidthUnit">Stroke width unit</Label>
+          <Label htmlFor="strokeWidthUnit">
+            {t("style.symbology.strokeWidthUnit")}
+          </Label>
           <Select
             id="strokeWidthUnit"
             value={strokeWidthUnit}
@@ -2796,14 +2883,18 @@ export function StylePanel({
               });
             }}
           >
-            <option value="pixels">Pixels (constant on screen)</option>
-            <option value="meters">Meters (scales with map)</option>
+            <option value="pixels">
+              {t("style.symbology.strokeWidthUnitPixels")}
+            </option>
+            <option value="meters">
+              {t("style.symbology.strokeWidthUnitMeters")}
+            </option>
           </Select>
         </div>
       )}
       <NumericStyleInput
         id="fillOpacity"
-        label="Fill opacity"
+        label={t("style.elevation3d.fillOpacity")}
         min={0}
         max={1}
         step={0.05}
@@ -2813,7 +2904,7 @@ export function StylePanel({
       {isSketchLayer ? null : (
         <NumericStyleInput
           id="circleRadius"
-          label="Circle radius"
+          label={t("style.elevation3d.circleRadius")}
           min={1}
           max={50}
           step={1}
@@ -2825,7 +2916,7 @@ export function StylePanel({
         <>
           <Separator />
           <div className="space-y-2">
-            <Label htmlFor="textColor">Text color</Label>
+            <Label htmlFor="textColor">{t("style.labels.textColor")}</Label>
             <ColorField
               id="textColor"
               value={styleValue(style, "textColor")}
@@ -2836,7 +2927,7 @@ export function StylePanel({
           </div>
           <NumericStyleInput
             id="textSize"
-            label="Text size"
+            label={t("style.labels.textSize")}
             min={6}
             max={96}
             step={1}
@@ -2844,7 +2935,9 @@ export function StylePanel({
             onChange={(textSize) => setLayerStyle(layer.id, { textSize })}
           />
           <div className="space-y-2">
-            <Label htmlFor="textHaloColor">Text halo color</Label>
+            <Label htmlFor="textHaloColor">
+              {t("style.symbology.textHaloColor")}
+            </Label>
             <ColorField
               id="textHaloColor"
               value={styleValue(style, "textHaloColor")}
@@ -2855,7 +2948,7 @@ export function StylePanel({
           </div>
           <NumericStyleInput
             id="textHaloWidth"
-            label="Text halo width"
+            label={t("style.symbology.textHaloWidth")}
             min={0}
             max={8}
             step={0.5}
@@ -2874,7 +2967,7 @@ export function StylePanel({
     <>
       {draftVectorStyleMode === "single" ? (
         <div className="space-y-2">
-          <Label htmlFor="extrusionColor">Extrusion color</Label>
+          <Label htmlFor="extrusionColor">{t("style.extrusion.color")}</Label>
           <ColorField
             id="extrusionColor"
             value={draftExtrusionColor}
@@ -2884,7 +2977,7 @@ export function StylePanel({
       ) : null}
       <NumericStyleInput
         id="extrusionOpacity"
-        label="Extrusion opacity"
+        label={t("style.extrusion.opacity")}
         min={0}
         max={1}
         step={0.05}
@@ -2904,11 +2997,13 @@ export function StylePanel({
             setExtrusionError(null);
           }}
         />
-        Advanced height expression
+        {t("style.extrusion.advanced")}
       </label>
       {draftAdvancedExtrusionEnabled ? (
         <div className="space-y-2">
-          <Label htmlFor="extrusionHeightExpression">Height expression</Label>
+          <Label htmlFor="extrusionHeightExpression">
+            {t("style.extrusion.heightExpression")}
+          </Label>
           <textarea
             id="extrusionHeightExpression"
             className="min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
@@ -2922,7 +3017,9 @@ export function StylePanel({
       ) : (
         <>
           <div className="space-y-2">
-            <Label htmlFor="extrusionHeightProperty">Height property</Label>
+            <Label htmlFor="extrusionHeightProperty">
+              {t("style.extrusion.heightProperty")}
+            </Label>
             <Select
               id="extrusionHeightProperty"
               value={draftExtrusionHeightProperty}
@@ -2932,7 +3029,7 @@ export function StylePanel({
               disabled={extrusionHeightProperties.length === 0}
             >
               {extrusionHeightProperties.length === 0 ? (
-                <option value="">No attributes found</option>
+                <option value="">{t("style.labels.noAttributes")}</option>
               ) : (
                 extrusionHeightProperties.map((property) => (
                   <option key={property} value={property}>
@@ -2944,7 +3041,7 @@ export function StylePanel({
           </div>
           <NumericStyleInput
             id="extrusionHeightScale"
-            label="Height scale"
+            label={t("style.extrusion.heightScale")}
             min={0}
             max={10000}
             step={0.00001}
@@ -2953,7 +3050,7 @@ export function StylePanel({
           />
           <NumericStyleInput
             id="extrusionBase"
-            label="Base height"
+            label={t("style.extrusion.base")}
             min={0}
             max={100000}
             step={1}
@@ -2969,7 +3066,7 @@ export function StylePanel({
         disabled={!extrusionSettingsChanged}
         onClick={applyExtrusionSettings}
       >
-        Apply 3D extrusion
+        {t("style.extrusion.apply")}
       </Button>
       {extrusionError && (
         <p className="text-xs text-destructive">{extrusionError}</p>
@@ -2977,31 +3074,130 @@ export function StylePanel({
     </>
   );
 
+  // Controls for the "3D (Z values)" mode: only the knobs the deck.gl render
+  // honors (flat colors, widths, and the elevation transform). Data-driven
+  // symbology, point renderers, patterns, markers, and labels are 2D-only.
+  const elevation3dControls = (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor="fillColor">{t("style.elevation3d.fillColor")}</Label>
+        <ColorField
+          id="fillColor"
+          value={style.fillColor}
+          onChange={(fillColor) => setLayerStyle(layer.id, { fillColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.fillColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="strokeColor">
+          {t("style.elevation3d.outlineColor")}
+        </Label>
+        <ColorField
+          id="strokeColor"
+          value={style.strokeColor}
+          onChange={(strokeColor) => setLayerStyle(layer.id, { strokeColor })}
+          allowTransparent
+          fallbackColor={DEFAULT_LAYER_STYLE.strokeColor}
+          transparentLabel={t("style.symbology.transparent")}
+          transparentSwatchLabel={t("style.symbology.transparentSwatch")}
+        />
+      </div>
+      {/* The 3D render honors meter-based widths (lineWidthUnits), so mirror
+          the 2D control's range/label switch or the tighter pixel clamp would
+          silently destroy a meters width on the next edit. */}
+      <NumericStyleInput
+        id="strokeWidth"
+        label={
+          strokeWidthInMeters
+            ? t("style.elevation3d.strokeWidthMeters")
+            : t("style.elevation3d.strokeWidth")
+        }
+        min={0}
+        max={strokeWidthInMeters ? 100000 : 20}
+        step={strokeWidthInMeters ? 1 : 0.5}
+        value={style.strokeWidth}
+        onChange={(strokeWidth) => setLayerStyle(layer.id, { strokeWidth })}
+      />
+      <NumericStyleInput
+        id="fillOpacity"
+        label={t("style.elevation3d.fillOpacity")}
+        min={0}
+        max={1}
+        step={0.05}
+        value={style.fillOpacity}
+        onChange={(fillOpacity) => setLayerStyle(layer.id, { fillOpacity })}
+      />
+      {/* Sketches mix geometry types under one style, so "Circle radius" is
+          suppressed there for the same reason as in the 2D controls (#483). */}
+      {geometryFlags.hasPoint && !isSketchLayer ? (
+        <NumericStyleInput
+          id="circleRadius"
+          label={t("style.elevation3d.circleRadius")}
+          min={1}
+          max={50}
+          step={1}
+          value={style.circleRadius}
+          onChange={(circleRadius) => setLayerStyle(layer.id, { circleRadius })}
+        />
+      ) : null}
+      <Separator />
+      <NumericStyleInput
+        id="elevation3dVerticalScale"
+        label={t("style.elevation3d.verticalScale")}
+        min={0}
+        max={100}
+        step={0.1}
+        value={styleValue(style, "elevation3dVerticalScale")}
+        onChange={(elevation3dVerticalScale) =>
+          setLayerStyle(layer.id, { elevation3dVerticalScale })
+        }
+        tooltip={t("style.elevation3d.verticalScaleTooltip")}
+      />
+      <NumericStyleInput
+        id="elevation3dOffset"
+        label={t("style.elevation3d.offset")}
+        min={-10000}
+        max={10000}
+        step={10}
+        value={styleValue(style, "elevation3dOffset")}
+        onChange={(elevation3dOffset) =>
+          setLayerStyle(layer.id, { elevation3dOffset })
+        }
+        tooltip={t("style.elevation3d.offsetTooltip")}
+      />
+    </>
+  );
+
   if (hasRasterPaintControls) {
     return (
-      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
-            Style - {layer.name}
+            {t("style.headingWithLayer", { name: layer.name })}
           </span>
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            title="Collapse style"
-            aria-label="Collapse style"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelRightClose className="h-4 w-4" />
           </Button>
         </div>
-        <ScrollArea className="flex-1 p-3">
-          <div className="space-y-4">
+        <ScrollArea className="flex-1">
+          {/* Padding on the inner content with extra right clearance so the
+              overlay scrollbar never covers a control's right edge. */}
+          <div className="space-y-4 p-3 pr-5">
             {beforeIdControl}
             {zoomRangeControls}
             <RasterStyleSlider
-              label="Opacity"
+              label={t("style.raster.opacity")}
               value={layer.opacity}
               min={0}
               max={1}
@@ -3011,7 +3207,7 @@ export function StylePanel({
             {!isDeckRasterLayer && (
               <>
                 <RasterStyleSlider
-                  label="Brightness Min"
+                  label={t("style.raster.brightnessMin")}
                   value={styleValue(style, "rasterBrightnessMin")}
                   min={0}
                   max={1}
@@ -3021,7 +3217,7 @@ export function StylePanel({
                   }
                 />
                 <RasterStyleSlider
-                  label="Brightness Max"
+                  label={t("style.raster.brightnessMax")}
                   value={styleValue(style, "rasterBrightnessMax")}
                   min={0}
                   max={1}
@@ -3031,7 +3227,7 @@ export function StylePanel({
                   }
                 />
                 <RasterStyleSlider
-                  label="Saturation"
+                  label={t("style.raster.saturation")}
                   value={styleValue(style, "rasterSaturation")}
                   min={-1}
                   max={1}
@@ -3063,7 +3259,7 @@ export function StylePanel({
                   {t("style.raster.greyscale")}
                 </Button>
                 <RasterStyleSlider
-                  label="Contrast"
+                  label={t("style.raster.contrast")}
                   value={styleValue(style, "rasterContrast")}
                   min={-1}
                   max={1}
@@ -3073,7 +3269,7 @@ export function StylePanel({
                   }
                 />
                 <RasterStyleSlider
-                  label="Hue Rotate"
+                  label={t("style.raster.hueRotate")}
                   value={styleValue(style, "rasterHueRotate")}
                   min={0}
                   max={360}
@@ -3086,7 +3282,10 @@ export function StylePanel({
               </>
             )}
             {layer.metadata.sourceKind === RASTER_SOURCE_KIND && (
-              <RasterSymbologySection layer={layer} />
+              <RasterSymbologySection
+                layer={layer}
+                mapControllerRef={mapControllerRef}
+              />
             )}
             <Separator />
             <Button
@@ -3117,8 +3316,8 @@ export function StylePanel({
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
           {isDeckRasterLayer
-            ? "Changes apply live to the raster layer opacity."
-            : "Changes apply live to MapLibre raster paint properties."}
+            ? t("style.raster.footerDeck")
+            : t("style.raster.footerMaplibre")}
         </p>
       </aside>
     );
@@ -3126,18 +3325,18 @@ export function StylePanel({
 
   if (!hasVectorPaintControls) {
     return (
-      <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+      <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
         {resizeHandle}
         <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
           <span className="truncate text-sm font-semibold">
-            Style - {layer.name}
+            {t("style.headingWithLayer", { name: layer.name })}
           </span>
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7 shrink-0"
-            title="Collapse style"
-            aria-label="Collapse style"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
             onClick={() => setIsCollapsed(true)}
           >
             <PanelRightClose className="h-4 w-4" />
@@ -3145,77 +3344,112 @@ export function StylePanel({
         </div>
         <div className="space-y-4 p-3">{beforeIdControl}</div>
         <p className="p-4 text-xs text-muted-foreground">
-          Style controls are not available for this layer type yet.
+          {t("style.noControls")}
         </p>
         <Separator />
         <p className="p-2 text-[10px] text-muted-foreground">
-          Selected layer type: {layer.type}
+          {t("style.selectedLayerType", { type: layer.type })}
         </p>
       </aside>
     );
   }
 
   return (
-    <aside aria-label="Layer style" className={STYLE_PANEL_ASIDE_CLASS}>
+    <aside aria-label={t("style.panelLabel")} className={STYLE_PANEL_ASIDE_CLASS}>
       {resizeHandle}
       <div className="flex items-center justify-between gap-2 border-b px-3 py-1.5">
         <span className="truncate text-sm font-semibold">
-          Style - {layer.name}
+          {t("style.headingWithLayer", { name: layer.name })}
         </span>
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0"
-          title="Collapse style"
-          aria-label="Collapse style"
+          title={t("style.collapse")}
+          aria-label={t("style.collapse")}
           onClick={() => setIsCollapsed(true)}
         >
           <PanelRightClose className="h-4 w-4" />
         </Button>
       </div>
-      <ScrollArea className="flex-1 p-3">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1">
+        {/* Padding lives on the inner content (not the ScrollArea root) with
+            extra right clearance so the overlay scrollbar never covers the
+            right edge of a control (e.g. the "Transparent" label). */}
+        <div className="space-y-4 p-3 pr-5">
           {beforeIdControl}
-          {zoomRangeControls}
+          {/* The 3D Z-value render (deck.gl) does not honor the MapLibre
+              min/max zoom range, so hide the controls rather than show a
+              silently-ignored setting. */}
+          {!elevation3dActive && zoomRangeControls}
           {hasExtrusionControls && (
             <div className="space-y-2">
-              <Label>Visualization</Label>
+              <Label>{t("style.visualization")}</Label>
               <div className="grid grid-cols-2 gap-2">
                 <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={!extrusionEnabled}
+                    checked={!extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setExtrusionError(null);
-                      setLayerStyle(layer.id, { extrusionEnabled: false });
+                      setLayerStyle(layer.id, {
+                        extrusionEnabled: false,
+                        elevation3dEnabled: false,
+                      });
                     }}
                   />
-                  2D
+                  {t("style.mode2d")}
                 </label>
                 <label className="flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
                   <input
                     type="radio"
                     name={`style-mode-${layer.id}`}
-                    checked={extrusionEnabled}
+                    checked={extrusionEnabled && !elevation3dActive}
                     onChange={() => {
                       setVectorStyleError(null);
-                      setLayerStyle(layer.id, { extrusionEnabled: true });
+                      setLayerStyle(layer.id, {
+                        extrusionEnabled: true,
+                        elevation3dEnabled: false,
+                      });
                     }}
                   />
-                  3D extrusion
+                  {t("style.mode3dExtrusion")}
                 </label>
+                {supportsElevation3d && (
+                  <label className="col-span-2 flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm">
+                    <input
+                      type="radio"
+                      name={`style-mode-${layer.id}`}
+                      checked={elevation3dActive}
+                      onChange={() => {
+                        setExtrusionError(null);
+                        setLayerStyle(layer.id, {
+                          extrusionEnabled: false,
+                          elevation3dEnabled: true,
+                        });
+                      }}
+                    />
+                    {t("style.elevation3d.mode")}
+                  </label>
+                )}
               </div>
             </div>
           )}
-          {/* Data-driven coloring doesn't apply to the heatmap renderer. */}
-          {pointRenderer === "heatmap" ? null : vectorSymbologyControls}
-          {!hasExtrusionControls || !extrusionEnabled ? (
+          {/* Data-driven coloring doesn't apply to the heatmap renderer or the
+              flat-styled 3D Z-value render. */}
+          {pointRenderer === "heatmap" || elevation3dActive
+            ? null
+            : vectorSymbologyControls}
+          {elevation3dActive ? (
+            elevation3dControls
+          ) : !hasExtrusionControls || !extrusionEnabled ? (
             twoDimensionalControls
           ) : (
             extrusionControls
           )}
-          {(!hasExtrusionControls || !extrusionEnabled) && (
+          {!elevation3dActive &&
+            (!hasExtrusionControls || !extrusionEnabled) && (
             <>
               {showProportionalControls && (
                 <>
@@ -3238,8 +3472,8 @@ export function StylePanel({
             </>
           )}
           {/* Attribute labels apply to vector features, not the heatmap density
-              surface or the 3D extrusion render. */}
-          {!extrusionEnabled && pointRenderer !== "heatmap" ? (
+              surface or the 3D extrusion / 3D Z-value renders. */}
+          {!extrusionEnabled && !elevation3dActive && pointRenderer !== "heatmap" ? (
             <>
               <Separator />
               <p className="text-sm font-semibold">
@@ -3253,10 +3487,12 @@ export function StylePanel({
       <Separator />
       <p className="p-2 text-[10px] text-muted-foreground">
         {extrusionEnabled
-          ? "3D extrusion settings apply when saved."
-          : isDeckVectorLayer
-            ? "Changes apply live to DuckDB deck.gl layer styling."
-            : "Changes apply live to MapLibre paint properties."}
+          ? t("style.extrusion.footer")
+          : elevation3dActive
+            ? t("style.elevation3d.footer")
+            : isDeckVectorLayer
+              ? t("style.footerDeck")
+              : t("style.footerMaplibre")}
       </p>
     </aside>
   );

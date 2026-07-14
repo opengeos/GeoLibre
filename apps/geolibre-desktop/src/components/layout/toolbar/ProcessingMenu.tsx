@@ -183,6 +183,11 @@ export function ProcessingMenu({
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
             <DropdownMenuItem
+              onSelect={() => setConversionOpen("vector-to-vector")}
+            >
+              {t("toolbar.conversion.vectorToVector")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onSelect={() => setConversionOpen("vector-to-geoparquet")}
             >
               {t("toolbar.conversion.vectorToGeoparquet")}

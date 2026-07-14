@@ -12,6 +12,8 @@ GeoLibre runs locally on your device. It does not require an account, and it doe
 not collect analytics, telemetry, or usage data. Your geospatial data and
 projects stay on your device unless you choose to share or export them.
 
+Your use of the app is also governed by our [Terms of Service](terms.md).
+
 ## Data processed locally
 
 The files and projects you open, create, and analyze in GeoLibre (vector and

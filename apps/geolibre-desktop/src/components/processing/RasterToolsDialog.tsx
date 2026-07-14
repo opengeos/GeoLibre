@@ -739,7 +739,7 @@ export function RasterToolsDialog({
                     type="button"
                     variant="outline"
                     size="icon"
-                    title="Choose input file"
+                    title={t("processing.filePicker.chooseInputFile")}
                     onClick={() => void pickClientInput()}
                   >
                     <FolderOpen className="h-4 w-4" />
@@ -750,14 +750,14 @@ export function RasterToolsDialog({
                   <Input
                     id="raster-input"
                     value={inputPath}
-                    placeholder="File path"
+                    placeholder={t("processing.filePicker.filePath")}
                     onChange={(event) => setInputPath(event.target.value)}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    title="Choose input file"
+                    title={t("processing.filePicker.chooseInputFile")}
                     onClick={() => void pickInput()}
                   >
                     <FolderOpen className="h-4 w-4" />
@@ -776,14 +776,14 @@ export function RasterToolsDialog({
                   <Input
                     id="raster-output"
                     value={outputPath}
-                    placeholder="File path"
+                    placeholder={t("processing.filePicker.filePath")}
                     onChange={(event) => setOutputPath(event.target.value)}
                   />
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    title="Choose output file"
+                    title={t("processing.filePicker.chooseOutputFile")}
                     onClick={() => void pickOutput()}
                   >
                     <Save className="h-4 w-4" />
@@ -911,6 +911,7 @@ function RasterParameterField({
   onChange,
   onPick,
 }: RasterParameterFieldProps): ReactElement {
+  const { t } = useTranslation();
   const label = (
     <Label htmlFor={param.id} className="text-xs">
       {param.label}
@@ -982,14 +983,14 @@ function RasterParameterField({
           <Input
             id={param.id}
             value={(value as string) ?? ""}
-            placeholder="File path"
+            placeholder={t("processing.filePicker.filePath")}
             onChange={(e) => onChange(e.target.value)}
           />
           <Button
             type="button"
             variant="outline"
             size="icon"
-            title="Choose file"
+            title={t("processing.filePicker.chooseFile")}
             onClick={onPick}
           >
             <FolderOpen className="h-4 w-4" />

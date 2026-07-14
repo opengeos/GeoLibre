@@ -7,10 +7,14 @@ import {
   fetchRemoteWhiteboxCatalogSnapshot,
   fetchWhiteboxStatus,
   fetchWhiteboxTools,
-  listGeolibreWasmTools,
+  listWasmToolManifests,
+  mergeWasmToolManifests,
+  normalizeVectorOutputFormat,
   runWhiteboxTool,
   runWhiteboxToolWasm,
   outputBaseName,
+  fileOutputTargetExtension,
+  outputTextFormatHint,
   type WhiteboxJob,
   type WhiteboxLayerInput,
   type WhiteboxTool,
@@ -40,6 +44,7 @@ import {
   Play,
   RefreshCw,
   Save,
+  Scan,
   Search,
   Server,
   ServerOff,
@@ -111,7 +116,7 @@ function parameterKind(param: WhiteboxToolParameter): string {
       ? (schemaObject.dataset as Record<string, unknown>)
       : {};
   const dataKind = String(
-    param.data_kind ?? dataset.kind ?? param.type ?? "",
+    param.data_kind ?? schemaObject.data_kind ?? dataset.kind ?? param.type ?? "",
   ).toLowerCase();
   const role = String(param.io_role ?? schemaObject.kind ?? "").toLowerCase();
   if (role === "input") return datasetParameterKind(dataKind, "in");
@@ -137,14 +142,17 @@ function isOutputParameter(param: WhiteboxToolParameter): boolean {
 }
 
 /**
- * Best-effort extension for a `file_out` blob, sniffed from its magic bytes.
- * Covers the formats GeoLibre `file_out` tools emit today (GeoParquet, PNG,
- * PMTiles); a genuinely opaque output falls back to `.bin`. Extend the sniff
- * here if a future tool writes a recognizable text format.
+ * Best-effort extension for a binary tool output, sniffed from its magic bytes.
+ * Covers the formats GeoLibre `file_out` and (CRS-preserving) `vector_out` tools
+ * emit today (GeoParquet, FlatGeobuf, zipped Shapefile, PNG, PMTiles); a
+ * genuinely opaque output falls back to `.bin`. Extend the sniff here if a
+ * future tool writes a recognizable format.
  */
 function fileOutputExtension(bytes: Uint8Array): string {
   const matches = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
   if (matches([0x50, 0x41, 0x52, 0x31])) return "parquet"; // "PAR1"
+  if (matches([0x66, 0x67, 0x62, 0x03])) return "fgb"; // FlatGeobuf "fgb\x03"
+  if (matches([0x50, 0x4b, 0x03, 0x04])) return "zip"; // Shapefile bundle "PK\x03\x04"
   if (matches([0x89, 0x50, 0x4e, 0x47])) return "png";
   // "PMTiles"
   if (matches([0x50, 0x4d, 0x54, 0x69, 0x6c, 0x65, 0x73])) return "pmtiles";
@@ -170,6 +178,21 @@ function downloadBytes(bytes: Uint8Array, filename: string): void {
 function isDataInputParameter(param: WhiteboxToolParameter): boolean {
   return ["raster_in", "vector_in", "lidar_in", "file_in"].includes(
     parameterKind(param),
+  );
+}
+
+// A `bbox` string param paired with a `bbox_crs` param is the geographic extent
+// of a subset tool, so the field can offer a "Use map extent" shortcut that
+// fills both from the current map view (GeoLibre#1213). Matching on the pair
+// covers every COG/WMS/XYZ (and future) extractor without hard-coding tool ids.
+function isMapExtentParameter(
+  tool: WhiteboxTool,
+  param: WhiteboxToolParameter,
+): boolean {
+  return (
+    param.name === "bbox" &&
+    parameterKind(param) === "string" &&
+    Boolean(tool.params?.some((other) => other.name === "bbox_crs"))
   );
 }
 
@@ -243,10 +266,13 @@ function outputExtensionForParameter(param: WhiteboxToolParameter): string {
   if (kind === "raster_out") return ".tif";
   if (kind === "vector_out") return ".shp";
   if (kind === "lidar_out") return ".laz";
-  if (/\bcsv\b/i.test(`${param.name} ${param.type ?? ""}`)) return ".csv";
-  if (/\bhtml\b/i.test(`${param.name} ${param.type ?? ""}`)) return ".html";
-  if (/\bjson\b/i.test(`${param.name} ${param.type ?? ""}`)) return ".json";
-  return ".txt";
+  // Sniff the intended text format from the parameter's name/description/type
+  // via the same shared helper the WASM runner uses (e.g.
+  // vector_summary_statistics' output is an "Output CSV path"). Only the
+  // fallback differs: a friendly `.txt` here for a default filename suggestion,
+  // vs the opaque `.dat` the runner writes.
+  const hint = outputTextFormatHint(param);
+  return hint ? `.${hint}` : ".txt";
 }
 
 function defaultOutputName(
@@ -441,6 +467,14 @@ export function ProcessingDialog({
   const browsedInputsRef = useRef<
     Map<string, { name: string; bytes: Uint8Array; geojson?: FeatureCollection }>
   >(new Map());
+  // Parameters passed to each run, keyed by the resulting job id, so output
+  // naming can honor the output path the user actually typed (which the finished
+  // job does not carry). Keyed per job (not a single slot) so a rapid re-run
+  // cannot overwrite the entry a still-draining previous job is reading; the
+  // entry is deleted once its outputs are imported.
+  const runParametersByJobRef = useRef<Map<string, Record<string, unknown>>>(
+    new Map(),
+  );
 
   const selectedTool = useMemo(() => {
     const tool =
@@ -566,36 +600,76 @@ export function ProcessingDialog({
 
     // In WASM mode the tools run in-browser, so skip the Python sidecar probe
     // entirely (on the web build that request 404s to the SPA index.html, which
-    // is the "Unexpected token '<'" JSON error). Just load the catalog for the
-    // parameter UI.
+    // is the "Unexpected token '<'" JSON error). Load the catalog for the tool
+    // list + display metadata, then let the WASM binary's own manifests be
+    // authoritative for parameters: the local tools can expose a different
+    // parameter set than the sidecar (e.g. reproject_vector validates `epsg`,
+    // not the catalog's `dst_epsg`, #1047), and they add the GeoLibre-authored
+    // tools (write_geoparquet, delineate_depressions, …) absent from the catalog.
     if (runLocal) {
-      await applyRemoteCatalogSnapshot(
-        t("processing.whitebox.runningLocally"),
-        false,
+      setRuntimeAvailable(false);
+      setRuntimeMessage(t("processing.whitebox.runningLocally"));
+      // The catalog snapshot (HTTP/bundled asset) and the WASM manifest
+      // enumeration (loads + queries the WASM module) are independent, so fetch
+      // them concurrently rather than serially.
+      const [catalogResult, wasmResult] = await Promise.allSettled([
+        fetchRemoteWhiteboxCatalogSnapshot(),
+        listWasmToolManifests(),
+      ]);
+      // Hide locked ("pro"-tier) tools: they cannot run, so omit them from the
+      // catalog entirely rather than show them as disabled rows.
+      const catalogTools =
+        catalogResult.status === "fulfilled"
+          ? catalogResult.value.filter((tool) => !tool.locked)
+          : [];
+      const catalogError =
+        catalogResult.status === "rejected" ? catalogResult.reason : null;
+      // A snapshot that resolves to an empty list (malformed/empty JSON that
+      // doesn't throw) silently drops the ~700 Whitebox tools. Detect it from
+      // the raw result, not `catalogTools`, so a fetch that returned only locked
+      // tools isn't mistaken for a load failure.
+      const catalogEmpty =
+        catalogResult.status === "fulfilled" &&
+        catalogResult.value.length === 0;
+      const wasmTools =
+        wasmResult.status === "fulfilled" ? wasmResult.value : [];
+      const wasmError =
+        wasmResult.status === "rejected" ? wasmResult.reason : null;
+      if (wasmError) {
+        console.warn(
+          "[GeoLibre] Could not enumerate WASM tool manifests:",
+          wasmError,
+        );
+      }
+      if (catalogError) {
+        console.warn(
+          "[GeoLibre] Could not load Whitebox catalog snapshot:",
+          catalogError,
+        );
+      }
+      const nextTools = mergeWasmToolManifests(catalogTools, wasmTools);
+      setTools(nextTools);
+      setSelectedToolId((current) =>
+        nextTools.some((tool) => tool.id === current)
+          ? current
+          : nextTools[0]?.id ?? "",
       );
-      // The GeoLibre-authored tools (write_geoparquet, delineate_depressions, …)
-      // aren't in the Whitebox catalog snapshot, so append them from the WASM
-      // binary's own manifests. WASM-only: they have no Python sidecar
-      // equivalent, hence only in the runLocal branch.
-      try {
-        const geolibreTools = await listGeolibreWasmTools();
-        if (geolibreTools.length > 0) {
-          setTools((current) => {
-            // On an id collision, prefer the GeoLibre manifest (it carries the
-            // richer param schemas) over a catalog stub.
-            const geolibreIds = new Set(geolibreTools.map((tool) => tool.id));
-            return [
-              ...current.filter((tool) => !geolibreIds.has(tool.id)),
-              ...geolibreTools,
-            ];
-          });
-          // Select the first GeoLibre tool if the snapshot was empty (otherwise
-          // applyRemoteCatalogSnapshot already picked a selection).
-          setSelectedToolId((current) => current || geolibreTools[0].id);
-        }
-      } catch (err) {
-        // Non-fatal: the catalog tools still load if the WASM enumeration fails.
-        console.warn("[GeoLibre] Could not enumerate WASM GeoLibre tools:", err);
+      // In local mode the WASM runner is what actually executes tools, so its
+      // failure is the most important to report: without it every tool keeps the
+      // catalog's parameter names and would fail on run (exactly #1047). Failing
+      // that, surface a catalog-fetch failure even when the WASM manifests still
+      // yielded a few GeoLibre-authored tools, so the user is not silently left
+      // without the ~700 Whitebox catalog tools.
+      if (wasmError) {
+        setError(t("processing.whitebox.localRunnerError"));
+      } else if (catalogError) {
+        setError(
+          catalogError instanceof Error
+            ? catalogError.message
+            : t("processing.whitebox.catalogSnapshotError"),
+        );
+      } else if (catalogEmpty || nextTools.length === 0) {
+        setError(t("processing.whitebox.catalogSnapshotError"));
       }
       setLoadingTools(false);
       return;
@@ -748,6 +822,67 @@ export function ProcessingDialog({
     setValues((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Fill a subset tool's `bbox` (and companion `bbox_crs`) from the current map
+  // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
+  // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
+  // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
+  const handleUseMapExtent = () => {
+    // Clear any stale banner (e.g. a prior "map not ready") so a later success
+    // doesn't leave it lingering, mirroring RasterSubsetPanel.handleUseView.
+    setError(null);
+    const bounds = mapControllerRef.current?.readView().bbox;
+    if (!bounds) {
+      setError(t("processing.whitebox.mapExtentUnavailable"));
+      return;
+    }
+    const [west, south, east, north] = bounds;
+    // getBounds() is not normalized: a view wrapping 180° yields west >= east,
+    // and at low zoom (multiple world copies) the corners can fall outside
+    // ±180°/±90° while still ordered. Either produces a box the subset
+    // extractors mis-clip or reject, so block it rather than filling a silently
+    // wrong bbox, matching RasterSubsetPanel.parseBbox's ordering + range checks.
+    if (
+      !(west < east) ||
+      !(south < north) ||
+      west < -180 ||
+      east > 180 ||
+      south < -90 ||
+      north > 90
+    ) {
+      setError(t("processing.whitebox.mapExtentInvalid"));
+      return;
+    }
+    const fmt = (value: number) => Number(value.toFixed(6)).toString();
+    updateValue("bbox", bounds.map(fmt).join(","));
+    // Store as a string to match the file's convention that every int/double
+    // field value is a string (NumberStepperInput always emits one).
+    updateValue("bbox_crs", String(4326));
+  };
+
+  const handleRunLocalChange = (nextRunLocal: boolean) => {
+    setRunLocal(nextRunLocal);
+    // A `vector_out` param holds an output-format string in WASM mode but a
+    // free-text path in sidecar mode, and the form only resets on tool change.
+    // Turning WASM mode off would otherwise leave a format like "geoparquet" as
+    // the sidecar output path, so reset any such param to its default.
+    if (nextRunLocal || !selectedTool) return;
+    const defaults = createDefaultValues(selectedTool);
+    setValues((prev) => {
+      const next = { ...prev };
+      for (const param of selectedTool.params ?? []) {
+        const current = prev[param.name];
+        if (
+          parameterKind(param) === "vector_out" &&
+          typeof current === "string" &&
+          normalizeVectorOutputFormat(current) === current
+        ) {
+          next[param.name] = defaults[param.name];
+        }
+      }
+      return next;
+    });
+  };
+
   // Stash a browsed input file's bytes and show its name in the field. Used by
   // the path-browse button in the web build, where the WASM runner reads bytes
   // directly instead of a (non-existent in the browser) filesystem path.
@@ -787,6 +922,11 @@ export function ProcessingDialog({
       const jobToolLabel = jobTool
         ? toolLabel(jobTool)
         : humanize(nextJob.tool_id);
+      // This job's own run parameters (not a shared slot), consumed once here so a
+      // concurrent re-run cannot repoint the output-path lookup below.
+      const runParameters =
+        runParametersByJobRef.current.get(nextJob.id) ?? {};
+      runParametersByJobRef.current.delete(nextJob.id);
       for (const [name, value] of entries) {
         const path = isFeatureCollection(value) ? "" : (outputPath(value) ?? "");
         const data = isFeatureCollection(value)
@@ -806,14 +946,29 @@ export function ProcessingDialog({
 
       // Binary outputs come back from the WASM runner inline. Raster (COG) bytes
       // become a new raster layer; a `file_out` (e.g. write_geoparquet .parquet,
-      // a rendered .png, a .pmtiles) is not a GeoTIFF, so download it instead of
-      // handing it to the raster loader.
+      // a rendered .png, a .pmtiles) or a CRS-preserving `vector_out`
+      // (GeoParquet/FlatGeobuf/zipped Shapefile, chosen to keep a reprojection's
+      // target CRS) is not a GeoTIFF, so download it instead of handing it to the
+      // raster loader.
       for (const [name, value] of Object.entries(nextJob.outputs)) {
         if (!(value instanceof Uint8Array)) continue;
         const param = jobTool?.params?.find((item) => item.name === name);
-        if (param && parameterKind(param) === "file_out") {
+        const outKind = param ? parameterKind(param) : "";
+        if (outKind === "file_out" || outKind === "vector_out") {
           const label = `${jobToolLabel} ${humanize(name)}`.replace(/\s+/g, "_");
-          downloadBytes(value, `${label}.${fileOutputExtension(value)}`);
+          // Prefer the content signature: a `vector_out` and most binary
+          // `file_out` formats (GeoParquet/FlatGeobuf/zipped Shapefile/PNG/
+          // PMTiles) are identifiable from their magic bytes. Only signature-less
+          // text formats (CSV/JSON/HTML) return `bin`; for those, fall back to
+          // the extension the tool was actually told to write — the user's typed
+          // output path, else the param's declared format (shared with the WASM
+          // runner via `fileOutputTargetExtension`).
+          const sniffed = fileOutputExtension(value);
+          const extension =
+            sniffed !== "bin" || outKind !== "file_out" || !param
+              ? sniffed
+              : fileOutputTargetExtension(param, runParameters[name]);
+          downloadBytes(value, `${label}.${extension}`);
         } else if (onAddRaster) {
           // Display name stays human-readable; the file name matches the actual
           // WASM output path (e.g. fill_depressions_wang_and_liu_output.tif), so
@@ -903,6 +1058,20 @@ export function ProcessingDialog({
       }
     }
 
+    // In WASM mode a vector_out param carries the chosen output format (its value
+    // is otherwise unused by the runner). A CRS-preserving format keeps a
+    // reprojection's target CRS and comes back as a downloadable file.
+    const vectorOut = runLocal
+      ? (selectedTool.params ?? []).find(
+          (item) => parameterKind(item) === "vector_out",
+        )
+      : undefined;
+    const vectorOutValue = vectorOut ? values[vectorOut.name] : undefined;
+    // Validate against the known formats: a stale sidecar-mode output path left
+    // in the form state (the form only resets on tool change) would otherwise be
+    // cast to a bogus format and produce a `..._output.undefined` filename.
+    const vectorOutputFormat = normalizeVectorOutputFormat(vectorOutValue);
+
     try {
       const request = {
         tool_id: selectedTool.id,
@@ -911,6 +1080,7 @@ export function ProcessingDialog({
         layer_inputs: layerInputs,
         include_pro: false,
         tier: "open",
+        vector_output_format: vectorOutputFormat,
       };
       // The local WASM runner executes synchronously on the main thread, so yield
       // twice to the browser first: this lets React commit and paint the Run
@@ -920,9 +1090,18 @@ export function ProcessingDialog({
           requestAnimationFrame(() => requestAnimationFrame(resolve)),
         );
       }
-      setJob(
-        await (runLocal ? runWhiteboxToolWasm(request) : runWhiteboxTool(request)),
-      );
+      const nextJob = await (runLocal
+        ? runWhiteboxToolWasm(request)
+        : runWhiteboxTool(request));
+      // Record this run's parameters against its job id so output-download naming
+      // can later recover the output path the user typed (the job omits it). Only
+      // the WASM runner returns inline binary outputs that need this; the sidecar
+      // returns fetchable paths. `succeeded` is terminal for WASM, so a failed run
+      // adds nothing to clean up.
+      if (runLocal && nextJob.status === "succeeded") {
+        runParametersByJobRef.current.set(nextJob.id, parameters);
+      }
+      setJob(nextJob);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not start Whitebox tool.",
@@ -994,7 +1173,7 @@ export function ProcessingDialog({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   className="pl-9"
-                  placeholder="Search tools"
+                  placeholder={t("processing.searchTools")}
                 />
               </div>
               <Button
@@ -1003,7 +1182,7 @@ export function ProcessingDialog({
                 size="icon"
                 onClick={loadWhitebox}
                 disabled={serverBusy}
-                title="Refresh catalog"
+                title={t("processing.refreshCatalog")}
               >
                 <RefreshCw
                   className={cn("h-4 w-4", loadingTools && "animate-spin")}
@@ -1144,7 +1323,7 @@ export function ProcessingDialog({
                     type="checkbox"
                     data-testid="whitebox-run-local"
                     checked={runLocal}
-                    onChange={(e) => setRunLocal(e.target.checked)}
+                    onChange={(e) => handleRunLocalChange(e.target.checked)}
                   />
                   {t("processing.whitebox.runLocal")}
                 </label>
@@ -1194,10 +1373,16 @@ export function ProcessingDialog({
                       param={param}
                       layers={layers}
                       toolId={selectedTool.id}
+                      runLocal={runLocal}
                       value={values[param.name]}
                       onChange={(value) => updateValue(param.name, value)}
                       onPickFile={(fileName, bytes) =>
                         handlePickInputFile(param.name, fileName, bytes)
+                      }
+                      onUseMapExtent={
+                        isMapExtentParameter(selectedTool, param)
+                          ? handleUseMapExtent
+                          : undefined
                       }
                     />
                   ))
@@ -1284,7 +1469,11 @@ interface ParameterFieldProps {
   layers: GeoLibreLayer[];
   onChange: (value: unknown) => void;
   onPickFile?: (fileName: string, bytes: Uint8Array) => void;
+  /** When set, renders a "Use map extent" button that fills this bbox field
+   * (and its companion CRS) from the current map view. */
+  onUseMapExtent?: () => void;
   toolId: string;
+  runLocal: boolean;
   value: unknown;
 }
 
@@ -1293,9 +1482,12 @@ function ParameterField({
   layers,
   onChange,
   onPickFile,
+  onUseMapExtent,
   toolId,
+  runLocal,
   value,
 }: ParameterFieldProps) {
+  const { t } = useTranslation();
   const kind = parameterKind(param);
   const availableLayers = layers.filter((layer) =>
     canUseLayerForParameter(layer, param),
@@ -1336,6 +1528,32 @@ function ParameterField({
             </option>
           ))}
         </Select>
+      ) : onUseMapExtent ? (
+        // Checked before the path/data-input branches: once isMapExtentParameter
+        // has identified this bbox field, the "Use map extent" affordance should
+        // always win, even if the param's description happens to contain a word
+        // (path/file/…) that isPathParameter's heuristic would otherwise match.
+        <div className="grid gap-1.5">
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            placeholder={t("processing.whitebox.mapExtentPlaceholder")}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              onChange(event.target.value)
+            }
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="justify-self-start"
+            onClick={onUseMapExtent}
+          >
+            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("processing.whitebox.useMapExtent")}
+          </Button>
+        </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
           id={`whitebox-${param.name}`}
@@ -1345,6 +1563,36 @@ function ParameterField({
           onChange={onChange}
           onPickFile={onPickFile}
         />
+      ) : kind === "vector_out" && runLocal ? (
+        // In WASM mode a vector output is either a WGS84 map layer (GeoJSON) or a
+        // downloaded file in a CRS-preserving format that keeps a reprojection's
+        // target CRS (which the map, being EPSG:4326, cannot show). Normalize the
+        // value so a stale sidecar-mode output path doesn't leak into the Select.
+        <div className="grid gap-1.5">
+          <Select
+            id={`whitebox-${param.name}`}
+            value={normalizeVectorOutputFormat(valueText)}
+            onChange={(event) => onChange(event.target.value)}
+          >
+            <option value="geojson">
+              {t("processing.whitebox.output.geojson")}
+            </option>
+            <option value="geoparquet">
+              {t("processing.whitebox.output.geoparquet")}
+            </option>
+            <option value="flatgeobuf">
+              {t("processing.whitebox.output.flatgeobuf")}
+            </option>
+            <option value="shapefile">
+              {t("processing.whitebox.output.shapefile")}
+            </option>
+          </Select>
+          {normalizeVectorOutputFormat(valueText) !== "geojson" && (
+            <p className="text-xs text-muted-foreground">
+              {t("processing.whitebox.output.projectedHint")}
+            </p>
+          )}
+        </div>
       ) : isPathParameter(param) ? (
         <PathPickerInput
           id={`whitebox-${param.name}`}
@@ -1393,6 +1641,7 @@ function NumberStepperInput({
   onChange,
   value,
 }: NumberStepperInputProps) {
+  const { t } = useTranslation();
   const step = integer ? 1 : 0.1;
   const updateByStep = (direction: 1 | -1) => {
     const parsed = Number.parseFloat(value);
@@ -1413,7 +1662,7 @@ function NumberStepperInput({
       <div className="grid h-9 border-l">
         <button
           type="button"
-          aria-label="Increase value"
+          aria-label={t("processing.increaseValue")}
           className="flex h-[18px] items-center justify-center text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => updateByStep(1)}
         >
@@ -1421,7 +1670,7 @@ function NumberStepperInput({
         </button>
         <button
           type="button"
-          aria-label="Decrease value"
+          aria-label={t("processing.decreaseValue")}
           className="flex h-[18px] items-center justify-center border-t text-muted-foreground hover:bg-accent hover:text-foreground"
           onClick={() => updateByStep(-1)}
         >

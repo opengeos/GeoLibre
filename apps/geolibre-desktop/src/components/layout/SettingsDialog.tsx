@@ -1,5 +1,6 @@
 import {
   DEFAULT_PROJECT_PREFERENCES,
+  ELLIPSOIDS,
   GEOCODING_PROVIDERS,
   getGeocodingProvider,
   normalizeGeocodingProviderId,
@@ -9,6 +10,11 @@ import {
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
+import {
+  closeRightPanel,
+  collapseRightPanel,
+  openRightPanel,
+} from "@geolibre/plugins";
 import {
   Button,
   Dialog,
@@ -44,6 +50,7 @@ import {
   Eye,
   EyeOff,
   FolderCog,
+  FolderTree,
   Languages,
   Locate,
   MapPinned,
@@ -57,6 +64,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sun,
+  Terminal,
   Type,
   Trash2,
   TriangleAlert,
@@ -78,10 +86,16 @@ import {
   type UpdateSettings,
 } from "../../hooks/useDesktopSettings";
 import { useLanguage } from "../../hooks/useLanguage";
+import { BROWSER_PANEL_ID } from "../../hooks/useRegisterBrowserPanel";
+import { useRightPanelState } from "../../hooks/useRightPanels";
 import type { ThemeMode } from "../../hooks/useThemeMode";
 import { isTauri } from "../../lib/is-tauri";
-import { THEME_SCHEMES, type ThemeScheme } from "../../lib/theme-schemes";
-import type { UpdateNotificationLevel } from "../../lib/updates";
+import {
+  THEME_SCHEMES,
+  normalizeHexColor,
+  type ThemeScheme,
+} from "../../lib/theme-schemes";
+import { IS_STORE_BUILD, type UpdateNotificationLevel } from "../../lib/updates";
 import {
   DATA_SOURCE_CATALOG,
   DATA_SOURCE_SECTION_LABEL_KEYS,
@@ -99,8 +113,11 @@ import {
   ASSISTANT_PROVIDER_IDS,
   PROVIDER_LABELS,
   availableProviders,
+  scopeOsEnvToProject,
   type AssistantProviderId,
+  type RuntimeEnv,
 } from "../../lib/assistant/provider";
+import { loadOsEnvVars, readOsEnv } from "../../lib/assistant/os-env";
 import {
   PROVIDER_DOCS_URL,
   PROVIDER_FIELDS,
@@ -219,6 +236,7 @@ interface DraftPreferences {
 interface DraftDesktopSettings {
   layout: DesktopLayoutSettings;
   shareToken: string;
+  cesiumIonToken: string;
   uiProfile: UiProfileSettings;
   updates: UpdateSettings;
 }
@@ -247,6 +265,7 @@ function cloneDesktopSettings(settings: DesktopSettings): DraftDesktopSettings {
   return {
     layout: { ...settings.layout },
     shareToken: settings.shareToken,
+    cesiumIonToken: settings.cesiumIonToken,
     uiProfile: {
       ...settings.uiProfile,
       hiddenDataSources: [...settings.uiProfile.hiddenDataSources],
@@ -379,6 +398,21 @@ export function SettingsDialog({
     isMenuItemVisible(desktopSettings.uiProfile, id);
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSection>("map");
+  // The Browser is a dockable right panel (open/close via the registry), not a
+  // persisted layout preference, so its Layout toggle acts on the live registry
+  // state directly rather than through the draft settings.
+  const browserPanelOpen = useRightPanelState().activeId === BROWSER_PANEL_ID;
+  // Show it collapsed on the shared Layers rail, matching its default state, so
+  // re-enabling from Settings doesn't jump to an expanded panel that buries the
+  // Layers panel.
+  const toggleBrowserPanel = (show: boolean) => {
+    if (show) {
+      openRightPanel(BROWSER_PANEL_ID);
+      collapseRightPanel(BROWSER_PANEL_ID);
+    } else {
+      closeRightPanel(BROWSER_PANEL_ID);
+    }
+  };
   // A field a deep-link asked us to focus once its section renders; cleared
   // after the focus lands so a later open without a focus request stays put.
   const [pendingFocus, setPendingFocus] = useState<SettingsFocusTarget | null>(
@@ -406,6 +440,9 @@ export function SettingsDialog({
     // Automated update checks run in the desktop build only, so the section is
     // hidden on the web where its controls would be inert.
     if (id === "updates" && !isTauri()) return false;
+    // The Microsoft Store build has no in-app update flow to configure (policy
+    // 10.2.5), so its settings section is dropped entirely.
+    if (id === "updates" && IS_STORE_BUILD) return false;
     const gate = SECTION_GATE[id];
     return gate ? showSettingsItem(gate) : true;
   };
@@ -452,9 +489,39 @@ export function SettingsDialog({
     }
     return env;
   }, [draftPreferences.environmentVariables]);
+  // AI keys read from the user's OS environment (desktop only). This dialog is
+  // mounted eagerly at startup — before the App-root loader populates the cache
+  // and before the async Tauri read resolves — so a mount-only read would freeze
+  // at `{}`. Load it here through state (mirroring useRuntimeEnvironmentVariables)
+  // so provider status and the badges below reflect env-sourced credentials.
+  const [osEnv, setOsEnv] = useState<RuntimeEnv>(() => readOsEnv());
+  useEffect(() => {
+    let cancelled = false;
+    loadOsEnvVars().then((env) => {
+      if (!cancelled) setOsEnv(env);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  // Scope OS values against the draft exactly as the runtime merge does
+  // (useRuntimeEnvironmentVariables), so this dialog's notion of "configured"
+  // and the field badges match what the assistant will actually resolve — a
+  // plain spread would disagree in the alias-collision case (e.g. an empty
+  // project GOOGLE_API_KEY row shadows the whole Google OS alias group).
+  const scopedOsEnv = useMemo(
+    () => scopeOsEnvToProject(osEnv, new Set(Object.keys(draftEnv))),
+    [osEnv, draftEnv],
+  );
+  // Merge OS env under the draft so a provider configured purely via a system
+  // environment variable still reports "ready" — draft values win the overlap.
+  const effectiveEnv = useMemo(
+    () => ({ ...scopedOsEnv, ...draftEnv }),
+    [scopedOsEnv, draftEnv],
+  );
   const configuredProviders = useMemo(
-    () => new Set(availableProviders(draftEnv)),
-    [draftEnv],
+    () => new Set(availableProviders(effectiveEnv)),
+    [effectiveEnv],
   );
 
   // Seed the draft from the store only when the dialog opens. Depending on
@@ -469,6 +536,12 @@ export function SettingsDialog({
       // focus RAF fires, a leftover target would otherwise fire on a later
       // open that never asked for it.
       setPendingFocus(null);
+      // Discard any uncommitted hex text so a half-typed/invalid value never
+      // resurfaces on the next open (the swatch already shows the saved color),
+      // and clear the Escape skip flag so a leftover true can't swallow the
+      // first edit of the next session.
+      skipCustomColorCommitRef.current = false;
+      setCustomColorDraft(null);
       return;
     }
     const seededPreferences = clonePreferences(
@@ -480,11 +553,15 @@ export function SettingsDialog({
     );
     // Land the AI section on a provider the user already configured, so editing
     // existing credentials needs no extra click.
-    const seededEnv: Record<string, string> = {};
+    const seededProjectEnv: Record<string, string> = {};
     for (const variable of seededPreferences.environmentVariables) {
       const key = variable.key.trim();
-      if (variable.enabled && key) seededEnv[key] = variable.value;
+      if (variable.enabled && key) seededProjectEnv[key] = variable.value;
     }
+    const seededEnv = {
+      ...scopeOsEnvToProject(readOsEnv(), new Set(Object.keys(seededProjectEnv))),
+      ...seededProjectEnv,
+    };
     setAiProvider(availableProviders(seededEnv)[0] ?? "google");
     setRevealedValueIds(new Set());
     setError(null);
@@ -618,6 +695,16 @@ export function SettingsDialog({
       if (row) return row.value;
     }
     return "";
+  };
+
+  // The OS-environment variable name backing a field, when the system provides
+  // a value the project doesn't. Drives the "read from your environment" badge
+  // so a user sees a key is already covered without typing (or saving) it here.
+  const osFieldEnvName = (field: ProviderField): string | null => {
+    for (const key of fieldEnvKeys(field)) {
+      if (scopedOsEnv[key]?.trim()) return key;
+    }
+    return null;
   };
 
   // Write an AI provider field through to its backing env var. Edits the enabled
@@ -797,6 +884,28 @@ export function SettingsDialog({
     });
   };
 
+  // In-progress text for the inline hex field next to the swatch. While the user
+  // is typing or pasting a code it holds the raw string; `null` means the field
+  // mirrors the saved color. On commit a valid 3- or 6-digit hex applies and an
+  // invalid one is discarded, so the field reverts to the last valid color (#911).
+  const [customColorDraft, setCustomColorDraft] = useState<string | null>(null);
+  // Set just before the Escape-triggered blur so the imminent blur discards the
+  // draft instead of committing it: the dialog still closes (its own Escape
+  // handler), but the typed value is cancelled rather than applied on the way out.
+  const skipCustomColorCommitRef = useRef(false);
+
+  const commitCustomColorDraft = () => {
+    if (skipCustomColorCommitRef.current) {
+      skipCustomColorCommitRef.current = false;
+      setCustomColorDraft(null);
+      return;
+    }
+    if (customColorDraft === null) return;
+    const normalized = normalizeHexColor(customColorDraft);
+    if (normalized) updateSavedThemeCustomColor(normalized);
+    setCustomColorDraft(null);
+  };
+
   const updateDraftUpdateSettings = (patch: Partial<UpdateSettings>) => {
     setDraftDesktopSettings((current) => ({
       ...current,
@@ -839,6 +948,12 @@ export function SettingsDialog({
     // then closing the dialog without saving discards the change (a secret
     // field should not persist on every keystroke).
     setDraftDesktopSettings((current) => ({ ...current, shareToken: value }));
+  };
+
+  const updateCesiumIonToken = (value: string) => {
+    // Draft-only until Save, like the share token above (a secret field should
+    // not persist on every keystroke).
+    setDraftDesktopSettings((current) => ({ ...current, cesiumIonToken: value }));
   };
 
   const updateUiProfile = (patch: Partial<UiProfileSettings>) => {
@@ -993,6 +1108,7 @@ export function SettingsDialog({
       ...useDesktopSettingsStore.getState().desktopSettings,
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
+      cesiumIonToken: draftDesktopSettings.cesiumIonToken,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
     });
@@ -1122,6 +1238,15 @@ export function SettingsDialog({
                 onSelect={(event: Event) => event.preventDefault()}
               >
                 {t("settings.layout.showStylePanel")}
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={browserPanelOpen}
+                onCheckedChange={(checked: boolean) =>
+                  toggleBrowserPanel(checked === true)
+                }
+                onSelect={(event: Event) => event.preventDefault()}
+              >
+                {t("settings.layout.showBrowserPanel")}
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -1280,7 +1405,10 @@ export function SettingsDialog({
               {t("settings.menu.environmentVariables")}
             </DropdownMenuItem>
           )}
-          {isTauri() && (
+          {/* Share the same gate as the in-dialog nav/pane so the Store build
+              (and the web build) hide this shortcut too — otherwise it would
+              open the dialog on a fallback section. */}
+          {isSectionVisible("updates") && (
             <DropdownMenuItem
               onSelect={() => {
                 setSection("updates");
@@ -1471,6 +1599,29 @@ export function SettingsDialog({
                     />
                     {t("settings.map.renderWorldCopies")}
                   </label>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-ellipsoid">
+                      {t("settings.map.ellipsoid")}
+                    </Label>
+                    <Select
+                      id="settings-ellipsoid"
+                      value={draftPreferences.map.ellipsoidId}
+                      onChange={(event) =>
+                        updateMapPreferences({
+                          ellipsoidId: event.target.value,
+                        })
+                      }
+                    >
+                      {ELLIPSOIDS.map((ellipsoid) => (
+                        <option key={ellipsoid.id} value={ellipsoid.id}>
+                          {ellipsoid.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.map.ellipsoidHint")}
+                    </p>
+                  </div>
                 </div>
               ) : null}
               {effectiveSection === "layout" ? (
@@ -1558,6 +1709,18 @@ export function SettingsDialog({
                       />
                       <PanelRight className="h-4 w-4 text-muted-foreground" />
                       <span>{t("settings.layout.showStylePanel")}</span>
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                      <input
+                        className="h-4 w-4"
+                        type="checkbox"
+                        checked={browserPanelOpen}
+                        onChange={(event) =>
+                          toggleBrowserPanel(event.target.checked)
+                        }
+                      />
+                      <FolderTree className="h-4 w-4 text-muted-foreground" />
+                      <span>{t("settings.layout.showBrowserPanel")}</span>
                     </label>
                   </div>
                   {showsAdvancedNotices(desktopSettings.uiProfile) ? (
@@ -1685,9 +1848,61 @@ export function SettingsDialog({
                           aria-label={t("settings.appearance.customColor")}
                         />
                         <span>{t("settings.appearance.customColor")}</span>
-                        <code className="ml-auto text-xs uppercase text-muted-foreground">
-                          {desktopSettings.theme.customColor}
-                        </code>
+                        {/* Inline hex entry so power users can type or paste an
+                            exact code instead of only dragging the native picker.
+                            The text input is interactive content, so a click lands
+                            here and focuses it rather than reopening the picker the
+                            wrapping label drives (#911). */}
+                        <input
+                          type="text"
+                          spellCheck={false}
+                          autoComplete="off"
+                          className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
+                          value={
+                            customColorDraft ??
+                            desktopSettings.theme.customColor
+                          }
+                          // The field already holds a full `#rrggbb`, so select
+                          // all on focus to let the user type a replacement.
+                          onFocus={(event) => event.target.select()}
+                          // Drop whitespace and cap to the longest valid form
+                          // (`#rrggbb`) as the draft is stored, so a padded or
+                          // oversized paste is sanitized in place instead of
+                          // sitting clobbered; this also bounds a runaway paste
+                          // without a brittle maxLength that has to guess how
+                          // much surrounding whitespace to allow.
+                          onChange={(event) =>
+                            setCustomColorDraft(
+                              event.target.value.replace(/\s/g, "").slice(0, 7),
+                            )
+                          }
+                          onBlur={commitCustomColorDraft}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              // Blur is the single commit path; the resulting
+                              // onBlur applies/reverts the draft, so don't also
+                              // commit here and double-write the same value.
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            } else if (event.key === "Escape") {
+                              // Cancel the edit: flag the commit to skip, then
+                              // blur so the value is dropped, not applied. The
+                              // dialog's own Escape handling still closes it.
+                              skipCustomColorCommitRef.current = true;
+                              event.currentTarget.blur();
+                            }
+                          }}
+                          aria-label={t("settings.appearance.customColorHex")}
+                          // `|| undefined` omits the attribute entirely when
+                          // valid; a literal aria-invalid="false" makes some
+                          // screen readers announce "invalid: false" on focus.
+                          aria-invalid={
+                            (customColorDraft !== null &&
+                              customColorDraft.trim() !== "" &&
+                              normalizeHexColor(customColorDraft) === null) ||
+                            undefined
+                          }
+                        />
                       </label>
                     ) : null}
                   </div>
@@ -2118,9 +2333,20 @@ export function SettingsDialog({
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
                     <span>{t("settings.env.secretsWarning")}</span>
                   </div>
+                  {PROVIDER_FIELDS[aiProvider].some(
+                    (field) => osFieldEnvName(field) !== null,
+                  ) ? (
+                    <div className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 p-3 text-xs text-sky-700 dark:text-sky-300">
+                      <Terminal className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{t("settings.ai.osEnvNote")}</span>
+                    </div>
+                  ) : null}
                   <div className="space-y-4">
                     {PROVIDER_FIELDS[aiProvider].map((field) => {
                       const revealed = revealedValueIds.has(field.envKey);
+                      const osEnvName = osFieldEnvName(field);
+                      const fromOsEnv =
+                        getProviderField(field) === "" && osEnvName !== null;
                       return (
                         <div key={field.envKey} className="space-y-1.5">
                           <div className="flex items-center justify-between gap-2">
@@ -2151,7 +2377,11 @@ export function SettingsDialog({
                               onChange={(event) =>
                                 setProviderField(field, event.target.value)
                               }
-                              placeholder={t(field.placeholderKey)}
+                              placeholder={
+                                fromOsEnv
+                                  ? t("settings.ai.osEnvPlaceholder")
+                                  : t(field.placeholderKey)
+                              }
                             />
                             {field.secret ? (
                               <Button
@@ -2179,6 +2409,16 @@ export function SettingsDialog({
                               </Button>
                             ) : null}
                           </div>
+                          {fromOsEnv ? (
+                            <p className="flex items-center gap-1.5 text-[11px] text-sky-700 dark:text-sky-300">
+                              <Terminal className="h-3 w-3 shrink-0" />
+                              <span>
+                                {t("settings.ai.osEnvField", {
+                                  name: osEnvName,
+                                })}
+                              </span>
+                            </p>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -2230,6 +2470,39 @@ export function SettingsDialog({
                     />
                     <p className="text-xs text-muted-foreground">
                       {t("settings.env.tokenStorageNote")}
+                    </p>
+                  </div>
+                  <div className="space-y-2 border-t pt-5">
+                    <h3 className="text-sm font-semibold">
+                      {t("settings.env.cesiumTokenTitle")}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      <Trans
+                        i18nKey="settings.env.cesiumTokenDescription"
+                        components={{
+                          tokenLink: (
+                            <a
+                              className="underline"
+                              href="https://ion.cesium.com/tokens"
+                              target="_blank"
+                              rel="noreferrer noopener"
+                            />
+                          ),
+                        }}
+                      />
+                    </p>
+                    <Input
+                      aria-label={t("settings.env.cesiumTokenTitle")}
+                      type="password"
+                      autoComplete="new-password"
+                      placeholder={t("settings.env.cesiumTokenPlaceholder")}
+                      value={draftDesktopSettings.cesiumIonToken}
+                      onChange={(event) =>
+                        updateCesiumIonToken(event.target.value)
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.env.cesiumTokenStorageNote")}
                     </p>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t pt-5">

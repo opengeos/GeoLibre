@@ -9,9 +9,7 @@ import {
 } from "@geolibre/map";
 import type { GeoLibreMapControlPosition } from "@geolibre/plugins";
 import type { ParseKeys } from "i18next";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { createAppAPI } from "../../../hooks/usePlugins";
-import { isTauri } from "../../../lib/tauri-io";
 import type { AddDataKind } from "../AddDataDialog";
 
 /** The live app API surface plugins and panels are driven through. */
@@ -88,6 +86,8 @@ export const PLUGIN_POSITION_ITEMS: Array<{
 ];
 
 export const FEEDBACK_URL = "https://github.com/opengeos/GeoLibre/issues";
+export const WEBSITE_URL = "https://geolibre.app";
+export const GITHUB_URL = "https://github.com/opengeos/GeoLibre";
 // A small (~350 KB) CORS-enabled Las Vegas Strip sample, so the URL field works
 // out of the box on both the desktop and web builds.
 export const DEFAULT_OSM_PBF_URL =
@@ -102,6 +102,7 @@ export const ADD_DATA_KIND_COMMANDS: Array<{
   titleKey: ParseKeys;
 }> = [
   { kind: "delimited-text", titleKey: "toolbar.layerType.delimitedText" },
+  { kind: "cad", titleKey: "toolbar.item.cadLayer" },
   { kind: "gpx", titleKey: "toolbar.layerType.gpx" },
   { kind: "mbtiles", titleKey: "toolbar.layerType.mbtiles" },
   { kind: "xyz", titleKey: "toolbar.layerType.xyz" },
@@ -192,14 +193,9 @@ export const RASTER_TOOL_COMMANDS: Array<{
   { kind: "focal", titleKey: "toolbar.rasterTool.focal" },
 ];
 
-/** Open an external link in the OS browser (Tauri) or a new tab (web). */
-export async function openExternalLink(url: string): Promise<void> {
-  if (isTauri()) {
-    await openUrl(url);
-    return;
-  }
-  window.open(url, "_blank", "noopener,noreferrer");
-}
+// Re-exported so existing toolbar imports keep working; the shared helper
+// guards the URL scheme and logs opener failures instead of rejecting.
+export { openExternalLink } from "../../../lib/open-external";
 
 /** Format a recent-project timestamp for display, or "" if unparseable. */
 export function formatRecentProjectTime(openedAt: string): string {

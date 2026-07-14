@@ -1,6 +1,6 @@
 # Getting Started
 
-[![live demo](https://img.shields.io/badge/Live-demo-green.svg)](https://viewer.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
+[![Launch GeoLibre Web](https://img.shields.io/badge/Launch-GeoLibre%20Web-green.svg)](https://web.geolibre.app/?url=https://share.geolibre.app/giswqs/3d-tiles.geolibre.json)
 [![GeoLibre shared project](https://img.shields.io/badge/GeoLibre-share-green.svg)](https://share.geolibre.app)
 [![GeoLibre plugins](https://img.shields.io/badge/GeoLibre-plugins-green.svg)](https://plugins.geolibre.app)
 [![image](https://img.shields.io/pypi/v/geolibre.svg)](https://pypi.python.org/pypi/geolibre)
@@ -15,20 +15,64 @@
 [![image](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20785400.svg)](https://doi.org/10.5281/zenodo.20785400)
 
-GeoLibre is a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do, in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private. It is an npm workspaces monorepo: the main app lives in `apps/geolibre-desktop` and is built with Tauri, React, TypeScript, and MapLibre GL JS.
+GeoLibre is a free and open-source, lightweight, cloud-native GIS platform for visualizing, exploring, and analyzing geospatial data. It runs everywhere you do, in the web browser, on the desktop, on mobile, and inside Jupyter notebooks, all while keeping your data local and private.
+
+This page helps you start using GeoLibre. If you want to contribute to GeoLibre or run it from source, jump to [Run from source](#run-from-source) below or read the [Contributing](contributing.md) guide.
+
+## Use GeoLibre
+
+Pick whichever fits how you work. The same app ships in every form, so projects and `.geolibre.json` files move between them.
+
+### On the web
+
+GeoLibre Web is the full app running in your browser, with nothing to install. It keeps your data local and private, processing everything client-side in your browser session.
+
+[Launch GeoLibre Web](https://web.geolibre.app/){ .md-button .md-button--primary }
+
+You can load browser-selected vector data supported by DuckDB-WASM Spatial, drag GeoTIFF/COG rasters onto the map, add URL-based services and datasets (XYZ, WMS, GeoJSON, vector tiles, COG, ArcGIS, FlatGeobuf, PMTiles, Zarr, LiDAR, and Gaussian splats), style layers, and test plugins. Desktop-only file dialogs, local MBTiles, local raster file reads, and project save/open need the desktop app.
+
+### On the desktop
+
+The desktop app adds local filesystem dialogs, local MBTiles, local raster file reads, and project save/open. Installers are available for Windows, macOS, and Linux, including the Microsoft Store, Homebrew, winget, the AUR, COPR, and Flatpak.
+
+[Download the desktop app](downloads.md){ .md-button .md-button--primary }
+
+### In Jupyter
+
+The [`geolibre`](python.md) Python package embeds the full GeoLibre app in a Jupyter notebook and drives the map through an expanded leafmap-style API that syncs both ways, so UI edits read back from Python.
+
+```bash
+pip install geolibre
+```
+
+Or install it from conda-forge:
+
+```bash
+conda install -c conda-forge geolibre
+```
+
+See the [Python Package](python.md) reference to get started.
+
+### On Android
+
+GeoLibre ships as a native Android app built from the same codebase, with a responsive touch layout for phones. See [Android](android.md) for install details.
 
 ## Video tutorials
 
 - [GeoLibre 1.0: A Free, Open-Source Cloud-Native GIS That Runs Anywhere (Browser, Desktop & Jupyter)](https://youtu.be/87Cm0QagtxI)
 - [Geoprocessing in the Browser: 700+ Free GIS Tools in GeoLibre, Zero Install](https://youtu.be/W32bIQO_nG8)
 
-## Prerequisites
+## Run from source
+
+This section is for contributors and developers who want to clone GeoLibre and run it locally. Most users do not need it. For the full development workflow, project layout, and quality gate, see the [Contributing](contributing.md) guide. GeoLibre is an npm workspaces monorepo: the main app lives in `apps/geolibre-desktop` and is built with Tauri, React, TypeScript, and MapLibre GL JS.
+
+### Prerequisites
 
 - Node.js 22 or newer
 - Rust toolchain for desktop builds
 - Linux desktop build dependencies from the Tauri v2 prerequisites
 
-## Install
+### Install
 
 ```bash
 git clone https://github.com/opengeos/GeoLibre.git
@@ -38,7 +82,7 @@ npm install
 
 Bun users can run `bun install`. The root `trustedDependencies` list allows the known install scripts for `core-js`, `@google/genai`, and `protobufjs`.
 
-## Update
+### Update
 
 To update an existing source checkout to the latest version, pull the changes, reinstall dependencies (in case `package.json` changed), and rebuild:
 
@@ -50,7 +94,7 @@ npm install            # or: bun install
 
 If you run a production build, rebuild afterwards with `npm run build` (web) or `npm run tauri:build` (desktop). If you work from the dev servers (`npm run dev` or `npm run tauri:dev`), the `git pull` and `npm install` above are enough — just restart the dev server to pick up the changes.
 
-## Run the browser UI
+### Run the browser UI
 
 ```bash
 npm run dev
@@ -60,7 +104,7 @@ Open `http://localhost:5173`. The map and browser vector import support local ve
 
 Desktop filesystem dialogs, local MBTiles, local raster file reads, project save/open, and other filesystem operations require Tauri.
 
-## Run with Docker
+### Run with Docker
 
 The repository includes a Dockerfile for the browser version of GeoLibre. It builds the Vite app and serves the production files with nginx:
 
@@ -78,6 +122,18 @@ docker pull ghcr.io/opengeos/geolibre:latest
 docker run --rm -p 8080:80 ghcr.io/opengeos/geolibre:latest
 ```
 
+To require a username and password, set `GEOLIBRE_AUTH_USER` and
+`GEOLIBRE_AUTH_PASSWORD`; nginx then protects the app and the `/sidecar` API
+with HTTP Basic Auth (a single shared credential). Pair it with a
+TLS-terminating reverse proxy outside trusted networks:
+
+```bash
+docker run --rm -p 8080:80 \
+  -e GEOLIBRE_AUTH_USER=admin \
+  -e GEOLIBRE_AUTH_PASSWORD='change-me' \
+  ghcr.io/opengeos/geolibre:latest
+```
+
 For deployments under a URL subpath, pass the app base at build time:
 
 ```bash
@@ -86,17 +142,25 @@ docker build --build-arg GEOLIBRE_APP_BASE=/geolibre/ -t geolibre .
 
 The container always serves the app from its root path. The build argument only sets the URL prefix that the app expects, so subpath deployments also require a reverse proxy in front of the container that strips the prefix before forwarding requests (for example, nginx `proxy_pass http://geolibre/;` with a trailing slash).
 
-## Run the desktop app
+### Run the desktop app
 
 ```bash
 npm run tauri:dev
 ```
 
-## Build
+### Build
 
 ```bash
 npm run build
 npm run tauri:build
+```
+
+The default desktop build keeps the Linux binary small and uses DuckDB-WASM for
+DuckDB-backed browser features. To build a larger desktop binary with the native
+`duckdb-rs` vector loader enabled, run:
+
+```bash
+npm run tauri:build:native-duckdb
 ```
 
 Where to find the output:
@@ -106,14 +170,14 @@ Where to find the output:
 
 ## Optional imagery credentials
 
-The Street View plugin can use Google Street View and Mapillary imagery. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
+The Street View plugin can use Google Street View and Mapillary imagery. The 3D Tiles panel can also load Google Photorealistic 3D Tiles with the same Google Maps key. Create `apps/geolibre-desktop/.env.local` and set one or both provider credentials:
 
 ```env
 VITE_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 VITE_MAPILLARY_ACCESS_TOKEN=your_mapillary_access_token
 ```
 
-For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
+For Google Street View, enable the Maps Embed API for the key in Google Cloud. For Google Photorealistic 3D Tiles, enable the Map Tiles API. For local shell testing, `GOOGLE_MAPS_API_KEY` is also accepted by the desktop Vite build. For Mapillary, create an app in the Mapillary developer dashboard and use its client access token.
 
 Restart `npm run dev` or `npm run tauri:dev` after changing environment variables.
 
@@ -143,7 +207,7 @@ VITE_TOMTOM_API_KEY=your_tomtom_api_key             # TomTom Traffic Flow
 VITE_HERE_API_KEY=your_here_api_key                 # HERE Traffic Flow
 ```
 
-Google Traffic reuses the same `VITE_GOOGLE_MAPS_API_KEY` as Street View; enable the **Map Tiles API** for that key in Google Cloud. A newly entered key takes effect immediately, without reopening the project. Until a provider's key is set, its overlay reports a missing-key error instead of loading tiles.
+Google Traffic and Google Photorealistic 3D Tiles reuse the same `VITE_GOOGLE_MAPS_API_KEY` as Street View; enable the **Map Tiles API** for that key in Google Cloud. A newly entered key takes effect immediately, without reopening the project. Until a provider's key is set, its overlay reports a missing-key error instead of loading tiles.
 
 ## Optional Amazon Location styles
 

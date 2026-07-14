@@ -32,12 +32,15 @@ import {
   useSyncExternalStore,
   type RefObject,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
 import {
+  getExternalPluginLoadIssues,
   getPluginManager,
   installPluginArchive,
   installPluginArchiveFromFile,
   listPluginArchivesFromFile,
+  subscribeToExternalPluginLoads,
   uninstallPluginArchiveFromFile,
   upgradeExternalPlugin,
 } from "../../hooks/usePlugins";
@@ -91,6 +94,7 @@ export function ManagePluginsDialog({
   onOpenChange,
   mapControllerRef,
 }: ManagePluginsDialogProps) {
+  const { t } = useTranslation();
   const desktopSettings = useDesktopSettingsStore((s) => s.desktopSettings);
   const setDesktopSettings = useDesktopSettingsStore(
     (s) => s.setDesktopSettings,
@@ -190,6 +194,11 @@ export function ManagePluginsDialog({
     }
     return versions;
   }, [managerVersion]);
+  const externalLoadIssues = useSyncExternalStore(
+    subscribeToExternalPluginLoads,
+    getExternalPluginLoadIssues,
+    getExternalPluginLoadIssues,
+  );
 
   const installedSet = useMemo(
     () => new Set(desktopSettings.pluginManifestUrls.map((url) => url.trim())),
@@ -584,6 +593,7 @@ export function ManagePluginsDialog({
                     );
                     const updateAvailable = isUpgradeable(entry);
                     const loadPending = isLoadPending(entry);
+                    const loadIssue = externalLoadIssues.get(entry.manifestUrl);
                     return (
                       <div
                         key={entry.id}
@@ -646,6 +656,13 @@ export function ManagePluginsDialog({
                               {actionError.message}
                             </p>
                           ) : null}
+                          {installed && loadIssue ? (
+                            <p className="text-[11px] text-destructive">
+                              {t("managePlugins.failedToLoad", {
+                                message: loadIssue,
+                              })}
+                            </p>
+                          ) : null}
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
                           {!installed ? (
@@ -706,7 +723,12 @@ export function ManagePluginsDialog({
                                   Update
                                 </Button>
                               ) : null}
-                              {loadPending ? (
+                              {loadIssue ? (
+                                <span className="flex items-center gap-1 text-xs text-destructive">
+                                  <AlertTriangle className="h-3.5 w-3.5" />
+                                  {t("managePlugins.failed")}
+                                </span>
+                              ) : loadPending ? (
                                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                   Loading…

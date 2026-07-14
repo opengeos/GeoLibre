@@ -12,12 +12,19 @@
  * cannot decode (e.g. some TIFFs) is handled the same way: the point is placed,
  * the thumbnail is skipped.
  *
+ * A second, full-resolution image (the original bytes, un-re-encoded) rides
+ * along under {@link PHOTO_FULL_PROPERTY} for formats a browser can display so
+ * the enlarged/fullscreen viewer and a right-click "Save image" keep the native
+ * detail (and PNG/WebP transparency) rather than the downscaled, re-encoded
+ * thumbnail. It is omitted only for formats a browser can't show at native size
+ * (TIFF/HEIC), mislabeled bytes, or originals past the size ceiling.
+ *
  * The thumbnail and feature-shaping helpers live here (UI-free) so the Add Data
  * dialog and the map drag-and-drop handler share one implementation.
  */
 
 import type { Feature, FeatureCollection, Point } from "geojson";
-import { PHOTO_PROPERTY } from "./field-collection";
+import { PHOTO_FULL_PROPERTY, PHOTO_PROPERTY } from "./field-collection";
 
 /** Image extensions the photo importer recognizes. */
 export const PHOTO_IMAGE_EXTENSIONS = [
@@ -49,18 +56,111 @@ const PHOTO_DROP_EXTENSIONS = new Set([
 const HEIC_EXTENSIONS = new Set(["heic", "heif"]);
 
 /**
- * Longest edge (px) of the inline JPEG generated for each photo. The original
- * file is not retained after import, so this is the only resolution available
- * later: it is sized so the resizable photo popup stays sharp when enlarged
- * (the popup display caps near 900px, doubled here for high-DPI screens) while
- * keeping the inline data URL a few hundred KB rather than the multi-MB source.
- * Budget ~250-500 KB per photo at this size/quality; since the data URL is held
- * in the store and serialized into the project file, raising it further trades
- * sharpness for project size on photo-heavy imports.
+ * Longest edge (px) of the inline JPEG thumbnail generated for each photo. This
+ * thumbnail is what the map marker/popup shows; for JPEG/PNG/WebP sources larger
+ * than the cap the original is also retained (see {@link PHOTO_FULL_PROPERTY})
+ * for the enlarged view, but the thumbnail stays this small so the marker/popup
+ * render fast. It is sized so the resizable photo popup stays sharp when
+ * enlarged (the popup display caps near 900px, doubled here for high-DPI
+ * screens) while keeping the inline data URL a few hundred KB rather than the
+ * multi-MB source. Budget ~250-500 KB per photo at this size/quality; since the
+ * data URL is held in the store and serialized into the project file, raising it
+ * further trades sharpness for project size on photo-heavy imports.
  */
 const PHOTO_MAX_DIMENSION = 1600;
 /** JPEG quality for the generated photo image. */
 const PHOTO_JPEG_QUALITY = 0.82;
+
+/**
+ * Image MIME type, keyed by extension, for the formats a browser can render at
+ * native size directly from a data URL. Only these get a full-resolution image
+ * embedded alongside the thumbnail; TIFF/HEIC decode to a canvas thumbnail but
+ * cannot be shown natively in an `<img>`, so they fall back to the thumbnail.
+ */
+const FULL_RESOLUTION_IMAGE_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+/**
+ * Upper bound (bytes) on a single embedded full-resolution original. Normal
+ * high-resolution phone/DSLR photos (the reporter's are ~7 MB; 20-30 MB is
+ * typical for the largest) stay well under this and embed as intended; a
+ * pathologically large file (a giant panorama, an uncompressed original) falls
+ * back to thumbnail-only rather than adding hundreds of MB to the project from a
+ * single photo. This is a per-photo sanity ceiling, not a per-project one: many
+ * ordinary photos still grow the project roughly with their total size, which is
+ * the intended trade-off for native resolution.
+ */
+export const MAX_FULL_RESOLUTION_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Detect an image's MIME type from its leading magic bytes, so a mislabeled
+ * file (e.g. a `.png` that is actually JPEG data) still gets a data URL a
+ * browser can decode. Returns null when the signature is not one of the
+ * natively displayable formats (JPEG/PNG/WebP); the caller then skips embedding
+ * the original, since trusting the extension could yield an undecodable data URL.
+ */
+function sniffImageMime(bytes: Uint8Array): string | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return null;
+}
+
+/**
+ * Read a Blob as a base64 data URL. Prefers `FileReader.readAsDataURL`, which
+ * runs off the main thread and streams the base64 without the ~2x intermediate
+ * UTF-16 string {@link base64FromBytes} builds, so a near-cap (tens of MB) photo
+ * doesn't spike memory or freeze the UI. Falls back to `arrayBuffer()` + manual
+ * base64 under Node (tests), where `FileReader` is unavailable.
+ */
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  if (typeof FileReader === "function") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error ?? new Error("read failed"));
+      reader.readAsDataURL(blob);
+    });
+  }
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  return `data:${blob.type};base64,${base64FromBytes(bytes)}`;
+}
+
+/** Base64-encode raw bytes in chunks so large images don't overflow the call
+ * stack (`btoa(String.fromCharCode(...allBytes))` throws on multi-MB inputs).
+ * Exported for direct testing (the DOM decode path is unavailable under Node). */
+export function base64FromBytes(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
 
 function fileExtension(name: string): string {
   return name.split(".").pop()?.toLowerCase() ?? "";
@@ -161,15 +261,20 @@ function toIsoTimestamp(value: Date | string | undefined): string | undefined {
  * @param fileName - The source image's filename, stored as `name`.
  * @param exif - The parsed EXIF fields for the image.
  * @param thumbnail - A JPEG data URL thumbnail, or null when none was made.
+ * @param fullResolution - A data URL of the original, native-resolution image
+ *   for the enlarged/fullscreen viewer, or null when the thumbnail is already
+ *   native (or the format can't be shown at full size). Defaults to null.
  * @returns The GeoJSON feature properties for the photo point.
  */
 export function buildPhotoProperties(
   fileName: string,
   exif: PhotoExif,
   thumbnail: string | null,
+  fullResolution: string | null = null,
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = { name: fileName };
   if (thumbnail) properties[PHOTO_PROPERTY] = thumbnail;
+  if (fullResolution) properties[PHOTO_FULL_PROPERTY] = fullResolution;
 
   const timestamp = toIsoTimestamp(exif.DateTimeOriginal ?? exif.CreateDate);
   if (timestamp) properties.timestamp = timestamp;
@@ -210,22 +315,72 @@ async function readPhotoExif(file: Blob): Promise<PhotoExif | null> {
   }
 }
 
+/** The image data URLs generated for one photo. */
+interface PhotoImages {
+  /** Downscaled JPEG thumbnail (data URL) for the map marker/popup, or null. */
+  thumbnail: string | null;
+  /**
+   * Full-resolution image (data URL of the original bytes) for the enlarged
+   * viewer, or null when the format can't be shown at full size (TIFF/HEIC), the
+   * bytes are mislabeled, or the original exceeds the size ceiling.
+   */
+  fullResolution: string | null;
+}
+
 /**
- * Generate a downscaled JPEG (a data URL) for an image the browser can decode,
- * capped at {@link PHOTO_MAX_DIMENSION} on its longest edge. Returns null for
- * HEIC/HEIF (no canvas decoder) and for any image the browser fails to decode,
- * so the caller still places the point without an inline image.
+ * Embed the original image bytes unchanged as a data URL so the enlarged viewer
+ * and "Save image" get native resolution. Returns null for formats a browser
+ * cannot render in an `<img>` (TIFF/HEIC), where the viewer falls back to the
+ * thumbnail. The bytes are not re-encoded, so there is no quality loss; the
+ * trade-off is project-file size, since this is serialized into the project.
+ * Exported for testing.
  */
-async function createThumbnailDataUrl(
+export async function createFullResolutionDataUrl(
   file: Blob,
   fileName: string,
 ): Promise<string | null> {
-  if (isHeicFileName(fileName)) return null;
+  // Gate on the extension so TIFF/HEIC (which a browser can't show at full size)
+  // are never embedded.
+  if (!FULL_RESOLUTION_IMAGE_MIME[fileExtension(fileName)]) return null;
+  // A pathologically large original falls back to thumbnail-only so one photo
+  // can't add hundreds of MB to the project.
+  if (file.size > MAX_FULL_RESOLUTION_BYTES) return null;
+  try {
+    // Derive the MIME from the actual magic bytes, not the extension: a genuine
+    // JPEG/PNG/WebP always has a recognizable signature, so a failed sniff means
+    // the file is mislabeled (e.g. a GIF/BMP named .jpg), and tagging its bytes
+    // as image/jpeg would be undecodable — skip full-res (the canvas thumbnail
+    // still works). Blob.slice is a view, so retagging the type doesn't copy the
+    // image bytes.
+    const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const mime = sniffImageMime(header);
+    if (!mime) return null;
+    return await blobToDataUrl(file.slice(0, file.size, mime));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generate the thumbnail (a downscaled JPEG capped at {@link PHOTO_MAX_DIMENSION}
+ * on its longest edge) and, for formats a browser can show natively, the
+ * full-resolution image (the original bytes, regardless of the source's size).
+ * Returns both as null for HEIC/HEIF (no canvas decoder) and for any image the
+ * browser fails to decode, so the caller still places the point without an
+ * inline image; the full-resolution image alone is null when the format can't be
+ * shown natively, the bytes are mislabeled, or the original is over the ceiling.
+ */
+async function createPhotoImages(
+  file: Blob,
+  fileName: string,
+): Promise<PhotoImages> {
+  const empty: PhotoImages = { thumbnail: null, fullResolution: null };
+  if (isHeicFileName(fileName)) return empty;
   if (
     typeof createImageBitmap !== "function" ||
     typeof document === "undefined"
   ) {
-    return null;
+    return empty;
   }
 
   let bitmap: ImageBitmap;
@@ -233,25 +388,35 @@ async function createThumbnailDataUrl(
     // `from-image` bakes the EXIF orientation in so thumbnails aren't sideways.
     bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
-    return null;
+    return empty;
   }
 
+  const longestEdge = Math.max(bitmap.width, bitmap.height);
   try {
-    const scale = Math.min(
-      1,
-      PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height),
-    );
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / longestEdge);
     const width = Math.max(1, Math.round(bitmap.width * scale));
     const height = Math.max(1, Math.round(bitmap.height * scale));
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
-    if (!context) return null;
+    if (!context) return empty;
     context.drawImage(bitmap, 0, 0, width, height);
-    return canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
+    const thumbnail = canvas.toDataURL("image/jpeg", PHOTO_JPEG_QUALITY);
+    // Release the decoded bitmap (a raw RGBA buffer, ~194 MB for an 8064×6048
+    // source) before reading the original bytes and building the base64 string,
+    // where peak memory is highest; the full-res encode reads `file`, not the
+    // bitmap. The `finally` close is a safe no-op on an already-closed bitmap.
+    bitmap.close();
+    // Embed the original whenever the format allows, even when it is at/below the
+    // thumbnail cap: the thumbnail is a re-encoded, quality-0.82 JPEG (opaque,
+    // with compression artifacts), so it is not the original even at matching
+    // dimensions. This keeps the true bytes for the viewer/save and preserves
+    // PNG/WebP transparency.
+    const fullResolution = await createFullResolutionDataUrl(file, fileName);
+    return { thumbnail, fullResolution };
   } catch {
-    return null;
+    return empty;
   } finally {
     bitmap.close();
   }
@@ -291,7 +456,10 @@ export async function loadGeotaggedPhotos(
     const coord = exif && isValidLngLat(exif.longitude, exif.latitude);
     if (!exif || !coord) continue;
 
-    const thumbnail = await createThumbnailDataUrl(file, fileName);
+    const { thumbnail, fullResolution } = await createPhotoImages(
+      file,
+      fileName,
+    );
     if (!thumbnail) withoutThumbnail += 1;
 
     features.push({
@@ -300,7 +468,7 @@ export async function loadGeotaggedPhotos(
         type: "Point",
         coordinates: [coord.lng, coord.lat],
       },
-      properties: buildPhotoProperties(fileName, exif, thumbnail),
+      properties: buildPhotoProperties(fileName, exif, thumbnail, fullResolution),
     });
   }
 
@@ -336,7 +504,10 @@ export async function loadPhotosAtLocation(
   for (const file of files) {
     const fileName = file.name || "photo";
     const exif = (await readPhotoExif(file)) ?? {};
-    const thumbnail = await createThumbnailDataUrl(file, fileName);
+    const { thumbnail, fullResolution } = await createPhotoImages(
+      file,
+      fileName,
+    );
     if (!thumbnail) withoutThumbnail += 1;
 
     features.push({
@@ -345,7 +516,7 @@ export async function loadPhotosAtLocation(
         type: "Point",
         coordinates: [center[0], center[1]],
       },
-      properties: buildPhotoProperties(fileName, exif, thumbnail),
+      properties: buildPhotoProperties(fileName, exif, thumbnail, fullResolution),
     });
   }
 

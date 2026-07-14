@@ -4,7 +4,7 @@
 import type { GeoLibreProject } from "@geolibre/core";
 
 // Hosted viewer used as the default embed target (matches Python's default).
-export const DEFAULT_VIEWER_BASE_URL = "https://viewer.geolibre.app/";
+export const DEFAULT_VIEWER_BASE_URL = "https://web.geolibre.app/";
 
 // Excludes the structural CSS chars ("{};:") so a width/height can't close the
 // <style> rule and inject CSS; "/" is allowed so calc() divisions pass (extends
@@ -43,16 +43,28 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-// Insert embed=1 into the query before any "#fragment" (a fragment would
-// otherwise swallow a trailing "?embed=1"); mirrors the Python export.
-function withEmbedFlag(baseUrl: string): string {
-  const hashIndex = baseUrl.indexOf("#");
-  const base = hashIndex === -1 ? baseUrl : baseUrl.slice(0, hashIndex);
-  const fragment = hashIndex === -1 ? "" : baseUrl.slice(hashIndex);
-  // Don't double up the flag if the configured URL already carries it.
-  if (/[?&]embed=(1|true)(&|$)/.test(base)) return `${base}${fragment}`;
+// Append a flag to the query only when it is not already present, preserving an
+// existing query (joins with "&") or starting one (joins with "?").
+function appendFlag(base: string, flag: string, present: RegExp): string {
+  if (present.test(base)) return base;
   const separator = base.includes("?") ? "&" : "?";
-  return `${base}${separator}embed=1${fragment}`;
+  return `${base}${separator}${flag}`;
+}
+
+// Insert the viewer query flags before any "#fragment" (a fragment would
+// otherwise swallow a trailing "?..."); mirrors the Python export. `embed=1`
+// puts the framed app in embed mode so it accepts the posted project, and
+// `welcome=0` skips the first-launch experience-level wizard so the recipient
+// lands straight on the map (issue #991). `welcome=0` is what the currently
+// deployed viewer honors, so the export works without waiting for the
+// embed-mode onboarding suppression to ship.
+function withViewerFlags(baseUrl: string): string {
+  const hashIndex = baseUrl.indexOf("#");
+  let base = hashIndex === -1 ? baseUrl : baseUrl.slice(0, hashIndex);
+  const fragment = hashIndex === -1 ? "" : baseUrl.slice(hashIndex);
+  base = appendFlag(base, "embed=1", /[?&]embed=(1|true)(&|$)/);
+  base = appendFlag(base, "welcome=0", /[?&]welcome=(0|false|off|no)(&|$)/);
+  return `${base}${fragment}`;
 }
 
 export interface BuildProjectHtmlOptions {
@@ -87,7 +99,7 @@ export function buildProjectHtml(options: BuildProjectHtmlOptions): string {
   if (!CSS_DIMENSION_RE.test(height)) {
     throw new Error(`Invalid CSS height value: ${height}`);
   }
-  const iframeSrc = withEmbedFlag(appUrl);
+  const iframeSrc = withViewerFlags(appUrl);
   // Escape "<" so a property value can't break out of the JSON <script> block.
   const projectJson = JSON.stringify(project).replace(/</g, "\\u003c");
 

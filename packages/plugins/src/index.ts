@@ -46,6 +46,8 @@ export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";
 export {
   maplibreBasemapControlPlugin,
+  BASEMAP_CONTROL_PLUGIN_ID,
+  getActiveBasemapControl,
   setBasemapControlLabels,
   type BasemapControlLabels,
 } from "./plugins/maplibre-basemap-control";
@@ -85,6 +87,7 @@ export {
   openColorbarPanel,
   openHtmlPanel,
   openLegendPanel,
+  openLegendPanelWithItems,
   openLidarLayerPanel,
   restoreLidarLayers,
   openMeasurePanel,
@@ -122,6 +125,14 @@ export {
   type KerchunkVariable,
 } from "./plugins/kerchunk-reference-store";
 export {
+  openLocalNetcdf,
+  buildInlineZarrRefs,
+  type LocalNetcdfFile,
+  type LocalNetcdfVariable,
+  type LocalNetcdfLayerRefs,
+  type InlineZarrGrid,
+} from "./plugins/local-netcdf";
+export {
   closeDuckDBLayerPanel,
   getDuckDBFeatureBounds,
   getDuckDBLayerRows,
@@ -135,6 +146,7 @@ export {
 export {
   closePlanetaryComputerPanel,
   openPlanetaryComputerPanel,
+  restorePlanetaryComputerLayers,
 } from "./plugins/maplibre-planetary-computer";
 export {
   closeEarthEnginePanel,
@@ -174,6 +186,13 @@ export {
   RASTER_SOURCE_KIND,
   getRasterBandStats,
 } from "./plugins/raster-symbology-texture";
+export {
+  disposeAllPaletteLegends,
+  disposePaletteLegend,
+  extractPaletteLegend,
+  getPaletteLegend,
+  type PaletteLegendEntry,
+} from "./plugins/raster-palette";
 export { colormapColors, warmColormapColors } from "./plugins/colormap-colors";
 export {
   closeVectorLayerPanel,
@@ -187,9 +206,13 @@ export {
 // the tests import the sync helpers from the module paths directly.
 export {
   clearDirectionsWaypoints,
+  type DirectionsRouteLegMetric,
+  type DirectionsRouteMetrics,
   DIRECTIONS_PLUGIN_ID,
+  getDirectionsRouteMetrics,
   getDirectionsWaypointCount,
   isDirectionsRemovalInFlight,
+  isDirectionsRouteLoading,
   maplibreDirectionsPlugin,
   removeLastDirectionsWaypoint,
   restoreDirections,
@@ -215,6 +238,32 @@ export {
   restoreEffects,
   setEffectsSettings,
 } from "./plugins/maplibre-effects";
+export {
+  advanceSunClock,
+  closeSunPanel,
+  DEFAULT_SUN_SETTINGS,
+  getSunSettings,
+  getSunSettingsSnapshot,
+  isSunPanelVisible,
+  localDayStart,
+  maplibreSunPlugin,
+  normalizeSunSettings,
+  openSunPanel,
+  reattachSun,
+  restoreSun,
+  setSunSettings,
+  SUN_PLUGIN_ID,
+  SUN_SHADE_MAX,
+  SUN_SHADE_MIN,
+  SUN_SPEED_MAX,
+  SUN_SPEED_MIN,
+  type SunSettings,
+  subsolarPoint,
+  subscribeSunPanel,
+  subscribeSunSettings,
+  sunEquatorialPosition,
+  sunPositionAt,
+} from "./plugins/maplibre-sun";
 export {
   DECK_VIZ_PLUGIN_ID,
   maplibreDeckGlVizPlugin,
@@ -254,19 +303,63 @@ export { maplibreEsriWaybackPlugin } from "./plugins/maplibre-esri-wayback";
 export { maplibreFemaWmsPlugin } from "./plugins/maplibre-fema-wms";
 export {
   maplibreGeoEditorPlugin,
+  GEO_EDITOR_PLUGIN_ID,
   canEditLayerGeometry,
   SKETCHES_SOURCE_KIND,
   startLayerGeometryEdit,
   endLayerGeometryEdit,
   getGeometryEditTargetLayerId,
   subscribeGeometryEdit,
+  isGeoEditorAvailableForImport,
+  getGeoEditorFeatureCount,
+  hasViewImportBaseline,
+  loadViewFeaturesIntoEditor,
+  buildEditorSaveCollection,
 } from "./plugins/maplibre-geo-editor";
+export {
+  listViewVectorLayers,
+  resolveStoreLayerViewSource,
+  queryViewLayerFeatures,
+  VIEW_IMPORT_ID_PROPERTY,
+  VIEW_IMPORT_CHANGE_PROPERTY,
+  type ViewVectorLayer,
+  type ViewImportMap,
+  type ViewImportExport,
+  type ViewImportChangeCounts,
+} from "./plugins/geo-editor-view-import";
 export { maplibreGeoAgentPlugin } from "./plugins/maplibre-geoagent";
 export { maplibreUsgsLidarPlugin } from "./plugins/maplibre-usgs-lidar";
 export { maplibreNasaEarthdataPlugin } from "./plugins/maplibre-nasa-earthdata";
+export {
+  DEFAULT_OPENAERIALMAP_LABELS,
+  maplibreOpenAerialMapPlugin,
+  OPENAERIALMAP_PLUGIN_ID,
+  setOpenAerialMapLabels,
+  type OpenAerialMapLabels,
+} from "./plugins/maplibre-openaerialmap";
+export {
+  buildSearchUrl,
+  buildTitilerTemplate,
+  OAM_DEFAULT_ENDPOINT,
+  parseSearchResponse,
+  searchOpenAerialMap,
+  type OamImage,
+  type OamSearchResult,
+  type OpenAerialMapSearchOptions,
+} from "./plugins/openaerialmap-api";
 export { maplibreNationalMapPlugin } from "./plugins/maplibre-national-map";
 export { maplibreOvertureMapsPlugin } from "./plugins/maplibre-overture-maps";
 export { maplibreStreetViewPlugin } from "./plugins/maplibre-streetview";
+export {
+  maplibreMapillaryPlugin,
+  MAPILLARY_PLUGIN_ID,
+  setMapillaryLabels,
+  type MapillaryLabels,
+} from "./plugins/maplibre-mapillary";
+export {
+  maplibreElevationProfilePlugin,
+  ELEVATION_PROFILE_PLUGIN_ID,
+} from "./plugins/elevation-profile";
 export { maplibreSwipePlugin, SWIPE_PLUGIN_ID } from "./plugins/maplibre-swipe";
 export {
   maplibreGraticulePlugin,
@@ -283,6 +376,26 @@ export {
   type GraticuleLabelFormat,
   type GraticuleLabelEdges,
 } from "./plugins/maplibre-graticule";
+export type {
+  WeatherAnimationState,
+  WeatherLayerController,
+} from "./plugins/weather-layer";
+export {
+  maplibreCloudsPlugin,
+  CLOUDS_PLUGIN_ID,
+  getCloudsAnimationState,
+  setCloudsFrame,
+  toggleCloudsPlaying,
+  subscribeClouds,
+} from "./plugins/maplibre-clouds";
+export {
+  maplibrePrecipitationPlugin,
+  PRECIPITATION_PLUGIN_ID,
+  getPrecipitationAnimationState,
+  setPrecipitationFrame,
+  togglePrecipitationPlaying,
+  subscribePrecipitation,
+} from "./plugins/maplibre-precipitation";
 export {
   maplibreTimeSliderPlugin,
   TIME_SLIDER_PLUGIN_ID,
@@ -315,3 +428,55 @@ export {
   type TimeWindow,
 } from "./plugins/time-slider-binding";
 export { WEB_SERVICE_PLUGIN_IDS } from "./plugins/web-service-sync";
+export {
+  DEFAULT_ROUTE_ANIMATION_SETTINGS,
+  ROUTE_ANIM_SPEED_MAX,
+  ROUTE_ANIM_SPEED_MIN,
+  ROUTE_ANIMATION_PLUGIN_ID,
+  ROUTE_FOLLOW_PITCH_MAX,
+  ROUTE_FOLLOW_PITCH_MIN,
+  ROUTE_FOLLOW_ZOOM_MAX,
+  ROUTE_FOLLOW_ZOOM_MIN,
+  ROUTE_MARKER_STYLES,
+  ROUTE_VIDEO_FPS,
+  ROUTE_VIDEO_MIME_CANDIDATES,
+  RouteVideoUnsupportedError,
+  closeRouteAnimationPanel,
+  getRouteAnimationDurationSeconds,
+  getRouteAnimationSettings,
+  getRouteAnimationSnapshot,
+  isRouteAnimationPanelVisible,
+  isRouteVideoSupported,
+  maplibreRouteAnimationPlugin,
+  normalizeRouteAnimationSettings,
+  openRouteAnimationPanel,
+  pickRouteVideoMimeType,
+  pickVideoMimeType,
+  reattachRouteAnimation,
+  recordRouteAnimation,
+  restoreRouteAnimation,
+  setRouteAnimationElevation,
+  setRouteAnimationProgress,
+  setRouteAnimationRoute,
+  setRouteAnimationSettings,
+  subscribeRouteAnimation,
+  subscribeRouteAnimationPanel,
+  toggleRouteAnimationPlaying,
+  videoExtensionForMime,
+  type RecordRouteAnimationOptions,
+  type RouteAnimationRecording,
+  type RouteAnimationSettings,
+  type RouteElevationConfig,
+  type RouteMarkerStyle,
+} from "./plugins/maplibre-route-animation";
+export {
+  bearingBetween,
+  flattenToLine,
+  flattenToRoute,
+  measureLine,
+  pointAlongLine,
+  sliceLineAtDistance,
+  sliceRouteAtDistance,
+  type PointOnLine,
+  type RouteWithElevation,
+} from "./plugins/route-animation-geometry";

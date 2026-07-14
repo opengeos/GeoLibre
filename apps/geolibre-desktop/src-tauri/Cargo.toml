@@ -1,6 +1,6 @@
 [package]
 name = "geolibre-desktop"
-version = "1.8.0"
+version = "2.0.0"
 description = "GeoLibre Desktop — lightweight cloud-native desktop GIS"
 authors = ["GeoLibre Contributors"]
 edition = "2021"
@@ -8,6 +8,10 @@ edition = "2021"
 [lib]
 name = "geolibre_desktop_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+default = []
+native-duckdb = ["dep:duckdb"]
 
 # Optimize the release binary for size. The frontend assets dominate the binary,
 # but these still trim the Rust code: LTO + a single codegen unit let the linker
@@ -28,13 +32,23 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-http = "2"
 tauri-plugin-opener = "2"
+# Persists the fs scope the folder picker grants, so Browser-panel pinned
+# folders stay readable across app restarts (no re-pick required).
+tauri-plugin-persisted-scope = "2"
+duckdb = { version = "1.10504.0", features = ["bundled", "parquet"], optional = true }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 flate2 = "1"
 tar = "0.4"
-zip = { version = "2", default-features = false, features = ["deflate"] }
-rusqlite = { version = "0.32", features = ["bundled"] }
+zip = { version = "6", default-features = false, features = ["deflate"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # OS CSPRNG for the per-launch Jupyter token (already an indirect dep).
-getrandom = "0.2"
+getrandom = "0.4"
+
+# Runtime WebKitGTK version check (already an indirect dep via tauri/wry).
+[target."cfg(target_os = \"linux\")".dependencies]
+webkit2gtk-sys = "2"

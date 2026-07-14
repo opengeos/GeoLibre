@@ -10,7 +10,9 @@ from geolibre_server.app.conversion import (
     _RASTER_SCRIPT,
     _RESULT_MARKER,
     _VECTOR_SCRIPT,
+    _VECTOR_TO_VECTOR_SCRIPT,
     _evict_finished_jobs_locked,
+    _output_extension,
     _validate_paths,
     csv_to_geoparquet,
     raster_to_cog,
@@ -18,19 +20,26 @@ from geolibre_server.app.conversion import (
     vector_to_geopackage,
     vector_to_pmtiles,
     vector_to_shapefile,
+    vector_to_vector,
     CsvToGeoParquetRequest,
     RasterToCogRequest,
     VectorToGeoPackageRequest,
     VectorToGeoParquetRequest,
     VectorToPmtilesRequest,
     VectorToShapefileRequest,
+    VectorToVectorRequest,
 )
 from geolibre_server.app.runtime import JobState
 
 
 def test_embedded_scripts_compile() -> None:
     """The inline conversion scripts must be valid Python with a result marker."""
-    for script in (_VECTOR_SCRIPT, _RASTER_SCRIPT, _PMTILES_SCRIPT):
+    for script in (
+        _VECTOR_SCRIPT,
+        _VECTOR_TO_VECTOR_SCRIPT,
+        _RASTER_SCRIPT,
+        _PMTILES_SCRIPT,
+    ):
         compile(script, "<script>", "exec")
         assert _RESULT_MARKER in script
         assert "{marker}" not in script
@@ -236,6 +245,99 @@ def test_vector_to_geopackage_rejects_missing_input(tmp_path: Path) -> None:
     with pytest.raises(HTTPException) as excinfo:
         vector_to_geopackage(request)
     assert excinfo.value.status_code == 400
+
+
+def test_output_extension_parsing() -> None:
+    """The output extension is parsed case-insensitively, ignoring directories."""
+    assert _output_extension("/a/b/cities.GPKG") == "gpkg"
+    assert _output_extension("cities.tar.gz") == "gz"
+    assert _output_extension("/no/extension/here") == ""
+
+
+def test_vector_to_vector_rejects_unsupported_extension(tmp_path: Path) -> None:
+    """An output extension with no known driver is rejected before a job starts."""
+    source = tmp_path / "input.geojson"
+    source.write_text("{}", encoding="utf-8")
+    request = VectorToVectorRequest(
+        input_path=str(source),
+        output_path=str(tmp_path / "out.docx"),
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        vector_to_vector(request)
+    assert excinfo.value.status_code == 400
+    assert "docx" in excinfo.value.detail
+
+
+def test_vector_to_vector_requires_output_extension(tmp_path: Path) -> None:
+    """An output path without an extension cannot select a format."""
+    source = tmp_path / "input.geojson"
+    source.write_text("{}", encoding="utf-8")
+    request = VectorToVectorRequest(
+        input_path=str(source),
+        output_path=str(tmp_path / "out"),
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        vector_to_vector(request)
+    assert excinfo.value.status_code == 400
+
+
+def test_vector_to_vector_rejects_missing_input(tmp_path: Path) -> None:
+    """A missing input file is rejected before a conversion job starts."""
+    request = VectorToVectorRequest(
+        input_path=str(tmp_path / "missing.geojson"),
+        output_path=str(tmp_path / "out.gpkg"),
+    )
+    with pytest.raises(HTTPException) as excinfo:
+        vector_to_vector(request)
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.parametrize(
+    ("output_name", "expected_kind", "expected_driver", "expected_zip"),
+    [
+        ("out.gpkg", "gdal", "GPKG", False),
+        ("out.fgb", "gdal", "FlatGeobuf", False),
+        ("out.geojson", "gdal", "GeoJSON", False),
+        ("out.kml", "gdal", "KML", False),
+        ("out.shp", "gdal", "ESRI Shapefile", False),
+        ("out.zip", "gdal", "ESRI Shapefile", True),
+        ("out.csv", "gdal", "CSV", False),
+        ("out.parquet", "parquet", "", False),
+        ("out.geoparquet", "parquet", "", False),
+    ],
+)
+def test_vector_to_vector_routes_extension_to_driver(
+    tmp_path: Path,
+    monkeypatch,
+    output_name: str,
+    expected_kind: str,
+    expected_driver: str,
+    expected_zip: bool,
+) -> None:
+    """The output extension is mapped to the right writer params for the job."""
+    source = tmp_path / "input.geojson"
+    source.write_text("{}", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def fake_start_job(tool_id, script, params, output_name):  # noqa: ANN001
+        captured["tool_id"] = tool_id
+        captured["script"] = script
+        captured["params"] = params
+        return _job("job", "pending", "2026-01-01T00:00:00+00:00")
+
+    monkeypatch.setattr(conversion, "_start_job", fake_start_job)
+    request = VectorToVectorRequest(
+        input_path=str(source),
+        output_path=str(tmp_path / output_name),
+    )
+    vector_to_vector(request)
+
+    assert captured["tool_id"] == "vector-to-vector"
+    assert captured["script"] is _VECTOR_TO_VECTOR_SCRIPT
+    params = captured["params"]
+    assert params["output_kind"] == expected_kind
+    assert params["output_driver"] == expected_driver
+    assert params["zip_shapefile"] is expected_zip
 
 
 def _job(job_id: str, status: str, created_at: str) -> JobState:

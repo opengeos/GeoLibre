@@ -147,6 +147,9 @@ jobs:
     name: Update Homebrew cask
     needs: build
     runs-on: ubuntu-latest
+    # The primary cask is in the official homebrew/homebrew-cask repo, which
+    # BrewTestBot auto-bumps via livecheck. This job only updates the self-hosted
+    # tap (opengeos/homebrew-geolibre), kept as a fallback.
     # Serialise tap pushes so two close releases can't race on a non-fast-forward.
     concurrency:
       group: homebrew-tap-update

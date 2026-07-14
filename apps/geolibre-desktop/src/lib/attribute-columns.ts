@@ -366,7 +366,10 @@ export function calculateField(
     const props = (feature.properties ?? {}) as Record<string, unknown>;
     let value: unknown;
     try {
-      value = coerceComputedValue(compiled.evaluate(props, index), outputType);
+      value = coerceComputedValue(
+        compiled.evaluate(props, index, feature.geometry),
+        outputType,
+      );
       evaluated += 1;
     } catch {
       value = null;

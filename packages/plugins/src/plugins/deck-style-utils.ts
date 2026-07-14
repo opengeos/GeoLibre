@@ -16,6 +16,10 @@ export function colorToRgba(
   alpha: number,
 ): [number, number, number, number] {
   const normalized = color.trim();
+  // The Style panel's ColorField can emit the "transparent" sentinel
+  // (TRANSPARENT_COLOR in @geolibre/ui); render it invisible instead of
+  // letting it fall through to the invalid-color fallback blue.
+  if (normalized.toLowerCase() === "transparent") return [0, 0, 0, 0];
   const hex =
     normalized.length === 4 && normalized.startsWith("#")
       ? `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`

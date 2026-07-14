@@ -1,4 +1,5 @@
 import { styleValue, type LayerStyle } from "./types";
+import { getActiveSemiMajorAxisMeters } from "./ellipsoids";
 
 /**
  * A data-driven color value for a vector paint property: either a plain CSS
@@ -16,8 +17,17 @@ export function isVectorColorExpression(
   return Array.isArray(value);
 }
 
-function isColor(value: string): boolean {
-  return /^#[0-9a-f]{6}$/i.test(value.trim());
+/**
+ * Whether a string is a 6-digit hex color (`#rrggbb`), the form the vector
+ * renderer treats as valid. Exported so the symbology exporters can apply the
+ * same validity check the live `match`/`case` expressions use rather than
+ * re-deriving the regex.
+ */
+export function isHexColor(value: unknown): boolean {
+  // Guard the type: `stop.color`/`rule.color` are typed `string`, but the data
+  // can come from a hand-edited or imported .geolibre.json, so a missing/null
+  // value must return false rather than throw on `.trim()`.
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value.trim());
 }
 
 /** A 3- or 6-digit hex color, as emitted by the simplestyle spec. */
@@ -80,10 +90,27 @@ export function simpleStyleNumberValue(
   return ["to-number", ["get", property], base];
 }
 
-// Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
-// the Web Mercator projection: earth circumference (2*pi*6378137) over the
-// 512px world at zoom 0. Resolution halves with every zoom level.
-const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
+/**
+ * Ground resolution (meters per pixel) at MapLibre zoom 0 on the equator, for
+ * the Web Mercator projection: earth circumference (2*pi*6378137) over the
+ * 512px world at zoom 0. Resolution halves with every zoom level. Exported so
+ * the Mapbox-style importer can reverse {@link metersWidthExpression} without a
+ * second copy of the magic number.
+ */
+export const MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0 = (2 * Math.PI * 6378137) / 512;
+
+/**
+ * Same ground resolution as {@link MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0} but for
+ * the project's active body: its circumference over the 512px zoom-0 world. On
+ * Earth this equals the constant; on the Moon/Mars it uses that body's radius so
+ * a stroke width given in ground meters renders at the correct on-screen size.
+ * Exported so the Mapbox-style importer can reverse {@link metersWidthExpression}
+ * with the same ellipsoid-aware factor the exporter used (keeping the round trip
+ * correct on non-Earth projects), rather than the Earth-only constant.
+ */
+export function mercatorMetersPerPixelAtZoom0(): number {
+  return (2 * Math.PI * getActiveSemiMajorAxisMeters()) / 512;
+}
 
 // Largest zoom MapLibre renders; used as the upper interpolation stop.
 const MAX_MERCATOR_ZOOM = 24;
@@ -107,7 +134,7 @@ const MAX_MERCATOR_ZOOM = 24;
  * @returns A MapLibre `interpolate` expression array.
  */
 export function metersWidthExpression(meters: number): unknown[] {
-  const widthAtZoom0 = meters / MERCATOR_METERS_PER_PIXEL_AT_ZOOM_0;
+  const widthAtZoom0 = meters / mercatorMetersPerPixelAtZoom0();
   return [
     "interpolate",
     ["exponential", 2],
@@ -294,7 +321,7 @@ export function vectorColorExpression(
 
   if (mode === "categorized") {
     const stops = styleValue(style, "vectorStyleStops").filter(
-      (stop) => String(stop.value).trim().length > 0 && isColor(stop.color),
+      (stop) => String(stop.value).trim().length > 0 && isHexColor(stop.color),
     );
     if (stops.length === 0) return fallbackColor;
 
@@ -314,7 +341,7 @@ export function vectorColorExpression(
           ? stop.value
           : Number.parseFloat(stop.value),
     }))
-    .filter((stop) => Number.isFinite(stop.value) && isColor(stop.color))
+    .filter((stop) => Number.isFinite(stop.value) && isHexColor(stop.color))
     .sort((a, b) => a.value - b.value);
   if (stops.length < 2) return fallbackColor;
 
@@ -346,11 +373,11 @@ export function ruleBasedColorExpression(
   const rules = styleValue(style, "vectorRules");
   const elseRule = rules.find((rule) => rule.isElse);
   const elseColor =
-    elseRule && isColor(elseRule.color) ? elseRule.color : fallbackColor;
+    elseRule && isHexColor(elseRule.color) ? elseRule.color : fallbackColor;
 
   const branches: unknown[] = [];
   for (const rule of rules) {
-    if (rule.isElse || !isColor(rule.color)) continue;
+    if (rule.isElse || !isHexColor(rule.color)) continue;
     const filter = parseJsonExpression(rule.filter);
     // A MapLibre filter is an expression that must start with a string operator;
     // skip non-operator arrays (e.g. a bare value) so the compiled `case` never

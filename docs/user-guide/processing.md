@@ -102,6 +102,7 @@ See the [Terrain Analysis tutorial](../tutorials/terrain-analysis.md).
 
 | Tool | Engine | Description |
 | --- | --- | --- |
+| **Vector to Vector** | Browser + Sidecar | Convert between any formats DuckDB's spatial extension supports; input and output formats are detected from the file extensions. The desktop app (sidecar) writes any GDAL format (FlatGeobuf, GeoPackage, Shapefile, KML, GML, SQLite, …); the browser writes GeoJSON, CSV, GeoParquet, GeoPackage, and Shapefile. |
 | **Vector to GeoParquet** | Browser (DuckDB-WASM) | Hilbert-sorted, compressed GeoParquet. |
 | **Vector to FlatGeobuf** | Sidecar | Hilbert-sorted, cloud-optimized, spatially indexed vector. |
 | **Vector to Shapefile** | Sidecar | Hilbert-sorted, zipped ESRI Shapefile (field names truncated to 10 characters). |
@@ -129,4 +130,4 @@ The Processing menu also opens the **Planetary Computer** and **Earth Engine** p
 The raster tools, the sidecar conversion tools, the Whitebox toolbox, and the optional GeoPandas vector engine all use a local FastAPI sidecar that the desktop app starts on demand. The vector tools' client engine and the browser-based conversions need no sidecar. See [Getting Started](../getting-started.md#optional-python-sidecar) for setup and [Reference → Architecture](../architecture.md#python-sidecar) for how it works.
 
 !!! note "Browser vs desktop"
-    The client-side vector tools and the browser conversions (Vector to GeoParquet, CSV to GeoParquet) run in the browser. The raster tools, sidecar conversions, and Whitebox require the desktop app and the Python sidecar.
+    The client-side vector tools and the browser conversions (Vector to Vector, Vector to GeoParquet, CSV to GeoParquet) run in the browser. Vector to Vector's full any-format output (and the other sidecar conversions, raster tools, and Whitebox) requires the desktop app and the Python sidecar.

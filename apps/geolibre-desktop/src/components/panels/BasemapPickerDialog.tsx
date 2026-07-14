@@ -1,4 +1,10 @@
-import { BLANK_BASEMAP, useAppStore } from "@geolibre/core";
+import {
+  BLANK_BASEMAP,
+  PLANETARY_BASEMAP_GROUPS,
+  PLANETARY_BASEMAPS,
+  useAppStore,
+  type PlanetaryBasemap,
+} from "@geolibre/core";
 import {
   Button,
   cn,
@@ -19,6 +25,11 @@ import {
   resolveProtomapsPresets,
   type PresetBasemap,
 } from "../../lib/basemap-presets";
+import {
+  planetaryBasemapLabel,
+  planetaryBasemapSectionKey,
+} from "../../lib/planetary-sections";
+import { CollapsibleSection } from "../CollapsibleSection";
 
 // Picking the "Liberty 3D" preset applies the Liberty style and tilts the
 // current camera into a 3D perspective in place (matching the New Project
@@ -40,7 +51,7 @@ function PresetButton({ name, selected, onSelect }: PresetButtonProps) {
       type="button"
       aria-pressed={selected}
       className={cn(
-        "h-10 rounded-md border px-3 text-sm font-medium transition-colors",
+        "flex min-h-10 items-center justify-center rounded-md border px-3 py-1.5 text-center text-sm font-medium leading-tight transition-colors",
         "hover:bg-accent hover:text-accent-foreground",
         selected
           ? "border-primary bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
@@ -73,6 +84,7 @@ export function BasemapPickerDialog({
   const basemapStyleUrl = useAppStore((s) => s.basemapStyleUrl);
   const setBasemapStyleUrl = useAppStore((s) => s.setBasemapStyleUrl);
   const setMapView = useAppStore((s) => s.setMapView);
+  const applyPlanetaryBasemap = useAppStore((s) => s.applyPlanetaryBasemap);
 
   const openFreeMapPresets = useMemo(() => getOpenFreeMapPresets(), []);
   // Protomaps styles need an API key (VITE_PROTOMAPS_API_KEY). It can come from
@@ -92,7 +104,15 @@ export function BasemapPickerDialog({
   }, [open]);
 
   const allPresets = useMemo(
-    () => [...openFreeMapPresets, ...protomapsPresets],
+    () => [
+      ...openFreeMapPresets,
+      ...protomapsPresets,
+      ...PLANETARY_BASEMAPS.map((b) => ({
+        id: b.id,
+        name: b.name,
+        styleUrl: b.styleUrl,
+      })),
+    ],
     [openFreeMapPresets, protomapsPresets],
   );
 
@@ -132,6 +152,14 @@ export function BasemapPickerDialog({
       // Tilt the current view into 3D in place, preserving center and zoom.
       setMapView({ pitch: THREE_D_PITCH }, true);
     }
+    onOpenChange(false);
+  };
+
+  // Selecting a planetary basemap also switches the project's celestial body so
+  // measurements (distance/area/scale) use that body's radius, and the globe
+  // control renders it as the correct sphere.
+  const applyPlanetary = (basemap: PlanetaryBasemap) => {
+    applyPlanetaryBasemap(basemap);
     onOpenChange(false);
   };
 
@@ -193,6 +221,42 @@ export function BasemapPickerDialog({
               </div>
             </div>
           ) : null}
+
+          {PLANETARY_BASEMAP_GROUPS.map((group) => {
+            const heading = t(planetaryBasemapSectionKey(group.id));
+            const grid = (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {group.basemaps.map((basemap) => (
+                  <PresetButton
+                    key={basemap.id}
+                    name={planetaryBasemapLabel(basemap, group.id)}
+                    selected={activeChoice === basemap.id}
+                    onSelect={() => applyPlanetary(basemap)}
+                  />
+                ))}
+              </div>
+            );
+            // The "other bodies" section holds many entries, so collapse it to
+            // keep the panel short; the Moon/Mars sections stay always-visible.
+            return group.id === "other" ? (
+              <CollapsibleSection
+                key={group.id}
+                title={heading}
+                // Collapsed by default, but auto-expanded when the active basemap
+                // is one of these, so the current selection isn't hidden.
+                defaultOpen={group.basemaps.some((b) => b.id === activeChoice)}
+              >
+                {grid}
+              </CollapsibleSection>
+            ) : (
+              <div key={group.id} className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  {heading}
+                </p>
+                {grid}
+              </div>
+            );
+          })}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">

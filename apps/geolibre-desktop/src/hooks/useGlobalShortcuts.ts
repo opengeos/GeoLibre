@@ -23,8 +23,9 @@ interface UseGlobalShortcutsOptions {
  * Centralized global hotkey layer. Attaches a single window keydown listener
  * that opens the command palette, opens the cheat sheet, and runs any command
  * whose `shortcut` matches. Shortcuts are ignored while the user is typing in a
- * text field, and only `mod`/`?`-style combinations are used so MapLibre's own
- * arrow/zoom key handling on the focused canvas is left untouched.
+ * text field. Bare-letter shortcuts (e.g. "N"/"R" for the camera resets) only
+ * use keys MapLibre does not bind, so its own arrow/zoom key handling on the
+ * focused canvas is left untouched.
  */
 export function useGlobalShortcuts({
   commands,

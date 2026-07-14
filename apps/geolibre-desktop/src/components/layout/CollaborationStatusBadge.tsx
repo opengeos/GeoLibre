@@ -71,7 +71,9 @@ export function CollaborationStatusBadge({
   );
   // Shares the bottom-left corner with the MapLibre scale control and the
   // bounds-restriction badge, so lift the badge above whichever of those is
-  // showing (see the positioning note below).
+  // showing (see the positioning note below). The KnowledgeCardPanel also opens
+  // in this corner, but as a large transient z-20 panel it overlays this z-10
+  // badge while open rather than participating in this stacking.
   const restrictBounds = useAppStore((s) => s.preferences.map.restrictBounds);
 
   const [expanded, setExpanded] = useState(false);

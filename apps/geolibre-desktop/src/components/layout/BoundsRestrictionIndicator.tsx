@@ -16,6 +16,9 @@ import { useTranslation } from "react-i18next";
  * (CollaborationStatusBadge), already accounts for this badge: it lifts itself
  * to `bottom-20` (above this `bottom-12`) when a session is active and bounds
  * are restricted. If yet another bottom-left control is added, revisit both.
+ * (The KnowledgeCardPanel also opens bottom-left at `bottom-12`, but as a large
+ * transient `z-20` panel it overlays these small `z-10` badges while open rather
+ * than stacking with them.)
  */
 export function BoundsRestrictionIndicator() {
   const { t } = useTranslation();

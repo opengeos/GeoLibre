@@ -7,6 +7,7 @@
 // with a personal API token to also return the signed-in user's `unlisted` and
 // `private` projects.
 
+import { getShareFetch } from "./share-fetch";
 import { resolveShareBaseUrl } from "./share-geolibre";
 
 /**
@@ -190,7 +191,9 @@ export async function fetchSharedProjects(
   options: FetchSharedProjectsOptions = {},
 ): Promise<FetchSharedProjectsResult> {
   const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
-  const fetchImpl = options.fetchImpl ?? fetch;
+  // See share-fetch.ts: on desktop this routes the share host through Tauri's
+  // native HTTP client so the gallery listing isn't blocked by WebView CORS.
+  const fetchImpl = options.fetchImpl ?? getShareFetch();
 
   const params = new URLSearchParams();
   if (options.limit != null) params.set("limit", String(options.limit));
@@ -308,9 +311,14 @@ export async function fetchMyProjects(
   options: FetchMyProjectsOptions,
 ): Promise<SharedProject[]> {
   const base = (options.baseUrl ?? resolveShareBaseUrl()).replace(/\/+$/, "");
-  // One auth path for both production and tests: the injected fetch (if any)
-  // flows through the same same-origin gating as the global fetch.
-  const authFetch = shareAuthorizedFetch(options.token, base, options.fetchImpl);
+  // One auth path for both production and tests: the injected fetch (or the
+  // share fetch, which the desktop build routes natively to bypass CORS — see
+  // share-fetch.ts) flows through the same same-origin token gating.
+  const authFetch = shareAuthorizedFetch(
+    options.token,
+    base,
+    options.fetchImpl ?? getShareFetch(),
+  );
 
   const timeout = AbortSignal.timeout(LISTING_TIMEOUT_MS);
   const signal = options.signal

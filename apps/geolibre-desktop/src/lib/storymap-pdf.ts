@@ -36,6 +36,12 @@ export interface HandoutChapter {
   map: HandoutImage;
   /** The chapter's own photo, when it has one and it loaded successfully. */
   photo?: HandoutImage;
+  /**
+   * Draw the map image edge-to-edge as a clean full-page screen with no title,
+   * description, or running header/footer. Used for the start/closing slide
+   * pages (a solid color or a global/preview map view) (#998).
+   */
+  fullBleed?: boolean;
 }
 
 /** Page setup and running text for the handout. */
@@ -44,6 +50,10 @@ export interface HandoutOptions {
   orientation: Orientation;
   /** Document title drawn at the top of every page (omitted when empty). */
   title: string;
+  /** Subtitle drawn under the title on every page (omitted when empty). */
+  subtitle: string;
+  /** Byline drawn at the left of the footer on every page (omitted when empty). */
+  byline: string;
   /** Footer text drawn at the bottom of every page (omitted when empty). */
   footer: string;
 }
@@ -187,6 +197,38 @@ function imageFormat(data: HandoutImage["data"]): "PNG" | "JPEG" {
   return "PNG";
 }
 
+/**
+ * Draw an image edge-to-edge over a box at `(x, y)` of size `boxW x boxH`,
+ * scaling to cover (cropping the overflow) so a full-bleed slide page has no
+ * borders even when the image and page aspect ratios differ. The crop spills
+ * past the page edges, which jsPDF leaves unrendered (clipped to the page box).
+ */
+function drawImageCover(
+  pdf: jsPDF,
+  image: HandoutImage,
+  x: number,
+  y: number,
+  boxW: number,
+  boxH: number,
+): void {
+  const scale =
+    image.width > 0 && image.height > 0
+      ? Math.max(boxW / image.width, boxH / image.height)
+      : 1;
+  const w = image.width > 0 ? image.width * scale : boxW;
+  const h = image.height > 0 ? image.height * scale : boxH;
+  pdf.addImage(
+    image.data,
+    imageFormat(image.data),
+    x + (boxW - w) / 2,
+    y + (boxH - h) / 2,
+    w,
+    h,
+    undefined,
+    "FAST",
+  );
+}
+
 /** Draw an image centered within a box at `(x, y)` of size `boxW x boxH`. */
 function drawImageInBox(
   pdf: jsPDF,
@@ -223,6 +265,13 @@ function drawChapterPage(
   widthMm: number,
   heightMm: number,
 ): void {
+  // A full-bleed slide page is just the captured screen edge-to-edge: no title,
+  // description, or running header/footer (#998).
+  if (chapter.fullBleed) {
+    drawImageCover(pdf, chapter.map, 0, 0, widthMm, heightMm);
+    return;
+  }
+
   const contentWidth = widthMm - MARGIN_MM * 2;
   const footerSize = 9;
   const footerY = heightMm - MARGIN_MM + lineHeightMm(footerSize);
@@ -230,10 +279,12 @@ function drawChapterPage(
   const bottomLimit = heightMm - MARGIN_MM - lineHeightMm(footerSize) - 4;
   let y = MARGIN_MM;
 
-  // The title and footer are running, single-line text; reduce any HTML the
-  // story carried (e.g. the default footer's links) to plain text so the
-  // handout shows readable labels instead of raw markup.
+  // The title/subtitle/byline/footer are running, single-line text; reduce any
+  // HTML the story carried (e.g. the default footer's links) to plain text so
+  // the handout shows readable labels instead of raw markup.
   const docTitle = singleLine(options.title);
+  const subtitle = singleLine(options.subtitle);
+  const byline = singleLine(options.byline);
   const footerText = singleLine(options.footer);
 
   if (docTitle) {
@@ -242,6 +293,20 @@ function drawChapterPage(
     pdf.setFontSize(size);
     pdf.setTextColor(110, 110, 110);
     pdf.text(docTitle, widthMm / 2, y + lineHeightMm(size), {
+      align: "center",
+    });
+    y += lineHeightMm(size) + (subtitle ? 1 : 3);
+  }
+
+  if (subtitle) {
+    const size = 8.5;
+    // Add the leading gap a title would have provided, so a standalone subtitle
+    // is not flush against the top margin.
+    if (!docTitle) y += 3;
+    pdf.setFont("helvetica", "italic");
+    pdf.setFontSize(size);
+    pdf.setTextColor(140, 140, 140);
+    pdf.text(subtitle, widthMm / 2, y + lineHeightMm(size), {
       align: "center",
     });
     y += lineHeightMm(size) + 3;
@@ -316,10 +381,20 @@ function drawChapterPage(
   pdf.setFont("helvetica", "normal");
   pdf.setFontSize(footerSize);
   pdf.setTextColor(130, 130, 130);
+  if (byline) {
+    // Left-aligned in the footer band, occupying the left slot that mirrors the
+    // page-number slot on the right. The centered footer text is kept clear of
+    // both slots (see footerMaxWidth below), so bounding the byline to
+    // PAGE_NUM_SLOT_MM guarantees it never runs into the footer. The first
+    // wrapped line is kept; a very long byline is truncated to this slot.
+    const bylineMaxWidth = Math.max(20, PAGE_NUM_SLOT_MM);
+    const [line] = pdf.splitTextToSize(byline, bylineMaxWidth) as string[];
+    pdf.text(line, MARGIN_MM, footerY);
+  }
   if (footerText) {
     // Keep the footer centered but bound its width symmetrically so it stays
-    // clear of the right-aligned page number on both sides, even on wide pages
-    // (e.g. Tabloid landscape). Only the first wrapped line is kept.
+    // clear of the byline (left) and the page number (right) on both sides, even
+    // on wide pages (e.g. Tabloid landscape). Only the first wrapped line is kept.
     const footerMaxWidth = Math.max(20, widthMm - 2 * (MARGIN_MM + PAGE_NUM_SLOT_MM));
     // splitTextToSize always returns at least one element for non-empty input,
     // and footerText is non-empty here, so `line` is always a string.

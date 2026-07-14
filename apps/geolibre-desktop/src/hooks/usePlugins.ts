@@ -6,6 +6,7 @@ import {
   maplibreComponentsPlugin,
   maplibreDeckGlVizPlugin,
   maplibreDirectionsPlugin,
+  maplibreElevationProfilePlugin,
   maplibreEffectsPlugin,
   getEffectsSettings,
   setEffectsSettings,
@@ -18,10 +19,16 @@ import {
   maplibreLayerControlPlugin,
   maplibreNasaEarthdataPlugin,
   maplibreNationalMapPlugin,
+  maplibreOpenAerialMapPlugin,
   maplibreOvertureMapsPlugin,
   maplibreGraticulePlugin,
+  maplibreCloudsPlugin,
+  maplibrePrecipitationPlugin,
+  maplibreMapillaryPlugin,
   maplibreReverseGeocodePlugin,
   maplibreStreetViewPlugin,
+  maplibreSunPlugin,
+  maplibreRouteAnimationPlugin,
   maplibreSwipePlugin,
   SWIPE_PLUGIN_ID,
   maplibreTimeSliderPlugin,
@@ -57,7 +64,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readDir, readFile } from "@tauri-apps/plugin-fs";
 import type { RefObject } from "react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { bundledPluginManifestPaths } from "virtual:bundled-plugins";
 import {
   installWebPluginArchive,
@@ -71,7 +78,12 @@ import {
   type InstalledWebPlugin,
 } from "../lib/external-plugins";
 import { appendDiagnostic } from "../lib/diagnostics";
-import { createWmsTileUrl } from "../components/layout/add-data/helpers";
+import { fetchUrlBytes } from "../lib/native-http";
+import { partitionProjectPluginManifestUrls } from "../lib/plugin-trust";
+import {
+  createWmsTileUrl,
+  normalizeWmsVersion,
+} from "../components/layout/add-data/helpers";
 import { createExternalNativeStoreLayer } from "../lib/external-native-layer";
 import { mergeStringLists } from "../lib/string-lists";
 import {
@@ -82,22 +94,7 @@ import {
   saveTextFileWithFallback,
 } from "../lib/tauri-io";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
-import { useFileNamePrompt } from "./useFileNamePrompt";
-
-/**
- * Append the first allowed extension to a user-entered file name when it lacks
- * one, so a name like "my-bookmarks" becomes "my-bookmarks.json".
- */
-function ensureFileExtension(name: string, extensions: string[]): string {
-  const ext = extensions[0];
-  if (!ext) return name;
-  const lower = name.toLowerCase();
-  if (extensions.some((e) => lower.endsWith(`.${e.toLowerCase()}`))) {
-    return name;
-  }
-  // Strip any trailing dots first so "my-bookmarks." doesn't become a double dot.
-  return `${name.replace(/\.+$/, "")}.${ext}`;
-}
+import { ensureFileExtension, useFileNamePrompt } from "./useFileNamePrompt";
 
 const RASTER_PROXY_PATH = "/__geolibre_raster_proxy";
 
@@ -146,15 +143,22 @@ manager.registerAll([
   maplibreNasaEarthdataPlugin,
   maplibreEnviroAtlasPlugin,
   maplibreNationalMapPlugin,
+  maplibreOpenAerialMapPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
   maplibreOvertureMapsPlugin,
   maplibreGeoAgentPlugin,
   maplibreUsgsLidarPlugin,
   maplibreStreetViewPlugin,
+  maplibreMapillaryPlugin,
+  maplibreElevationProfilePlugin,
   maplibreSwipePlugin,
   maplibreGraticulePlugin,
+  maplibreCloudsPlugin,
+  maplibrePrecipitationPlugin,
   maplibreEffectsPlugin,
+  maplibreSunPlugin,
+  maplibreRouteAnimationPlugin,
   maplibreDirectionsPlugin,
   maplibreReverseGeocodePlugin,
   maplibreDeckGlVizPlugin,
@@ -164,11 +168,25 @@ manager.registerAll([
 let externalPluginsLoaded = false;
 let externalPluginsLoadPromise: Promise<void> | null = null;
 let externalPluginsLoadKey: string | null = null;
+let externalPluginLoadIssues = new Map<string, string>();
 const externalPluginsListeners = new Set<() => void>();
 const EMPTY_PLUGIN_MANIFEST_URLS: string[] = [];
 
 export function getPluginManager(): PluginManager {
   return manager;
+}
+
+export function getExternalPluginLoadIssues(): ReadonlyMap<string, string> {
+  return externalPluginLoadIssues;
+}
+
+export function subscribeToExternalPluginLoads(
+  listener: () => void,
+): () => void {
+  // Shares the ready-state listener set so marketplace rows update for both
+  // successful loads and per-plugin load issues.
+  externalPluginsListeners.add(listener);
+  return () => externalPluginsListeners.delete(listener);
 }
 
 // Upgrade an installed external plugin in place by re-fetching its manifest URL
@@ -207,15 +225,9 @@ export async function installPluginArchive(
   // so the forced re-scan re-registers the updated version under the same id.
   unloadFilesystemPlugin(manager, pluginId, app);
   const desktopSettings = useDesktopSettingsStore.getState().desktopSettings;
-  const projectManifestUrls =
-    useAppStore.getState().projectPlugins?.manifestUrls ??
-    EMPTY_PLUGIN_MANIFEST_URLS;
-  await ensureExternalPluginsLoadedWithSettings(
-    desktopSettings,
-    projectManifestUrls,
-    app,
-    { force: true },
-  );
+  await ensureExternalPluginsLoadedWithSettings(desktopSettings, app, {
+    force: true,
+  });
   return pluginId;
 }
 
@@ -364,19 +376,21 @@ export function useExternalPluginsReady(
   const desktopSettings = useDesktopSettingsStore(
     (state) => state.desktopSettings,
   );
-  const projectPluginManifestUrls = useAppStore(
-    (state) => state.projectPlugins?.manifestUrls ?? EMPTY_PLUGIN_MANIFEST_URLS,
-  );
 
   useEffect(() => {
     // mapControllerRef is a stable ref object, so it is intentionally not a
     // dependency; createAppAPI dereferences .current lazily.
+    //
+    // Project-supplied plugin URLs are intentionally NOT loaded here: the scan
+    // only ever fetches/imports the user's installed URLs (desktop settings) and
+    // the bundled drop-ins. Untrusted project URLs are surfaced by
+    // useProjectPluginTrust and only reach this scan after the user trusts them
+    // (which adds them to desktopSettings and re-runs this effect). See #1062.
     void ensureExternalPluginsLoadedWithSettings(
       desktopSettings,
-      projectPluginManifestUrls,
       createAppAPI(mapControllerRef),
     );
-  }, [desktopSettings, projectPluginManifestUrls]);
+  }, [desktopSettings]);
 
   return useSyncExternalStore(
     (listener) => {
@@ -386,6 +400,81 @@ export function useExternalPluginsReady(
     () => externalPluginsLoaded,
     () => externalPluginsLoaded,
   );
+}
+
+export interface ProjectPluginTrustState {
+  /**
+   * Project-supplied plugin manifest URLs awaiting the user's trust decision.
+   * Empty when the opened project references no untrusted plugins (its URLs are
+   * already installed or bundled), which is the common case for a user's own
+   * saved projects.
+   */
+  pendingUrls: string[];
+  /**
+   * Trust every pending URL: add it to the persisted desktop settings so it is
+   * installed like any marketplace/manual plugin. This re-runs the external
+   * plugin scan (via useExternalPluginsReady's settings dependency), which is
+   * what actually fetches and imports the now-trusted plugins.
+   */
+  trust: () => void;
+  /** Dismiss the prompt for this session without loading or persisting anything. */
+  dismiss: () => void;
+}
+
+/**
+ * Gate the plugin manifest URLs carried inside an opened project behind an
+ * explicit user trust decision (#1062).
+ *
+ * When a project is opened, its `plugins.manifestUrls` are compared against the
+ * user's installed URLs and the bundled drop-ins. Any URL that is neither is
+ * "untrusted" and is surfaced here so the shell can show a trust prompt before
+ * the plugin's code is ever fetched or imported. Trusting persists the URLs to
+ * desktop settings (which loads them); dismissing loads nothing and persists
+ * nothing. A per-session dismissed set keeps a declined URL from re-prompting
+ * on every render or when another project references the same URL.
+ */
+export function useProjectPluginTrust(): ProjectPluginTrustState {
+  const projectManifestUrls = useAppStore(
+    (state) => state.projectPlugins?.manifestUrls ?? EMPTY_PLUGIN_MANIFEST_URLS,
+  );
+  const trustedManifestUrls = useDesktopSettingsStore(
+    (state) => state.desktopSettings.pluginManifestUrls,
+  );
+  const [dismissedUrls, setDismissedUrls] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  const pendingUrls = useMemo(() => {
+    const { untrusted } = partitionProjectPluginManifestUrls(
+      projectManifestUrls,
+      trustedManifestUrls,
+      bundledPluginManifestUrls(),
+    );
+    return untrusted.filter((url) => !dismissedUrls.has(url));
+  }, [projectManifestUrls, trustedManifestUrls, dismissedUrls]);
+
+  const trust = useCallback(() => {
+    if (pendingUrls.length === 0) return;
+    const current = useDesktopSettingsStore.getState().desktopSettings;
+    useDesktopSettingsStore.getState().setDesktopSettings({
+      ...current,
+      pluginManifestUrls: mergeStringLists(
+        current.pluginManifestUrls,
+        pendingUrls,
+      ),
+    });
+  }, [pendingUrls]);
+
+  const dismiss = useCallback(() => {
+    if (pendingUrls.length === 0) return;
+    setDismissedUrls((previous) => {
+      const next = new Set(previous);
+      for (const url of pendingUrls) next.add(url);
+      return next;
+    });
+  }, [pendingUrls]);
+
+  return { pendingUrls, trust, dismiss };
 }
 
 /**
@@ -428,7 +517,7 @@ export function useSwipeSplitViewExclusivity(
 // load time rather than stored in Settings, so a baked-in plugin always loads
 // and cannot be removed by the user. The URL loader skips the scheme allow-list
 // applied to user/project URLs, so the desktop tauri:// origin is accepted.
-function bundledPluginManifestUrls(): string[] {
+export function bundledPluginManifestUrls(): string[] {
   if (typeof window === "undefined") return [];
   // Resolve against a base that always ends in "/" so a non-trailing-slash
   // BASE_URL (e.g. "/geolibre") cannot mangle the path into "/geolibreplugins".
@@ -444,14 +533,18 @@ function ensureExternalPluginsLoadedWithSettings(
   desktopSettings: ReturnType<
     typeof useDesktopSettingsStore.getState
   >["desktopSettings"],
-  projectPluginManifestUrls: string[],
   app: ReturnType<typeof createAppAPI>,
   options?: { force?: boolean },
 ): Promise<void> {
+  // Only the user's installed URLs (desktop settings) and the bundled drop-ins
+  // are auto-loaded. Project-supplied URLs are deliberately excluded here so
+  // opening a project never fetches or imports third-party plugin code; they
+  // reach this scan only after the user trusts them, at which point they are in
+  // desktopSettings.pluginManifestUrls (see useProjectPluginTrust / #1062).
+  const bundledManifestUrls = bundledPluginManifestUrls();
   const pluginManifestUrls = mergeStringLists(
-    bundledPluginManifestUrls(),
+    bundledManifestUrls,
     desktopSettings.pluginManifestUrls,
-    projectPluginManifestUrls,
   );
   const loadKey = JSON.stringify({
     additionalPluginDirectories: desktopSettings.additionalPluginDirectories,
@@ -472,6 +565,8 @@ function ensureExternalPluginsLoadedWithSettings(
     return externalPluginsLoadPromise;
   }
 
+  externalPluginLoadIssues = new Map();
+  notifyExternalPluginsListeners();
   setExternalPluginsLoaded(false);
   externalPluginsLoadKey = loadKey;
   // Serialize scans: loadExternalPlugins reads and writes module-level state
@@ -496,9 +591,19 @@ function ensureExternalPluginsLoadedWithSettings(
         manager,
         desktopSettings.additionalPluginDirectories,
         pluginManifestUrls,
+        // Only manifests fetched from the bundled drop-in URLs may use
+        // activeByDefault (they are baked into the build, hence trusted).
+        { bundledManifestUrls },
       );
     })
     .then((result) => {
+      externalPluginLoadIssues = new Map(
+        result.issues.map((issue) => [
+          issue.sourceUrl ?? issue.archiveName,
+          issue.message,
+        ]),
+      );
+      notifyExternalPluginsListeners();
       if (result.loadedPluginIds.length) {
         console.info(
           `Loaded external GeoLibre plugins from ${result.pluginSources.join(
@@ -581,6 +686,7 @@ export function createAppAPI(
         styles,
         format,
         transparent,
+        version,
         ...tileOptions
       } = options;
       // TypeScript enforces these, but an untyped JS plugin can pass "" — an
@@ -599,6 +705,19 @@ export function createAppAPI(
       const resolvedStyles = styles ?? "";
       const resolvedFormat = format ?? "image/png";
       const resolvedTransparent = transparent ?? true;
+      const resolvedVersion = normalizeWmsVersion(version);
+      // Mirror setMapProjection's unrecognized-value warning so a typo'd
+      // version from an untyped JS plugin is visible instead of silently
+      // coerced. Valid shorthand in a recognized 1.x family (e.g. "1.3") is
+      // not warned about — it normalizes cleanly.
+      if (
+        version !== undefined &&
+        (typeof version !== "string" || !/^1\.\d/.test(version.trim()))
+      ) {
+        console.warn(
+          `[GeoLibre] addWmsLayer: unsupported WMS version "${String(version)}"; using "${resolvedVersion}".`,
+        );
+      }
       const tileUrl = createWmsTileUrl({
         endpoint: url,
         layers,
@@ -606,6 +725,7 @@ export function createAppAPI(
         format: resolvedFormat,
         transparent: resolvedTransparent,
         tileSize,
+        version: resolvedVersion,
       });
       return store.addTileLayer(
         name,
@@ -620,6 +740,7 @@ export function createAppAPI(
             styles: resolvedStyles,
             format: resolvedFormat,
             transparent: resolvedTransparent,
+            version: resolvedVersion,
           },
           ...tileOptions,
         },
@@ -793,6 +914,46 @@ export function createAppAPI(
           }),
         ));
     })(),
+    // Hand external plugins GeoLibre's own maplibre-gl-raster module so they
+    // render COGs on the host's single deck.gl/luma.gl instance. A bundled
+    // second copy throws on luma.gl's "already initialized" guard. Memoized so
+    // repeated calls reuse one resolved module.
+    getMaplibreGlRaster: (() => {
+      let cached: Promise<typeof import("maplibre-gl-raster")> | undefined;
+      return () =>
+        (cached ??= import("maplibre-gl-raster").catch((error) => {
+          // Don't memoize a rejection: a transient chunk-load failure would
+          // otherwise poison getMaplibreGlRaster() for the whole session.
+          cached = undefined;
+          throw error;
+        }));
+    })(),
+    // Set the persisted projection preference so the host's projection
+    // enforcement keeps it (a raw map.setProjection is reverted on idle).
+    // deck.gl-backed plugins need mercator; globe breaks deck tile traversal.
+    setMapProjection: (projection: "globe" | "mercator") => {
+      // External plugins call through a JS boundary where TypeScript can't
+      // enforce the union, so reject anything else. An invalid value would be
+      // persisted and make enforceProjection throw and reschedule on every idle
+      // forever.
+      if (projection !== "globe" && projection !== "mercator") {
+        console.warn(
+          `[GeoLibre] setMapProjection: ignoring unknown projection "${String(projection)}" (expected "globe" or "mercator").`,
+        );
+        return;
+      }
+      const store = useAppStore.getState();
+      const { map } = store.preferences;
+      if (map.projection === projection) return;
+      store.setPreferences({
+        ...store.preferences,
+        map: { ...map, projection },
+      });
+    },
+    getMapProjection: () =>
+      // Legacy projects may not carry a projection preference; default to globe
+      // like MapController.enforceProjection so the declared return type holds.
+      useAppStore.getState().preferences.map.projection ?? "globe",
     registerRightPanel,
     unregisterRightPanel,
     openRightPanel,
@@ -819,9 +980,7 @@ async function fetchRemoteArrayBuffer(url: string): Promise<ArrayBuffer> {
 
   if (isTauriRuntime()) {
     try {
-      const bytes = await invoke<number[] | Uint8Array>("fetch_url_bytes", {
-        url,
-      });
+      const bytes = await fetchUrlBytes(url, { context: "plugin resource" });
       return normalizeBytes(bytes);
     } catch {
       // Fall back to browser fetch for web builds and during local development.
@@ -923,6 +1082,10 @@ function isTauriRuntime(): boolean {
 function setExternalPluginsLoaded(loaded: boolean): void {
   if (externalPluginsLoaded === loaded) return;
   externalPluginsLoaded = loaded;
+  notifyExternalPluginsListeners();
+}
+
+function notifyExternalPluginsListeners(): void {
   for (const listener of externalPluginsListeners) listener();
 }
 

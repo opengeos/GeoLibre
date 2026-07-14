@@ -160,3 +160,91 @@ export function reconcileEditedFeatures(
     }),
   };
 }
+
+/** A map style layer described by what role it plays for overlay ordering. */
+export interface OverlayOrderLayer {
+  /** The MapLibre style layer id. */
+  id: string;
+  /** True for the GeoEditor overlay (Geoman `gm_*` and `geo-editor-*`) layers. */
+  isOverlay: boolean;
+  /** True for the edited layer's own (anchor) map layers. */
+  isAnchor: boolean;
+}
+
+/** The move the caller should apply to keep the overlay above the edited layer. */
+export interface OverlayOrderPlan {
+  /** The ids of the overlay layers, in their current bottom-to-top order. */
+  overlayIds: string[];
+  /**
+   * The MapLibre `beforeId` to pass to `moveLayer` for each overlay layer: the
+   * first non-overlay layer above the edited layer, or `undefined` to move the
+   * overlay to the very top (nothing but overlay sits above the edited layer).
+   */
+  beforeId: string | undefined;
+}
+
+/**
+ * Decide how to reposition the GeoEditor overlay so it renders at the edited
+ * layer's slot in the stack. `MapController.syncLayers` reorders the map's
+ * layers on every layers change and has no knowledge of the overlay, so without
+ * this the overlay drifts below any layer stacked above the edited one and the
+ * edit features disappear behind it (issue #1015).
+ *
+ * Returns `null` when nothing should move: the edited layer is not on the map
+ * (no anchor), there are no overlay layers, or the overlay already sits in one
+ * contiguous run directly above the anchor (so re-applying would needlessly
+ * churn the style and re-fire `styledata`).
+ *
+ * @param layers The map's style layers, bottom-to-top, tagged with their roles.
+ * @returns The reposition plan, or `null` when no move is needed.
+ */
+export function planGeoEditorOverlayOrder(
+  layers: OverlayOrderLayer[],
+): OverlayOrderPlan | null {
+  let lastAnchorIndex = -1;
+  for (let i = 0; i < layers.length; i += 1) {
+    if (layers[i].isAnchor) lastAnchorIndex = i;
+  }
+  // Without the edited layer on the map there is no anchor; leave the overlay
+  // where Geoman placed it (on top) rather than guessing a position.
+  if (lastAnchorIndex < 0) return null;
+
+  const overlayIds = layers
+    .filter((layer) => layer.isOverlay)
+    .map((layer) => layer.id);
+  if (overlayIds.length === 0) return null;
+
+  if (overlayLayersAlreadyPositioned(layers, overlayIds.length, lastAnchorIndex)) {
+    return null;
+  }
+
+  // Anchor the overlay just below the first non-overlay layer above the edited
+  // layer (or on top of the map when nothing sits above it).
+  let beforeId: string | undefined;
+  for (let i = lastAnchorIndex + 1; i < layers.length; i += 1) {
+    if (!layers[i].isOverlay) {
+      beforeId = layers[i].id;
+      break;
+    }
+  }
+
+  return { overlayIds, beforeId };
+}
+
+/**
+ * Whether the overlay layers already sit in one contiguous run directly above
+ * the edited layer's anchor layers, so no reposition is needed.
+ */
+function overlayLayersAlreadyPositioned(
+  layers: OverlayOrderLayer[],
+  overlayCount: number,
+  lastAnchorIndex: number,
+): boolean {
+  const start = lastAnchorIndex + 1;
+  if (start + overlayCount > layers.length) return false;
+  for (let i = 0; i < overlayCount; i += 1) {
+    if (!layers[start + i].isOverlay) return false;
+  }
+  const after = layers[start + overlayCount];
+  return !(after && after.isOverlay);
+}

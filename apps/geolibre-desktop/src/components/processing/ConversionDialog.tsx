@@ -9,6 +9,7 @@ import {
   runVectorToGeoParquet,
   runVectorToPmtiles,
   runVectorToShapefile,
+  runVectorToVector,
   type ConversionJob,
 } from "@geolibre/processing";
 import {
@@ -34,6 +35,7 @@ import {
   Server,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   isTauri,
   pickLocalPathWithFallback,
@@ -42,7 +44,9 @@ import {
   saveBinaryFileWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
+import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import i18n from "../../i18n";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
@@ -59,12 +63,28 @@ function fileExtension(name: string): string {
   return index >= 0 ? name.slice(index + 1).toLowerCase() : "";
 }
 
+function stripExtension(name: string): string {
+  const extension = fileExtension(name);
+  return extension ? name.slice(0, -(extension.length + 1)) : name;
+}
+
 function defaultGeoParquetName(inputName: string): string {
-  const extension = fileExtension(inputName);
-  const stem = extension
-    ? inputName.slice(0, -(extension.length + 1))
-    : inputName;
-  return `${stem || "sorted"}.parquet`;
+  return `${stripExtension(inputName) || "sorted"}.parquet`;
+}
+
+/**
+ * Suggest an output file name for a tool from its input file: the input's stem
+ * plus the tool's default output extension (e.g. `cities.geojson` →
+ * `cities.gpkg` for Vector to Vector, `cities.parquet` for the GeoParquet
+ * writers).
+ */
+function defaultOutputNameForKind(
+  kind: ConversionToolKind,
+  inputName: string,
+): string {
+  const stem = stripExtension(inputName) || "output";
+  const extension = fileExtension(TOOL_CONFIGS[kind].defaultOutputName) || "parquet";
+  return `${stem}.${extension}`;
 }
 
 function browserConversionJob(
@@ -144,7 +164,85 @@ const VECTOR_INPUT_EXTENSIONS = [
 ];
 const PARQUET_COMPRESSIONS = ["zstd", "snappy", "gzip", "lz4", "uncompressed"];
 
+// Input extensions the generic Vector to Vector tool accepts. Reading is handled
+// by ST_Read (or read_parquet), so this only bounds the file picker; the actual
+// detection is by content/extension at read time. `.zip` is a zipped Shapefile,
+// read by the sidecar via GDAL's /vsizip/ (browser input is gated separately —
+// the in-browser DuckDB reader can't open a zip).
+const VECTOR_TO_VECTOR_INPUT_EXTENSIONS = [
+  "geojson",
+  "geojsonl",
+  "json",
+  "parquet",
+  "geoparquet",
+  "fgb",
+  "gpkg",
+  "shp",
+  "zip",
+  "kml",
+  "gml",
+  "gpx",
+];
+
+// In-browser writers, keyed by output extension. DuckDB-WASM cannot write GDAL
+// vector formats (its virtual filesystem lacks the random-access seek/write the
+// GDAL drivers need), so the web build is limited to GeoParquet (DuckDB) plus
+// the pure-JS GeoJSON/CSV/GeoPackage/Shapefile writers. The Shapefile writer
+// always emits a zip, so `.zip` (not bare `.shp`) is the browser Shapefile
+// option; a bare `.shp` is produced only by the desktop sidecar.
+const BROWSER_OUTPUT_FORMATS: Record<
+  string,
+  "geojson" | "csv" | "geoparquet" | "geopackage" | "shapefile"
+> = {
+  geojson: "geojson",
+  json: "geojson",
+  csv: "csv",
+  parquet: "geoparquet",
+  geoparquet: "geoparquet",
+  gpkg: "geopackage",
+  zip: "shapefile",
+};
+
+// Output extensions the generic Vector to Vector tool offers. The sidecar
+// (native DuckDB spatial) writes every one of these via a GDAL driver; the
+// in-browser runtime can only produce the BROWSER_OUTPUT_FORMATS subset.
+const VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS = [
+  "geojson",
+  "geojsonl",
+  "json",
+  "fgb",
+  "gpkg",
+  "shp",
+  "zip",
+  "kml",
+  "gml",
+  "gpx",
+  "sqlite",
+  "csv",
+  "parquet",
+  "geoparquet",
+];
+
+/** The in-browser writer for an output extension, or null when unsupported. */
+function browserExportFormatForExtension(extension: string) {
+  return BROWSER_OUTPUT_FORMATS[extension] ?? null;
+}
+
 const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
+  "vector-to-vector": {
+    title: "Vector to Vector",
+    description:
+      "Convert between any vector formats DuckDB's spatial extension supports. The input and output formats are detected from the file extensions. The desktop app writes any format (FlatGeobuf, GeoPackage, Shapefile, KML, GML, …); the browser writes GeoJSON, CSV, GeoParquet, GeoPackage, and Shapefile.",
+    inputLabel: "Input vector file",
+    inputFilters: [
+      { name: "Vector", extensions: VECTOR_TO_VECTOR_INPUT_EXTENSIONS },
+    ],
+    outputLabel: "Output vector file",
+    outputFilters: [
+      { name: "Vector", extensions: VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS },
+    ],
+    defaultOutputName: "output.gpkg",
+  },
   "vector-to-geoparquet": {
     title: "Vector to GeoParquet",
     description:
@@ -243,6 +341,7 @@ function jobStatusTone(job: ConversionJob | null): string {
 }
 
 export function ConversionDialog() {
+  const { t } = useTranslation();
   const kind = useAppStore((s) => s.ui.conversionOpen);
   const setConversionOpen = useAppStore((s) => s.setConversionOpen);
 
@@ -266,12 +365,15 @@ export function ConversionDialog() {
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
   const desktop = isTauri();
-  // These conversions run entirely in-browser with DuckDB-WASM and never need
-  // the Python sidecar. FlatGeobuf and PMTiles have no WASM writer, so they
-  // stay sidecar-only.
+  // These conversions run entirely in-browser with DuckDB-WASM (plus the
+  // bundled JS writers) and never need the Python sidecar. On desktop the same
+  // tools prefer the sidecar, which covers every format. FlatGeobuf and PMTiles
+  // have no WASM writer, so they stay sidecar-only.
   const usesBrowserRuntime =
     !desktop &&
-    (kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet");
+    (kind === "vector-to-vector" ||
+      kind === "vector-to-geoparquet" ||
+      kind === "csv-to-geoparquet");
   const isCsv = kind === "csv-to-geoparquet";
   const isPmtiles = kind === "vector-to-pmtiles";
   const showCompression = Boolean(config?.compressions);
@@ -392,9 +494,9 @@ export function ConversionDialog() {
       if (!files.length) return;
       setBrowserFiles(files);
       const { mainFile } = splitBrowserSelection(files);
-      if (mainFile) {
+      if (mainFile && kind) {
         setOutputPath((current) =>
-          current.trim() ? current : defaultGeoParquetName(mainFile.name),
+          current.trim() ? current : defaultOutputNameForKind(kind, mainFile.name),
         );
         if (isCsv) void loadCsvColumns(mainFile);
       }
@@ -426,6 +528,103 @@ export function ConversionDialog() {
     if (path) setOutputPath(path);
   };
 
+  // In-browser path for the generic Vector to Vector tool: read any format with
+  // DuckDB-WASM (ST_Read), then write the subset the browser can produce by
+  // dispatching on the output extension. Arbitrary GDAL formats need the desktop
+  // sidecar; this is only reached on the web build.
+  const runBrowserVectorToVector = async (mainFile: File, siblings: File[]) => {
+    if (!kind) return;
+    const toolId = kind;
+    // The in-browser DuckDB reader cannot open a zipped Shapefile (ST_Read needs
+    // GDAL's /vsizip/, which only the sidecar uses); guide the user instead of
+    // failing deep in the loader. The desktop app reads .zip inputs directly.
+    if (fileExtension(mainFile.name) === "zip") {
+      setError(i18n.t("toolbar.conversion.zipInputBrowserError"));
+      return;
+    }
+    const outputName =
+      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    const outputExtension = fileExtension(outputName);
+    const format = browserExportFormatForExtension(outputExtension);
+    if (!format) {
+      setError(
+        outputExtension
+          ? i18n.t("toolbar.conversion.browserOutputUnsupported", {
+              extension: outputExtension,
+            })
+          : i18n.t("toolbar.conversion.outputExtensionRequired"),
+      );
+      return;
+    }
+    setError(null);
+    setJob(
+      browserConversionJob(toolId, "running", [
+        i18n.t("toolbar.conversion.readingWithDuckDb", { name: mainFile.name }),
+      ]),
+    );
+    try {
+      const [
+        { loadDuckDbVectorFile, VectorLoadCancelledError },
+        { exportVectorLayer },
+      ] = await Promise.all([
+        import("../../lib/duckdb-vector-loader"),
+        import("../../lib/vector-export"),
+      ]);
+      const toVectorFile = async (file: File) => ({
+        name: file.name,
+        extension: fileExtension(file.name),
+        data: new Uint8Array(await file.arrayBuffer()),
+      });
+      let geojson;
+      try {
+        geojson = await loadDuckDbVectorFile(
+          {
+            ...(await toVectorFile(mainFile)),
+            siblingFiles: await Promise.all(siblings.map(toVectorFile)),
+          },
+          {
+            // Preflight a feature count and confirm before materializing a huge
+            // dataset to GeoJSON in memory, matching the Add Data vector loaders.
+            onLargeDataset: ({ name, featureCount }: LargeVectorDataset) =>
+              window.confirm(
+                i18n.t("toolbar.item.largeVectorDesc", {
+                  name,
+                  count: featureCount.toLocaleString(),
+                }),
+              ),
+          },
+        );
+      } catch (loadErr) {
+        if (loadErr instanceof VectorLoadCancelledError) {
+          // The user declined the large-dataset confirmation; clear the job
+          // rather than showing it as a failure.
+          setJob(null);
+          return;
+        }
+        throw loadErr;
+      }
+      const baseName = stripExtension(outputName) || "output";
+      const savedName = await exportVectorLayer(geojson, format, baseName);
+      setJob(
+        browserConversionJob(toolId, "succeeded", [
+          i18n.t("toolbar.conversion.readFeatures", {
+            features: geojson.features.length,
+            name: mainFile.name,
+          }),
+          // Cancelling the save dialog is a deliberate user action, not a
+          // failure, so keep the status green.
+          savedName
+            ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
+            : i18n.t("toolbar.conversion.saveCanceled"),
+        ]),
+      );
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message : "Could not convert this file.";
+      setJob(browserConversionJob(toolId, "failed", [detail], detail));
+    }
+  };
+
   const runBrowserConversion = async () => {
     // Only reached when usesBrowserRuntime is true, which requires a kind.
     if (!kind) return;
@@ -433,6 +632,10 @@ export function ConversionDialog() {
     const { mainFile, siblings } = splitBrowserSelection(browserFiles);
     if (!mainFile) {
       setError("Choose an input file.");
+      return;
+    }
+    if (kind === "vector-to-vector") {
+      await runBrowserVectorToVector(mainFile, siblings);
       return;
     }
     const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
@@ -544,7 +747,11 @@ export function ConversionDialog() {
     const rowGroupValid =
       Number.isFinite(parsedRowGroupSize) && parsedRowGroupSize > 0;
     try {
-      if (kind === "vector-to-geoparquet") {
+      if (kind === "vector-to-vector") {
+        // The backend resolves the output format from the output extension, so
+        // the input/output paths are all it needs.
+        setJob(await runVectorToVector({ input_path, output_path }));
+      } else if (kind === "vector-to-geoparquet") {
         if (!rowGroupValid) {
           setError("Row group size must be a positive integer.");
           return;
@@ -661,14 +868,14 @@ export function ConversionDialog() {
                 <Input
                   id="conversion-input"
                   value={browserFiles.map((file) => file.name).join(", ")}
-                  placeholder="Choose a file"
+                  placeholder={t("processing.filePicker.chooseFilePlaceholder")}
                   readOnly
                 />
               ) : (
                 <Input
                   id="conversion-input"
                   value={inputPath}
-                  placeholder="File path"
+                  placeholder={t("processing.filePicker.filePath")}
                   onChange={(event) => setInputPath(event.target.value)}
                 />
               )}
@@ -676,7 +883,7 @@ export function ConversionDialog() {
                 type="button"
                 variant="outline"
                 size="icon"
-                title="Choose input file"
+                title={t("processing.filePicker.chooseInputFile")}
                 onClick={() => void pickInput()}
               >
                 <FolderOpen className="h-4 w-4" />
@@ -706,7 +913,7 @@ export function ConversionDialog() {
                 placeholder={
                   usesBrowserRuntime
                     ? (config?.defaultOutputName ?? "output")
-                    : "File path"
+                    : t("processing.filePicker.filePath")
                 }
                 onChange={(event) => setOutputPath(event.target.value)}
               />
@@ -715,7 +922,7 @@ export function ConversionDialog() {
                   type="button"
                   variant="outline"
                   size="icon"
-                  title="Choose output file"
+                  title={t("processing.filePicker.chooseOutputFile")}
                   onClick={() => void pickOutput()}
                 >
                   <Save className="h-4 w-4" />

@@ -4,10 +4,16 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const userArgs = process.argv.slice(2);
+const nativeDuckDb = userArgs.includes("--native-duckdb");
+const tauriArgs = userArgs.filter((arg) => arg !== "--native-duckdb");
 const buildArgs =
-  userArgs.length === 0 && process.platform === "linux"
+  tauriArgs.length === 0 && process.platform === "linux"
     ? ["--bundles", "deb,rpm"]
-    : userArgs;
+    : tauriArgs;
+
+if (nativeDuckDb) {
+  buildArgs.push("--features", "native-duckdb");
+}
 
 const result = spawnSync(
   "npm",

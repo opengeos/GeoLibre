@@ -1,0 +1,18 @@
+name = "geolibre-tiles"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+
+# The /wms reprojection path is CPU-bound (pure-JS PNG decode + warp + encode),
+# unlike the byte-forwarding /opm path. A single 256×256 tile stays well under
+# this budget, and each tile is edge-cached so the cost is paid once; raise it
+# if cold tiles ever hit the limit. Note: this knob only applies on paid plans —
+# the Workers free tier is capped at 10 ms regardless, too low for reprojection.
+[limits]
+cpu_ms = 200
+
+# Binds the custom domain on deploy. Because geolibre.app is managed in this
+# Cloudflare account, the DNS record and TLS certificate are provisioned
+# automatically on the first `wrangler deploy`.
+[[routes]]
+pattern = "tiles.geolibre.app"
+custom_domain = true

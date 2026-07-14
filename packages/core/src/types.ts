@@ -263,6 +263,18 @@ export interface LayerStyle {
   extrusionAdvancedStyleEnabled: boolean;
   extrusionColorExpression: string;
   extrusionHeightExpression: string;
+  /**
+   * When true, a vector layer whose coordinates carry Z values (e.g. a GPX
+   * track with elevations) renders in true 3D through the shared deck.gl
+   * overlay instead of MapLibre's flat 2D layers, so features sit at their
+   * own altitude. Orthogonal to {@link extrusionEnabled}, which extrudes flat
+   * polygons by an attribute; only one of the two should be on at a time.
+   */
+  elevation3dEnabled: boolean;
+  /** Multiplier applied to each coordinate's Z value (vertical exaggeration). */
+  elevation3dVerticalScale: number;
+  /** Constant altitude offset in meters added after the vertical scale. */
+  elevation3dOffset: number;
   vectorStyleMode: VectorStyleMode;
   vectorStyleProperty: string;
   vectorStyleClassCount: number;
@@ -372,6 +384,9 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   extrusionAdvancedStyleEnabled: false,
   extrusionColorExpression: "",
   extrusionHeightExpression: "",
+  elevation3dEnabled: false,
+  elevation3dVerticalScale: 1,
+  elevation3dOffset: 0,
   vectorStyleMode: "single",
   vectorStyleProperty: "",
   vectorStyleClassCount: 5,
@@ -597,6 +612,12 @@ export interface SecondaryMapView {
   /** Optional user-entered label shown on the pane (e.g. a date or scenario). */
   label?: string;
   /**
+   * Which rendering engine draws this pane. Defaults to `"maplibre"` (the 2D
+   * map) when absent, so existing projects and panes are unchanged. `"cesium"`
+   * renders a 3D globe (see {@link CesiumCanvas}) over the same shared layers.
+   */
+  viewKind?: "maplibre" | "cesium";
+  /**
    * Per-layer visibility overrides keyed by layer id. A layer absent from this
    * map inherits the primary map's visibility (`layer.visible`); an entry forces
    * the layer visible (`true`) or hidden (`false`) in this pane only.
@@ -695,6 +716,12 @@ export interface MapPreferences {
   maxPitch: number;
   renderWorldCopies: boolean;
   projection: MapProjection;
+  /**
+   * Celestial body / ellipsoid the project's coordinates describe (keys into the
+   * ellipsoid registry in `@geolibre/core`). Drives measurement radii and pairs
+   * with planetary basemaps. Defaults to `"earth"` (WGS 84).
+   */
+  ellipsoidId: string;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -757,6 +784,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     maxPitch: 85,
     renderWorldCopies: true,
     projection: "globe",
+    ellipsoidId: "earth",
   },
   environmentVariables: [],
   geocoding: {
@@ -859,6 +887,21 @@ export type StoryInsetPosition =
   | "bottom-left"
   | "bottom-right";
 
+/**
+ * A non-chapter intro/outro slide shown before the first or after the last
+ * chapter (#998). `"none"` disables it. The remaining modes are:
+ * - `"blank"` a solid screen in the panel theme color,
+ * - `"black"` a solid black screen,
+ * - `"global"` a zoomed-out global view of the map with no text,
+ * - `"adjacent"` the camera of the neighboring chapter (the first chapter for
+ *   the start slide, the last chapter for the closing slide) with all text and
+ *   media hidden, so the presenter can zoom into the full content next.
+ */
+export type StorySlideMode = "none" | "blank" | "black" | "global" | "adjacent";
+
+/** A start/closing slide that is actually shown (every mode except `"none"`). */
+export type StoryActiveSlideMode = Exclude<StorySlideMode, "none">;
+
 /** Scroll-driven story map authored on top of a GeoLibre project. */
 export interface StoryMap {
   title: string;
@@ -870,6 +913,16 @@ export interface StoryMap {
   markerColor: string;
   inset: boolean;
   insetPosition: StoryInsetPosition;
+  /**
+   * Start the presentation with the chapter itinerary/navigation panel hidden,
+   * revealing chapters one at a time instead of listing every upcoming location
+   * up front (#995). The presenter still offers a toggle to open the list.
+   */
+  hideChapterNav: boolean;
+  /** Optional intro slide shown before the first chapter (#998). */
+  startSlide: StorySlideMode;
+  /** Optional closing slide shown after the last chapter (#998). */
+  endSlide: StorySlideMode;
   chapters: StoryChapter[];
 }
 
@@ -883,6 +936,9 @@ export const DEFAULT_STORY_MAP: StoryMap = {
   markerColor: "#3fb1ce",
   inset: false,
   insetPosition: "bottom-left",
+  hideChapterNav: false,
+  startSlide: "none",
+  endSlide: "none",
   chapters: [],
 };
 
