@@ -28,9 +28,11 @@ body,
 /* MapLibre anchors its controls with physical left/right CSS, so when the app
    runs in a right-to-left locale (html[dir="rtl"]) the inherited direction
    would half-mirror the map chrome (control rows, attribution) while the
-   corners stay put. Pin the map subtree to ltr; text inside popups still
-   shapes correctly via the Unicode bidi algorithm. */
-.maplibregl-map {
+   corners stay put. Pin only MapLibre's own control container to ltr — NOT the
+   whole `.maplibregl-map` subtree, which also hosts app overlays portalled into
+   the map container (e.g. StoryMapPresenter); those must stay free to mirror in
+   RTL. Control text still shapes correctly via the Unicode bidi algorithm. */
+.maplibregl-control-container {
   direction: ltr;
 }
 
