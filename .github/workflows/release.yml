@@ -83,7 +83,7 @@ jobs:
         run: npm ci
 
       - name: Build and upload release assets
-        uses: tauri-apps/tauri-action@v0.6
+        uses: tauri-apps/tauri-action@v1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
