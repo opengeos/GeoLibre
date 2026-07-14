@@ -299,7 +299,7 @@
 - [x] Load local HDF5 and NetCDF-4 files directly from disk, extending the NetCDF/HDF workflow beyond Cloud-Optimized references to files already on your machine
 - [x] GeoEditor plugin can pull the vector features currently visible in the map view into the editor, so you can start editing what you are looking at without re-importing the source data
 
-## v2.0: A 3D globe, planetary mapping, symbology interchange, and editable source layers (current)
+## v2.0: A 3D globe, planetary mapping, symbology interchange, and editable source layers
 
 - [x] Switch any map pane to a **CesiumJS 3D globe** view that stays camera-synced with the 2D maps and mirrors the layer stack, adding a true photorealistic globe alongside the flat workspace (requires a Cesium Ion token)
 - [x] Planetary mapping with the OpenPlanetaryMap basemap set (Mars and the Moon) plus USGS Astrogeology basemaps for Mercury, Venus, the Galilean moons, Titan, Pluto, and Charon reprojected to Web Mercator, a per-project ellipsoid whose radius drives distance/area/scale, and a planet switcher in the Layers panel, plus an expanded EOX Maps catalog and dark-mode-aware basemap theming
@@ -315,6 +315,21 @@
 - [x] Import delimited text (CSV) without coordinates as a standalone attribute table
 - [x] All 13 locale catalogs completed, with the remaining hardcoded panel and dialog strings migrated to the translation system
 - [x] The AI assistant can read provider API keys from OS environment variables, and the desktop diagnostics network log now captures native Tauri HTTP requests and classifies failed `fetch()` errors
+
+## v2.1: A data-source Browser panel, route animation, in-browser object detection, and map recording (current)
+
+- [x] A QGIS-style **Browser panel** (Data Source Manager) for exploring and adding data from one place: browse map Services and Recent items, connect to PostGIS databases and browse their schemas and tables, drill into local files, save and reopen Favorites, add a New connection per service kind, and navigate the whole tree from the keyboard
+- [x] **Route animation**: animate a marker along any line layer, follow the track in 3D with camera controls, and export the whole animation as an MP4 video
+- [x] **In-browser object detection** that runs ONNX/YOLO models directly in the webview, no server or Python required
+- [x] Record the map canvas (or a drawn bounding box) to a video file straight from the browser
+- [x] A true native-resolution viewer for geotagged photos, so full-detail imagery stays crisp on the map
+- [x] Wikipedia knowledge cards: click a place on the map to pull up its Wikipedia summary and info card
+- [x] USGS planetary basemaps for nine more celestial bodies, extending the planetary mapping catalog
+- [x] New OpenAerialMap plugin for searching open aerial imagery, plus a GEBCO ocean-bathymetry WMS sample with proper attribution
+- [x] The Whitebox toolbox is now a floating panel, and Processing subset tools can populate their bounding box from the current map view
+- [x] Scale bar switches between metric, imperial, and nautical units
+- [x] Bundled plugin drop-ins can set `activeByDefault` in their manifest, deployments can opt out of the welcome dialog, and the app now defaults to the Advanced interface and skips the welcome dialog on first run
+- [x] Optional HTTP Basic Auth for the web (Docker) container
 
 ## Plugin marketplace and registry (design)
 
