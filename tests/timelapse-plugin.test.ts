@@ -199,6 +199,53 @@ describe("maplibreTimelapsePlugin", () => {
     assert.ok(storeLayer());
   });
 
+  it("switchProvider rebuilds the stack and store layer for the new provider", async () => {
+    const map = fakeMap();
+    plugin.activate(fakeApp(map));
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+    assert.equal(control.provider.id, "eox-s2cloudless");
+
+    await control.switchProvider("nasa-gibs-landsat-weld");
+
+    // The EOX stack is gone and the nine-year GIBS stack replaced it.
+    assert.equal(control.provider.id, "nasa-gibs-landsat-weld");
+    assert.equal(control.frames.length, 9);
+    assert.equal(map.sources.size, 9);
+    assert.equal(map.layers.size, 9);
+    assert.ok(map.sources.has("timelapse-source-gibs-weld-1983"));
+    assert.ok(!map.sources.has("timelapse-source-s2cloudless-2018"));
+    const gibsSource = map.sources.get("timelapse-source-gibs-weld-1983") as {
+      tiles: string[];
+    };
+    assert.ok(gibsSource.tiles[0].includes("/1983-12-01/"));
+
+    // Exactly one mirroring store layer, now keyed to the GIBS provider, and
+    // the switch resets playback to the oldest year (index 0 → 1983).
+    const layers = useAppStore
+      .getState()
+      .layers.filter(
+        (item) => item.metadata.sourceKind === TIMELAPSE_SOURCE_KIND,
+      );
+    assert.equal(layers.length, 1);
+    assert.equal(layers[0].id, timelapseStoreLayerId("nasa-gibs-landsat-weld"));
+    assert.equal(control.getFrameIndex(), 0);
+    assert.equal(control.getState().year, 1983);
+  });
+
+  it("switchProvider is a no-op when the id resolves to the active provider", async () => {
+    const map = fakeMap();
+    plugin.activate(fakeApp(map));
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+
+    await control.switchProvider("eox-s2cloudless");
+    await control.switchProvider("no-such-provider");
+
+    assert.equal(control.provider.id, "eox-s2cloudless");
+    assert.equal(map.sources.size, FRAME_COUNT);
+  });
+
   it("swaps a year with exactly two raster-opacity writes", () => {
     const map = fakeMap();
     plugin.activate(fakeApp(map));

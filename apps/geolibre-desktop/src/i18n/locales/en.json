@@ -2185,6 +2185,7 @@
   },
   "timelapse": {
     "title": "Timelapse",
+    "provider": "Imagery source",
     "yearSlider": "Timelapse year",
     "play": "Play",
     "pause": "Pause",

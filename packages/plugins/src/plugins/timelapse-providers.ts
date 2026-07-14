@@ -5,9 +5,10 @@
  * raster tile URL template the plugin turns into a pre-warmed MapLibre raster
  * layer. Providers with remote discovery (Google Earth Engine per-year
  * composites, Planetary Computer mosaic searches) can return a Promise from
- * {@link TimelapseProvider.listFrames}; the built-in EOX provider is static.
- * Register additional providers with {@link registerTimelapseProvider} — the
- * control only shows a provider picker when more than one is registered.
+ * {@link TimelapseProvider.listFrames}; the two built-in providers (EOX
+ * Sentinel-2 cloudless and NASA GIBS Landsat/WELD) are static. Register more
+ * with {@link registerTimelapseProvider} — the control only shows a provider
+ * picker when more than one is registered.
  */
 
 /** One dated imagery frame (a year) a timelapse steps through. */
@@ -108,8 +109,67 @@ export const eoxS2CloudlessProvider: TimelapseProvider = {
   },
 };
 
+export const NASA_GIBS_WELD_PROVIDER_ID = "nasa-gibs-landsat-weld";
+
+/**
+ * NASA GIBS publishes the global Landsat/WELD annual mosaic only for three
+ * disjoint spans — 1983–1985, 1988–1990, 1998–2000 — with no imagery in the
+ * gap years (1986–1987, 1991–1997, 2001+ serve a 404 placeholder, not tiles).
+ * These are the exact `P1Y` dates from the layer's WMTS Time dimension; the
+ * timelapse steps straight across the gaps (1985 → 1988 → 1998) rather than
+ * flashing blank years. The underlying science product (GWELDYR v3.1) is a
+ * fixed set of epochs, so this list is static rather than remotely discovered.
+ */
+const GIBS_WELD_YEARS = [
+  1983, 1984, 1985, 1988, 1989, 1990, 1998, 1999, 2000,
+] as const;
+
+/** Native depth of the layer's GoogleMapsCompatible_Level12 matrix set. */
+const GIBS_WELD_MAXZOOM = 12;
+
+/** NASA asks that GIBS imagery credit EOSDIS; the year names the mosaic. */
+function gibsWeldAttribution(year: number): string {
+  return (
+    `Landsat/WELD ${year} surface reflectance — imagery courtesy of ` +
+    '<a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-gweldyr-031" ' +
+    'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>'
+  );
+}
+
+/**
+ * NASA GIBS Landsat/WELD "Corrected Reflectance (True Color)" global annual
+ * surface-reflectance mosaics — global, keyless, 30 m Landsat. Complements the
+ * EOX Sentinel-2 provider with historical years (1983–2000) that predate
+ * Sentinel-2, at the cost of a sparse, gap-filled timeline (see
+ * {@link GIBS_WELD_YEARS}). Tiles come from the EPSG:3857 WMTS endpoint in
+ * `{z}/{y}/{x}` (WMTS TileRow/TileCol) order; the source maxzoom caps at the
+ * Level12 matrix set's native depth and MapLibre overzooms past it.
+ */
+export const nasaGibsWeldProvider: TimelapseProvider = {
+  id: NASA_GIBS_WELD_PROVIDER_ID,
+  name: "Landsat annual (NASA GIBS)",
+  attribution:
+    "Landsat/WELD 1983–2000 surface reflectance — imagery courtesy of " +
+    '<a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-gweldyr-031" ' +
+    'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>',
+  listFrames: () =>
+    GIBS_WELD_YEARS.map((year) => ({
+      id: `gibs-weld-${year}`,
+      label: String(year),
+      year,
+      tileUrlTemplate:
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" +
+        "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual/default/" +
+        `${year}-12-01/GoogleMapsCompatible_Level12/{z}/{y}/{x}.jpeg`,
+      attribution: gibsWeldAttribution(year),
+      maxzoom: GIBS_WELD_MAXZOOM,
+      tileSize: 256,
+    })),
+};
+
 const providers = new Map<string, TimelapseProvider>([
   [eoxS2CloudlessProvider.id, eoxS2CloudlessProvider],
+  [nasaGibsWeldProvider.id, nasaGibsWeldProvider],
 ]);
 
 /**

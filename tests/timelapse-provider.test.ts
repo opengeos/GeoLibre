@@ -5,6 +5,8 @@ import {
   eoxS2CloudlessProvider,
   getTimelapseProvider,
   listTimelapseProviders,
+  NASA_GIBS_WELD_PROVIDER_ID,
+  nasaGibsWeldProvider,
   registerTimelapseProvider,
   type TimelapseFrame,
 } from "../packages/plugins/src/plugins/timelapse-providers";
@@ -12,6 +14,12 @@ import {
 function eoxFrames(): TimelapseFrame[] {
   const frames = eoxS2CloudlessProvider.listFrames();
   assert.ok(Array.isArray(frames), "EOX provider is synchronous");
+  return frames;
+}
+
+function gibsFrames(): TimelapseFrame[] {
+  const frames = nasaGibsWeldProvider.listFrames();
+  assert.ok(Array.isArray(frames), "NASA GIBS provider is synchronous");
   return frames;
 }
 
@@ -63,6 +71,47 @@ describe("eoxS2CloudlessProvider", () => {
   });
 });
 
+describe("nasaGibsWeldProvider", () => {
+  it("lists only the nine sparse WELD annual mosaics in order", () => {
+    // GIBS publishes the global WELD layer for three disjoint spans only —
+    // 1983–1985, 1988–1990, 1998–2000 — so the frame list steps over the gaps.
+    const frames = gibsFrames();
+    assert.deepEqual(
+      frames.map((frame) => frame.year),
+      [1983, 1984, 1985, 1988, 1989, 1990, 1998, 1999, 2000],
+    );
+    assert.deepEqual(
+      frames.map((frame) => frame.label),
+      frames.map((frame) => String(frame.year)),
+    );
+  });
+
+  it("targets the true-color WMTS layer with the mosaic's December date", () => {
+    for (const frame of gibsFrames()) {
+      assert.equal(
+        frame.tileUrlTemplate,
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" +
+          "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual/default/" +
+          `${frame.year}-12-01/GoogleMapsCompatible_Level12/{z}/{y}/{x}.jpeg`,
+      );
+    }
+  });
+
+  it("credits NASA EOSDIS GIBS with the mosaic year in each frame", () => {
+    for (const frame of gibsFrames()) {
+      assert.ok(frame.attribution.includes(String(frame.year)));
+      assert.ok(frame.attribution.includes("NASA EOSDIS GIBS"));
+    }
+  });
+
+  it("caps the source maxzoom at the Level12 matrix set's native depth", () => {
+    for (const frame of gibsFrames()) {
+      assert.equal(frame.maxzoom, 12);
+      assert.equal(frame.tileSize, 256);
+    }
+  });
+});
+
 describe("timelapse provider registry", () => {
   it("returns the EOX provider by id and as the fallback", () => {
     assert.equal(
@@ -71,6 +120,16 @@ describe("timelapse provider registry", () => {
     );
     assert.equal(getTimelapseProvider("no-such-provider"), eoxS2CloudlessProvider);
     assert.equal(getTimelapseProvider(undefined), eoxS2CloudlessProvider);
+  });
+
+  it("returns the NASA GIBS provider by id and lists both built-ins", () => {
+    assert.equal(
+      getTimelapseProvider(NASA_GIBS_WELD_PROVIDER_ID),
+      nasaGibsWeldProvider,
+    );
+    const all = listTimelapseProviders();
+    assert.ok(all.includes(eoxS2CloudlessProvider));
+    assert.ok(all.includes(nasaGibsWeldProvider));
   });
 
   it("lists registered providers and resolves them by id", () => {

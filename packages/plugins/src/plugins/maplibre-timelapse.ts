@@ -49,6 +49,7 @@ import {
 } from "./timelapse-engine";
 import {
   getTimelapseProvider,
+  listTimelapseProviders,
   type TimelapseFrame,
   type TimelapseProvider,
 } from "./timelapse-providers";
@@ -123,6 +124,8 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 export interface TimelapseLabels {
   /** Panel title shown in the floating card's title bar. */
   title: string;
+  /** Accessible name of the imagery-provider picker (shown only with >1 provider). */
+  provider: string;
   yearSlider: string;
   play: string;
   pause: string;
@@ -143,6 +146,7 @@ export interface TimelapseLabels {
 
 export const DEFAULT_TIMELAPSE_LABELS: TimelapseLabels = {
   title: "Timelapse",
+  provider: "Imagery source",
   yearSlider: "Timelapse year",
   play: "Play",
   pause: "Pause",
@@ -168,6 +172,22 @@ export function setTimelapseLabels(next: Partial<TimelapseLabels>): void {
   labels = { ...labels, ...next };
   timelapseControl?.refreshLabels();
   syncPanelRegistration();
+}
+
+/**
+ * Theme a native `<select>` so its text/border track the app theme. Inline (not
+ * just the index.css `.geolibre-timelapse-panel` block, which themes the option
+ * popup): rules from other control stylesheets can outrank a class selector.
+ * The `important` color is required — with the app's global `transition: all`
+ * on form controls, Chromium otherwise keeps reporting the pre-theme (black)
+ * text color for a plain inline declaration.
+ */
+function styleThemedSelect(select: HTMLSelectElement): void {
+  select.style.background = "hsl(var(--background))";
+  select.style.setProperty("color", "hsl(var(--foreground))", "important");
+  select.style.border = "1px solid hsl(var(--border))";
+  select.style.borderRadius = "4px";
+  select.style.padding = "2px 4px";
 }
 
 /** Shared styling for the panel's labelled (Play/Record) buttons. */
@@ -250,8 +270,10 @@ interface TimelapseControlOptions {
  * {@link renderInto} never runs.
  */
 export class TimelapseControl {
-  readonly provider: TimelapseProvider;
-  readonly frames: TimelapseFrame[];
+  // Not readonly: switchProvider swaps the active imagery provider (and its
+  // frame stack) in place without tearing down the panel.
+  provider: TimelapseProvider;
+  frames: TimelapseFrame[];
 
   private map: MapLibreMap | null;
   private frameIndex = 0;
@@ -269,6 +291,10 @@ export class TimelapseControl {
   private playSession = 0;
   private recordAbort: AbortController | null = null;
 
+  // The floating-panel body container, kept so switchProvider can re-render the
+  // slider range/labels/attribution in place after swapping providers.
+  private container: HTMLElement | null = null;
+  private providerSelect: HTMLSelectElement | null = null;
   private slider: HTMLInputElement | null = null;
   private playButton: HTMLButtonElement | null = null;
   private yearLabel: HTMLElement | null = null;
@@ -396,6 +422,39 @@ export class TimelapseControl {
   rebuildStack(): void {
     this.stackPresent = false;
     this.ensureStack();
+  }
+
+  /**
+   * Swap the active imagery provider (the panel's provider picker). Pauses
+   * playback, tears down the current frame stack and mirroring store layer,
+   * resolves the new provider's frames (awaiting a remote catalog if the
+   * provider is async), rebuilds the pre-warmed stack from the oldest year, and
+   * re-renders the panel body in place so the slider range, end labels, and
+   * attribution follow the new years. A no-op when the id resolves back to the
+   * current provider or the new provider yields no frames (the current stack is
+   * left untouched).
+   */
+  async switchProvider(providerId: string): Promise<void> {
+    if (providerId === this.provider.id) return;
+    const provider = getTimelapseProvider(providerId);
+    // An unknown id falls back to the built-in provider; if that is the one
+    // already active, there is nothing to switch to.
+    if (provider.id === this.provider.id) return;
+    const framesResult = provider.listFrames();
+    const frames = Array.isArray(framesResult)
+      ? framesResult
+      : await framesResult;
+    if (frames.length === 0) return;
+    this.pause();
+    this.removeStack();
+    removeTimelapseStoreLayers();
+    this.provider = provider;
+    this.frames = frames;
+    this.frameIndex = 0;
+    this.ensureStack();
+    // Re-render the panel body so the slider bounds/labels and attribution
+    // reflect the new frame set (renderInto rebuilds it from scratch).
+    if (this.container) this.renderInto(this.container);
   }
 
   /**
@@ -645,6 +704,7 @@ export class TimelapseControl {
    * each time the panel opens; returns the cleanup the host runs on close.
    */
   renderInto(container: HTMLElement): () => void {
+    this.container = container;
     container.innerHTML = "";
     // Tag the panel so index.css can theme its native form controls (the
     // select's option popup cannot be styled inline).
@@ -654,6 +714,27 @@ export class TimelapseControl {
     container.style.gap = "8px";
     container.style.padding = "10px 12px";
     container.style.fontSize = "12px";
+
+    // Imagery-provider picker — shown only when more than one provider is
+    // registered (a single-provider install has nothing to switch between).
+    const providers = listTimelapseProviders();
+    if (providers.length > 1) {
+      const providerSelect = document.createElement("select");
+      styleThemedSelect(providerSelect);
+      providerSelect.style.width = "100%";
+      for (const item of providers) {
+        const option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.name;
+        option.selected = item.id === this.provider.id;
+        providerSelect.appendChild(option);
+      }
+      providerSelect.addEventListener("change", () => {
+        void this.switchProvider(providerSelect.value);
+      });
+      this.providerSelect = providerSelect;
+      container.appendChild(providerSelect);
+    }
 
     // Year slider with range labels.
     const sliderRow = document.createElement("div");
@@ -720,21 +801,7 @@ export class TimelapseControl {
     speedLabel.appendChild(speedText);
     this.speedText = speedText;
     const speedSelect = document.createElement("select");
-    // Inline (not just the index.css block, which themes the option popup):
-    // rules from other control stylesheets can outrank a class selector here.
-    speedSelect.style.background = "hsl(var(--background))";
-    // `important` is required: with the app's global `transition: all` on form
-    // controls, Chromium keeps reporting the select's pre-theme (black) text
-    // color for a plain inline declaration; the important priority is the only
-    // level observed to actually take effect in both themes.
-    speedSelect.style.setProperty(
-      "color",
-      "hsl(var(--foreground))",
-      "important",
-    );
-    speedSelect.style.border = "1px solid hsl(var(--border))";
-    speedSelect.style.borderRadius = "4px";
-    speedSelect.style.padding = "2px 4px";
+    styleThemedSelect(speedSelect);
     for (const step of TIMELAPSE_SPEED_STEPS) {
       const option = document.createElement("option");
       option.value = String(step);
@@ -796,6 +863,8 @@ export class TimelapseControl {
 
     return () => {
       // The card body is discarded on close; only the on-map badge outlives it.
+      this.container = null;
+      this.providerSelect = null;
       this.slider = null;
       this.playButton = null;
       this.yearLabel = null;
@@ -832,6 +901,9 @@ export class TimelapseControl {
 
   /** Re-apply the current {@link labels} to the static panel strings. */
   refreshLabels(): void {
+    if (this.providerSelect) {
+      this.providerSelect.setAttribute("aria-label", labels.provider);
+    }
     if (this.slider) {
       this.slider.setAttribute("aria-label", labels.yearSlider);
     }

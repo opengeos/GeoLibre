@@ -304,6 +304,7 @@ export function TopToolbar({
     });
     setTimelapseLabels({
       title: t("timelapse.title"),
+      provider: t("timelapse.provider"),
       yearSlider: t("timelapse.yearSlider"),
       play: t("timelapse.play"),
       pause: t("timelapse.pause"),
