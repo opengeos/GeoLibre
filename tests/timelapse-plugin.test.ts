@@ -303,6 +303,42 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(control.provider.id, "fast-b");
   });
 
+  it("switchProvider bails if a recording starts while an async switch is pending", async () => {
+    const map = fakeMap();
+    plugin.activate(fakeApp(map));
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+
+    let resolveSlow: (frames: unknown[]) => void = () => {};
+    registerTimelapseProvider({
+      id: "slow-rec",
+      name: "Slow Rec",
+      attribution: "s",
+      listFrames: () =>
+        new Promise((resolve) => {
+          resolveSlow = resolve as (frames: unknown[]) => void;
+        }) as never,
+    });
+
+    const pending = control.switchProvider("slow-rec");
+    // A recording begins while the async listFrames() is still in flight.
+    (control as unknown as { recording: boolean }).recording = true;
+    resolveSlow([
+      {
+        id: "slow-2100",
+        label: "2100",
+        year: 2100,
+        tileUrlTemplate: "https://example.test/s/{z}/{y}/{x}.png",
+        attribution: "s",
+      },
+    ]);
+    await pending;
+
+    // The switch must not tear down the stack the recorder is drawing from.
+    assert.equal(control.provider.id, "eox-s2cloudless");
+    assert.equal(map.sources.size, FRAME_COUNT);
+  });
+
   it("swaps a year with exactly two raster-opacity writes", () => {
     const map = fakeMap();
     plugin.activate(fakeApp(map));

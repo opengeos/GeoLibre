@@ -489,6 +489,14 @@ export class TimelapseControl {
     // A newer switch superseded this resolution while awaiting; the winning
     // call owns the picker and stack, so bail without touching either.
     if (session !== this.switchSession) return;
+    // A recording may have started while an async listFrames() was pending (the
+    // picker only disables once recording begins, which is after this switch
+    // started); tearing down the stack now would corrupt that export, so bail
+    // and restore the picker to the still-active provider.
+    if (this.recording) {
+      this.syncProviderSelect();
+      return;
+    }
     if (frames.length === 0) {
       this.syncProviderSelect();
       return;
