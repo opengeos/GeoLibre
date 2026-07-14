@@ -1118,7 +1118,7 @@ async function saveTimelapseRecording(
 // Plugin
 // ---------------------------------------------------------------------------
 
-let timelapsePosition: GeoLibreMapControlPosition = "bottom-left";
+let timelapsePosition: GeoLibreMapControlPosition = "top-left";
 let timelapseControl: TimelapseControl | null = null;
 let savedState: TimelapseProjectState | null = null;
 let unsubscribeStore: (() => void) | null = null;
