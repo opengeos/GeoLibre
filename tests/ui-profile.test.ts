@@ -247,7 +247,8 @@ describe("normalizeUiProfileSettings (via the store)", () => {
     });
     assert.equal(result.enabled, false);
     assert.equal(result.level, null);
-    assert.equal(result.onboarded, false);
+    // Non-boolean falls back to the default (welcome dialog off by default).
+    assert.equal(result.onboarded, true);
     assert.equal(result.locked, false);
     // Non-strings dropped, duplicates/blank removed.
     assert.deepEqual(result.hiddenDataSources, ["postgres"]);
