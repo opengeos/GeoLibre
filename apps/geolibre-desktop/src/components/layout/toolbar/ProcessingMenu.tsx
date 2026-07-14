@@ -56,14 +56,18 @@ export function ProcessingMenu({
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
 
-  // Whitebox, format Conversion, Raster tools, and AI Segmentation all require
-  // the Python sidecar, which cannot run on Android/iOS — hide them on mobile so
-  // they don't present and then fail. Vector (Turf), SQL (PGlite/DuckDB), Python
-  // (Pyodide), geocode, statistics, and the assistant run client-side and stay.
-  // The user agent is stable for the session, so evaluate once.
+  // Format Conversion, Raster tools, and AI Segmentation require the Python
+  // sidecar, which cannot run on Android/iOS — hide them on mobile so they don't
+  // present and then fail. Vector (Turf), SQL (PGlite/DuckDB), Python (Pyodide),
+  // geocode, statistics, and the assistant run client-side and stay. The user
+  // agent is stable for the session, so evaluate once.
   const mobile = useMemo(() => isMobile(), []);
   const uiProfile = useDesktopSettingsStore((s) => s.desktopSettings.uiProfile);
   const show = (id: string) => isMenuItemVisible(uiProfile, id);
+  // The Whitebox toolbox (and its WASI/GeoLibre tool catalog) runs entirely in
+  // the browser via WebAssembly, so unlike the sidecar-backed tools it stays
+  // available on mobile.
+  const showWhitebox = show("processing.whitebox");
 
   // Open the Whitebox toolbox dialog preselected to a specific tool, used by the
   // per-category submenus below. Two store writes: queue the tool, then open.
@@ -120,17 +124,16 @@ export function ProcessingMenu({
             <DropdownMenuSeparator />
           </>
         )}
-        {!mobile && show("processing.whitebox") && (
+        {showWhitebox && (
           <DropdownMenuItem onSelect={() => setProcessingOpen(true)}>
             {t("toolbar.item.whitebox")}
           </DropdownMenuItem>
         )}
         {/* Whitebox tools grouped by category/subcategory. Each leaf opens the
             Whitebox toolbox dialog preselected to that tool. Catalog data lives
-            in lib/whitebox-menu-catalog.ts; gated with the Whitebox item since
-            they share the same sidecar/WASM backend (hidden on mobile). */}
-        {!mobile &&
-          show("processing.whitebox") &&
+            in lib/whitebox-menu-catalog.ts; gated with the Whitebox item, which
+            runs in the browser via WebAssembly (so available on mobile too). */}
+        {showWhitebox &&
           WHITEBOX_MENU_CATALOG.map((cat) => (
             <DropdownMenuSub key={cat.key}>
               <DropdownMenuSubTrigger>{t(cat.labelKey)}</DropdownMenuSubTrigger>
@@ -521,7 +524,7 @@ export function ProcessingMenu({
         )}
         {/* Divide the tool-category submenus (Whitebox, GeoLibre) from the
             workspaces and consoles below. Only when both sides are present. */}
-        {((!mobile && show("processing.whitebox")) || showGeolibre) &&
+        {(showWhitebox || showGeolibre) &&
           showWorkspacesOrServices && <DropdownMenuSeparator />}
         {show("processing.sqlWorkspace") && (
           <DropdownMenuItem onSelect={() => setSqlWorkspaceOpen(true)}>

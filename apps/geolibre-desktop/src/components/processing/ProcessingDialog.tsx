@@ -22,11 +22,6 @@ import {
 } from "@geolibre/processing";
 import {
   Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   Input,
   Label,
   ScrollArea,
@@ -40,6 +35,7 @@ import {
   ChevronDown,
   ChevronUp,
   FolderOpen,
+  GripHorizontal,
   Loader2,
   Play,
   RefreshCw,
@@ -48,6 +44,8 @@ import {
   Search,
   Server,
   ServerOff,
+  SquareDashed,
+  X,
 } from "lucide-react";
 import {
   type ChangeEvent,
@@ -57,6 +55,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   isTauri,
@@ -65,7 +64,9 @@ import {
   pickSavePathWithFallback,
   type FileDialogFilter,
 } from "../../lib/tauri-io";
+import { clamp } from "../../lib/clamp";
 import { fetchableUrl } from "../../lib/url-utils";
+import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
@@ -85,6 +86,11 @@ type ParameterValues = Record<string, unknown>;
 
 const LAYER_TOKEN_PREFIX = "layer:";
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
+
+// Smallest the floating panel can be resized to, so the two-column tool browser
+// stays usable (left list + a readable parameter form).
+const PANEL_MIN_W = 560;
+const PANEL_MIN_H = 400;
 
 function toolLabel(tool: WhiteboxTool): string {
   return tool.display_name || humanize(tool.id);
@@ -451,6 +457,229 @@ export function ProcessingDialog({
   // terminal job (never "pending"/"running"), so without this flag the Run
   // button would stay enabled mid-execution and allow concurrent runs.
   const [runningLocal, setRunningLocal] = useState(false);
+
+  // Floating, non-modal panel (GH: whitebox modal -> floating panel). Rendered
+  // as a draggable `fixed` window instead of a Radix modal so the map stays
+  // interactive while a tool is open (e.g. to pan/zoom and use "Use map extent"
+  // for the subset tools). Mirrors RecordVideoDialog's drag pattern. `pos` is
+  // null until first dragged, when the default corner placement (CSS) applies;
+  // afterwards it pins to explicit coords.
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const dragOffset = useRef<{ x: number; y: number } | null>(null);
+  // Explicit size, null until first resized (the default responsive CSS size
+  // applies). A drag from the bottom-right grip grows the panel from its pinned
+  // top-left corner.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const resizeStart = useRef<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    left: number;
+    top: number;
+  } | null>(null);
+  // True while a "Draw on map" rubber-band is in progress.
+  const [drawing, setDrawing] = useState(false);
+  const drawAbortRef = useRef<AbortController | null>(null);
+  // Viewport-space corners of the in-progress draw box, drawn as an SVG overlay
+  // (not a MapLibre layer) so the rubber-band sits above an interleaved deck.gl
+  // raster, which occludes MapLibre layers.
+  const [drawPoints, setDrawPoints] = useState<{ x: number; y: number }[] | null>(
+    null,
+  );
+
+  const onDragStart = (event: React.PointerEvent) => {
+    // Never begin a drag from an interactive control: the pointer capture would
+    // swallow the ensuing click (e.g. the close button).
+    if ((event.target as Element).closest("button, a, input, [role='button']"))
+      return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragOffset.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
+    setPos({ x: rect.left, y: rect.top });
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onDragMove = (event: React.PointerEvent) => {
+    if (!dragOffset.current) return;
+    const width = panelRef.current?.offsetWidth ?? 0;
+    const height = panelRef.current?.offsetHeight ?? 0;
+    // Keep the panel within the viewport so it can't be dragged off-screen.
+    const x = Math.max(
+      0,
+      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width),
+    );
+    const y = Math.max(
+      0,
+      Math.min(
+        event.clientY - dragOffset.current.y,
+        window.innerHeight - height,
+      ),
+    );
+    setPos({ x, y });
+  };
+
+  const onDragEnd = (event: React.PointerEvent) => {
+    dragOffset.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  const onResizeStart = (event: React.PointerEvent) => {
+    // Don't also start a header drag; the grip lives outside the header but stop
+    // propagation defensively.
+    event.stopPropagation();
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Pin the top-left so the panel grows toward the grip instead of staying
+    // centered (the default placement uses a translate to center it).
+    setPos({ x: rect.left, y: rect.top });
+    resizeStart.current = {
+      x: event.clientX,
+      y: event.clientY,
+      w: rect.width,
+      h: rect.height,
+      left: rect.left,
+      top: rect.top,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onResizeMove = (event: React.PointerEvent) => {
+    const start = resizeStart.current;
+    if (!start) return;
+    // Grow from the pinned top-left, clamped to a usable minimum and the room
+    // available to the viewport edge. The minimum is itself capped to that room,
+    // so a panel pinned near the edge (or a viewport smaller than the minimum)
+    // shrinks to fit rather than being forced off-screen past the grip.
+    const availW = window.innerWidth - start.left;
+    const availH = window.innerHeight - start.top;
+    const w = clamp(
+      start.w + (event.clientX - start.x),
+      Math.min(PANEL_MIN_W, availW),
+      availW,
+    );
+    const h = clamp(
+      start.h + (event.clientY - start.y),
+      Math.min(PANEL_MIN_H, availH),
+      availH,
+    );
+    setSize({ w, h });
+  };
+
+  const onResizeEnd = (event: React.PointerEvent) => {
+    resizeStart.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  // Escape closes the panel, mirroring the affordance the Radix modal provided.
+  // Since the panel is non-modal, only act when focus is inside it, so pressing
+  // Escape to cancel an unrelated map/panel interaction doesn't also close this
+  // one. Suppressed while drawing so Escape cancels the in-progress rubber-band
+  // (the draw helper's own Escape handler) instead of closing the whole panel.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !drawing &&
+        panelRef.current?.contains(document.activeElement)
+      ) {
+        setProcessingOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, drawing, setProcessingOpen]);
+
+  // Re-clamp an explicit size and dragged position to the viewport, so a
+  // resized/moved panel can't be left oversized or partly off-screen. Runs once
+  // on open (position/size persist across opens, so the window may have shrunk
+  // while the panel was closed) and on every subsequent resize. Functional
+  // updates read the latest values, so the listener isn't re-subscribed on every
+  // drag/resize frame; a never-moved/never-resized panel (null) keeps its
+  // responsive CSS placement. The size minimum is capped to the viewport so a
+  // window smaller than the minimum shrinks the panel to fit.
+  useEffect(() => {
+    if (!open) return;
+    const clampToViewport = () => {
+      setSize((current) =>
+        current
+          ? {
+              w: clamp(
+                current.w,
+                Math.min(PANEL_MIN_W, window.innerWidth),
+                window.innerWidth,
+              ),
+              h: clamp(
+                current.h,
+                Math.min(PANEL_MIN_H, window.innerHeight),
+                window.innerHeight,
+              ),
+            }
+          : null,
+      );
+      const panel = panelRef.current;
+      if (!panel) return;
+      setPos((current) =>
+        current
+          ? {
+              x: Math.max(
+                0,
+                Math.min(current.x, window.innerWidth - panel.offsetWidth),
+              ),
+              y: Math.max(
+                0,
+                Math.min(current.y, window.innerHeight - panel.offsetHeight),
+              ),
+            }
+          : null,
+      );
+    };
+    // Coalesce the flurry of `resize` events during a live OS window-resize drag
+    // into one clamp per frame (matching the rAF pattern used by the pointer
+    // drag/resize handlers), so the tool browser doesn't re-render every tick.
+    let raf = 0;
+    const onResize = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        clampToViewport();
+      });
+    };
+    clampToViewport();
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [open]);
+
+  // The non-modal panel no longer gets Radix's focus management, so move focus
+  // into it on open (it carries role="dialog", so a screen reader announces it),
+  // and best-effort restore focus to the opener on close. The focus is deferred
+  // two frames: the panel is opened from a Radix menu that restores focus to its
+  // trigger as it closes, so a single frame would be stolen back.
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => panelRef.current?.focus());
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+      // Only if the opener is still around; otherwise focus falls to the document.
+      const prev = previousFocusRef.current;
+      if (prev?.isConnected) prev.focus();
+    };
+  }, [open]);
   const importedJobIdRef = useRef<string | null>(null);
   // The selected tool's row in the left list, so a preselection arriving from the
   // Processing menu can be scrolled into view (it may sit far down the catalog).
@@ -826,21 +1055,21 @@ export function ProcessingDialog({
   // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
   // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
   // to keep the pair consistent (a stale `bbox_crs` would misread the extent).
-  const handleUseMapExtent = () => {
-    // Clear any stale banner (e.g. a prior "map not ready") so a later success
-    // doesn't leave it lingering, mirroring RasterSubsetPanel.handleUseView.
+  // Validate a WGS84 box and write it into the `bbox`/`bbox_crs` fields. Shared
+  // by "Use map extent" (current view) and "Draw on map" (rubber-band). Rejects
+  // an unnormalized box - a view/box wrapping 180° yields west >= east, and at
+  // low zoom (multiple world copies) getBounds() corners can fall outside
+  // ±180°/±90° while still ordered - which the subset extractors mis-clip or
+  // reject, matching RasterSubsetPanel.parseBbox's ordering + range checks.
+  const applyBboxExtent = (
+    bounds: [number, number, number, number] | undefined,
+  ): void => {
     setError(null);
-    const bounds = mapControllerRef.current?.readView().bbox;
     if (!bounds) {
       setError(t("processing.whitebox.mapExtentUnavailable"));
       return;
     }
     const [west, south, east, north] = bounds;
-    // getBounds() is not normalized: a view wrapping 180° yields west >= east,
-    // and at low zoom (multiple world copies) the corners can fall outside
-    // ±180°/±90° while still ordered. Either produces a box the subset
-    // extractors mis-clip or reject, so block it rather than filling a silently
-    // wrong bbox, matching RasterSubsetPanel.parseBbox's ordering + range checks.
     if (
       !(west < east) ||
       !(south < north) ||
@@ -858,6 +1087,87 @@ export function ProcessingDialog({
     // field value is a string (NumberStepperInput always emits one).
     updateValue("bbox_crs", String(4326));
   };
+
+  const handleUseMapExtent = () => {
+    // Cancel any in-flight draw so its late-resolving box can't overwrite the
+    // extent the user just asked for from the current view.
+    drawAbortRef.current?.abort();
+    applyBboxExtent(mapControllerRef.current?.readView().bbox);
+  };
+
+  // Rubber-band a box on the map to fill the bbox (only workable because the
+  // panel is now non-modal). Reuses the print-extent draw helper, which suspends
+  // pan/zoom during the drag and handles Escape/blur. We draw our own SVG preview
+  // (drawBox: false + onPreview) so the box sits above an interleaved deck.gl
+  // raster instead of being occluded by it. Toggling the button (or closing the
+  // panel) aborts an in-flight draw.
+  const handleDrawBbox = async () => {
+    const map = mapControllerRef.current?.getMap();
+    if (!map) {
+      setError(t("processing.whitebox.mapExtentUnavailable"));
+      return;
+    }
+    if (drawing) {
+      drawAbortRef.current?.abort();
+      return;
+    }
+    setError(null);
+    const controller = new AbortController();
+    drawAbortRef.current = controller;
+    setDrawing(true);
+    try {
+      const extent = await drawPrintExtent(map, {
+        signal: controller.signal,
+        drawBox: false,
+        // Project the box corners to viewport space (map.project is canvas-
+        // relative, so add the canvas offset). The map is pan/zoom-locked during
+        // the draw, so corners only move as the box is dragged.
+        onPreview: (box) => {
+          if (!box) {
+            setDrawPoints(null);
+            return;
+          }
+          const rect = map.getCanvas().getBoundingClientRect();
+          const [w, s, e, n] = box;
+          const corners: [number, number][] = [
+            [w, n],
+            [e, n],
+            [e, s],
+            [w, s],
+          ];
+          setDrawPoints(
+            corners.map(([lng, lat]) => {
+              const p = map.project([lng, lat]);
+              return { x: p.x + rect.left, y: p.y + rect.top };
+            }),
+          );
+        },
+      });
+      if (controller.signal.aborted) return;
+      if (extent) applyBboxExtent(extent);
+    } finally {
+      clearPrintExtent(map);
+      setDrawPoints(null);
+      if (drawAbortRef.current === controller) {
+        drawAbortRef.current = null;
+        setDrawing(false);
+      }
+    }
+  };
+
+  // Abort an in-flight draw when the panel closes or the component unmounts, so
+  // the map isn't left in draw mode after the panel is gone.
+  useEffect(() => {
+    if (open) return;
+    drawAbortRef.current?.abort();
+  }, [open]);
+  useEffect(() => () => drawAbortRef.current?.abort(), []);
+  // Abort an in-flight draw when the selected tool changes: `values` is reset to
+  // the new tool's defaults on that change, so a box that resolves after the
+  // switch would otherwise fill the wrong tool's bbox field.
+  useEffect(() => {
+    drawAbortRef.current?.abort();
+  }, [selectedToolId]);
 
   const handleRunLocalChange = (nextRunLocal: boolean) => {
     setRunLocal(nextRunLocal);
@@ -1147,282 +1457,385 @@ export function ProcessingDialog({
     runningLocal || Boolean(job && RUNNING_JOB_STATUSES.has(job.status));
   const serverBusy = loadingTools || startingServer || stoppingServer;
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={setProcessingOpen}>
-      <DialogContent
-        className="h-[min(760px,92vh)] max-w-6xl"
-        bodyClassName="grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden p-5"
-      >
-        <DialogHeader>
-          <DialogTitle>Whitebox toolbox</DialogTitle>
-          <DialogDescription>
-            {runtimeAvailable === null
-              ? "Checking runtime."
-              : runtimeAvailable
-                ? runtimeMessage || `${tools.length} tools available.`
-                : runtimeMessage || "Whitebox runtime is unavailable."}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid min-h-0 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4">
-          <div className="flex min-h-0 flex-col gap-3 border-r pr-4">
-            <div className="flex gap-2">
-              <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  className="pl-9"
-                  placeholder={t("processing.searchTools")}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={loadWhitebox}
-                disabled={serverBusy}
-                title={t("processing.refreshCatalog")}
-              >
-                <RefreshCw
-                  className={cn("h-4 w-4", loadingTools && "animate-spin")}
-                />
-              </Button>
-            </div>
-
-            {/* The processing server is a local Python process that only the
-                desktop app can spawn or stop. In the browser these buttons
-                would always fail, and a same-origin sidecar (when deployed) is
-                auto-detected without them, so gate both on the desktop build. */}
-            {desktop && runtimeAvailable !== true && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={startServer}
-                disabled={serverBusy}
-              >
-                {startingServer ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Server className="h-4 w-4" />
-                )}
-                Start server
-              </Button>
-            )}
-
-            {desktop && runtimeAvailable === true && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={stopServer}
-                disabled={serverBusy || running}
-              >
-                {stoppingServer ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ServerOff className="h-4 w-4" />
-                )}
-                Stop server
-              </Button>
-            )}
-
-            <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-              {categories.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </Select>
-
-            {hasGeolibreTools && (
-              <Select
-                value={source}
-                // Reset the category too: a category with no tools in the newly
-                // chosen source would otherwise leave the list empty.
-                onChange={(e) => {
-                  setSource(e.target.value);
-                  setCategory("All");
+    <div
+      ref={panelRef}
+      role="dialog"
+      tabIndex={-1}
+      aria-labelledby="whitebox-toolbox-title"
+      aria-modal={false}
+      style={{
+        // Inline width/height (once resized) override the responsive w-/h- classes.
+        ...(pos ? { left: pos.x, top: pos.y } : null),
+        ...(size ? { width: size.w, height: size.h } : null),
+      }}
+      className={cn(
+        // Height leaves room for the top offset (top-16) plus a bottom margin so
+        // the whole panel - including the bottom-right resize grip - stays on
+        // screen at small viewport heights.
+        "fixed z-40 flex h-[min(760px,calc(100vh-6rem))] w-[min(72rem,95vw)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        pos ? "" : "left-1/2 top-16 -translate-x-1/2",
+      )}
+    >
+      {/* Draw-bbox preview, portaled to <body> as a viewport-space SVG overlay
+          so it sits above an interleaved deck.gl raster (which occludes MapLibre
+          layers) and escapes the panel's own transform/overflow. Non-interactive
+          so it never blocks the drag on the map below. */}
+      {drawPoints
+        ? createPortal(
+            <svg
+              className="pointer-events-none fixed inset-0 z-30 h-full w-full"
+              aria-hidden="true"
+            >
+              <polygon
+                points={drawPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                style={{
+                  fill: "hsl(var(--primary))",
+                  stroke: "hsl(var(--primary))",
                 }}
-                aria-label={t("processing.whitebox.filterBySource")}
-              >
-                <option value="All">
-                  {t("processing.whitebox.allSources")} ({sourceCounts.all})
-                </option>
-                <option value="geolibre">
-                  {t("processing.whitebox.geolibreTools")} (
-                  {sourceCounts.geolibre})
-                </option>
-                <option value="whitebox">
-                  {t("processing.whitebox.whiteboxTools")} (
-                  {sourceCounts.whitebox})
-                </option>
-              </Select>
-            )}
-
-            <ScrollArea className="min-h-0 flex-1 rounded-md border">
-              <div className="divide-y">
-                {loadingTools ? (
-                  <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Loading
-                  </div>
-                ) : filteredTools.length === 0 ? (
-                  <div className="p-3 text-sm text-muted-foreground">
-                    No tools found.
-                  </div>
-                ) : (
-                  filteredTools.map((tool) => (
-                    <button
-                      key={tool.id}
-                      type="button"
-                      ref={
-                        selectedTool?.id === tool.id
-                          ? selectedButtonRef
-                          : undefined
-                      }
-                      className={cn(
-                        "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
-                        selectedTool?.id === tool.id && "bg-accent",
-                        tool.locked && "opacity-60",
-                      )}
-                      onClick={() => setSelectedToolId(tool.id)}
-                    >
-                      <span className="block truncate font-medium">
-                        {tool.locked ? "[Locked] " : ""}
-                        {toolLabel(tool)}
-                      </span>
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {tool.category || "General"}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
-            <div className="min-w-0 border-b pb-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h3 className="truncate text-base font-semibold">
-                    {selectedTool ? toolLabel(selectedTool) : "No tool selected"}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedTool?.id}
-                    {selectedTool?.license_tier
-                      ? ` | ${selectedTool.license_tier}`
-                      : ""}
-                  </p>
-                </div>
-                <label
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                  title={t("processing.whitebox.runLocalHint")}
-                >
-                  <input
-                    type="checkbox"
-                    data-testid="whitebox-run-local"
-                    checked={runLocal}
-                    onChange={(e) => handleRunLocalChange(e.target.checked)}
-                  />
-                  {t("processing.whitebox.runLocal")}
-                </label>
-                <Button
-                  type="button"
-                  onClick={runSelectedTool}
-                  disabled={
-                    !selectedTool ||
-                    selectedTool.locked ||
-                    running ||
-                    (!runLocal && runtimeAvailable !== true)
-                  }
-                >
-                  {running ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4" />
-                  )}
-                  {running
-                    ? t("processing.whitebox.running")
-                    : t("processing.whitebox.run")}
-                </Button>
-              </div>
-              {selectedTool?.summary && (
-                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                  {selectedTool.summary}
-                </p>
-              )}
-              {selectedTool?.locked && (
-                <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {selectedTool.locked_reason || "This tool is locked."}
-                </p>
-              )}
-            </div>
-
-            <ScrollArea className="min-h-0">
-              <div className="grid gap-4 pb-2 pr-5">
-                {(selectedTool?.params ?? []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    This tool has no parameters.
-                  </p>
-                ) : (
-                  selectedTool?.params?.map((param) => (
-                    <ParameterField
-                      key={param.name}
-                      param={param}
-                      layers={layers}
-                      toolId={selectedTool.id}
-                      runLocal={runLocal}
-                      value={values[param.name]}
-                      onChange={(value) => updateValue(param.name, value)}
-                      onPickFile={(fileName, bytes) =>
-                        handlePickInputFile(param.name, fileName, bytes)
-                      }
-                      onUseMapExtent={
-                        isMapExtentParameter(selectedTool, param)
-                          ? handleUseMapExtent
-                          : undefined
-                      }
-                    />
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-
-            <div className="grid gap-2 border-t pt-3">
-              {/* Sidecar mode but the server is unreachable: show interactive
-                  troubleshooting with a one-click switch to the WASM runner.
-                  Otherwise fall back to a plain error line (e.g. a parameter or
-                  tool-run error that has nothing to do with the sidecar). */}
-              {!runLocal && runtimeAvailable === false ? (
-                <SidecarHelpBanner
-                  isDesktop={desktop}
-                  error={error}
-                  onRunLocally={() => {
-                    // Clear the stale sidecar error in the same batch as the
-                    // mode switch, so it cannot flash as a plain error line on
-                    // the render before loadWhitebox resets it.
-                    setError(null);
-                    setRunLocal(true);
-                  }}
-                />
-              ) : (
-                error && (
-                  <p className="flex items-center gap-2 text-sm text-destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    {error}
-                  </p>
-                )
-              )}
-              {job && (
-                <JobOutputPanel job={job} />
-              )}
-            </div>
+                fillOpacity={0.12}
+                strokeWidth={2}
+                strokeDasharray="6 3"
+              />
+            </svg>,
+            document.body,
+          )
+        : null}
+      {/* Draggable title bar (replaces the Radix modal header) so the map stays
+          interactive underneath the panel. */}
+      <div
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+        className="flex cursor-move touch-none select-none items-start justify-between gap-3 border-b px-5 py-3"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <GripHorizontal
+            className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <h2
+              id="whitebox-toolbox-title"
+              className="text-lg font-semibold leading-none tracking-tight"
+            >
+              {t("processing.whitebox.toolbox")}
+            </h2>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {runtimeAvailable === null
+                ? t("processing.whitebox.checkingRuntime")
+                : runtimeAvailable
+                  ? runtimeMessage ||
+                    t("processing.whitebox.toolsAvailable", {
+                      count: tools.length,
+                    })
+                  : runtimeMessage ||
+                    t("processing.whitebox.runtimeUnavailable")}
+            </p>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        <button
+          type="button"
+          aria-label={t("common.close")}
+          onClick={() => setProcessingOpen(false)}
+          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4 overflow-hidden p-5">
+        <div className="flex min-h-0 flex-col gap-3 border-r pr-4">
+          <div className="flex gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                className="pl-9"
+                placeholder={t("processing.searchTools")}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={loadWhitebox}
+              disabled={serverBusy}
+              title={t("processing.refreshCatalog")}
+            >
+              <RefreshCw
+                className={cn("h-4 w-4", loadingTools && "animate-spin")}
+              />
+            </Button>
+          </div>
+
+          {/* The processing server is a local Python process that only the
+              desktop app can spawn or stop. In the browser these buttons
+              would always fail, and a same-origin sidecar (when deployed) is
+              auto-detected without them, so gate both on the desktop build. */}
+          {desktop && runtimeAvailable !== true && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={startServer}
+              disabled={serverBusy}
+            >
+              {startingServer ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Server className="h-4 w-4" />
+              )}
+              Start server
+            </Button>
+          )}
+
+          {desktop && runtimeAvailable === true && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={stopServer}
+              disabled={serverBusy || running}
+            >
+              {stoppingServer ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ServerOff className="h-4 w-4" />
+              )}
+              Stop server
+            </Button>
+          )}
+
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {categories.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </Select>
+
+          {hasGeolibreTools && (
+            <Select
+              value={source}
+              // Reset the category too: a category with no tools in the newly
+              // chosen source would otherwise leave the list empty.
+              onChange={(e) => {
+                setSource(e.target.value);
+                setCategory("All");
+              }}
+              aria-label={t("processing.whitebox.filterBySource")}
+            >
+              <option value="All">
+                {t("processing.whitebox.allSources")} ({sourceCounts.all})
+              </option>
+              <option value="geolibre">
+                {t("processing.whitebox.geolibreTools")} (
+                {sourceCounts.geolibre})
+              </option>
+              <option value="whitebox">
+                {t("processing.whitebox.whiteboxTools")} (
+                {sourceCounts.whitebox})
+              </option>
+            </Select>
+          )}
+
+          <ScrollArea className="min-h-0 flex-1 rounded-md border">
+            <div className="divide-y">
+              {loadingTools ? (
+                <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading
+                </div>
+              ) : filteredTools.length === 0 ? (
+                <div className="p-3 text-sm text-muted-foreground">
+                  No tools found.
+                </div>
+              ) : (
+                filteredTools.map((tool) => (
+                  <button
+                    key={tool.id}
+                    type="button"
+                    ref={
+                      selectedTool?.id === tool.id
+                        ? selectedButtonRef
+                        : undefined
+                    }
+                    className={cn(
+                      "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                      selectedTool?.id === tool.id && "bg-accent",
+                      tool.locked && "opacity-60",
+                    )}
+                    onClick={() => setSelectedToolId(tool.id)}
+                  >
+                    <span className="block truncate font-medium">
+                      {tool.locked ? "[Locked] " : ""}
+                      {toolLabel(tool)}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {tool.category || "General"}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </div>
+
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3">
+          <div className="min-w-0 border-b pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-semibold">
+                  {selectedTool ? toolLabel(selectedTool) : "No tool selected"}
+                </h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {selectedTool?.id}
+                  {selectedTool?.license_tier
+                    ? ` | ${selectedTool.license_tier}`
+                    : ""}
+                </p>
+              </div>
+              <label
+                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                title={t("processing.whitebox.runLocalHint")}
+              >
+                <input
+                  type="checkbox"
+                  data-testid="whitebox-run-local"
+                  checked={runLocal}
+                  onChange={(e) => handleRunLocalChange(e.target.checked)}
+                />
+                {t("processing.whitebox.runLocal")}
+              </label>
+              <Button
+                type="button"
+                onClick={runSelectedTool}
+                disabled={
+                  !selectedTool ||
+                  selectedTool.locked ||
+                  running ||
+                  (!runLocal && runtimeAvailable !== true)
+                }
+              >
+                {running ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                {running
+                  ? t("processing.whitebox.running")
+                  : t("processing.whitebox.run")}
+              </Button>
+            </div>
+            {selectedTool?.summary && (
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                {selectedTool.summary}
+              </p>
+            )}
+            {selectedTool?.locked && (
+              <p className="mt-2 flex items-center gap-2 text-sm text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                {selectedTool.locked_reason || "This tool is locked."}
+              </p>
+            )}
+          </div>
+
+          <ScrollArea className="min-h-0">
+            <div className="grid gap-4 pb-2 pr-5">
+              {(selectedTool?.params ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  This tool has no parameters.
+                </p>
+              ) : (
+                selectedTool?.params?.map((param) => (
+                  <ParameterField
+                    key={param.name}
+                    param={param}
+                    layers={layers}
+                    toolId={selectedTool.id}
+                    runLocal={runLocal}
+                    value={values[param.name]}
+                    onChange={(value) => updateValue(param.name, value)}
+                    onPickFile={(fileName, bytes) =>
+                      handlePickInputFile(param.name, fileName, bytes)
+                    }
+                    onUseMapExtent={
+                      isMapExtentParameter(selectedTool, param)
+                        ? handleUseMapExtent
+                        : undefined
+                    }
+                    onDrawMapExtent={
+                      isMapExtentParameter(selectedTool, param)
+                        ? handleDrawBbox
+                        : undefined
+                    }
+                    drawingMapExtent={drawing}
+                  />
+                ))
+              )}
+            </div>
+          </ScrollArea>
+
+          <div className="grid gap-2 border-t pt-3">
+            {/* Sidecar mode but the server is unreachable: show interactive
+                troubleshooting with a one-click switch to the WASM runner.
+                Otherwise fall back to a plain error line (e.g. a parameter or
+                tool-run error that has nothing to do with the sidecar). */}
+            {!runLocal && runtimeAvailable === false ? (
+              <SidecarHelpBanner
+                isDesktop={desktop}
+                error={error}
+                onRunLocally={() => {
+                  // Clear the stale sidecar error in the same batch as the
+                  // mode switch, so it cannot flash as a plain error line on
+                  // the render before loadWhitebox resets it.
+                  setError(null);
+                  setRunLocal(true);
+                }}
+              />
+            ) : (
+              error && (
+                <p className="flex items-center gap-2 text-sm text-destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  {error}
+                </p>
+              )
+            )}
+            {job && (
+              <JobOutputPanel job={job} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Resize grip (bottom-right). The diagonal lines hint the affordance.
+          Pointer-only, so it is presentational - there is no keyboard resize to
+          expose to assistive tech. */}
+      <div
+        role="presentation"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none"
+        onPointerDown={onResizeStart}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+      >
+        <svg
+          viewBox="0 0 10 10"
+          className="h-full w-full text-muted-foreground"
+          aria-hidden="true"
+        >
+          <path
+            d="M9 1 L1 9 M9 5 L5 9"
+            stroke="currentColor"
+            strokeWidth={1}
+            fill="none"
+          />
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -1472,6 +1885,11 @@ interface ParameterFieldProps {
   /** When set, renders a "Use map extent" button that fills this bbox field
    * (and its companion CRS) from the current map view. */
   onUseMapExtent?: () => void;
+  /** When set, renders a "Draw on map" button that fills this bbox field by
+   * rubber-banding a box on the map. */
+  onDrawMapExtent?: () => void;
+  /** Whether a draw is currently in progress (toggles the button's label/state). */
+  drawingMapExtent?: boolean;
   toolId: string;
   runLocal: boolean;
   value: unknown;
@@ -1483,6 +1901,8 @@ function ParameterField({
   onChange,
   onPickFile,
   onUseMapExtent,
+  onDrawMapExtent,
+  drawingMapExtent,
   toolId,
   runLocal,
   value,
@@ -1543,16 +1963,36 @@ function ParameterField({
               onChange(event.target.value)
             }
           />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="justify-self-start"
-            onClick={onUseMapExtent}
-          >
-            <Scan className="h-3.5 w-3.5" aria-hidden="true" />
-            {t("processing.whitebox.useMapExtent")}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onUseMapExtent}
+            >
+              <Scan className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("processing.whitebox.useMapExtent")}
+            </Button>
+            {onDrawMapExtent ? (
+              <Button
+                type="button"
+                variant={drawingMapExtent ? "secondary" : "outline"}
+                size="sm"
+                aria-pressed={drawingMapExtent}
+                onClick={onDrawMapExtent}
+              >
+                <SquareDashed className="h-3.5 w-3.5" aria-hidden="true" />
+                {drawingMapExtent
+                  ? t("processing.whitebox.drawingBbox")
+                  : t("processing.whitebox.drawBbox")}
+              </Button>
+            ) : null}
+          </div>
+          {drawingMapExtent ? (
+            <p className="text-xs text-muted-foreground">
+              {t("processing.whitebox.drawBboxHint")}
+            </p>
+          ) : null}
         </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
