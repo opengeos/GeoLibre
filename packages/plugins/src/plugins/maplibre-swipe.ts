@@ -1,6 +1,9 @@
+import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   SwipeControl,
   type SwipeControlOptions,
+  type SwipeLayerProvider,
+  type SwipeLayerSide,
   type SwipeState,
 } from "maplibre-gl-swipe";
 import type {
@@ -9,6 +12,13 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
+import {
+  getSwipeCogRasters,
+  setCogRasterMainVisibility,
+  subscribeSwipeCogChanges,
+  type SwipeCogRasterSnapshot,
+} from "./maplibre-components";
+import { SwipeCogMirror } from "./swipe-cog-mirror";
 
 /**
  * Plugin id for the Layer Swipe control. Exported so the app can coordinate it
@@ -21,6 +31,117 @@ let swipeControlPosition: GeoLibreMapControlPosition = "top-left";
 let swipeControl: SwipeControl | null = null;
 let savedSwipeState: SwipeState | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
+
+// --- COG raster swipe integration ------------------------------------------
+// GeoLibre renders COG rasters on a deck.gl overlay, so they are MapLibre custom
+// layers that the swipe control cannot see through getStyle(). This provider
+// (passed to SwipeControl via the layerProvider option) lists them in the swipe
+// panel and renders each per its side assignment: right/both/none rasters are
+// mirrored onto the swipe comparison map (which the control already clips to the
+// swipe region), and right-only rasters are hidden on the main map. See #1240.
+
+// The comparison-map raster mirror, recreated whenever the swipe control makes a
+// fresh comparison map (basemap change, re-activation).
+let cogMirror: SwipeCogMirror | null = null;
+// The main-map visibility this provider last forced per raster id (with the
+// opacity to restore when showing it again), so it only toggles on change and
+// can restore visibility on teardown.
+const cogMainForced = new Map<string, { visible: boolean; opacity: number }>();
+// Side assignments accumulated during one _updateLayerVisibility pass (the
+// control calls applySide once per provider layer); reconciled together so the
+// comparison mirror syncs in a single pass.
+const cogPendingSides = new Map<string, SwipeLayerSide>();
+let cogPendingComparisonMap: MapLibreMap | undefined;
+let cogReconcileScheduled = false;
+let unsubscribeCogRasterChanges: (() => void) | null = null;
+
+const cogSwipeProvider: SwipeLayerProvider = {
+  getLayers: () =>
+    getSwipeCogRasters().map((raster) => ({
+      id: raster.id,
+      type: "raster",
+      visible: raster.visible,
+    })),
+  applySide: (id, side, comparisonMap) => {
+    cogPendingSides.set(id, side);
+    cogPendingComparisonMap = comparisonMap;
+    scheduleCogReconcile();
+  },
+  detachComparison: () => {
+    teardownCogSwipe();
+  },
+};
+
+function scheduleCogReconcile(): void {
+  if (cogReconcileScheduled) return;
+  cogReconcileScheduled = true;
+  // Coalesce the per-layer applySide calls of one visibility pass into a single
+  // reconcile so the mirror syncs its whole set at once.
+  queueMicrotask(reconcileCogSwipe);
+}
+
+function reconcileCogSwipe(): void {
+  cogReconcileScheduled = false;
+  const sides = new Map(cogPendingSides);
+  cogPendingSides.clear();
+  const comparisonMap = cogPendingComparisonMap;
+
+  // Rebuild the mirror when the comparison map changes identity (or drop it when
+  // there is none).
+  if (!comparisonMap) {
+    cogMirror?.destroy();
+    cogMirror = null;
+  } else if (!cogMirror || cogMirror.getMap() !== comparisonMap) {
+    cogMirror?.destroy();
+    cogMirror = new SwipeCogMirror(comparisonMap);
+  }
+
+  const rasters = getSwipeCogRasters();
+  const sideFor = (raster: SwipeCogRasterSnapshot): SwipeLayerSide =>
+    sides.get(raster.id) ?? "none";
+
+  // A raster shows on the comparison (right) side for right/both, and for none
+  // (unselected) so it stays full-screen like an unswiped layer. Left-only
+  // rasters are omitted, so the comparison map shows the basemap there.
+  const onComparison = (side: SwipeLayerSide): boolean =>
+    side === "right" || side === "both" || side === "none";
+
+  if (cogMirror) {
+    void cogMirror.sync(
+      rasters.filter(
+        (raster) => raster.visible && onComparison(sideFor(raster)),
+      ),
+    );
+  }
+
+  // Main map: hide right-only rasters (shown on the comparison side instead);
+  // keep every other visible raster on the main map. Hidden rasters are left
+  // untouched. Only toggle when the target differs from the last forced value.
+  for (const raster of rasters) {
+    if (!raster.visible) continue;
+    const wantVisible = sideFor(raster) !== "right";
+    if (cogMainForced.get(raster.id)?.visible !== wantVisible) {
+      cogMainForced.set(raster.id, {
+        visible: wantVisible,
+        opacity: raster.opacity,
+      });
+      setCogRasterMainVisibility(raster.id, wantVisible, raster.opacity);
+    }
+  }
+}
+
+function teardownCogSwipe(): void {
+  cogMirror?.destroy();
+  cogMirror = null;
+  cogPendingSides.clear();
+  cogPendingComparisonMap = undefined;
+  cogReconcileScheduled = false;
+  // Restore any raster this provider hid on the main map.
+  for (const [id, forced] of cogMainForced) {
+    if (!forced.visible) setCogRasterMainVisibility(id, true, forced.opacity);
+  }
+  cogMainForced.clear();
+}
 
 export const maplibreSwipePlugin: GeoLibrePlugin = {
   id: SWIPE_PLUGIN_ID,
@@ -37,6 +158,12 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
       return false;
     }
     expandSwipeControl(savedSwipeState ?? undefined);
+
+    // Keep the swipe panel's COG raster rows and comparison-map mirror in sync
+    // as rasters are added, removed, or restyled while the swipe is active.
+    unsubscribeCogRasterChanges = subscribeSwipeCogChanges(() => {
+      swipeControl?.refreshLayers();
+    });
 
     // The control reads the basemap style only on construction, so recreate it
     // when the active basemap changes to keep its basemap-layer grouping in
@@ -56,6 +183,12 @@ export const maplibreSwipePlugin: GeoLibrePlugin = {
   deactivate: (app: GeoLibreAppAPI) => {
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
+    unsubscribeCogRasterChanges?.();
+    unsubscribeCogRasterChanges = null;
+    // Restore any main-map raster this provider hid; removeMapControl's
+    // detachComparison also tears the mirror down, but that only runs when a
+    // comparison map exists.
+    teardownCogSwipe();
     if (!swipeControl) return;
     savedSwipeState = swipeControl.getState();
     app.removeMapControl(swipeControl);
@@ -128,6 +261,10 @@ function getSwipeControlOptions(
     excludeLayers: [...INTERNAL_HELPER_LAYER_PATTERNS],
     // List only currently visible layers (plus any already selected), kept in sync live (#843).
     visibleLayersOnly: true,
+    // Surface deck.gl COG rasters (invisible to getStyle()) in the panel and
+    // render them per side: right/both on the comparison map, right-only hidden
+    // on the main map. See #1240 and swipe-cog-mirror.ts.
+    layerProvider: cogSwipeProvider,
   };
 }
 

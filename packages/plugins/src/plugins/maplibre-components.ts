@@ -2912,6 +2912,199 @@ function createCogRasterControl(
   return control;
 }
 
+// --- Layer Swipe COG integration -------------------------------------------
+// GeoLibre renders COG rasters (Vantor Open Data, STAC "Visualize", etc.)
+// through the CogLayerControl deck.gl overlay, so they are MapLibre custom
+// layers that Layer Swipe cannot see through getStyle(). These helpers let the
+// swipe plugin's layerProvider list them and render each per its side
+// assignment: mirror right/both onto the swipe comparison map, hide right-only
+// on the main map. See #1240 and swipe-cog-mirror.ts.
+
+/**
+ * A COG raster snapshot for the Layer Swipe provider, read from the app store
+ * (the user's intent) rather than the live control, so swipe's transient
+ * main-map visibility toggles do not perturb its decisions.
+ */
+export interface SwipeCogRasterSnapshot {
+  /** The CogLayerControl layer id (also the store layer id). */
+  id: string;
+  /** Display name. */
+  name: string;
+  /** COG URL. */
+  url: string;
+  /** User-facing visibility from the store (not swipe's transient state). */
+  visible: boolean;
+  /** Layer opacity. */
+  opacity: number;
+  /** Band selection string (e.g. "1" or "1,2,3"). */
+  bands?: string;
+  /** Colormap name. */
+  colormap?: CogLayerControlOptions["defaultColormap"];
+  /** Rescale minimum. */
+  rescaleMin?: number;
+  /** Rescale maximum. */
+  rescaleMax?: number;
+  /** Nodata value. */
+  nodata?: number;
+}
+
+// Notified when the set/state of CogLayerControl rasters changes, so the swipe
+// provider can refresh its list and re-mirror. Backed by a single store
+// subscription while at least one listener is registered.
+const swipeCogChangeListeners = new Set<() => void>();
+let swipeCogStoreUnsubscribe: (() => void) | null = null;
+
+function notifySwipeCogChange(): void {
+  for (const listener of swipeCogChangeListeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn("[GeoLibre] swipe COG change listener", error);
+    }
+  }
+}
+
+/**
+ * Subscribes to COG raster set/state changes (add/remove/visibility/opacity),
+ * so the Layer Swipe plugin can keep its panel list and comparison-map mirror
+ * in sync while a swipe is active.
+ *
+ * @param listener - Called after any relevant layer change.
+ * @returns An unsubscribe function.
+ */
+export function subscribeSwipeCogChanges(listener: () => void): () => void {
+  swipeCogChangeListeners.add(listener);
+  // A change to any COG raster surfaces as a store `layers` array change; the
+  // provider recompute is cheap, so notify on any layers change rather than
+  // diffing here. Swipe's own main-map hide goes through the control directly
+  // (setCogRasterMainVisibility), not the store, so it cannot loop back.
+  swipeCogStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
+    if (state.layers !== previous.layers) notifySwipeCogChange();
+  });
+  return () => {
+    swipeCogChangeListeners.delete(listener);
+    if (swipeCogChangeListeners.size === 0) {
+      swipeCogStoreUnsubscribe?.();
+      swipeCogStoreUnsubscribe = null;
+    }
+  };
+}
+
+/**
+ * Snapshots the store's CogLayerControl COG rasters for the Layer Swipe
+ * provider, in store (paint) order.
+ *
+ * @returns One snapshot per "cog-url" store layer with a URL source.
+ */
+export function getSwipeCogRasters(): SwipeCogRasterSnapshot[] {
+  const snapshots: SwipeCogRasterSnapshot[] = [];
+  for (const layer of useAppStore.getState().layers) {
+    if (!isCogRasterControlLayer(layer)) continue;
+    const source = layer.source as {
+      url?: unknown;
+      bands?: unknown;
+      colormap?: unknown;
+      rescaleMin?: unknown;
+      rescaleMax?: unknown;
+      nodata?: unknown;
+    };
+    if (typeof source.url !== "string") continue;
+    snapshots.push({
+      id: layer.id,
+      name: layer.name,
+      url: source.url,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      bands: typeof source.bands === "string" ? source.bands : undefined,
+      colormap:
+        typeof source.colormap === "string"
+          ? (source.colormap as CogLayerControlOptions["defaultColormap"])
+          : undefined,
+      rescaleMin:
+        typeof source.rescaleMin === "number" ? source.rescaleMin : undefined,
+      rescaleMax:
+        typeof source.rescaleMax === "number" ? source.rescaleMax : undefined,
+      nodata: typeof source.nodata === "number" ? source.nodata : undefined,
+    });
+  }
+  return snapshots;
+}
+
+/**
+ * Shows or hides a COG raster on the main map without writing the change back
+ * to the store, so Layer Swipe can hide a right-only raster on the main map
+ * while the Layers panel still lists it as visible. Visibility is opacity-based
+ * in CogLayerControl, so the stored opacity is restored when showing it again.
+ * A no-op when the control is not mounted.
+ *
+ * @param id - The raster layer id.
+ * @param visible - Whether it should render on the main map.
+ * @param opacity - The opacity to restore when making it visible.
+ */
+export function setCogRasterMainVisibility(
+  id: string,
+  visible: boolean,
+  opacity: number
+): void {
+  cogRasterControl?.setLayerVisibility(id, visible, opacity);
+}
+
+/**
+ * Creates a hidden CogLayerControl bound to a given map (the Layer Swipe
+ * comparison map) so the swipe plugin can render COG mirrors on the swipe's
+ * clipped comparison view. The control's own UI is hidden; only its deck
+ * overlay renders.
+ *
+ * @param map - The map to mount the mirror control on.
+ * @returns The mirror control, or null if the components module fails to load.
+ */
+export async function createSwipeCogMirrorControl(
+  map: maplibregl.Map
+): Promise<CogLayerControl | null> {
+  const { CogLayerControl: CogLayerControlClass } =
+    await getComponentsConstructors();
+  const control = new CogLayerControlClass(COG_RASTER_OPTIONS);
+  map.addControl(control);
+  // Hide the panel/button: the mirror only contributes its deck overlay, which
+  // the swipe control already clips to the comparison region.
+  control.hide();
+  control.collapse();
+  return control;
+}
+
+/**
+ * Renders one COG snapshot on a mirror control, matching the main map's
+ * visualization (bands/colormap/rescale/nodata/opacity).
+ *
+ * @param control - A mirror control from {@link createSwipeCogMirrorControl}.
+ * @param snapshot - The COG raster to render.
+ */
+export async function mirrorAddCogLayer(
+  control: CogLayerControl,
+  snapshot: SwipeCogRasterSnapshot
+): Promise<void> {
+  configureCogRasterControl(control, {
+    url: snapshot.url,
+    name: snapshot.name,
+    bands: snapshot.bands,
+    colormap: snapshot.colormap,
+    rescaleMin: snapshot.rescaleMin,
+    rescaleMax: snapshot.rescaleMax,
+    nodata: snapshot.nodata,
+    opacity: snapshot.opacity,
+  });
+  await control.addLayer(snapshot.url);
+}
+
+/**
+ * Removes every mirrored raster from a mirror control.
+ *
+ * @param control - A mirror control from {@link createSwipeCogMirrorControl}.
+ */
+export function clearMirrorCogLayers(control: CogLayerControl): void {
+  control.removeLayer();
+}
+
 function createLidarControl(
   LidarControlClass: LidarControlConstructor,
   LidarLayerAdapterClass: LidarLayerAdapterConstructor
