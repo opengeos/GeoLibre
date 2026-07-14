@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   DEFAULT_LANGUAGE,
+  languageDirection,
   languageOptions,
   resolveLanguage,
 } from "../apps/geolibre-desktop/src/i18n/languages";
@@ -53,5 +54,30 @@ describe("languageOptions", () => {
     const zh = languageOptions(["zh"])[0];
     assert.equal(zh.nativeName, "中文");
     assert.equal(zh.englishName, "Chinese");
+  });
+});
+
+describe("languageDirection", () => {
+  it("marks right-to-left languages as rtl", () => {
+    assert.equal(languageDirection("ar"), "rtl");
+    assert.equal(languageDirection("he"), "rtl");
+    assert.equal(languageDirection("fa"), "rtl");
+    assert.equal(languageDirection("ur"), "rtl");
+  });
+
+  it("resolves regional tags and casing through the base subtag", () => {
+    assert.equal(languageDirection("ar-SA"), "rtl");
+    assert.equal(languageDirection("AR_EG"), "rtl");
+    assert.equal(languageDirection(" Ar "), "rtl");
+    assert.equal(languageDirection("pt-BR"), "ltr");
+  });
+
+  it("defaults to ltr for left-to-right, unknown, or empty input", () => {
+    assert.equal(languageDirection("en"), "ltr");
+    assert.equal(languageDirection("zh"), "ltr");
+    assert.equal(languageDirection("xx"), "ltr");
+    assert.equal(languageDirection(""), "ltr");
+    assert.equal(languageDirection(null), "ltr");
+    assert.equal(languageDirection(undefined), "ltr");
   });
 });

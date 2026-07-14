@@ -337,10 +337,14 @@ export function PythonConsolePanel({
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
+    const isRtl = getComputedStyle(container).direction === "rtl";
+
     const onMove = (moveEvent: MouseEvent) => {
-      // Editor is the right pane: its width is the gap between the cursor and
-      // the container's right edge.
-      const raw = (rect.right - moveEvent.clientX) / rect.width;
+      // The editor pane hugs the container's inline-end: its width is the gap
+      // between the cursor and that edge.
+      const raw = isRtl
+        ? (moveEvent.clientX - rect.left) / rect.width
+        : (rect.right - moveEvent.clientX) / rect.width;
       nextFraction = Math.min(
         MAX_EDITOR_FRACTION,
         Math.max(MIN_EDITOR_FRACTION, raw),

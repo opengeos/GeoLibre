@@ -406,7 +406,7 @@ function WidgetCard({
             disabled={index === 0}
             onClick={() => onMove(index - 1)}
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-180" />
           </Button>
           <Button
             variant="ghost"
@@ -417,7 +417,7 @@ function WidgetCard({
             disabled={index === count - 1}
             onClick={() => onMove(index + 1)}
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
           </Button>
           <Button
             variant="ghost"

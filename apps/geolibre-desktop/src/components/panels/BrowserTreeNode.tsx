@@ -179,7 +179,7 @@ export function BrowserTreeNode({
             isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground rtl:rotate-180" />
             )
           ) : (
             <span className="w-3.5 shrink-0" />

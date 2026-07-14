@@ -734,7 +734,10 @@ export function RasterSubsetPanel({
               {showAdvanced ? (
                 <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
               ) : (
-                <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                <ChevronRight
+                  className="h-3.5 w-3.5 rtl:rotate-180"
+                  aria-hidden="true"
+                />
               )}
               {t("rasterSubset.advanced")}
             </button>

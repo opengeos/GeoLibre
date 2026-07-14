@@ -2,7 +2,11 @@ import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 
 import { DESKTOP_SETTINGS_STORAGE_KEY } from "../lib/storage-keys";
-import { DEFAULT_LANGUAGE, resolveLanguage } from "./languages";
+import {
+  DEFAULT_LANGUAGE,
+  languageDirection,
+  resolveLanguage,
+} from "./languages";
 
 /**
  * Catalogs are auto-discovered: every `locales/<code>.json` is bundled eagerly,
@@ -76,6 +80,20 @@ export function getInitialLanguage(): string {
 
   return DEFAULT_LANGUAGE;
 }
+
+/**
+ * Keep the document's `lang`/`dir` attributes in sync with the active
+ * language so right-to-left locales (e.g. Arabic) mirror the whole UI.
+ * Registered before `init` so the event fired during init already applies
+ * the direction on first paint.
+ */
+function applyDocumentDirection(code: string) {
+  if (typeof document === "undefined") return;
+  document.documentElement.lang = code;
+  document.documentElement.dir = languageDirection(code);
+}
+
+i18n.on("languageChanged", applyDocumentDirection);
 
 i18n.use(initReactI18next).init({
   resources,

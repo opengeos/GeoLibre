@@ -25,6 +25,15 @@ body,
   padding-right: env(safe-area-inset-right);
 }
 
+/* MapLibre anchors its controls with physical left/right CSS, so when the app
+   runs in a right-to-left locale (html[dir="rtl"]) the inherited direction
+   would half-mirror the map chrome (control rows, attribution) while the
+   corners stay put. Pin the map subtree to ltr; text inside popups still
+   shapes correctly via the Unicode bidi algorithm. */
+.maplibregl-map {
+  direction: ltr;
+}
+
 .geoagent-control .geoagent-control-toggle {
   align-items: center;
   display: flex;

@@ -1649,6 +1649,10 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = layerPanelWidth;
+      // In a right-to-left layout the panels are mirrored, so pointer deltas
+      // (and the deferred-resize guide anchor) flip sign.
+      const dirSign =
+        getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
       const panelRect =
         event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
@@ -1661,7 +1665,7 @@ export function DesktopShell({
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         nextWidth = clamp(
-          startWidth + moveEvent.clientX - startX,
+          startWidth + dirSign * (moveEvent.clientX - startX),
           MIN_SIDE_PANEL_WIDTH,
           MAX_SIDE_PANEL_WIDTH,
         );
@@ -1671,7 +1675,9 @@ export function DesktopShell({
           if (deferPanelResize) {
             if (verticalResizeGuideRef.current && panelRect) {
               verticalResizeGuideRef.current.style.left = `${
-                panelRect.left + nextWidth
+                dirSign === 1
+                  ? panelRect.left + nextWidth
+                  : panelRect.right - nextWidth
               }px`;
               verticalResizeGuideRef.current.classList.remove("hidden");
             }
@@ -1724,6 +1730,8 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = stylePanelWidth;
+      const dirSign =
+        getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
       const panelRect =
         event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
@@ -1736,7 +1744,7 @@ export function DesktopShell({
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         nextWidth = clamp(
-          startWidth + startX - moveEvent.clientX,
+          startWidth + dirSign * (startX - moveEvent.clientX),
           MIN_SIDE_PANEL_WIDTH,
           MAX_SIDE_PANEL_WIDTH,
         );
@@ -1746,7 +1754,9 @@ export function DesktopShell({
           if (deferPanelResize) {
             if (verticalResizeGuideRef.current && panelRect) {
               verticalResizeGuideRef.current.style.left = `${
-                panelRect.right - nextWidth
+                dirSign === 1
+                  ? panelRect.right - nextWidth
+                  : panelRect.left + nextWidth
               }px`;
               verticalResizeGuideRef.current.classList.remove("hidden");
             }
@@ -1789,9 +1799,9 @@ export function DesktopShell({
     [deferPanelResize, stylePanelWidth],
   );
 
-  // The notebook panel is right-docked like the Style panel, so its left-edge
-  // handle widens the panel as the pointer moves left (mirrors
-  // startStylePanelResize, with the notebook's own width constants/CSS var).
+  // The notebook panel is docked on the same side as the Style panel, so its
+  // map-side handle widens the panel as the pointer moves toward the map
+  // (mirrors startStylePanelResize, with the notebook's own constants/CSS var).
   const startNotebookPanelResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -1800,6 +1810,8 @@ export function DesktopShell({
 
       const startX = event.clientX;
       const startWidth = notebookPanelWidth;
+      const dirSign =
+        getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
       const panelRect =
         event.currentTarget.parentElement?.getBoundingClientRect();
       let nextWidth = startWidth;
@@ -1812,7 +1824,7 @@ export function DesktopShell({
 
       const onPointerMove = (moveEvent: PointerEvent) => {
         nextWidth = clamp(
-          startWidth + startX - moveEvent.clientX,
+          startWidth + dirSign * (startX - moveEvent.clientX),
           MIN_NOTEBOOK_PANEL_WIDTH,
           MAX_NOTEBOOK_PANEL_WIDTH,
         );
@@ -1822,7 +1834,9 @@ export function DesktopShell({
           if (deferPanelResize) {
             if (verticalResizeGuideRef.current && panelRect) {
               verticalResizeGuideRef.current.style.left = `${
-                panelRect.right - nextWidth
+                dirSign === 1
+                  ? panelRect.right - nextWidth
+                  : panelRect.left + nextWidth
               }px`;
               verticalResizeGuideRef.current.classList.remove("hidden");
             }
