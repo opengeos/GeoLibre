@@ -936,8 +936,18 @@ body,
   z-index: 2;
 }
 
+/*
+ * The overlaid deck.gl canvas (COG rasters via CogLayerControl, ArcGIS I3S, the
+ * Tauri raster fallback) is map content and must sit UNDER the map-control
+ * panels, not over them. It lives inside `.maplibregl-control-container` (pinned
+ * to z-index 7 below), which already lifts it above the map canvas, so it only
+ * needs a low z-index within that container. #1131 raised this to 5, which put
+ * the raster above the STAC / Vantor plugin panels (z-index 3) and painted over
+ * them (opengeos/GeoLibre#1240). Back to 1: the raster still renders above the
+ * basemap, and control panels render above the raster.
+ */
 #deckgl-overlay {
-  z-index: 5;
+  z-index: 1;
 }
 
 /*
