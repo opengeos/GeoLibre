@@ -43,7 +43,8 @@ jobs:
          github.event.pull_request.author_association == 'CONTRIBUTOR')) ||
       (github.event_name == 'issue_comment' &&
         github.event.issue.pull_request != null &&
-        startsWith(github.event.comment.body, '/claude-review') &&
+        (github.event.comment.body == '/claude-review' ||
+         startsWith(github.event.comment.body, '/claude-review ')) &&
         (github.event.comment.author_association == 'OWNER' ||
          github.event.comment.author_association == 'MEMBER' ||
          github.event.comment.author_association == 'COLLABORATOR'))
