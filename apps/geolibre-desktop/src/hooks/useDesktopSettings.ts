@@ -226,17 +226,18 @@ export function normalizeDesktopSettings(settings: unknown): DesktopSettings {
 }
 
 /**
- * Coerce a persisted (or tampered) value into a clean env-var record: string
- * keys with a non-empty trimmed name mapped to string values. Anything else is
- * dropped so a malformed localStorage entry cannot inject non-string values
- * into the runtime environment.
+ * Coerce a persisted (or tampered) value into a clean env-var record: entries
+ * with a non-empty trimmed name mapped to a non-empty string value. Blank keys,
+ * blank values, and non-string values are dropped so a malformed localStorage
+ * entry cannot inject bad values into the runtime environment and the persisted
+ * blob never accrues empty leftovers (every consumer treats a blank as unset).
  */
 function normalizeEnvRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const result: Record<string, string> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
     const name = key.trim();
-    if (name && typeof entry === "string") result[name] = entry;
+    if (name && typeof entry === "string" && entry) result[name] = entry;
   }
   return result;
 }

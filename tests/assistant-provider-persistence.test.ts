@@ -28,12 +28,13 @@ describe("DesktopSettings.aiProviderEnv persistence", () => {
     });
   });
 
-  it("drops non-string values and blank keys from tampered storage", () => {
+  it("drops non-string values, blank values, and blank keys from tampered storage", () => {
     const stored = {
       aiProviderEnv: {
         ANTHROPIC_API_KEY: "sk-ant-123",
         OPENAI_API_KEY: 42,
         GEMINI_API_KEY: null,
+        OLLAMA_MODEL: "",
         "   ": "orphan",
         "  AWS_REGION  ": "us-east-1",
       },

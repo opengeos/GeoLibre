@@ -1,5 +1,6 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { scopeOsEnvToProject, type RuntimeEnv } from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
@@ -17,8 +18,12 @@ export function useRuntimeEnvironmentVariables() {
   // Device-local AI Assistant provider credentials (Settings → AI Providers).
   // Projected below so the assistant picks them up after a restart without the
   // keys ever living in the shared project file. See useDesktopSettings.ts.
+  // useShallow keeps the reference stable across unrelated setDesktopSettings
+  // updates (e.g. dragging the accent-color picker), which normalizeDesktopSettings
+  // would otherwise churn into a fresh object every time — needlessly re-running
+  // this effect and re-rendering the host.
   const aiProviderEnv = useDesktopSettingsStore(
-    (s) => s.desktopSettings.aiProviderEnv,
+    useShallow((s) => s.desktopSettings.aiProviderEnv),
   );
   const lastSerializedEnv = useRef<string | null>(null);
   const isFirstRender = useRef(true);
