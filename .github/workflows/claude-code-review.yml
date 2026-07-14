@@ -1,33 +1,52 @@
 name: Claude Code Review
 
 # Uses pull_request_target so the workflow has access to repository secrets
-# (CLAUDE_CODE_OAUTH_TOKEN) even for PRs opened from forks, which lets Claude
-# review and comment on ALL PRs. This is safe here because the job only reads
-# the diff and posts comments. It never installs dependencies or executes the
-# PR's code, so untrusted fork code is never run with the elevated token.
+# (CLAUDE_CODE_OAUTH_TOKEN) even for PRs opened from forks. This is safe here
+# because the job only reads the diff and posts comments. It never installs
+# dependencies or executes the PR's code, so untrusted fork code is never run
+# with the elevated token.
+#
+# Who gets an automatic review, and who needs a maintainer to trigger one:
+#   - Known authors (OWNER / MEMBER / COLLABORATOR / CONTRIBUTOR) are reviewed
+#     automatically when they open or push to a PR.
+#   - First-time contributors (FIRST_TIME_CONTRIBUTOR / FIRST_TIMER / NONE) are
+#     NOT reviewed automatically. This blocks the low-effort economic-DoS vector
+#     where throwaway accounts spam PRs to burn CLAUDE_CODE_OAUTH_TOKEN budget.
+#     A maintainer opts such a PR in by commenting `/claude-review` on it; only
+#     comments from OWNER / MEMBER / COLLABORATOR accounts are honored.
 on:
   pull_request_target:
     types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+  issue_comment:
+    types: [created]
 
-# Cancel a superseded run when a fork PR is pushed to repeatedly, capping the
-# CI-minute / Claude-credit cost from rapid synchronize events.
+# Cancel a superseded run when a PR is pushed to repeatedly, capping the
+# CI-minute / Claude-credit cost from rapid synchronize events. Keyed on the PR
+# number, which lives in a different place for the two triggering events.
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number }}
+  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Run when EITHER:
+    #  (a) a known author (not a first-timer) opens/updates a PR, OR
+    #  (b) a maintainer comments `/claude-review` on a PR (this is the opt-in
+    #      path for first-time-contributor PRs).
+    # author_association on the comment gates (b): only OWNER/MEMBER/COLLABORATOR
+    # accounts — i.e. people with write/admin on the repo — can trigger a review.
+    if: >
+      (github.event_name == 'pull_request_target' &&
+        (github.event.pull_request.author_association == 'OWNER' ||
+         github.event.pull_request.author_association == 'MEMBER' ||
+         github.event.pull_request.author_association == 'COLLABORATOR' ||
+         github.event.pull_request.author_association == 'CONTRIBUTOR')) ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        startsWith(github.event.comment.body, '/claude-review') &&
+        (github.event.comment.author_association == 'OWNER' ||
+         github.event.comment.author_association == 'MEMBER' ||
+         github.event.comment.author_association == 'COLLABORATOR'))
 
     runs-on: ubuntu-latest
     permissions:
@@ -36,6 +55,24 @@ jobs:
       issues: write
 
     steps:
+      # The PR number and head SHA live in different event fields depending on
+      # whether we were triggered by a PR event or a maintainer's comment. On the
+      # comment path the payload has no PR head SHA, so resolve it from the API.
+      - name: Resolve target PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            number="${{ github.event.issue.number }}"
+            sha="$(gh pr view "$number" --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)"
+          else
+            number="${{ github.event.pull_request.number }}"
+            sha="${{ github.event.pull_request.head.sha }}"
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
       - name: Checkout PR head for review context (read-only; never executed)
         uses: actions/checkout@v6
         with:
@@ -47,7 +84,7 @@ jobs:
           # it, and this job never installs deps or executes the checked-out code.
           # Combined with the prompt's read-scope guardrails, the untrusted head is
           # safe to have on disk here.
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ steps.pr.outputs.sha }}
           persist-credentials: false
           fetch-depth: 1
 
@@ -68,12 +105,13 @@ jobs:
           # By default the action aborts ("Actor does not have write permissions
           # to the repository") when the PR author lacks write access, which
           # skips every fork/external-contributor PR. Allow all authors so Claude
-          # reviews ALL PRs. This is safe here because the job only reads the diff
+          # can review fork PRs (the job's `if:` above already decides *whether* a
+          # given PR is eligible). Safe here because the job only reads the diff
           # and posts comments with the minimal-scope GITHUB_TOKEN, never runs the
           # PR's code, and restricts tools via claude_args below.
           allowed_non_write_users: "*"
           prompt: |
-            Perform a thorough code review of pull request ${{ github.repository }}/pull/${{ github.event.pull_request.number }}.
+            Perform a thorough code review of pull request ${{ github.repository }}/pull/${{ steps.pr.outputs.number }}.
 
             Inspect the changes with `gh pr diff` and `gh pr view`. When the diff alone is not enough to judge correctness, read the surrounding source files for context.
 
