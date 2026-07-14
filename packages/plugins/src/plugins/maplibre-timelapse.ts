@@ -845,7 +845,11 @@ export class TimelapseControl {
     const frame = this.frames[this.frameIndex];
     if (this.slider) this.slider.value = String(this.frameIndex);
     if (this.yearLabel) this.yearLabel.textContent = frame?.label ?? "";
-    if (this.badge) this.badge.textContent = frame?.label ?? "";
+    if (this.badge) {
+      // No year overlay without imagery under it (e.g. after the user deletes
+      // the Layers-panel entry); an empty badge renders nothing.
+      this.badge.textContent = this.stackPresent ? (frame?.label ?? "") : "";
+    }
     if (this.playButton) {
       this.playButton.textContent = this.playing
         ? `⏸ ${labels.pause}`
@@ -864,6 +868,11 @@ export class TimelapseControl {
     }
     if (this.slider) this.slider.disabled = this.recording;
     if (this.attributionLine && frame) {
+      // Trust assumption: attribution HTML comes from the frame's provider.
+      // The built-in EOX string is fixed, and registerTimelapseProvider is
+      // only reachable from plugin code that already runs in-process — do not
+      // copy this innerHTML pattern anywhere provider strings are less
+      // trusted without sanitizing first.
       this.attributionLine.innerHTML = frame.attribution;
     }
   }
@@ -1125,6 +1134,10 @@ let unsubscribeStore: (() => void) | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
 let unregisterPanel: (() => void) | null = null;
 let appRef: GeoLibreAppAPI | null = null;
+// Bumped by activate()/deactivate() so an async provider's listFrames()
+// resolving after a deactivate cannot wire up a control the plugin manager
+// already considers gone.
+let activationSession = 0;
 
 /**
  * The floating-panel registration. A single mutable object (the Mapillary
@@ -1209,14 +1222,18 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
   name: "Timelapse",
   version: "0.2.0",
   activate: (app: GeoLibreAppAPI) => {
+    const session = ++activationSession;
     const provider = getTimelapseProvider(savedState?.providerId);
     const frames = provider.listFrames();
     if (Array.isArray(frames)) return activateWithFrames(app, provider, frames);
     return frames.then((resolved) =>
-      activateWithFrames(app, provider, resolved),
+      activationSession === session
+        ? activateWithFrames(app, provider, resolved)
+        : false,
     );
   },
   deactivate: (_app: GeoLibreAppAPI) => {
+    activationSession += 1;
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
     unsubscribeStore?.();
@@ -1251,7 +1268,18 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
     const current = timelapseControl?.getState() ?? savedState;
     if (JSON.stringify(next) === JSON.stringify(current ?? null)) return false;
     savedState = next;
-    if (next && timelapseControl) timelapseControl.applyState(next);
+    if (!timelapseControl) return;
+    if (next) {
+      timelapseControl.applyState(next);
+      return;
+    }
+    // A null state (New Project reset, or a corrupted entry) with the plugin
+    // still active must not leave the previous project's year/speed/loop on
+    // screen — reset the live control to defaults (normalize({}) never
+    // returns null) and stop any playback carried over from the old project.
+    timelapseControl.pause();
+    const defaults = normalizeTimelapseProjectState({}, frames);
+    if (defaults) timelapseControl.applyState(defaults);
   },
 };
 

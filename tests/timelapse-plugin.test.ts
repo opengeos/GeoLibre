@@ -10,6 +10,7 @@ import {
   TIMELAPSE_SOURCE_KIND,
   timelapseStoreLayerId,
 } from "../packages/plugins/src/plugins/maplibre-timelapse";
+import { registerTimelapseProvider } from "../packages/plugins/src/plugins/timelapse-providers";
 import type {
   GeoLibreAppAPI,
   GeoLibreFloatingPanelRegistration,
@@ -351,6 +352,63 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(state.secondsPerYear, 2);
     assert.equal(state.loop, false);
     assert.equal(restored.getFrameIndex(), 3);
+  });
+
+  it("resets a live control to defaults when the project state is cleared", () => {
+    const map = fakeMap();
+    const app = fakeApp(map);
+    plugin.activate(app);
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+    control.setFrameIndex(3);
+    control.setSecondsPerYear(2);
+    control.setLoop(false);
+    control.play();
+
+    // A New Project reset applies a null/invalid state while still active.
+    plugin.applyProjectState?.(app, null);
+
+    assert.equal(control.isPlaying(), false);
+    const state = control.getState();
+    assert.equal(state.year, 2018);
+    assert.equal(state.secondsPerYear, 1);
+    assert.equal(state.loop, true);
+    // The next save reports the defaults, not the previous project's state.
+    assert.deepEqual(plugin.getProjectState?.(), state);
+  });
+
+  it("does not wire up an async provider that resolves after deactivate", async () => {
+    let release: (() => void) | null = null;
+    registerTimelapseProvider({
+      id: "slow-async",
+      name: "Slow Async",
+      attribution: "test",
+      listFrames: () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve([
+              {
+                id: "slow-2020",
+                label: "2020",
+                year: 2020,
+                tileUrlTemplate: "https://example.com/{z}/{x}/{y}.png",
+                attribution: "test",
+              },
+            ]);
+        }),
+    });
+    const map = fakeMap();
+    const app = fakeApp(map);
+    // Select the async provider via a saved state, then activate + deactivate
+    // before its catalog resolves.
+    plugin.applyProjectState?.(app, { providerId: "slow-async", year: 2020 });
+    const activation = plugin.activate(app);
+    plugin.deactivate(app);
+    release?.();
+    assert.equal(await activation, false);
+    assert.equal(getActiveTimelapseControl(), null);
+    assert.equal(map.sources.size, 0);
+    assert.equal(storeLayer(), undefined);
   });
 
   it("clamps a hand-edited project year into the provider range", () => {
