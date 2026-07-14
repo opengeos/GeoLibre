@@ -1988,6 +1988,8 @@
   },
   "timelapse": {
     "title": "타임랩스",
+    "provider": "이미지 소스",
+    "legend": "범례",
     "yearSlider": "타임랩스 연도",
     "play": "재생",
     "pause": "일시정지",

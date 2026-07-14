@@ -2028,6 +2028,8 @@
   },
   "timelapse": {
     "title": "Timelapse",
+    "provider": "Fonte de imagens",
+    "legend": "Legenda",
     "yearSlider": "Ano do timelapse",
     "play": "Reproduzir",
     "pause": "Pausar",

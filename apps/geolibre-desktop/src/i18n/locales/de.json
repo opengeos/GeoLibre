@@ -2028,6 +2028,8 @@
   },
   "timelapse": {
     "title": "Zeitraffer",
+    "provider": "Bildquelle",
+    "legend": "Legende",
     "yearSlider": "Zeitraffer-Jahr",
     "play": "Abspielen",
     "pause": "Pause",

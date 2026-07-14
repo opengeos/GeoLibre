@@ -1988,6 +1988,8 @@
   },
   "timelapse": {
     "title": "タイムラプス",
+    "provider": "画像ソース",
+    "legend": "凡例",
     "yearSlider": "タイムラプスの年",
     "play": "再生",
     "pause": "一時停止",

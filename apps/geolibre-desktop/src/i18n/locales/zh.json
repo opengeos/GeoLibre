@@ -1988,6 +1988,8 @@
   },
   "timelapse": {
     "title": "延时影像",
+    "provider": "影像来源",
+    "legend": "图例",
     "yearSlider": "延时年份",
     "play": "播放",
     "pause": "暂停",

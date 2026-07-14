@@ -2028,6 +2028,8 @@
   },
   "timelapse": {
     "title": "Timelapse",
+    "provider": "Beeldbron",
+    "legend": "Legenda",
     "yearSlider": "Timelapse-jaar",
     "play": "Afspelen",
     "pause": "Pauzeren",

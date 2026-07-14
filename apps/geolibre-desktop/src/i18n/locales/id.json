@@ -1988,6 +1988,8 @@
   },
   "timelapse": {
     "title": "Timelapse",
+    "provider": "Sumber citra",
+    "legend": "Legenda",
     "yearSlider": "Tahun timelapse",
     "play": "Putar",
     "pause": "Jeda",

@@ -466,12 +466,20 @@ export class TimelapseControl {
     // loop is drawing from these exact layers); the select is also disabled
     // while recording, so this only guards the programmatic path.
     if (this.recording) return;
-    if (providerId === this.provider.id) return;
+    // Bump the session on every early return too: re-selecting the active
+    // provider must cancel a still-pending switch to another one (otherwise
+    // that older switch's resolution would pass the superseded check below and
+    // apply, overriding this re-selection).
+    if (providerId === this.provider.id) {
+      this.switchSession += 1;
+      return;
+    }
     const provider = getTimelapseProvider(providerId);
     // An unknown id falls back to the built-in provider; if that is the one
     // already active, there is nothing to switch to — but the native <select>
     // has already moved to the rejected option, so restore its display.
     if (provider.id === this.provider.id) {
+      this.switchSession += 1;
       this.syncProviderSelect();
       return;
     }

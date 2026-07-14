@@ -2028,6 +2028,8 @@
   },
   "timelapse": {
     "title": "Timelapse",
+    "provider": "Görüntü kaynağı",
+    "legend": "Lejant",
     "yearSlider": "Timelapse yılı",
     "play": "Oynat",
     "pause": "Duraklat",

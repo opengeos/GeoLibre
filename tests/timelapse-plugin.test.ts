@@ -339,6 +339,41 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(map.sources.size, FRAME_COUNT);
   });
 
+  it("re-selecting the active provider cancels a pending async switch", async () => {
+    const map = fakeMap();
+    plugin.activate(fakeApp(map));
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+
+    let resolveSlow: (frames: unknown[]) => void = () => {};
+    registerTimelapseProvider({
+      id: "slow-cancel",
+      name: "Slow Cancel",
+      attribution: "s",
+      listFrames: () =>
+        new Promise((resolve) => {
+          resolveSlow = resolve as (frames: unknown[]) => void;
+        }) as never,
+    });
+
+    const pending = control.switchProvider("slow-cancel");
+    // Re-picking the still-active provider must cancel the pending switch.
+    await control.switchProvider("eox-s2cloudless");
+    resolveSlow([
+      {
+        id: "slow-2100",
+        label: "2100",
+        year: 2100,
+        tileUrlTemplate: "https://example.test/s/{z}/{y}/{x}.png",
+        attribution: "s",
+      },
+    ]);
+    await pending;
+
+    assert.equal(control.provider.id, "eox-s2cloudless");
+    assert.equal(map.sources.size, FRAME_COUNT);
+  });
+
   it("swaps a year with exactly two raster-opacity writes", () => {
     const map = fakeMap();
     plugin.activate(fakeApp(map));
