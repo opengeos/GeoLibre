@@ -6,9 +6,9 @@
     "upng-js": "^2.1.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260707.1",
+    "@cloudflare/workers-types": "^5.20260714.1",
     "@types/upng-js": "^2.1.5",
-    "wrangler": "^4.107.0"
+    "wrangler": "^4.110.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
