@@ -36,12 +36,17 @@ jobs:
       issues: write
 
     steps:
-      - name: Checkout PR head (read-only; code is reviewed, not executed)
+      - name: Checkout base ref for review context (never the untrusted PR head)
         uses: actions/checkout@v6
         with:
-          # pull_request_target defaults to the base ref; explicitly check out
-          # the PR head so Claude reviews the proposed changes.
-          ref: ${{ github.event.pull_request.head.sha }}
+          # SECURITY: under pull_request_target, do NOT check out the PR head into
+          # the workspace root. That would place untrusted fork code — and, with
+          # persisted credentials, the write-scoped GITHUB_TOKEN in .git/config —
+          # where a prompt-injected review agent could read it. Keep the trusted
+          # base branch at the root (the pull_request_target default) and let
+          # Claude review the proposed changes via `gh pr diff`, as the prompt
+          # instructs. persist-credentials: false drops the token from .git/config.
+          persist-credentials: false
           fetch-depth: 1
 
       - name: Run Claude Code Review
