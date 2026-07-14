@@ -230,11 +230,15 @@ export function buildAreaGrid(
   if (!(widthMeters > 0) || !(heightMeters > 0)) return null;
 
   // Pick cols/rows proportional to the bbox aspect so cells come out roughly
-  // square, while keeping cols * rows <= maxSamples.
+  // square, while keeping cols * rows <= maxSamples. Cap rows so that cols'
+  // floor of 2 cannot push the product past maxSamples on very skinny
+  // polygons (a tall sliver would otherwise blow rows up unbounded).
   const aspect = widthMeters / heightMeters;
-  const rawRows = Math.sqrt(Math.max(4, maxSamples) / aspect);
-  const rows = Math.max(2, Math.round(rawRows));
-  const cols = Math.max(2, Math.floor(Math.max(4, maxSamples) / rows));
+  const budget = Math.max(4, maxSamples);
+  const rawRows = Math.sqrt(budget / aspect);
+  const rowCap = Math.max(2, Math.floor(budget / 2));
+  const rows = Math.max(2, Math.min(Math.round(rawRows), rowCap));
+  const cols = Math.max(2, Math.floor(budget / rows));
 
   const coords: LngLat[] = [];
   const inside: boolean[] = [];
@@ -320,7 +324,12 @@ export function surfaceArea(
       }
       const secant = Math.min(Math.hypot(1, dzdx, dzdy), maxSecant);
       secantSum += secant;
-      slopeSum += Math.atan(Math.hypot(dzdx, dzdy)) / DEG_TO_RAD;
+      // Clamp like the secant so a spiky DEM sample can't report a mean slope
+      // the area contribution was already protected against.
+      slopeSum += Math.min(
+        Math.atan(Math.hypot(dzdx, dzdy)) / DEG_TO_RAD,
+        MAX_SLOPE_DEG,
+      );
       sampledCount += 1;
     }
   }

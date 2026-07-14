@@ -133,6 +133,34 @@ describe("terrain-measure geometry: pointInRing / buildAreaGrid", () => {
     assert.ok(grid.cellWidthMeters > 0 && grid.cellHeightMeters > 0);
   });
 
+  it("keeps the grid within maxSamples for very skinny polygons", () => {
+    // A ~10 m x 5000 m north-south sliver: without a row cap, rows would
+    // blow past the budget while cols sits at its floor of 2.
+    const sliver: LngLat[] = [
+      [0, 0],
+      [0.0001, 0],
+      [0.0001, 0.045],
+      [0, 0.045],
+      [0, 0],
+    ];
+    const grid = buildAreaGrid(sliver, 256, EARTH_RADIUS);
+    assert.ok(grid);
+    assert.ok(
+      grid.cols * grid.rows <= 256,
+      `expected ${grid.cols}x${grid.rows} <= 256 samples`,
+    );
+    const wide: LngLat[] = [
+      [0, 0],
+      [0.045, 0],
+      [0.045, 0.0001],
+      [0, 0.0001],
+      [0, 0],
+    ];
+    const wideGrid = buildAreaGrid(wide, 256, EARTH_RADIUS);
+    assert.ok(wideGrid);
+    assert.ok(wideGrid.cols * wideGrid.rows <= 256);
+  });
+
   it("returns null for degenerate rings", () => {
     assert.equal(buildAreaGrid([], 100, EARTH_RADIUS), null);
     const line: LngLat[] = [
@@ -173,6 +201,21 @@ describe("terrain-measure geometry: surfaceArea", () => {
     assert.ok(result);
     closeTo(result.surfaceSquareMeters, 1_000_000 * Math.SQRT2, 1000);
     closeTo(result.meanSlopeDegrees, 45, 0.1);
+  });
+
+  it("clamps the mean slope like the area's secant", () => {
+    const grid = buildAreaGrid(square, 64, EARTH_RADIUS)!;
+    // A pathological spike: elevation rises 1000 m per meter eastward.
+    const elevations = grid.coords.map(
+      (_, i) => (i % grid.cols) * grid.cellWidthMeters * 1000,
+    );
+    const result = surfaceArea(grid, elevations, 1_000_000);
+    assert.ok(result);
+    // Both readouts are protected by the same 85-degree cap, so they can't
+    // silently disagree on spiky DEM data.
+    assert.ok(result.meanSlopeDegrees <= 85);
+    closeTo(result.meanSlopeDegrees, 85, 0.01);
+    closeTo(result.surfaceSquareMeters, 1_000_000 / Math.cos((85 * Math.PI) / 180), 1);
   });
 
   it("returns null when most samples are missing", () => {

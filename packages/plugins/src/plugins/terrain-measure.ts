@@ -355,13 +355,19 @@ export function attachTerrainMeasure(
   const section = document.createElement("div");
   section.className = "geolibre-terrain-measure";
   section.style.borderTop = "1px solid hsl(var(--border))";
-  section.style.marginTop = "8px";
+  // The panel's children carry their own margins (it has no padding), so
+  // inset the section on all sides to keep text off the panel border.
+  section.style.margin = "8px 12px 12px";
   section.style.paddingTop = "8px";
   section.style.display = "none";
   section.style.fontSize = "12px";
   panel.appendChild(section);
 
   let current: TerrainReadout | null = null;
+  // The measurement whose computation is still in flight; tracked separately
+  // from `current` (which stays null until the promise resolves) so a removal
+  // during the "Computing terrain…" window can cancel the pending work too.
+  let pendingMeasurementId: string | null = null;
   let requestToken = 0;
 
   const hide = (): void => {
@@ -419,27 +425,37 @@ export function attachTerrainMeasure(
     const measurement = event.measurement;
     if (!measurement) return;
     const token = ++requestToken;
+    pendingMeasurementId = measurement.id;
     showComputing();
     computeTerrainReadout(measurement, getMap())
       .then((readout) => {
         if (token !== requestToken) return;
+        pendingMeasurementId = null;
         current = readout;
         render();
       })
       .catch(() => {
         if (token !== requestToken) return;
+        pendingMeasurementId = null;
         hide();
       });
   };
 
   const onClear = (): void => {
     requestToken += 1;
+    pendingMeasurementId = null;
     hide();
   };
 
   const onMeasurementRemove = (event: { measurement?: Measurement }): void => {
-    if (current && event.measurement?.id === current.measurementId) {
+    const removedId = event.measurement?.id;
+    if (!removedId) return;
+    if (
+      current?.measurementId === removedId ||
+      pendingMeasurementId === removedId
+    ) {
       requestToken += 1;
+      pendingMeasurementId = null;
       hide();
     }
   };
