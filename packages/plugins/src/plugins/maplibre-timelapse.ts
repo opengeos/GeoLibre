@@ -297,11 +297,18 @@ export class TimelapseControl {
   // Fallback timer for the tiles-ready gate (see armTilesReadyGate); cleared
   // when the map fires `idle` first, when re-arming, and on teardown.
   private tilesReadyTimer: ReturnType<typeof setTimeout> | null = null;
+  // The current `idle` listener for the tiles-ready gate, tracked so a stale
+  // one from a prior arm can be removed before re-arming.
+  private tilesReadyIdleHandler: (() => void) | null = null;
   // Bumped by play()/pause() so a tick() awaiting the next year's tiles when
   // playback is toggled can tell it is stale and must not advance the frame
   // (a resumed session schedules its own timer; the old tick racing it would
   // double-advance).
   private playSession = 0;
+  // Bumped by switchProvider() so a slow async provider whose listFrames()
+  // resolves after the user has already picked another cannot clobber the newer
+  // selection (mirrors playSession / the plugin-level activationSession).
+  private switchSession = 0;
   private recordAbort: AbortController | null = null;
 
   // The floating-panel body container, kept so switchProvider can re-render the
@@ -444,21 +451,48 @@ export class TimelapseControl {
    * resolves the new provider's frames (awaiting a remote catalog if the
    * provider is async), rebuilds the pre-warmed stack from the oldest year, and
    * re-renders the panel body in place so the slider range, end labels, and
-   * attribution follow the new years. A no-op when the id resolves back to the
-   * current provider or the new provider yields no frames (the current stack is
-   * left untouched).
+   * attribution follow the new years.
+   *
+   * A no-op that leaves the current stack untouched (and re-syncs the picker to
+   * the active provider) when: a recording is in flight, the id resolves back
+   * to the current provider, a newer switch superseded this one while its
+   * frames were resolving, the async catalog rejected, or the provider yields
+   * no frames. The {@link switchSession} counter mirrors the `activationSession`
+   * /`playSession` pattern so a slow async provider that resolves after the
+   * user has already picked another cannot clobber the newer selection.
    */
   async switchProvider(providerId: string): Promise<void> {
+    // Tearing down the stack mid-recording would corrupt the export (the record
+    // loop is drawing from these exact layers); the select is also disabled
+    // while recording, so this only guards the programmatic path.
+    if (this.recording) return;
     if (providerId === this.provider.id) return;
     const provider = getTimelapseProvider(providerId);
     // An unknown id falls back to the built-in provider; if that is the one
-    // already active, there is nothing to switch to.
-    if (provider.id === this.provider.id) return;
-    const framesResult = provider.listFrames();
-    const frames = Array.isArray(framesResult)
-      ? framesResult
-      : await framesResult;
-    if (frames.length === 0) return;
+    // already active, there is nothing to switch to — but the native <select>
+    // has already moved to the rejected option, so restore its display.
+    if (provider.id === this.provider.id) {
+      this.syncProviderSelect();
+      return;
+    }
+    const session = ++this.switchSession;
+    let frames: TimelapseFrame[];
+    try {
+      const framesResult = provider.listFrames();
+      frames = Array.isArray(framesResult) ? framesResult : await framesResult;
+    } catch {
+      // A remote catalog can reject; keep the current provider and re-sync the
+      // picker so it doesn't advertise a source that never loaded.
+      if (session === this.switchSession) this.syncProviderSelect();
+      return;
+    }
+    // A newer switch superseded this resolution while awaiting; the winning
+    // call owns the picker and stack, so bail without touching either.
+    if (session !== this.switchSession) return;
+    if (frames.length === 0) {
+      this.syncProviderSelect();
+      return;
+    }
     this.pause();
     this.removeStack();
     removeTimelapseStoreLayers();
@@ -467,8 +501,18 @@ export class TimelapseControl {
     this.frameIndex = 0;
     this.ensureStack();
     // Re-render the panel body so the slider bounds/labels and attribution
-    // reflect the new frame set (renderInto rebuilds it from scratch).
+    // reflect the new frame set (renderInto rebuilds it from scratch, which
+    // also selects the active provider in the picker).
     if (this.container) this.renderInto(this.container);
+  }
+
+  /**
+   * Restore the provider `<select>`'s displayed value to the active provider,
+   * after an early return that did not apply the user's picked option (the
+   * browser moves the native select on `change` before the handler runs).
+   */
+  private syncProviderSelect(): void {
+    if (this.providerSelect) this.providerSelect.value = this.provider.id;
   }
 
   /**
@@ -593,6 +637,7 @@ export class TimelapseControl {
   dispose(): void {
     this.stopForTeardown();
     this.clearTilesReadyTimer();
+    this.clearTilesReadyIdleHandler();
     this.badge?.remove();
     this.badge = null;
   }
@@ -665,13 +710,18 @@ export class TimelapseControl {
       this.tilesReady = true;
       return;
     }
+    // Drop a still-pending `idle` listener from a prior arm (e.g. a provider
+    // switch before the last stack settled), so its stale closure can't flip
+    // the new gate ready when `idle` finally fires.
+    this.clearTilesReadyIdleHandler();
     const markReady = (): void => {
       this.clearTilesReadyTimer();
-      map.off?.("idle", markReady);
+      this.clearTilesReadyIdleHandler();
       if (this.tilesReady) return;
       this.tilesReady = true;
       this.updateUi();
     };
+    this.tilesReadyIdleHandler = markReady;
     map.once("idle", markReady);
     this.tilesReadyTimer = setTimeout(markReady, TILES_READY_FALLBACK_MS);
   }
@@ -680,6 +730,13 @@ export class TimelapseControl {
     if (this.tilesReadyTimer !== null) {
       clearTimeout(this.tilesReadyTimer);
       this.tilesReadyTimer = null;
+    }
+  }
+
+  private clearTilesReadyIdleHandler(): void {
+    if (this.tilesReadyIdleHandler) {
+      this.map?.off?.("idle", this.tilesReadyIdleHandler);
+      this.tilesReadyIdleHandler = null;
     }
   }
 
@@ -1021,6 +1078,10 @@ export class TimelapseControl {
         !this.tilesReady && !this.recording ? labels.loadingTiles : "";
     }
     if (this.slider) this.slider.disabled = this.recording;
+    // Switching providers mid-recording would tear down the layers the export
+    // is drawing from, so the picker is inert while recording; disable it too
+    // (mirroring the slider) instead of looking interactive but silently no-op.
+    if (this.providerSelect) this.providerSelect.disabled = this.recording;
     if (this.attributionLine && frame) {
       // Trust assumption: attribution HTML comes from the frame's provider.
       // The built-in EOX string is fixed, and registerTimelapseProvider is

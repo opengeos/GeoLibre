@@ -10,7 +10,10 @@ import {
   TIMELAPSE_SOURCE_KIND,
   timelapseStoreLayerId,
 } from "../packages/plugins/src/plugins/maplibre-timelapse";
-import { registerTimelapseProvider } from "../packages/plugins/src/plugins/timelapse-providers";
+import {
+  NASA_GIBS_WELD_PROVIDER_ID,
+  registerTimelapseProvider,
+} from "../packages/plugins/src/plugins/timelapse-providers";
 import type {
   GeoLibreAppAPI,
   GeoLibreFloatingPanelRegistration,
@@ -228,7 +231,10 @@ describe("maplibreTimelapsePlugin", () => {
         (item) => item.metadata.sourceKind === TIMELAPSE_SOURCE_KIND,
       );
     assert.equal(layers.length, 1);
-    assert.equal(layers[0].id, timelapseStoreLayerId("nasa-gibs-landsat-weld"));
+    assert.equal(
+      layers[0].id,
+      timelapseStoreLayerId(NASA_GIBS_WELD_PROVIDER_ID),
+    );
     assert.equal(control.getFrameIndex(), 0);
     assert.equal(control.getState().year, 1983);
   });
@@ -244,6 +250,57 @@ describe("maplibreTimelapsePlugin", () => {
 
     assert.equal(control.provider.id, "eox-s2cloudless");
     assert.equal(map.sources.size, FRAME_COUNT);
+  });
+
+  it("switchProvider ignores a superseded async resolution", async () => {
+    const map = fakeMap();
+    plugin.activate(fakeApp(map));
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+
+    // A slow async provider whose frames we resolve by hand, and a fast one.
+    let resolveSlow: (frames: unknown[]) => void = () => {};
+    registerTimelapseProvider({
+      id: "slow-a",
+      name: "Slow A",
+      attribution: "a",
+      listFrames: () =>
+        new Promise((resolve) => {
+          resolveSlow = resolve as (frames: unknown[]) => void;
+        }) as never,
+    });
+    registerTimelapseProvider({
+      id: "fast-b",
+      name: "Fast B",
+      attribution: "b",
+      listFrames: () => [
+        {
+          id: "b-2100",
+          label: "2100",
+          year: 2100,
+          tileUrlTemplate: "https://example.test/b/{z}/{y}/{x}.png",
+          attribution: "b",
+        },
+      ],
+    });
+
+    // Pick the slow provider (suspends), then the fast one (applies now).
+    const slowSwitch = control.switchProvider("slow-a");
+    await control.switchProvider("fast-b");
+    assert.equal(control.provider.id, "fast-b");
+
+    // The stale slow resolution lands last but must not clobber the newer pick.
+    resolveSlow([
+      {
+        id: "a-1900",
+        label: "1900",
+        year: 1900,
+        tileUrlTemplate: "https://example.test/a/{z}/{y}/{x}.png",
+        attribution: "a",
+      },
+    ]);
+    await slowSwitch;
+    assert.equal(control.provider.id, "fast-b");
   });
 
   it("swaps a year with exactly two raster-opacity writes", () => {
