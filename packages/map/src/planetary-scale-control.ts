@@ -1,5 +1,16 @@
-import { getActiveMeanRadiusMeters, type MapScaleUnit } from "@geolibre/core";
+import {
+  formatRoundNum,
+  getActiveMeanRadiusMeters,
+  getRoundNum,
+  scaleSpan,
+  type MapScaleUnit,
+} from "@geolibre/core";
 import maplibregl from "maplibre-gl";
+
+// Re-exported so the nice-number rounding and unit conversion — now shared with
+// the Print Layout scale bar in `@geolibre/core` — can still be imported from
+// this module (and covered by planetary-scale-control.test.ts).
+export { getRoundNum, scaleSpan } from "@geolibre/core";
 
 /**
  * A metric scale bar that respects the active celestial body's radius.
@@ -112,27 +123,6 @@ export function greatCircleMeters(
   return 2 * radiusMeters * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// The largest "1 / 2 / 3 / 5 / 10 × 10ⁿ" number that does not exceed `num`, so
-// the bar lands on a readable round value. Uses log10 for the magnitude (unlike
-// MapLibre's digit-count trick, which returns 1 for any 0 < num < 1 and so
-// rounds *up* — producing a bar wider than maxWidth for sub-unit spans).
-export function getRoundNum(num: number): number {
-  if (!(num > 0)) return 0;
-  const pow10 = Math.pow(10, Math.floor(Math.log10(num)));
-  const d = num / pow10;
-  const nice = d >= 10 ? 10 : d >= 5 ? 5 : d >= 3 ? 3 : d >= 2 ? 2 : 1;
-  return pow10 * nice;
-}
-
-/** Trim trailing-zero noise from a rounded value (e.g. 0.5, 2, 300). */
-function formatNum(value: number): string {
-  return Number.parseFloat(value.toPrecision(12)).toString();
-}
-
-const FEET_PER_METER = 3.2808398950131235; // 1 / 0.3048
-const FEET_PER_MILE = 5280;
-const METERS_PER_NAUTICAL_MILE = 1852;
-
 /** Size the bar and label to a round distance in the requested unit system. */
 function setScale(
   el: HTMLElement,
@@ -146,28 +136,5 @@ function setScale(
   // hard guard against any pathological span slipping through.
   const width = Math.min(maxWidth, maxWidth * (rounded / span));
   el.style.width = `${width}px`;
-  el.textContent = `${formatNum(rounded)} ${label}`;
-}
-
-/**
- * Convert a ground distance in metres into the unit the bar rounds and labels
- * with: km/m for metric, mi/ft for imperial, and nautical miles for nautical.
- * The unit crosses to the larger denomination once the span exceeds one of it.
- */
-export function scaleSpan(
-  maxMeters: number,
-  unit: MapScaleUnit,
-): { span: number; label: string } {
-  if (unit === "imperial") {
-    const feet = maxMeters * FEET_PER_METER;
-    return feet >= FEET_PER_MILE
-      ? { span: feet / FEET_PER_MILE, label: "mi" }
-      : { span: feet, label: "ft" };
-  }
-  if (unit === "nautical") {
-    return { span: maxMeters / METERS_PER_NAUTICAL_MILE, label: "nmi" };
-  }
-  return maxMeters >= 1000
-    ? { span: maxMeters / 1000, label: "km" }
-    : { span: maxMeters, label: "m" };
+  el.textContent = `${formatRoundNum(rounded)} ${label}`;
 }

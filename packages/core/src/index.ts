@@ -6,6 +6,7 @@ export * from "./color-ramp";
 export * from "./paths";
 export * from "./routing";
 export * from "./vector-color";
+export * from "./scale-units";
 export * from "./project";
 export * from "./layer-groups";
 export { createSampleStoryMap } from "./storymap-sample";
