@@ -2093,9 +2093,14 @@ export class MapController {
       // style, so getNamedStyleLayers (which filters to existing style layers)
       // skips them. Publish their store id -> name directly so the Layer Swipe
       // panel, which lists them by store id via its COG layerProvider, shows a
-      // friendly name instead of the raw id. See opengeos/GeoLibre#1240.
+      // friendly name instead of the raw id. Scoped to "cog-url" (the
+      // CogLayerControl rasters the provider lists) to match that scope. See
+      // opengeos/GeoLibre#1240.
       ...layers
-        .filter((layer) => layer.type === "cog")
+        .filter(
+          (layer) =>
+            layer.type === "cog" && layer.metadata.sourceKind === "cog-url",
+        )
         .map((layer): [string, string] => [layer.id, layer.name]),
       // The Layer Swipe panel groups all basemap layers under "__basemap__";
       // publish the translated base-layer label last so this synthetic key
