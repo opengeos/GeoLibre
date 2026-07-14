@@ -88,6 +88,13 @@ function frameLayerId(frame: TimelapseFrame): string {
  * frozen animation. */
 const SOURCE_LOADED_TIMEOUT_MS = 2000;
 
+/** Fallback for the cosmetic tiles-ready gate: enable Play/Record this long
+ * after the stack is built even if the map never fires `idle`. A slow or
+ * partly-404 tile host (e.g. GIBS, which has no imagery over ocean) can keep
+ * the map from ever settling, which would otherwise leave Play stuck disabled
+ * until an unrelated interaction nudges the map idle. */
+const TILES_READY_FALLBACK_MS = 3000;
+
 /** Strict per-frame render gate while recording (`idle` can legitimately take
  * a while on slow networks; bail out so a stuck source can't hang the export). */
 const RECORD_IDLE_TIMEOUT_MS = 8000;
@@ -284,6 +291,9 @@ export class TimelapseControl {
   private tilesReady = false;
   private stackPresent = false;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
+  // Fallback timer for the tiles-ready gate (see armTilesReadyGate); cleared
+  // when the map fires `idle` first, when re-arming, and on teardown.
+  private tilesReadyTimer: ReturnType<typeof setTimeout> | null = null;
   // Bumped by play()/pause() so a tick() awaiting the next year's tiles when
   // playback is toggled can tell it is stale and must not advance the frame
   // (a resumed session schedules its own timer; the old tick racing it would
@@ -578,6 +588,7 @@ export class TimelapseControl {
   /** Release DOM owned outside the panel container (the on-map year badge). */
   dispose(): void {
     this.stopForTeardown();
+    this.clearTilesReadyTimer();
     this.badge?.remove();
     this.badge = null;
   }
@@ -636,19 +647,36 @@ export class TimelapseControl {
   /**
    * Disable Play (cosmetically) until the pre-warmed stack has fetched its
    * first round of tiles; the per-tick source gate is the real protection.
+   * Play is re-enabled on whichever comes first — the map going `idle` or the
+   * {@link TILES_READY_FALLBACK_MS} fallback — so a tile host that never lets
+   * the map settle (a slow or partly-404 source such as GIBS over ocean) can't
+   * leave the button stuck disabled.
    */
   private armTilesReadyGate(): void {
     this.tilesReady = false;
+    this.clearTilesReadyTimer();
     this.updateUi();
     const map = this.map;
     if (!map || typeof map.once !== "function") {
       this.tilesReady = true;
       return;
     }
-    map.once("idle", () => {
+    const markReady = (): void => {
+      this.clearTilesReadyTimer();
+      map.off?.("idle", markReady);
+      if (this.tilesReady) return;
       this.tilesReady = true;
       this.updateUi();
-    });
+    };
+    map.once("idle", markReady);
+    this.tilesReadyTimer = setTimeout(markReady, TILES_READY_FALLBACK_MS);
+  }
+
+  private clearTilesReadyTimer(): void {
+    if (this.tilesReadyTimer !== null) {
+      clearTimeout(this.tilesReadyTimer);
+      this.tilesReadyTimer = null;
+    }
   }
 
   // --- Recording ----------------------------------------------------------------
