@@ -55,6 +55,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import {
   isTauri,
@@ -481,6 +482,12 @@ export function ProcessingDialog({
   // True while a "Draw on map" rubber-band is in progress.
   const [drawing, setDrawing] = useState(false);
   const drawAbortRef = useRef<AbortController | null>(null);
+  // Viewport-space corners of the in-progress draw box, drawn as an SVG overlay
+  // (not a MapLibre layer) so the rubber-band sits above an interleaved deck.gl
+  // raster, which occludes MapLibre layers.
+  const [drawPoints, setDrawPoints] = useState<{ x: number; y: number }[] | null>(
+    null,
+  );
 
   const onDragStart = (event: React.PointerEvent) => {
     // Never begin a drag from an interactive control: the pointer capture would
@@ -1090,8 +1097,10 @@ export function ProcessingDialog({
 
   // Rubber-band a box on the map to fill the bbox (only workable because the
   // panel is now non-modal). Reuses the print-extent draw helper, which suspends
-  // pan/zoom during the drag, previews the box, and handles Escape/blur. Toggling
-  // the button (or closing the panel) aborts an in-flight draw.
+  // pan/zoom during the drag and handles Escape/blur. We draw our own SVG preview
+  // (drawBox: false + onPreview) so the box sits above an interleaved deck.gl
+  // raster instead of being occluded by it. Toggling the button (or closing the
+  // panel) aborts an in-flight draw.
   const handleDrawBbox = async () => {
     const map = mapControllerRef.current?.getMap();
     if (!map) {
@@ -1107,11 +1116,38 @@ export function ProcessingDialog({
     drawAbortRef.current = controller;
     setDrawing(true);
     try {
-      const extent = await drawPrintExtent(map, { signal: controller.signal });
+      const extent = await drawPrintExtent(map, {
+        signal: controller.signal,
+        drawBox: false,
+        // Project the box corners to viewport space (map.project is canvas-
+        // relative, so add the canvas offset). The map is pan/zoom-locked during
+        // the draw, so corners only move as the box is dragged.
+        onPreview: (box) => {
+          if (!box) {
+            setDrawPoints(null);
+            return;
+          }
+          const rect = map.getCanvas().getBoundingClientRect();
+          const [w, s, e, n] = box;
+          const corners: [number, number][] = [
+            [w, n],
+            [e, n],
+            [e, s],
+            [w, s],
+          ];
+          setDrawPoints(
+            corners.map(([lng, lat]) => {
+              const p = map.project([lng, lat]);
+              return { x: p.x + rect.left, y: p.y + rect.top };
+            }),
+          );
+        },
+      });
       if (controller.signal.aborted) return;
       if (extent) applyBboxExtent(extent);
     } finally {
       clearPrintExtent(map);
+      setDrawPoints(null);
       if (drawAbortRef.current === controller) {
         drawAbortRef.current = null;
         setDrawing(false);
@@ -1443,6 +1479,30 @@ export function ProcessingDialog({
         pos ? "" : "left-1/2 top-16 -translate-x-1/2",
       )}
     >
+      {/* Draw-bbox preview, portaled to <body> as a viewport-space SVG overlay
+          so it sits above an interleaved deck.gl raster (which occludes MapLibre
+          layers) and escapes the panel's own transform/overflow. Non-interactive
+          so it never blocks the drag on the map below. */}
+      {drawPoints
+        ? createPortal(
+            <svg
+              className="pointer-events-none fixed inset-0 z-30 h-full w-full"
+              aria-hidden="true"
+            >
+              <polygon
+                points={drawPoints.map((p) => `${p.x},${p.y}`).join(" ")}
+                style={{
+                  fill: "hsl(var(--primary))",
+                  stroke: "hsl(var(--primary))",
+                }}
+                fillOpacity={0.12}
+                strokeWidth={2}
+                strokeDasharray="6 3"
+              />
+            </svg>,
+            document.body,
+          )
+        : null}
       {/* Draggable title bar (replaces the Radix modal header) so the map stays
           interactive underneath the panel. */}
       <div
