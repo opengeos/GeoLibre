@@ -2026,6 +2026,9 @@ export function DesktopShell({
                 onClose={() => setRasterSubsetLayer(null)}
                 mapControllerRef={mapControllerRef}
               />
+              <Suspense fallback={null}>
+                <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+              </Suspense>
               <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>
@@ -2244,9 +2247,6 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <SegmentationDialog mapControllerRef={mapControllerRef} />
-      </Suspense>
-      <Suspense fallback={null}>
-        <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
       </Suspense>
       <StoryMapPanel mapControllerRef={mapControllerRef} />
       <StoryMapPresenter mapControllerRef={mapControllerRef} />

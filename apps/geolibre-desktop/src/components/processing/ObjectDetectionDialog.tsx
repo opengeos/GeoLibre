@@ -6,24 +6,17 @@ import {
   type Detection,
   type RasterData,
 } from "@geolibre/processing";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Input,
-  Label,
-  Select,
-} from "@geolibre/ui";
+import { Button, Input, Label, Select } from "@geolibre/ui";
 import {
   AlertCircle,
   CheckCircle2,
   FolderOpen,
+  GripVertical,
   Info,
   Loader2,
   Play,
+  ScanSearch,
+  X,
 } from "lucide-react";
 import type { Feature, FeatureCollection } from "geojson";
 import {
@@ -31,9 +24,11 @@ import {
   useEffect,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { clamp } from "../../lib/clamp";
 import { openLocalDataFileWithFallback } from "../../lib/tauri-io";
 import { reprojectFeatureCollectionToWgs84 } from "../../lib/duckdb-vector-loader";
 import {
@@ -51,6 +46,14 @@ const IMAGE_FILTERS = [
 const IMAGE_ACCEPT = ".tif,.tiff";
 const MODEL_FILTERS = [{ name: "ONNX model", extensions: ["onnx"] }];
 const MODEL_ACCEPT = ".onnx";
+
+/** Default panel geometry (px); the user can drag it around the map area. */
+const PANEL_MARGIN = 12;
+
+interface PanelPos {
+  x: number;
+  y: number;
+}
 
 /**
  * Read the source EPSG code from a raster's GeoTIFF GeoKeys.
@@ -151,17 +154,18 @@ function detectionsToFeatureCollection(
 }
 
 /**
- * Object detection dialog (issue #902). Runs a user-supplied YOLO model
- * exported to ONNX entirely in the browser (onnxruntime-web) against a chosen
- * GeoTIFF, georeferences the detected boxes, and adds one GeoJSON layer per
- * detected class.
+ * Object detection panel (issue #902). A floating, draggable panel (not a modal)
+ * that runs a user-supplied YOLO model exported to ONNX entirely in the browser
+ * (onnxruntime-web) against a chosen GeoTIFF, georeferences the detected boxes,
+ * and adds one GeoJSON layer per detected class. The map stays interactive while
+ * the panel is open, matching the Raster Subset / Pixel Time Series panels.
  *
  * Unlike AI Segmentation, inference is client-side, so this works in both the
  * web and desktop builds with no Python sidecar.
  */
 export function ObjectDetectionDialog({
   mapControllerRef,
-}: ObjectDetectionDialogProps): ReactElement {
+}: ObjectDetectionDialogProps): ReactElement | null {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.objectDetectionOpen);
   const setOpen = useAppStore((s) => s.setObjectDetectionOpen);
@@ -191,6 +195,61 @@ export function ObjectDetectionDialog({
   // run started, dismissed, then restarted cannot spawn a second concurrent
   // session that would add duplicate layers.
   const inferringRef = useRef(false);
+
+  // Floating-panel drag state: `pos` is null until the user first drags, so the
+  // panel opens anchored to its default corner and only switches to absolute
+  // coordinates once moved (mirrors RasterSubsetPanel).
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<PanelPos | null>(null);
+
+  const handleDragStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      // Let clicks on the header's close button through without starting a drag.
+      if ((event.target as HTMLElement).closest("button")) return;
+      event.preventDefault();
+      const el = panelRef.current;
+      const parent =
+        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const pb = parent?.getBoundingClientRect();
+      const eb = el?.getBoundingClientRect();
+      const start: PanelPos = pos ?? {
+        x: (eb?.left ?? 0) - (pb?.left ?? 0),
+        y: (eb?.top ?? 0) - (pb?.top ?? 0),
+      };
+      if (!pos) setPos(start);
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const w = eb?.width ?? 0;
+      const h = eb?.height ?? 0;
+      const move = (m: PointerEvent) => {
+        if (!panelRef.current) return;
+        const bounds = parent?.getBoundingClientRect();
+        const maxX = bounds
+          ? bounds.width - w - PANEL_MARGIN
+          : Number.POSITIVE_INFINITY;
+        const maxY = bounds
+          ? bounds.height - h - PANEL_MARGIN
+          : Number.POSITIVE_INFINITY;
+        setPos({
+          x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
+          y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
+        });
+      };
+      const end = () => {
+        if (handle.hasPointerCapture(event.pointerId))
+          handle.releasePointerCapture(event.pointerId);
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", end);
+        handle.removeEventListener("pointercancel", end);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", end);
+      handle.addEventListener("pointercancel", end);
+    },
+    [pos],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -367,21 +426,50 @@ export function ObjectDetectionDialog({
     t,
   ]);
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next: boolean) => {
-        if (!next) setOpen(false);
-      }}
-    >
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("objectDetection.title")}</DialogTitle>
-          <DialogDescription>
-            {t("objectDetection.description")}
-          </DialogDescription>
-        </DialogHeader>
+  if (!open) return null;
 
+  return (
+    <div
+      ref={panelRef}
+      className={
+        pos
+          ? "pointer-events-auto absolute z-20 flex max-h-[calc(100%-2rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+          : "pointer-events-auto absolute right-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(24rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+      }
+      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      role="region"
+      aria-label={t("objectDetection.title")}
+      data-testid="object-detection-panel"
+    >
+      <div
+        className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b px-3 py-2"
+        onPointerDown={handleDragStart}
+      >
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <GripVertical
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <ScanSearch
+            className="h-4 w-4 shrink-0 text-primary"
+            aria-hidden="true"
+          />
+          <span className="truncate">{t("objectDetection.title")}</span>
+        </div>
+        <button
+          type="button"
+          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          onClick={() => setOpen(false)}
+          aria-label={t("common.close")}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex flex-col overflow-auto p-3">
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t("objectDetection.description")}
+        </p>
         <div className="flex flex-col gap-3">
           <p className="flex items-start gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
@@ -598,7 +686,7 @@ export function ObjectDetectionDialog({
             </p>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
