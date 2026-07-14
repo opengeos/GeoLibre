@@ -11,7 +11,7 @@ import type {
   LngLatBounds,
   Map as MapLibreMap,
 } from "maplibre-gl";
-import proj4 from "proj4";
+import proj4, { type Converter } from "proj4";
 import type { GeoLibreAppAPI, GeoLibrePlugin } from "../types";
 
 /**
@@ -455,7 +455,7 @@ const UTM_RANGE_SAMPLES = 8;
  * miss the extremes). Returns null if every projection failed.
  */
 function utmExtent(
-  toUtm: proj4.Converter,
+  toUtm: Converter,
   west: number,
   east: number,
   south: number,
@@ -554,8 +554,8 @@ function buildUtmGeometry(activeMap: MapLibreMap): GraticuleGeometry {
 
     for (const band of bands) {
       if (band.north <= band.south || count >= maxLines) continue;
-      let toUtm: proj4.Converter;
-      let toLngLat: proj4.Converter;
+      let toUtm: Converter;
+      let toLngLat: Converter;
       try {
         const def = utmProjDef(zone, band.useSouth);
         toUtm = proj4("EPSG:4326", def);
