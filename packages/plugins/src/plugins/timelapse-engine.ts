@@ -3,7 +3,10 @@
  * DOM/MapLibre so it can be unit tested directly.
  */
 
-import type { TimelapseFrame } from "./timelapse-providers";
+import {
+  EOX_S2CLOUDLESS_PROVIDER_ID,
+  type TimelapseFrame,
+} from "./timelapse-providers";
 
 /** Allowed playback cadences, in seconds spent on each year. */
 export const TIMELAPSE_SPEED_STEPS = [0.25, 0.5, 1, 2, 3] as const;
@@ -84,7 +87,7 @@ export function normalizeTimelapseProjectState(
     providerId:
       typeof candidate.providerId === "string" && candidate.providerId
         ? candidate.providerId
-        : "eox-s2cloudless",
+        : EOX_S2CLOUDLESS_PROVIDER_ID,
     year: frames[frameIndex]?.year ?? 0,
     secondsPerYear: clampSecondsPerYear(candidate.secondsPerYear),
     loop: typeof candidate.loop === "boolean" ? candidate.loop : true,

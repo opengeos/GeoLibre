@@ -275,6 +275,26 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(map.layers.size, 10);
   });
 
+  it("tears down fully when repositioning fails to re-add the control", () => {
+    const map = fakeMap();
+    plugin.activate(fakeApp(map));
+    const control = getActiveTimelapseControl();
+    assert.ok(control);
+    control.setFrameIndex(3);
+
+    const failingApp = fakeApp(map, { addControlSucceeds: false });
+    const result = plugin.setMapControlPosition?.(failingApp, "top-right");
+
+    assert.equal(result, false);
+    assert.equal(getActiveTimelapseControl(), null);
+    assert.equal(map.layers.size, 0);
+    assert.equal(map.sources.size, 0);
+    assert.equal(storeLayer(), undefined);
+    // The failure keeps the last state, so re-activation restores the year.
+    plugin.activate(fakeApp(map));
+    assert.equal(getActiveTimelapseControl()?.getFrameIndex(), 3);
+  });
+
   it("deactivate removes the control, native stack, and store layer", () => {
     const map = fakeMap();
     const app = fakeApp(map);

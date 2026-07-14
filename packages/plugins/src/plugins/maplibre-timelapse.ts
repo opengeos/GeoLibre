@@ -108,6 +108,80 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * User-facing strings for the control. This package is framework-agnostic and
+ * cannot call react-i18next's `t()` directly, so the host pushes translated
+ * values via {@link setTimelapseLabels} on every language change (the pattern
+ * used by `maplibre-graticule` / `maplibre-reverse-geocode`; wired from
+ * `TopToolbar.tsx`). Defaults are English.
+ */
+export interface TimelapseLabels {
+  /** Control name: the toggle button tooltip and the panel header prefix. */
+  title: string;
+  collapse: string;
+  yearSlider: string;
+  play: string;
+  pause: string;
+  speed: string;
+  /** Accessible name of the speed select. */
+  secondsPerYear: string;
+  /** Unit suffix in the speed options (e.g. `1 s/yr`). */
+  secondsPerYearSuffix: string;
+  loop: string;
+  record: string;
+  stopRecording: string;
+  /** Progress prefix while recording (`Recording 4/10…`). */
+  recording: string;
+  recordingFailed: string;
+  recordingUnsupported: string;
+  loadingTiles: string;
+}
+
+export const DEFAULT_TIMELAPSE_LABELS: TimelapseLabels = {
+  title: "Timelapse",
+  collapse: "Collapse",
+  yearSlider: "Timelapse year",
+  play: "Play",
+  pause: "Pause",
+  speed: "Speed",
+  secondsPerYear: "Seconds per year",
+  secondsPerYearSuffix: "s/yr",
+  loop: "Loop",
+  record: "Record video",
+  stopRecording: "Stop recording",
+  recording: "Recording",
+  recordingFailed: "Recording failed.",
+  recordingUnsupported: "Canvas recording is not supported in this browser.",
+  loadingTiles: "Loading tiles…",
+};
+
+let labels: TimelapseLabels = { ...DEFAULT_TIMELAPSE_LABELS };
+
+/**
+ * Replace the user-facing strings (the host calls this with translations on
+ * every language change) and push them into the live control.
+ */
+export function setTimelapseLabels(next: Partial<TimelapseLabels>): void {
+  labels = { ...labels, ...next };
+  timelapseControl?.refreshLabels();
+}
+
+/** Shared styling for the panel's labelled (Play/Record) buttons. */
+function stylePillButton(button: HTMLButtonElement): void {
+  button.type = "button";
+  button.style.cursor = "pointer";
+  button.style.whiteSpace = "nowrap";
+  // MapLibre's .maplibregl-ctrl-group button rule fixes buttons at 29px
+  // square (meant for icon buttons); undo that for these labelled buttons.
+  button.style.width = "auto";
+  button.style.height = "auto";
+  button.style.padding = "2px 10px";
+  button.style.border = "1px solid hsl(var(--border))";
+  button.style.borderRadius = "4px";
+  button.style.background = "transparent";
+  button.style.color = "inherit";
+}
+
 // ---------------------------------------------------------------------------
 // Store layer mirror
 // ---------------------------------------------------------------------------
@@ -560,7 +634,7 @@ export class TimelapseControl implements IControl {
         signal: this.recordAbort.signal,
         onFrame: (index, total) => {
           if (this.recordStatus) {
-            this.recordStatus.textContent = `Recording ${index + 1}/${total}…`;
+            this.recordStatus.textContent = `${labels.recording} ${index + 1}/${total}…`;
           }
         },
       });
@@ -572,7 +646,11 @@ export class TimelapseControl implements IControl {
     } catch (error) {
       if (this.recordStatus) {
         this.recordStatus.textContent =
-          error instanceof Error ? error.message : "Recording failed.";
+          error instanceof TimelapseVideoUnsupportedError
+            ? labels.recordingUnsupported
+            : error instanceof Error
+              ? error.message
+              : labels.recordingFailed;
       }
     } finally {
       this.recording = false;
@@ -670,19 +748,8 @@ export class TimelapseControl implements IControl {
     transport.style.justifyContent = "center";
     transport.style.gap = "10px";
     const playButton = document.createElement("button");
-    playButton.type = "button";
-    playButton.style.cursor = "pointer";
+    stylePillButton(playButton);
     playButton.style.fontSize = "14px";
-    playButton.style.whiteSpace = "nowrap";
-    // MapLibre's .maplibregl-ctrl-group button rule fixes buttons at 29px
-    // square (meant for icon buttons); undo that for these labelled buttons.
-    playButton.style.width = "auto";
-    playButton.style.height = "auto";
-    playButton.style.padding = "2px 10px";
-    playButton.style.border = "1px solid hsl(var(--border))";
-    playButton.style.borderRadius = "4px";
-    playButton.style.background = "transparent";
-    playButton.style.color = "inherit";
     playButton.addEventListener("click", () => {
       if (this.playing) this.pause();
       else this.play();
@@ -757,16 +824,7 @@ export class TimelapseControl implements IControl {
     recordRow.style.alignItems = "center";
     recordRow.style.gap = "8px";
     const recordButton = document.createElement("button");
-    recordButton.type = "button";
-    recordButton.style.cursor = "pointer";
-    recordButton.style.whiteSpace = "nowrap";
-    recordButton.style.width = "auto";
-    recordButton.style.height = "auto";
-    recordButton.style.padding = "2px 10px";
-    recordButton.style.border = "1px solid hsl(var(--border))";
-    recordButton.style.borderRadius = "4px";
-    recordButton.style.background = "transparent";
-    recordButton.style.color = "inherit";
+    stylePillButton(recordButton);
     recordButton.addEventListener("click", () => {
       void this.handleRecordClick();
     });
@@ -1186,7 +1244,18 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
     app.removeMapControl(timelapseControl);
     const added = app.addMapControl(timelapseControl, timelapsePosition);
     if (!added) {
+      // Full teardown, mirroring deactivate(): without it the native frame
+      // stack, the mirrored store layer, and the store/basemap subscriptions
+      // would outlive the abandoned control — and deactivate() early-returns
+      // on a null control, so the leak would be unrecoverable from the UI.
+      unsubscribeBasemap?.();
+      unsubscribeBasemap = null;
+      unsubscribeStore?.();
+      unsubscribeStore = null;
+      savedState = timelapseControl.getState();
       timelapseControl.stopForTeardown();
+      timelapseControl.removeStack();
+      removeTimelapseStoreLayers();
       timelapseControl = null;
       return false;
     }
