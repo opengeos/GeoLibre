@@ -182,7 +182,7 @@ export function SharedSidebar({
       aria-label={t("sharedRail.label")}
       className={cn(
         "flex w-full shrink-0 items-center gap-1 border-t bg-card px-2 py-1 md:h-auto md:w-11 md:flex-col md:border-t-0 md:px-0 md:py-2",
-        side === "layers" ? "md:border-r" : "md:border-l",
+        side === "layers" ? "md:border-e" : "md:border-s",
       )}
     >
       {entries.map((entry) => (

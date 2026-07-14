@@ -217,7 +217,7 @@ export function PhotosSource() {
             {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={source.isSubmitting}>
-            <MapPin className="mr-2 h-3.5 w-3.5" />
+            <MapPin className="me-2 h-3.5 w-3.5" />
             {t("addData.photos.manualPlace")}
           </Button>
         </div>
@@ -244,7 +244,7 @@ export function PhotosSource() {
               variant="outline"
               onClick={handleChoosePhotos}
             >
-              <Images className="mr-2 h-3.5 w-3.5" />
+              <Images className="me-2 h-3.5 w-3.5" />
               {t("addData.photos.choosePhotos")}
             </Button>
             <span className="min-w-0 truncate text-xs text-muted-foreground">

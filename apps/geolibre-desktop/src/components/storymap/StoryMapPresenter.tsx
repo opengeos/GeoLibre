@@ -561,7 +561,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
           className="shadow-md"
           onClick={exitPresentation}
         >
-          <X className="mr-1 h-4 w-4" />
+          <X className="me-1 h-4 w-4" />
           {t("storymap.exitPresentation")}
         </Button>
         <Button
@@ -587,7 +587,7 @@ export function StoryMapPresenter({ mapControllerRef }: StoryMapPresenterProps) 
               type="button"
               onClick={() => goToStep(index + startOffset)}
               className={cn(
-                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors",
+                "flex w-full items-center gap-2 rounded px-2 py-1.5 text-start text-xs transition-colors",
                 index === activeChapter
                   ? "bg-primary/15 font-medium text-foreground"
                   : "text-muted-foreground hover:bg-muted",

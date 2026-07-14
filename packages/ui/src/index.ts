@@ -1,3 +1,4 @@
+export { DirectionProvider } from "@radix-ui/react-direction";
 export { cn } from "./lib/utils";
 export { Button, type ButtonProps } from "./components/button";
 export { Input } from "./components/input";

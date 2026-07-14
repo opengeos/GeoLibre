@@ -446,7 +446,7 @@ export function CollaborationStatusBadge({
                 setExpanded(false);
               }}
             >
-              <Settings2 className="mr-2 h-3.5 w-3.5" />
+              <Settings2 className="me-2 h-3.5 w-3.5" />
               {t("collaborate.manageSession")}
             </Button>
           </div>

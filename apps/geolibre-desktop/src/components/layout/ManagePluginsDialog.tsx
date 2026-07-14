@@ -480,7 +480,7 @@ export function ManagePluginsDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
-          <nav className="flex gap-1 overflow-x-auto border-b p-3 md:flex-col md:overflow-x-visible md:border-b-0 md:border-r">
+          <nav className="flex gap-1 overflow-x-auto border-b p-3 md:flex-col md:overflow-x-visible md:border-b-0 md:border-e">
             {sectionItems.map((item) => (
               <Button
                 key={item.id}
@@ -527,11 +527,11 @@ export function ManagePluginsDialog({
               <>
                 <div className="flex items-center justify-between gap-3">
                   <div className="relative flex-1">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       aria-label="Search plugins"
                       placeholder="Search plugins"
-                      className="pl-8"
+                      className="ps-8"
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
                     />

@@ -185,7 +185,7 @@ export function ShareProjectDialog({
                   variant="outline"
                   onClick={() => void openExternalLink(ACCOUNT_SETTINGS_URL)}
                 >
-                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  <ExternalLink className="me-2 h-3.5 w-3.5" />
                   {t("share.getToken")}
                 </Button>
               </li>
@@ -195,7 +195,7 @@ export function ShareProjectDialog({
                   {t("share.step2Description")}
                 </p>
                 <Button type="button" onClick={handleConfigureToken}>
-                  <KeyRound className="mr-2 h-3.5 w-3.5" />
+                  <KeyRound className="me-2 h-3.5 w-3.5" />
                   {t("share.configureToken")}
                 </Button>
               </li>
@@ -225,7 +225,7 @@ export function ShareProjectDialog({
                 variant="outline"
                 onClick={() => void openExternalLink(result.projectUrl)}
               >
-                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                <ExternalLink className="me-2 h-3.5 w-3.5" />
                 {t("share.open")}
               </Button>
               <Button type="button" onClick={() => onOpenChange(false)}>
@@ -280,7 +280,7 @@ export function ShareProjectDialog({
                   size="sm"
                   onClick={() => void openExternalLink(ACCOUNT_SETTINGS_URL)}
                 >
-                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  <ExternalLink className="me-2 h-3.5 w-3.5" />
                   {t("share.openAccountSettings")}
                 </Button>
               </div>
@@ -310,12 +310,12 @@ export function ShareProjectDialog({
               >
                 {status === "uploading" ? (
                   <>
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
                     {t("share.sharing")}
                   </>
                 ) : (
                   <>
-                    <Share2 className="mr-2 h-3.5 w-3.5" />
+                    <Share2 className="me-2 h-3.5 w-3.5" />
                     {t("share.shareButton")}
                   </>
                 )}

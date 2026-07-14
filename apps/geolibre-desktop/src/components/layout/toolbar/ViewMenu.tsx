@@ -179,7 +179,7 @@ export function ViewMenu({
         <DropdownMenuSeparator />
         {show("view.zoomIn") && (
           <DropdownMenuItem disabled={atMaxZoom} onSelect={onZoomIn}>
-            <ZoomIn className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <ZoomIn className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.zoomIn")}
             </span>
@@ -187,7 +187,7 @@ export function ViewMenu({
         )}
         {show("view.zoomOut") && (
           <DropdownMenuItem disabled={atMinZoom} onSelect={onZoomOut}>
-            <ZoomOut className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <ZoomOut className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.zoomOut")}
             </span>
@@ -199,7 +199,7 @@ export function ViewMenu({
             disabled={!history.canGoBack}
             onSelect={history.goBack}
           >
-            <ArrowLeft className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <ArrowLeft className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.previousView")}
             </span>
@@ -210,7 +210,7 @@ export function ViewMenu({
             disabled={!history.canGoForward}
             onSelect={history.goForward}
           >
-            <ArrowRight className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <ArrowRight className="me-2 h-3.5 w-3.5 shrink-0 rtl:rotate-180" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.nextView")}
             </span>
@@ -236,7 +236,7 @@ export function ViewMenu({
                   disabled={pitchIsFlat}
                   onSelect={onResetPitch}
                 >
-                  <Mountain className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <Mountain className="me-2 h-3.5 w-3.5 shrink-0" />
                   <span className="whitespace-nowrap">
                     {t("toolbar.item.resetPitch")}
                   </span>
@@ -247,7 +247,7 @@ export function ViewMenu({
                   disabled={bearingIsNorth}
                   onSelect={onResetNorth}
                 >
-                  <Compass className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <Compass className="me-2 h-3.5 w-3.5 shrink-0" />
                   <span className="whitespace-nowrap">
                     {t("toolbar.item.resetBearing")}
                   </span>
@@ -258,7 +258,7 @@ export function ViewMenu({
                   disabled={bearingIsNorth && pitchIsFlat}
                   onSelect={onResetPitchBearing}
                 >
-                  <RotateCcw className="mr-2 h-3.5 w-3.5 shrink-0" />
+                  <RotateCcw className="me-2 h-3.5 w-3.5 shrink-0" />
                   <span className="whitespace-nowrap">
                     {t("toolbar.item.resetPitchBearing")}
                   </span>
@@ -272,7 +272,7 @@ export function ViewMenu({
         )}
         {showSetView && (
           <DropdownMenuItem onSelect={onSetView}>
-            <Crosshair className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <Crosshair className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.setView")}
             </span>
@@ -330,7 +330,7 @@ export function ViewMenu({
                 // so toggling sync doesn't dismiss the submenu mid-comparison.
                 onSelect={(event: Event) => event.preventDefault()}
               >
-                <Link2 className="mr-2 h-3.5 w-3.5 shrink-0" />
+                <Link2 className="me-2 h-3.5 w-3.5 shrink-0" />
                 <span className="whitespace-nowrap">
                   {t("toolbar.item.splitViewSync")}
                 </span>
@@ -346,7 +346,7 @@ export function ViewMenu({
           showExternal && <DropdownMenuSeparator />}
         {showGoogleMaps && (
           <DropdownMenuItem onSelect={onViewInGoogleMaps}>
-            <MapIcon className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <MapIcon className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.viewInGoogleMaps")}
             </span>
@@ -354,7 +354,7 @@ export function ViewMenu({
         )}
         {showGoogleEarth && (
           <DropdownMenuItem onSelect={onViewInGoogleEarth}>
-            <Earth className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <Earth className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">
               {t("toolbar.item.viewInGoogleEarth")}
             </span>

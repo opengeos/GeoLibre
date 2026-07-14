@@ -242,7 +242,7 @@ export function ServiceLibrarySection({
             variant="ghost"
             onClick={openSaveForm}
           >
-            <Save className="mr-1.5 h-3.5 w-3.5" />
+            <Save className="me-1.5 h-3.5 w-3.5" />
             {t("addData.serviceLibrary.saveCurrent")}
           </Button>
           {/* Separate the per-service "Save current" action from the
@@ -364,7 +364,7 @@ export function ServiceLibrarySection({
               {t("common.cancel")}
             </Button>
             <Button type="button" size="sm" onClick={handleSave}>
-              <Save className="mr-1.5 h-3.5 w-3.5" />
+              <Save className="me-1.5 h-3.5 w-3.5" />
               {t("common.save")}
             </Button>
           </div>

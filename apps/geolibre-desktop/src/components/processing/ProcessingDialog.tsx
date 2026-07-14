@@ -1548,14 +1548,14 @@ export function ProcessingDialog({
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] gap-4 overflow-hidden p-5">
-        <div className="flex min-h-0 flex-col gap-3 border-r pr-4">
+        <div className="flex min-h-0 flex-col gap-3 border-e pe-4">
           <div className="flex gap-2">
             <div className="relative min-w-0 flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                className="pl-9"
+                className="ps-9"
                 placeholder={t("processing.searchTools")}
               />
             </div>
@@ -1664,7 +1664,7 @@ export function ProcessingDialog({
                         : undefined
                     }
                     className={cn(
-                      "block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent",
+                      "block w-full px-3 py-2 text-start text-sm transition-colors hover:bg-accent",
                       selectedTool?.id === tool.id && "bg-accent",
                       tool.locked && "opacity-60",
                     )}
@@ -1744,7 +1744,7 @@ export function ProcessingDialog({
           </div>
 
           <ScrollArea className="min-h-0">
-            <div className="grid gap-4 pb-2 pr-5">
+            <div className="grid gap-4 pb-2 pe-5">
               {(selectedTool?.params ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   This tool has no parameters.
@@ -2099,7 +2099,7 @@ function NumberStepperInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
-      <div className="grid h-9 border-l">
+      <div className="grid h-9 border-s">
         <button
           type="button"
           aria-label={t("processing.increaseValue")}

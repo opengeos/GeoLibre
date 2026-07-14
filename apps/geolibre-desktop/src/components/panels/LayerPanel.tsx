@@ -406,7 +406,7 @@ function LayerOpacitySlider({
           step={step}
           autoFocus
           aria-label={t("layers.opacityValueInputAria", { label: ariaLabel })}
-          className="h-6 w-12 px-1 py-0 text-right font-mono text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="h-6 w-12 px-1 py-0 text-end font-mono text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
@@ -425,7 +425,7 @@ function LayerOpacitySlider({
       ) : (
         <button
           type="button"
-          className="w-9 shrink-0 cursor-text text-right font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
+          className="w-9 shrink-0 cursor-text text-end font-mono text-[10px] tabular-nums text-muted-foreground hover:text-foreground"
           title={t("layers.opacityExactHint")}
           aria-label={t("layers.opacityValueEditAria", { label: ariaLabel })}
           onClick={(e: ReactMouseEvent) => e.stopPropagation()}
@@ -1922,7 +1922,7 @@ export function LayerPanel({
             }}
           >
             {group.collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" />
+              <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180" />
             ) : (
               <ChevronDown className="h-3.5 w-3.5" />
             )}
@@ -2007,7 +2007,7 @@ export function LayerPanel({
                   beginGroupRename(group);
                 }}
               >
-                <Pencil className="mr-2 h-3.5 w-3.5" />
+                <Pencil className="me-2 h-3.5 w-3.5" />
                 {t("layers.renameGroup")}
               </DropdownMenuItem>
               {/* Action items below omit preventDefault so Radix dismisses the
@@ -2019,7 +2019,7 @@ export function LayerPanel({
                   reorderLayerGroup(group.id, "up");
                 }}
               >
-                <ChevronUp className="mr-2 h-3.5 w-3.5" />
+                <ChevronUp className="me-2 h-3.5 w-3.5" />
                 {t("layers.moveGroupUp")}
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -2028,7 +2028,7 @@ export function LayerPanel({
                   reorderLayerGroup(group.id, "down");
                 }}
               >
-                <ChevronDown className="mr-2 h-3.5 w-3.5" />
+                <ChevronDown className="me-2 h-3.5 w-3.5" />
                 {t("layers.moveGroupDown")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -2037,7 +2037,7 @@ export function LayerPanel({
                   removeLayerGroup(group.id);
                 }}
               >
-                <FolderMinus className="mr-2 h-3.5 w-3.5" />
+                <FolderMinus className="me-2 h-3.5 w-3.5" />
                 {t("layers.ungroupKeepLayers")}
               </DropdownMenuItem>
               <DropdownMenuItem
@@ -2046,7 +2046,7 @@ export function LayerPanel({
                   removeLayerGroup(group.id, { removeChildren: true });
                 }}
               >
-                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                <Trash2 className="me-2 h-3.5 w-3.5" />
                 {t("layers.deleteGroupAndLayers")}
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -2072,7 +2072,7 @@ export function LayerPanel({
     return (
       <aside
         aria-label={t("layers.panelCollapsedLabel")}
-        className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-r md:py-2"
+        className="flex h-11 w-full shrink-0 items-center gap-2 border-b bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-b-0 md:border-e md:py-2"
       >
         <Button
           variant="ghost"
@@ -2097,13 +2097,13 @@ export function LayerPanel({
   return (
     <aside
       aria-label={t("sharedRail.layers")}
-      className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-r"
+      className="relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-b bg-card max-md:absolute max-md:inset-x-0 max-md:top-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--layer-panel-width)] md:border-b-0 md:border-e"
     >
       <div
         role="separator"
         aria-orientation="vertical"
         aria-label={t("layers.resizePanel")}
-        className="absolute -right-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-r border-transparent hover:border-primary md:block"
+        className="absolute -end-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-e border-transparent hover:border-primary md:block"
         onPointerDown={onResizeStart}
       />
       <div className="flex items-center justify-between border-b px-3 py-1.5">
@@ -2357,7 +2357,7 @@ export function LayerPanel({
                     ? "border-primary bg-primary/5"
                     : "border-border bg-background hover:border-muted-foreground/40 hover:bg-muted/20"
                 } ${draggedLayerId === layer.id ? "opacity-50" : ""} ${
-                  group ? "ml-4" : ""
+                  group ? "ms-4" : ""
                 }`}
                 onDragOver={(e) => handleLayerDragOver(e, layer.id)}
                 onDrop={(e) => handleLayerDrop(e, layer.id, displayIndex)}
@@ -2610,7 +2610,7 @@ export function LayerPanel({
                           beginRename(layer);
                         }}
                       >
-                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        <Pencil className="me-2 h-3.5 w-3.5" />
                         {t("layers.rename")}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
@@ -2624,7 +2624,7 @@ export function LayerPanel({
                           addLayerGroup(undefined, [layer.id]);
                         }}
                       >
-                        <FolderPlus className="mr-2 h-3.5 w-3.5" />
+                        <FolderPlus className="me-2 h-3.5 w-3.5" />
                         {t("layers.newGroupFromLayer")}
                       </DropdownMenuItem>
                       {layerGroups.length > 0 && (
@@ -2654,7 +2654,7 @@ export function LayerPanel({
                             moveLayerToGroup(layer.id, null);
                           }}
                         >
-                          <FolderMinus className="mr-2 h-3.5 w-3.5" />
+                          <FolderMinus className="me-2 h-3.5 w-3.5" />
                           {t("layers.removeFromGroup")}
                         </DropdownMenuItem>
                       )}
@@ -2666,7 +2666,7 @@ export function LayerPanel({
                               onMaterializeDuckDBLayer(layer);
                             }}
                           >
-                            <Table2 className="mr-2 h-3.5 w-3.5" />
+                            <Table2 className="me-2 h-3.5 w-3.5" />
                             {t("layers.materializeToEditable")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -2681,7 +2681,7 @@ export function LayerPanel({
                             onToggleGeometryEdit(layer.id);
                           }}
                         >
-                          <PencilRuler className="mr-2 h-3.5 w-3.5" />
+                          <PencilRuler className="me-2 h-3.5 w-3.5" />
                           {geometryEditActive
                             ? t("layers.finishEditingGeometry")
                             : t("layers.editGeometry")}
@@ -2694,7 +2694,7 @@ export function LayerPanel({
                             setLoadEditorFeaturesOpen(true, layer.id);
                           }}
                         >
-                          <SquarePen className="mr-2 h-3.5 w-3.5" />
+                          <SquarePen className="me-2 h-3.5 w-3.5" />
                           {t("loadEditorFeatures.menuItem")}
                         </DropdownMenuItem>
                       )}
@@ -2705,7 +2705,7 @@ export function LayerPanel({
                             setAttributeTableOpen(true);
                           }}
                         >
-                          <TableProperties className="mr-2 h-3.5 w-3.5" />
+                          <TableProperties className="me-2 h-3.5 w-3.5" />
                           {t("layers.openAttributeTable")}
                         </DropdownMenuItem>
                       )}
@@ -2719,7 +2719,7 @@ export function LayerPanel({
                             }
                           }}
                         >
-                          <CalendarClock className="mr-2 h-3.5 w-3.5" />
+                          <CalendarClock className="me-2 h-3.5 w-3.5" />
                           {timeBinding
                             ? t("layers.unbindFromTimeSlider")
                             : t("layers.bindToTimeSlider")}
@@ -2786,7 +2786,7 @@ export function LayerPanel({
                                     void handleExportStyle(layer);
                                   }}
                                 >
-                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  <Download className="me-2 h-3.5 w-3.5" />
                                   {t("layers.exportMapboxStyle")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
@@ -2794,7 +2794,7 @@ export function LayerPanel({
                                     void handleExportSldStyle(layer);
                                   }}
                                 >
-                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  <Download className="me-2 h-3.5 w-3.5" />
                                   {t("layers.exportSldStyle")}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
@@ -2802,7 +2802,7 @@ export function LayerPanel({
                                     void handleExportQmlStyle(layer);
                                   }}
                                 >
-                                  <Download className="mr-2 h-3.5 w-3.5" />
+                                  <Download className="me-2 h-3.5 w-3.5" />
                                   {t("layers.exportQmlStyle")}
                                 </DropdownMenuItem>
                               </>
@@ -2816,7 +2816,7 @@ export function LayerPanel({
                                   void handleImportStyle(layer);
                                 }}
                               >
-                                <Upload className="mr-2 h-3.5 w-3.5" />
+                                <Upload className="me-2 h-3.5 w-3.5" />
                                 {t("layers.importStyle")}
                               </DropdownMenuItem>
                             )}
@@ -2829,7 +2829,7 @@ export function LayerPanel({
                             void handleSaveEditsToSource(layer);
                           }}
                         >
-                          <Save className="mr-2 h-3.5 w-3.5" />
+                          <Save className="me-2 h-3.5 w-3.5" />
                           {isPostgisEditableLayer(layer)
                             ? t("layers.saveEditsToPostgis")
                             : t("layers.saveEditsToSource")}
@@ -2842,7 +2842,7 @@ export function LayerPanel({
                             onOpenRasterStylePanel();
                           }}
                         >
-                          <Palette className="mr-2 h-3.5 w-3.5" />
+                          <Palette className="me-2 h-3.5 w-3.5" />
                           {t("layers.openRasterStylePanel")}
                         </DropdownMenuItem>
                       )}
@@ -2884,7 +2884,7 @@ export function LayerPanel({
                             }}
                           >
                             <RefreshCw
-                              className={`mr-2 h-3.5 w-3.5 ${
+                              className={`me-2 h-3.5 w-3.5 ${
                                 isRefreshing ? "animate-spin" : ""
                               }`}
                             />
@@ -2911,7 +2911,7 @@ export function LayerPanel({
                             }}
                           >
                             <RefreshCw
-                              className={`mr-2 h-3.5 w-3.5 ${
+                              className={`me-2 h-3.5 w-3.5 ${
                                 isRefreshing ? "animate-spin" : ""
                               }`}
                             />
@@ -2923,7 +2923,7 @@ export function LayerPanel({
                               setRefreshSettingsLayerId(layer.id);
                             }}
                           >
-                            <Timer className="mr-2 h-3.5 w-3.5" />
+                            <Timer className="me-2 h-3.5 w-3.5" />
                             {refreshConfig.enabled
                               ? t("layers.autoRefreshOn")
                               : t("layers.autoRefresh")}

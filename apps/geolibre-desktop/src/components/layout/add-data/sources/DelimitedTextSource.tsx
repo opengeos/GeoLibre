@@ -291,7 +291,7 @@ export function DelimitedTextSource() {
               variant="outline"
               onClick={handleChooseDelimitedText}
             >
-              <FileUp className="mr-2 h-3.5 w-3.5" />
+              <FileUp className="me-2 h-3.5 w-3.5" />
               {t("addData.common.chooseFile")}
             </Button>
             <span className="min-w-0 truncate text-xs text-muted-foreground">
@@ -329,7 +329,7 @@ export function DelimitedTextSource() {
             (delimitedTextMode === "url" && !delimitedTextUrl.trim())
           }
         >
-          <Columns3 className="mr-2 h-3.5 w-3.5" />
+          <Columns3 className="me-2 h-3.5 w-3.5" />
           {isRetrievingDelimitedTextColumns
             ? t("addData.delimitedText.retrieving")
             : t("addData.delimitedText.retrieveColumns")}

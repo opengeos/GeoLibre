@@ -81,7 +81,7 @@ export function CollaborationParticipantRow({
                 ? t("collaborate.setViewOnly")
                 : t("collaborate.allowEdit")
             }
-            className={`ml-auto flex shrink-0 items-center gap-1 rounded border py-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground ${compact ? "px-1 text-[10px]" : "px-1.5 text-xs"}`}
+            className={`ms-auto flex shrink-0 items-center gap-1 rounded border py-0.5 text-muted-foreground transition hover:bg-accent hover:text-foreground ${compact ? "px-1 text-[10px]" : "px-1.5 text-xs"}`}
           >
             {permIcon}
             {permLabel}
@@ -89,7 +89,7 @@ export function CollaborationParticipantRow({
         ) : (
           // Non-host viewers still see each guest's current permission.
           <span
-            className={`ml-auto flex shrink-0 items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-xs"}`}
+            className={`ms-auto flex shrink-0 items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-xs"}`}
           >
             {permIcon}
             {permLabel}

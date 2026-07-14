@@ -52,14 +52,14 @@ export function EditMenu({ chrome }: EditMenuProps) {
         <DropdownMenuSeparator />
         {show("edit.undo") && (
           <DropdownMenuItem disabled={!canUndo} onSelect={undo}>
-            <Undo2 className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <Undo2 className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.undo")}</span>
             <DropdownMenuShortcut>Ctrl/Cmd+Z</DropdownMenuShortcut>
           </DropdownMenuItem>
         )}
         {show("edit.redo") && (
           <DropdownMenuItem disabled={!canRedo} onSelect={redo}>
-            <Redo2 className="mr-2 h-3.5 w-3.5 shrink-0" />
+            <Redo2 className="me-2 h-3.5 w-3.5 shrink-0" />
             <span className="whitespace-nowrap">{t("toolbar.item.redo")}</span>
             <DropdownMenuShortcut>
               Ctrl/Cmd+Shift+Z / Ctrl+Y

@@ -552,10 +552,14 @@ export function SqlWorkspacePanel() {
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
 
+    const isRtl = getComputedStyle(container).direction === "rtl";
+
     const onMove = (moveEvent: MouseEvent) => {
-      // Editor is the left pane: its width is the gap between the container's
-      // left edge and the cursor.
-      const raw = (moveEvent.clientX - rect.left) / rect.width;
+      // The editor pane hugs the container's inline-start: its width is the gap
+      // between that edge and the cursor.
+      const raw = isRtl
+        ? (rect.right - moveEvent.clientX) / rect.width
+        : (moveEvent.clientX - rect.left) / rect.width;
       nextFraction = Math.min(
         MAX_EDITOR_FRACTION,
         Math.max(MIN_EDITOR_FRACTION, raw),
@@ -626,7 +630,7 @@ export function SqlWorkspacePanel() {
         <span className="text-sm font-semibold">{t("toolbar.sqlWorkspace.title")}</span>
         <Select
           aria-label={t("toolbar.sqlWorkspace.engine")}
-          className="ml-2 h-7 w-auto text-xs"
+          className="ms-2 h-7 w-auto text-xs"
           value={engine}
           onChange={(event) => {
             const value = event.target.value;
@@ -650,7 +654,7 @@ export function SqlWorkspacePanel() {
             {t("toolbar.sqlWorkspace.engineOption", { name: "Apache Sedona" })}
           </option>
         </Select>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -923,7 +927,7 @@ export function SqlWorkspacePanel() {
                       {result.columns.map((column, colIndex) => (
                         <th
                           key={colIndex}
-                          className="border-b px-2 py-1.5 text-left font-medium"
+                          className="border-b px-2 py-1.5 text-start font-medium"
                         >
                           {column}
                         </th>

@@ -245,7 +245,7 @@ export function PythonEditorPane({
           <Eraser className="h-4 w-4" />
         </Button>
         <span
-          className="ml-1 min-w-0 flex-1 truncate text-xs text-muted-foreground"
+          className="ms-1 min-w-0 flex-1 truncate text-xs text-muted-foreground"
           title={filePath ?? name}
         >
           {name}
@@ -253,15 +253,15 @@ export function PythonEditorPane({
         </span>
         <Button
           size="sm"
-          className="ml-auto h-7"
+          className="ms-auto h-7"
           onClick={runEditor}
           disabled={running || !ready || !code.trim()}
           title={t("pythonConsole.runScript")}
         >
           {running ? (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            <Loader2 className="me-1 h-4 w-4 animate-spin" />
           ) : (
-            <Play className="mr-1 h-4 w-4" />
+            <Play className="me-1 h-4 w-4" />
           )}
           {t("pythonConsole.run")}
         </Button>

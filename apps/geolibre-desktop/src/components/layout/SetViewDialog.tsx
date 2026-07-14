@@ -502,7 +502,7 @@ export function SetViewDialog({
               )}
             >
               <ClipboardPaste className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span className="flex-1 text-left">
+              <span className="flex-1 text-start">
                 {t("toolbar.setView.smartPaste")}
               </span>
               <ChevronDown

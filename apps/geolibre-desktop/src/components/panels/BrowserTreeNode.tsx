@@ -151,7 +151,7 @@ export function BrowserTreeNode({
           type="button"
           disabled={isDisabled}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-left text-sm",
+            "flex min-w-0 flex-1 items-center gap-1.5 rounded px-2 py-1 text-start text-sm",
             "hover:bg-accent hover:text-accent-foreground",
             "disabled:pointer-events-none disabled:opacity-50",
             node.kind === "section" && "font-semibold",
@@ -179,7 +179,7 @@ export function BrowserTreeNode({
             isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground rtl:rotate-180" />
             )
           ) : (
             <span className="w-3.5 shrink-0" />
@@ -191,12 +191,12 @@ export function BrowserTreeNode({
           )}
           <span className="truncate">{node.label}</span>
           {node.builtin ? (
-            <span className="ml-1 shrink-0 rounded border px-1 text-[10px] uppercase leading-tight text-muted-foreground">
+            <span className="ms-1 shrink-0 rounded border px-1 text-[10px] uppercase leading-tight text-muted-foreground">
               {t("browser.builtinBadge")}
             </span>
           ) : null}
           {typeof node.count === "number" && node.count > 0 ? (
-            <span className="ml-auto shrink-0 text-xs text-muted-foreground">
+            <span className="ms-auto shrink-0 text-xs text-muted-foreground">
               {node.count}
             </span>
           ) : null}
@@ -205,7 +205,7 @@ export function BrowserTreeNode({
           <button
             type="button"
             className={cn(
-              "mr-1 shrink-0 rounded p-1 hover:bg-accent hover:text-accent-foreground",
+              "me-1 shrink-0 rounded p-1 hover:bg-accent hover:text-accent-foreground",
               favorited
                 ? "text-amber-500"
                 : // Unpinned: reveal on row hover / keyboard focus to reduce clutter.
@@ -233,7 +233,7 @@ export function BrowserTreeNode({
         {removePath ? (
           <button
             type="button"
-            className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            className="me-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             title={t("browser.unpinFolder", { name: node.label })}
             aria-label={t("browser.unpinFolder", { name: node.label })}
             tabIndex={node.id === activeRowId ? 0 : -1}
@@ -245,7 +245,7 @@ export function BrowserTreeNode({
         {plusAction ? (
           <button
             type="button"
-            className="mr-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            className="me-1 shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             title={plusAction.label}
             aria-label={plusAction.label}
             tabIndex={node.id === activeRowId ? 0 : -1}

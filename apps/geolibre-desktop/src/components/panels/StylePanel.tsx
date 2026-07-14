@@ -761,7 +761,7 @@ function removeTrailingJsonCommas(value: string): string {
 // Shared shell classes for every expanded StylePanel return branch. On phones
 // (max-md) it overlays the map as a bottom sheet instead of squeezing it.
 const STYLE_PANEL_ASIDE_CLASS =
-  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--style-panel-width)] md:border-l md:border-t-0";
+  "relative flex max-h-[min(24rem,42vh)] supports-[max-height:1dvh]:max-h-[min(24rem,42dvh)] w-full shrink-0 flex-col border-t bg-card max-md:absolute max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:shadow-xl md:max-h-none md:w-[var(--style-panel-width)] md:border-s md:border-t-0";
 
 const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
 const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
@@ -826,14 +826,14 @@ function NumericStyleInput({
           min={min}
           max={max}
           step={step}
-          className="pr-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="pe-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           value={value}
           onChange={(event) => {
             const next = Number(event.target.value);
             if (Number.isFinite(next)) onChange(normalize(next));
           }}
         />
-        <div className="absolute right-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
+        <div className="absolute end-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
           <button
             type="button"
             className="flex h-1/2 items-center justify-center text-foreground hover:bg-accent"
@@ -895,11 +895,11 @@ function StopValueInput({
         type="number"
         step="any"
         aria-label={label}
-        className="pr-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="pe-9 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         value={String(value)}
         onChange={(event) => onChange(event.target.value)}
       />
-      <div className="absolute right-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
+      <div className="absolute end-1 top-0.5 flex h-8 w-7 flex-col overflow-hidden rounded border bg-background">
         <button
           type="button"
           className="flex h-1/2 items-center justify-center text-foreground hover:bg-accent"
@@ -988,7 +988,7 @@ function RasterStyleSlider({
             step={step}
             autoFocus
             aria-label={t("style.raster.valueAria", { label })}
-            className="h-6 w-20 px-1.5 py-0 text-right font-mono text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="h-6 w-20 px-1.5 py-0 text-end font-mono text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={(event) => commit(event.target.value)}
@@ -1266,7 +1266,7 @@ export function StylePanel({
       role="separator"
       aria-orientation="vertical"
       aria-label={t("style.resizePanel")}
-      className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-l border-transparent hover:border-primary md:block"
+      className="absolute -start-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-s border-transparent hover:border-primary md:block"
       onPointerDown={onResizeStart}
     />
   );
@@ -1279,7 +1279,7 @@ export function StylePanel({
     return (
       <aside
         aria-label={t("style.panelLabelCollapsed")}
-        className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2"
+        className="flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-s md:border-t-0 md:py-2"
       >
         <Button
           variant="ghost"
@@ -3193,7 +3193,7 @@ export function StylePanel({
         <ScrollArea className="flex-1">
           {/* Padding on the inner content with extra right clearance so the
               overlay scrollbar never covers a control's right edge. */}
-          <div className="space-y-4 p-3 pr-5">
+          <div className="space-y-4 p-3 pe-5">
             {beforeIdControl}
             {zoomRangeControls}
             <RasterStyleSlider
@@ -3376,7 +3376,7 @@ export function StylePanel({
         {/* Padding lives on the inner content (not the ScrollArea root) with
             extra right clearance so the overlay scrollbar never covers the
             right edge of a control (e.g. the "Transparent" label). */}
-        <div className="space-y-4 p-3 pr-5">
+        <div className="space-y-4 p-3 pe-5">
           {beforeIdControl}
           {/* The 3D Z-value render (deck.gl) does not honor the MapLibre
               min/max zoom range, so hide the controls rather than show a

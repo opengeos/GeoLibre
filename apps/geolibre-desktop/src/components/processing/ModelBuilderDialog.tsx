@@ -693,7 +693,7 @@ function ModelPanel({
                 type="button"
                 onClick={() => loadModel(model)}
                 className={cn(
-                  "w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                  "w-full truncate rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
                   model.id === draft.id &&
                     "bg-accent font-medium text-accent-foreground",
                 )}

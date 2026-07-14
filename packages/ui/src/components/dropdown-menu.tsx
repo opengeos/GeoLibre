@@ -26,13 +26,13 @@ export const DropdownMenuSubTrigger = React.forwardRef<
       // DropdownMenuItem, a disabled SubTrigger therefore still receives pointer
       // events; callers that need clicks suppressed must handle that themselves.
       "flex min-w-0 cursor-default select-none items-center gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-sm outline-none focus:bg-accent data-[disabled]:opacity-50 data-[state=open]:bg-accent",
-      inset && "pl-8",
+      inset && "ps-8",
       className,
     )}
     {...props}
   >
     {children}
-    <ChevronRight className="ml-auto h-4 w-4 shrink-0" />
+    <ChevronRight className="ms-auto h-4 w-4 shrink-0 rtl:rotate-180" />
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName =
@@ -104,7 +104,7 @@ export const DropdownMenuItem = React.forwardRef<
     ref={ref}
     className={cn(
       "relative flex min-w-0 cursor-default select-none items-center overflow-hidden rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      inset && "pl-8",
+      inset && "ps-8",
       className,
     )}
     {...props}
@@ -122,7 +122,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
   <DropdownMenuPrimitive.CheckboxItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground",
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 ps-8 pe-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground",
       className,
     )}
     checked={checked}
@@ -131,7 +131,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
     {indicator === "box" ? (
       <span
         className={cn(
-          "absolute left-2 flex h-4 w-4 items-center justify-center rounded-[4px] border transition-colors",
+          "absolute start-2 flex h-4 w-4 items-center justify-center rounded-[4px] border transition-colors",
           checked === true
             ? "border-primary bg-primary text-primary-foreground"
             : checked === "indeterminate"
@@ -146,7 +146,7 @@ export const DropdownMenuCheckboxItem = React.forwardRef<
         ) : null}
       </span>
     ) : (
-      <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+      <span className="absolute start-2 flex h-3.5 w-3.5 items-center justify-center">
         <DropdownMenuPrimitive.ItemIndicator>
           <Check className="h-4 w-4" />
         </DropdownMenuPrimitive.ItemIndicator>
@@ -165,12 +165,12 @@ export const DropdownMenuRadioItem = React.forwardRef<
   <DropdownMenuPrimitive.RadioItem
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-sm py-1.5 pl-8 pr-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground",
+      "relative flex cursor-default select-none items-center rounded-sm py-1.5 ps-8 pe-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground",
       className,
     )}
     {...props}
   >
-    <span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute start-2 flex h-3.5 w-3.5 items-center justify-center">
       <DropdownMenuPrimitive.ItemIndicator>
         <Circle className="h-2 w-2 fill-current" />
       </DropdownMenuPrimitive.ItemIndicator>
@@ -191,7 +191,7 @@ export const DropdownMenuLabel = React.forwardRef<
     ref={ref}
     className={cn(
       "px-2 py-1.5 text-sm font-semibold",
-      inset && "pl-8",
+      inset && "ps-8",
       className,
     )}
     {...props}
@@ -218,7 +218,7 @@ export const DropdownMenuShortcut = ({
 }: React.HTMLAttributes<HTMLSpanElement>) => (
   <span
     className={cn(
-      "ml-auto shrink-0 whitespace-nowrap pl-4 text-xs text-muted-foreground",
+      "ms-auto shrink-0 whitespace-nowrap ps-4 text-xs text-muted-foreground",
       className,
     )}
     {...props}

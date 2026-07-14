@@ -303,9 +303,9 @@ export function WmsSource() {
               className="shrink-0"
             >
               {isRetrieving ? (
-                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <ListTree className="mr-2 h-3.5 w-3.5" />
+                <ListTree className="me-2 h-3.5 w-3.5" />
               )}
               {isRetrieving
                 ? t("addData.wms.retrieving")

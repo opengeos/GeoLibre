@@ -663,9 +663,9 @@ export function StoryMapHandoutDialog({
               onClick={() => void handleGenerate()}
             >
               {generating ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                <Loader2 className="me-1 h-4 w-4 animate-spin" />
               ) : (
-                <FileDown className="mr-1 h-4 w-4" />
+                <FileDown className="me-1 h-4 w-4" />
               )}
               {t("storymap.handout.generate")}
             </Button>

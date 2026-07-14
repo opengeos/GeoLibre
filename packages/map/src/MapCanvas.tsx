@@ -93,7 +93,7 @@ function createIdentifyPopupElement(
   root.appendChild(title);
 
   const rows = document.createElement("div");
-  rows.className = "geolibre-identify-popup-rows pr-2";
+  rows.className = "geolibre-identify-popup-rows pe-2";
   root.appendChild(rows);
 
   const appendRow = (key: string, value: unknown) => {

@@ -676,7 +676,7 @@ export function FieldCollectionDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] pr-3">
+          <ScrollArea className="max-h-[60vh] pe-3">
             <div className="space-y-4 py-1">
               <div className="space-y-1.5">
                 <Label>{t("fieldCollection.targetLayer")}</Label>
@@ -800,9 +800,9 @@ function DrawToolbar({
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={onAddGps} disabled={locating}>
           {locating ? (
-            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="me-1 h-3.5 w-3.5 animate-spin" />
           ) : (
-            <Navigation className="mr-1 h-3.5 w-3.5" />
+            <Navigation className="me-1 h-3.5 w-3.5" />
           )}
           {t("fieldCollection.addGpsVertex")}
         </Button>
@@ -812,11 +812,11 @@ function DrawToolbar({
           onClick={onUndo}
           disabled={count === 0}
         >
-          <Undo2 className="mr-1 h-3.5 w-3.5" />
+          <Undo2 className="me-1 h-3.5 w-3.5" />
           {t("fieldCollection.undo")}
         </Button>
         <Button size="sm" onClick={onFinish} disabled={!ready}>
-          <Check className="mr-1 h-3.5 w-3.5" />
+          <Check className="me-1 h-3.5 w-3.5" />
           {t("fieldCollection.finish")}
         </Button>
         <Button variant="ghost" size="sm" onClick={onCancel}>
@@ -932,7 +932,7 @@ function SetupStep({
           size="sm"
           onClick={() => onDrafts([...drafts, newDraft()])}
         >
-          <Plus className="mr-1 h-3.5 w-3.5" />
+          <Plus className="me-1 h-3.5 w-3.5" />
           {t("fieldCollection.addField")}
         </Button>
       </div>
@@ -997,7 +997,7 @@ function SetupStep({
       </div>
 
       <Button className="w-full" onClick={onCreate}>
-        <MapPin className="mr-2 h-4 w-4" />
+        <MapPin className="me-2 h-4 w-4" />
         {t("fieldCollection.createLayer")}
       </Button>
     </div>
@@ -1052,30 +1052,30 @@ function CaptureStep({
           // A point is already captured, so GPS would silently discard the
           // current selection; offer only an explicit reposition (#711).
           <Button variant="outline" className="w-full" onClick={onPickOnMap}>
-            <Crosshair className="mr-2 h-4 w-4" />
+            <Crosshair className="me-2 h-4 w-4" />
             {t("fieldCollection.reposition")}
           </Button>
         ) : (
           <div className="grid grid-cols-2 gap-2">
             <Button variant="outline" onClick={onUseGps} disabled={locating}>
               {locating ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
               ) : (
-                <Navigation className="mr-2 h-4 w-4" />
+                <Navigation className="me-2 h-4 w-4" />
               )}
               {locating
                 ? t("fieldCollection.locating")
                 : t("fieldCollection.useGps")}
             </Button>
             <Button variant="outline" onClick={onPickOnMap}>
-              <Crosshair className="mr-2 h-4 w-4" />
+              <Crosshair className="me-2 h-4 w-4" />
               {t("fieldCollection.pickOnMap")}
             </Button>
           </div>
         )
       ) : (
         <Button variant="outline" className="w-full" onClick={onStartDrawing}>
-          <Pencil className="mr-2 h-4 w-4" />
+          <Pencil className="me-2 h-4 w-4" />
           {t("fieldCollection.drawOnMap")}
         </Button>
       )}
@@ -1104,7 +1104,7 @@ function CaptureStep({
                 <Label htmlFor={`fc-${field.key}`}>
                   {field.label}
                   {field.required && (
-                    <span className="ml-0.5 text-destructive">*</span>
+                    <span className="ms-0.5 text-destructive">*</span>
                   )}
                 </Label>
                 {field.type === "choice" && field.options?.length ? (
@@ -1143,7 +1143,7 @@ function CaptureStep({
               reachable without scrolling past the upload, and the photo reads
               as the optional extra it is (#711). */}
           <Button className="w-full" onClick={onSave}>
-            <Save className="mr-2 h-4 w-4" />
+            <Save className="me-2 h-4 w-4" />
             {t(`fieldCollection.save.${geometry}`)}
           </Button>
 
@@ -1159,7 +1159,7 @@ function CaptureStep({
                   className="h-16 w-16 rounded-md object-cover"
                 />
                 <Button variant="ghost" size="sm" onClick={onRemovePhoto}>
-                  <X className="mr-1 h-3.5 w-3.5" />
+                  <X className="me-1 h-3.5 w-3.5" />
                   {t("fieldCollection.removePhoto")}
                 </Button>
               </div>
@@ -1182,7 +1182,7 @@ function CaptureStep({
                   className="w-full"
                   onClick={() => photoInputRef.current?.click()}
                 >
-                  <ImagePlus className="mr-2 h-4 w-4" />
+                  <ImagePlus className="me-2 h-4 w-4" />
                   {t("fieldCollection.choosePhoto")}
                 </Button>
               </>

@@ -74,7 +74,7 @@ export function ColorRampSelect({
           ariaLabel ? `${ariaLabel}: ${selected?.label ?? value}` : undefined
         }
         className={cn(
-          "flex h-9 w-full items-center gap-2 rounded-md border border-input bg-background py-1 pl-3 pr-3 text-sm shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-9 w-full items-center gap-2 rounded-md border border-input bg-background py-1 ps-3 pe-3 text-sm shadow-xs transition-colors focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50",
           className,
         )}
       >
@@ -87,7 +87,7 @@ export function ColorRampSelect({
               : undefined,
           }}
         />
-        <span className="min-w-0 flex-1 truncate text-left">
+        <span className="min-w-0 flex-1 truncate text-start">
           {selected?.label ?? value}
         </span>
         <ChevronDown

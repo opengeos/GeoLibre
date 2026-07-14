@@ -263,7 +263,7 @@ export function KnowledgeCardPanel({
                 <li key={item.pageId}>
                   <button
                     type="button"
-                    className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-left text-xs hover:bg-muted"
+                    className="flex w-full items-start gap-2 rounded px-1.5 py-1.5 text-start text-xs hover:bg-muted"
                     onClick={() => openNearby(item)}
                   >
                     <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />

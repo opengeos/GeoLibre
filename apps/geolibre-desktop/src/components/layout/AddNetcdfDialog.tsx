@@ -373,7 +373,7 @@ export function AddNetcdfDialog({
                 onClick={handleChooseLocalFile}
                 disabled={loadingVars}
               >
-                <FileUp className="mr-2 h-3.5 w-3.5" />
+                <FileUp className="me-2 h-3.5 w-3.5" />
                 {loadingVars
                   ? t("addData.netcdf.readingFile")
                   : fileName

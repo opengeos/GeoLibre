@@ -196,13 +196,13 @@ function SunPanelCard() {
       >
         <Sun className="h-4 w-4 text-amber-500" />
         <span className="text-sm font-medium">{t("toolbar.sun.title")}</span>
-        <span className="ml-1 truncate text-xs text-muted-foreground">
+        <span className="ms-1 truncate text-xs text-muted-foreground">
           {dateLabel}
         </span>
         <Button
           variant="ghost"
           size="icon"
-          className="ml-auto h-6 w-6"
+          className="ms-auto h-6 w-6"
           aria-label={t("toolbar.sun.close")}
           onClick={() => closeSunPanel()}
         >
@@ -373,7 +373,7 @@ function SunTimeline({ value, label, onChange }: SunTimelineProps) {
         <span className="text-center">06</span>
         <span className="text-center">12</span>
         <span className="text-center">18</span>
-        <span className="text-right">24</span>
+        <span className="text-end">24</span>
       </div>
     </div>
   );

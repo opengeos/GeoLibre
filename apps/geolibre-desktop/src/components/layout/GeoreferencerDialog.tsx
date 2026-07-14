@@ -387,7 +387,7 @@ export function GeoreferencerDialog({
           <DialogDescription>{t("georeferencer.description")}</DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[64vh] pr-3">
+        <ScrollArea className="max-h-[64vh] pe-3">
           <div className="space-y-4 py-1">
             {!image ? (
               <label className="flex cursor-pointer flex-col items-center gap-2 rounded-md border border-dashed p-6 text-sm text-muted-foreground hover:bg-accent">
@@ -491,11 +491,11 @@ export function GeoreferencerDialog({
                   </span>
                   <Button
                     size="sm"
-                    className="ml-auto"
+                    className="ms-auto"
                     disabled={!pendingPixel}
                     onClick={handleLinkOnMap}
                   >
-                    <Crosshair className="mr-1 h-3.5 w-3.5" />
+                    <Crosshair className="me-1 h-3.5 w-3.5" />
                     {t("georeferencer.linkOnMap")}
                   </Button>
                 </div>
@@ -520,11 +520,11 @@ export function GeoreferencerDialog({
                         disabled={gcps.length === 0}
                         onClick={handleExportGcps}
                       >
-                        <Download className="mr-1 h-3.5 w-3.5" />
+                        <Download className="me-1 h-3.5 w-3.5" />
                         {t("georeferencer.exportGcps")}
                       </Button>
                       <label className="inline-flex cursor-pointer items-center rounded-md px-2 py-1 text-sm hover:bg-accent">
-                        <Upload className="mr-1 h-3.5 w-3.5" />
+                        <Upload className="me-1 h-3.5 w-3.5" />
                         {t("georeferencer.importGcps")}
                         <input
                           type="file"
@@ -549,10 +549,10 @@ export function GeoreferencerDialog({
                       <table className="w-full">
                         <thead className="bg-muted/50 text-xs text-muted-foreground">
                           <tr>
-                            <th className="px-2 py-1 text-left">#</th>
-                            <th className="px-2 py-1 text-right">px, py</th>
-                            <th className="px-2 py-1 text-right">lng, lat</th>
-                            <th className="px-2 py-1 text-right">
+                            <th className="px-2 py-1 text-start">#</th>
+                            <th className="px-2 py-1 text-end">px, py</th>
+                            <th className="px-2 py-1 text-end">lng, lat</th>
+                            <th className="px-2 py-1 text-end">
                               {t("georeferencer.residual")}
                             </th>
                             <th className="px-2 py-1" />
@@ -562,18 +562,18 @@ export function GeoreferencerDialog({
                           {gcps.map((g, i) => (
                             <tr key={g.key} className="border-t">
                               <td className="px-2 py-1">{i + 1}</td>
-                              <td className="px-2 py-1 text-right tabular-nums">
+                              <td className="px-2 py-1 text-end tabular-nums">
                                 {g.px}, {g.py}
                               </td>
-                              <td className="px-2 py-1 text-right tabular-nums">
+                              <td className="px-2 py-1 text-end tabular-nums">
                                 {g.lng.toFixed(4)}, {g.lat.toFixed(4)}
                               </td>
-                              <td className="px-2 py-1 text-right tabular-nums">
+                              <td className="px-2 py-1 text-end tabular-nums">
                                 {residuals
                                   ? `${residuals.perPoint[i].toFixed(1)} m`
                                   : "—"}
                               </td>
-                              <td className="px-2 py-1 text-right">
+                              <td className="px-2 py-1 text-end">
                                 <button
                                   type="button"
                                   aria-label={t("common.remove")}
@@ -643,9 +643,9 @@ export function GeoreferencerDialog({
                       onClick={handleExportGeoTiff}
                     >
                       {exporting ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <FileDown className="mr-2 h-4 w-4" />
+                        <FileDown className="me-2 h-4 w-4" />
                       )}
                       {t("georeferencer.exportTiffButton")}
                     </Button>
@@ -684,7 +684,7 @@ export function GeoreferencerDialog({
             disabled={!image && gcps.length === 0}
             onClick={handleClear}
           >
-            <Trash2 className="mr-2 h-4 w-4" />
+            <Trash2 className="me-2 h-4 w-4" />
             {t("georeferencer.clear")}
           </Button>
           <div className="flex items-center gap-2">
@@ -692,7 +692,7 @@ export function GeoreferencerDialog({
               {t("common.close")}
             </Button>
             <Button onClick={handleApply} disabled={!affine || !image}>
-              <MapPin className="mr-2 h-4 w-4" />
+              <MapPin className="me-2 h-4 w-4" />
               {t("georeferencer.addToMap")}
             </Button>
           </div>

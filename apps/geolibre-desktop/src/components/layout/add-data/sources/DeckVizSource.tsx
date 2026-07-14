@@ -549,7 +549,7 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
               onClick={handleUseDeckVizExample}
               disabled={isLoadingDeckViz}
             >
-              <Globe2 className="mr-2 h-3.5 w-3.5" />
+              <Globe2 className="me-2 h-3.5 w-3.5" />
               {isLoadingDeckViz ? t("addData.common.loading") : t("addData.deckViz.useExample")}
             </Button>
 
@@ -595,9 +595,9 @@ export function DeckVizSource({ initialDeckVizKind }: DeckVizSourceProps) {
               }
             >
               {deckVizMode === "file" ? (
-                <FileUp className="mr-2 h-3.5 w-3.5" />
+                <FileUp className="me-2 h-3.5 w-3.5" />
               ) : (
-                <Columns3 className="mr-2 h-3.5 w-3.5" />
+                <Columns3 className="me-2 h-3.5 w-3.5" />
               )}
               {isLoadingDeckViz
                 ? t("addData.common.loading")

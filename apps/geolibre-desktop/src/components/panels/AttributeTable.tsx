@@ -272,6 +272,9 @@ interface AttributeTableProps {
 
 export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   const { t } = useTranslation();
+  // Column order is visual: in a right-to-left layout the first column renders
+  // rightmost, so the move-left/right actions and their guards swap.
+  const isRtl = document.documentElement.dir === "rtl";
   const tableSectionRef = useRef<HTMLElement>(null);
   const tableResizeGuideRef = useRef<HTMLDivElement>(null);
   // The Radix ScrollArea viewport, used as the virtualizer's scroll container.
@@ -646,11 +649,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     const startX = event.clientX;
     const startWidth = columnWidth(key);
     const { min, max } = columnWidthLimits(key);
+    // The handle sits at the column's logical inline-end (`-end-2`) — the right
+    // edge in LTR, the left edge in RTL. clientX still increases to the right in
+    // both, so invert the delta under RTL: dragging the (left-side) RTL handle
+    // outward lowers clientX but should widen the column.
+    const directionSign =
+      getComputedStyle(event.currentTarget).direction === "rtl" ? -1 : 1;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
       const nextWidth = Math.min(
         max,
-        Math.max(min, startWidth + moveEvent.clientX - startX),
+        Math.max(min, startWidth + directionSign * (moveEvent.clientX - startX)),
       );
       setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
     };
@@ -1186,7 +1195,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     <div className="relative flex h-full min-h-10 items-center">
       <button
         type="button"
-        className="flex h-full min-w-0 flex-1 items-center gap-1 pr-3 text-left font-medium"
+        className="flex h-full min-w-0 flex-1 items-center gap-1 pe-3 text-start font-medium"
         onClick={() => toggleSort(key)}
       >
         <span className="truncate">{label}</span>
@@ -1196,7 +1205,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         role="separator"
         aria-orientation="vertical"
         aria-label={t("attributeTable.resizeColumn", { name: label })}
-        className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
+        className="absolute -end-2 top-0 h-full w-3 cursor-col-resize select-none border-e border-transparent hover:border-primary"
         onMouseDown={(event) => startColumnResize(key, event)}
       />
     </div>
@@ -1230,7 +1239,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             role="separator"
             aria-orientation="vertical"
             aria-label={t("attributeTable.resizeColumn", { name: col })}
-            className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
+            className="absolute -end-2 top-0 h-full w-3 cursor-col-resize select-none border-e border-transparent hover:border-primary"
             onMouseDown={(event) => startColumnResize(col, event)}
           />
         </div>
@@ -1245,7 +1254,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       <div className="relative flex h-full min-h-10 items-center">
         <button
           type="button"
-          className="flex h-full min-w-0 flex-1 items-center gap-1 pr-1 text-left font-medium"
+          className="flex h-full min-w-0 flex-1 items-center gap-1 pe-1 text-start font-medium"
           onClick={() => toggleSort(col)}
         >
           <span className="truncate">{col}</span>
@@ -1266,25 +1275,25 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => beginColumnRename(col)}>
-              <Pencil className="mr-2 h-3.5 w-3.5" />
+              <Pencil className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.renameField")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => handleToggleHidden(col)}>
-              <EyeOff className="mr-2 h-3.5 w-3.5" />
+              <EyeOff className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.hideField")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={index === 0}
-              onSelect={() => handleMoveColumn(col, "left")}
+              disabled={isRtl ? index === columns.length - 1 : index === 0}
+              onSelect={() => handleMoveColumn(col, isRtl ? "right" : "left")}
             >
-              <ArrowLeft className="mr-2 h-3.5 w-3.5" />
+              <ArrowLeft className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.moveLeft")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              disabled={index === columns.length - 1}
-              onSelect={() => handleMoveColumn(col, "right")}
+              disabled={isRtl ? index === 0 : index === columns.length - 1}
+              onSelect={() => handleMoveColumn(col, isRtl ? "left" : "right")}
             >
-              <ArrowRight className="mr-2 h-3.5 w-3.5" />
+              <ArrowRight className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.moveRight")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -1292,7 +1301,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
               className="text-destructive focus:text-destructive"
               onSelect={() => setColumnPendingDelete(col)}
             >
-              <Trash2 className="mr-2 h-3.5 w-3.5" />
+              <Trash2 className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.deleteField")}
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -1301,7 +1310,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           role="separator"
           aria-orientation="vertical"
           aria-label={t("attributeTable.resizeColumn", { name: col })}
-          className="absolute -right-2 top-0 h-full w-3 cursor-col-resize select-none border-r border-transparent hover:border-primary"
+          className="absolute -end-2 top-0 h-full w-3 cursor-col-resize select-none border-e border-transparent hover:border-primary"
           onMouseDown={(event) => startColumnResize(col, event)}
         />
       </div>
@@ -1364,7 +1373,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
         <Button
           variant={isEditing ? "secondary" : "outline"}
           size="sm"
-          className="ml-auto h-7 px-2"
+          className="ms-auto h-7 px-2"
           title={
             isGeometryEditing
               ? t("attributeTable.editTitleFinishGeometry")

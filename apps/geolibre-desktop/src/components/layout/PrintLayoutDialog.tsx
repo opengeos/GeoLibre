@@ -990,7 +990,7 @@ export function PrintLayoutDialog({
         >
           {/* Controls */}
           <div
-            className={`min-w-0 space-y-4 overflow-y-auto pr-1 ${
+            className={`min-w-0 space-y-4 overflow-y-auto pe-1 ${
               dialogSize ? "h-full" : "max-h-[60vh]"
             }`}
           >
@@ -1298,7 +1298,7 @@ export function PrintLayoutDialog({
                 disabled={drawingExtent}
                 onClick={() => void handleDrawExtent()}
               >
-                <Crop className="mr-2 h-4 w-4" />
+                <Crop className="me-2 h-4 w-4" />
                 {extentBbox
                   ? t("printLayout.extent.redraw")
                   : t("printLayout.extent.draw")}
@@ -1335,7 +1335,7 @@ export function PrintLayoutDialog({
                     size="sm"
                     onClick={handleClearExtent}
                   >
-                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    <RotateCcw className="me-1.5 h-3.5 w-3.5" />
                     {t("printLayout.extent.clear")}
                   </Button>
                 </div>
@@ -1506,7 +1506,7 @@ export function PrintLayoutDialog({
                       ])
                     }
                   >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    <Plus className="me-1.5 h-3.5 w-3.5" />
                     {t("printLayout.customLegend.addItem")}
                   </Button>
                 </div>
@@ -1804,7 +1804,7 @@ export function PrintLayoutDialog({
                         setLegendConfig({ ...DEFAULT_LEGEND_CONFIG })
                       }
                     >
-                      <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                      <RotateCcw className="me-1.5 h-3.5 w-3.5" />
                       {t("common.reset")}
                     </Button>
                   </div>
@@ -1845,7 +1845,7 @@ export function PrintLayoutDialog({
                           <div
                             key={row.key}
                             className={`flex items-center gap-1.5 ${
-                              row.kind === "class" ? "pl-5" : ""
+                              row.kind === "class" ? "ps-5" : ""
                             } ${row.hidden ? "opacity-50" : ""}`}
                           >
                             {row.kind === "entry" ? (
@@ -1966,7 +1966,7 @@ export function PrintLayoutDialog({
                 {t("printLayout.preview")}
               </span>
               <Button variant="ghost" size="sm" onClick={() => recapture()}>
-                <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                <RefreshCw className="me-2 h-3.5 w-3.5" />
                 {t("printLayout.recapture")}
               </Button>
             </div>
@@ -2001,9 +2001,9 @@ export function PrintLayoutDialog({
             onClick={() => void handleCopy()}
           >
             {copied ? (
-              <Check className="mr-2 h-4 w-4" />
+              <Check className="me-2 h-4 w-4" />
             ) : (
-              <ClipboardCopy className="mr-2 h-4 w-4" />
+              <ClipboardCopy className="me-2 h-4 w-4" />
             )}
             {copied
               ? t("printLayout.copied")
@@ -2016,7 +2016,7 @@ export function PrintLayoutDialog({
             disabled={exporting || !captured}
             onClick={() => void handleExport("png")}
           >
-            <FileImage className="mr-2 h-4 w-4" />
+            <FileImage className="me-2 h-4 w-4" />
             {t("printLayout.exportPng")}
           </Button>
           <Button
@@ -2024,7 +2024,7 @@ export function PrintLayoutDialog({
             disabled={exporting || !captured}
             onClick={() => void handleExport("pdf")}
           >
-            <FileText className="mr-2 h-4 w-4" />
+            <FileText className="me-2 h-4 w-4" />
             {t("printLayout.exportPdf")}
           </Button>
         </div>

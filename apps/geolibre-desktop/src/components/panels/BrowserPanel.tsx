@@ -350,7 +350,16 @@ export function BrowserPanel({
     if (index === -1) return;
     const row = visibleRows[index];
     let targetId: string | null | undefined;
-    switch (event.key) {
+    // Horizontal arrows follow the reading direction (WAI-ARIA tree pattern):
+    // in a right-to-left layout ArrowLeft expands and ArrowRight collapses.
+    const isRtl = document.documentElement.dir === "rtl";
+    const key =
+      isRtl && event.key === "ArrowRight"
+        ? "ArrowLeft"
+        : isRtl && event.key === "ArrowLeft"
+          ? "ArrowRight"
+          : event.key;
+    switch (key) {
       case "ArrowDown":
         targetId = visibleRows[index + 1]?.id;
         break;
@@ -581,9 +590,9 @@ export function BrowserPanel({
     // move/merge/collapse/close controls, and the dock rail around this.
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative border-b px-2 py-2">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute start-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="h-8 pl-7 text-sm"
+          className="h-8 ps-7 text-sm"
           placeholder={t("browser.searchPlaceholder")}
           value={query}
           aria-label={t("browser.searchPlaceholder")}

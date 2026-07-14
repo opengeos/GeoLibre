@@ -361,12 +361,12 @@ export function ProjectGalleryDialog({
         </div>
 
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute start-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("gallery.searchPlaceholder")}
-            className="pl-8"
+            className="ps-8"
             disabled={projects.length === 0 && status !== "idle"}
           />
         </div>
@@ -440,7 +440,7 @@ export function ProjectGalleryDialog({
                   >
                     {status === "loadingMore" ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
                         {t("gallery.loadingMore")}
                       </>
                     ) : (
@@ -491,7 +491,7 @@ function VisibilityBadge({ visibility }: { visibility: string }) {
   if (visibility !== "unlisted" && visibility !== "private") return null;
   const isPrivate = visibility === "private";
   return (
-    <span className="absolute left-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
+    <span className="absolute start-1.5 top-1.5 flex items-center gap-1 rounded bg-background/85 px-1.5 py-0.5 text-[10px] font-medium text-foreground shadow-sm">
       {isPrivate ? (
         <Lock className="h-2.5 w-2.5" />
       ) : (
@@ -559,7 +559,7 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
               {t("gallery.byAuthor", { author: project.username })}
             </span>
           ) : null}
-          <span className="ml-auto flex shrink-0 items-center gap-1">
+          <span className="ms-auto flex shrink-0 items-center gap-1">
             <Eye className="h-3 w-3" />
             {t("gallery.views", { count: project.views })}
           </span>
@@ -574,7 +574,7 @@ function GalleryCard({ project, opening, disabled, onOpen }: GalleryCardProps) {
           >
             {opening ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 {t("gallery.opening")}
               </>
             ) : (
