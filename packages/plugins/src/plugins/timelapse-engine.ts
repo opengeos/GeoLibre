@@ -82,12 +82,19 @@ export function normalizeTimelapseProjectState(
   if (!state || typeof state !== "object") return null;
   const candidate = state as Record<string, unknown>;
   const frameIndex = frameIndexForYear(frames, candidate.year);
+  // With no frames to clamp against (an async provider's catalog is not
+  // available yet at project-restore time), keep the persisted year verbatim —
+  // the control clamps it against the real frames when the plugin activates.
+  const fallbackYear =
+    typeof candidate.year === "number" && Number.isFinite(candidate.year)
+      ? candidate.year
+      : 0;
   return {
     providerId:
       typeof candidate.providerId === "string" && candidate.providerId
         ? candidate.providerId
         : EOX_S2CLOUDLESS_PROVIDER_ID,
-    year: frames[frameIndex]?.year ?? 0,
+    year: frames.length > 0 ? (frames[frameIndex]?.year ?? 0) : fallbackYear,
     secondsPerYear: clampSecondsPerYear(candidate.secondsPerYear),
     loop: typeof candidate.loop === "boolean" ? candidate.loop : true,
   };

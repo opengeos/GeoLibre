@@ -262,6 +262,11 @@ export class TimelapseControl {
   private tilesReady = false;
   private stackPresent = false;
   private playTimer: ReturnType<typeof setTimeout> | null = null;
+  // Bumped by play()/pause() so a tick() awaiting the next year's tiles when
+  // playback is toggled can tell it is stale and must not advance the frame
+  // (a resumed session schedules its own timer; the old tick racing it would
+  // double-advance).
+  private playSession = 0;
   private recordAbort: AbortController | null = null;
 
   private slider: HTMLInputElement | null = null;
@@ -480,12 +485,14 @@ export class TimelapseControl {
       }
     }
     this.playing = true;
+    this.playSession += 1;
     this.scheduleTick();
     this.updateUi();
   }
 
   pause(): void {
     this.playing = false;
+    this.playSession += 1;
     if (this.playTimer !== null) {
       clearTimeout(this.playTimer);
       this.playTimer = null;
@@ -526,6 +533,7 @@ export class TimelapseControl {
 
   private async tick(): Promise<void> {
     if (!this.playing) return;
+    const session = this.playSession;
     const next = nextFrameIndex(this.frameIndex, this.frames.length, this.loop);
     if (next === null) {
       this.pause();
@@ -533,7 +541,10 @@ export class TimelapseControl {
     }
     const frame = this.frames[next];
     if (frame) await this.waitForSourceLoaded(frameSourceId(frame));
-    if (!this.playing) return;
+    // A pause (or pause+resume) while awaiting tiles makes this tick stale:
+    // the resumed session runs on its own timer, so advancing here too would
+    // double-step onto a frame computed before the pause.
+    if (!this.playing || session !== this.playSession) return;
     this.setFrameIndex(next);
     this.scheduleTick();
   }
@@ -839,7 +850,10 @@ export class TimelapseControl {
       this.playButton.textContent = this.playing
         ? `⏸ ${labels.pause}`
         : `▶ ${labels.play}`;
-      this.playButton.disabled = this.recording || this.frames.length < 2;
+      this.playButton.disabled =
+        this.recording ||
+        this.frames.length < 2 ||
+        (!this.tilesReady && !this.playing);
       this.playButton.title =
         !this.tilesReady && !this.playing ? labels.loadingTiles : "";
     }
@@ -981,7 +995,11 @@ export async function recordTimelapseCycle({
   };
 
   // Keep the captured stream fed with fresh frames even while the map itself
-  // has nothing to redraw (a raster year dwelling on screen).
+  // has nothing to redraw (a raster year dwelling on screen). The per-tick
+  // triggerRepaint is intentional even during idle dwells: reading a WebGL
+  // canvas via drawImage is only reliable right after a render on some
+  // platforms, and recordings are short (seconds), so the bounded extra
+  // rendering is preferred over risking blank captured frames.
   let rafId = 0;
   const pump = (): void => {
     map.triggerRepaint();

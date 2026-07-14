@@ -104,6 +104,15 @@ describe("normalizeTimelapseProjectState", () => {
     assert.ok(state && !("playing" in state));
   });
 
+  it("keeps the persisted year verbatim when no frames are available", () => {
+    // An async provider's catalog is unresolved at project-restore time; the
+    // year must survive so activation can clamp it against the real frames.
+    const state = normalizeTimelapseProjectState({ year: 2021 }, []);
+    assert.equal(state?.year, 2021);
+    const invalid = normalizeTimelapseProjectState({ year: "2021" }, []);
+    assert.equal(invalid?.year, 0);
+  });
+
   it("round-trips a valid state through JSON", () => {
     const original = {
       providerId: "eox-s2cloudless",
