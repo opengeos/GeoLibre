@@ -322,6 +322,31 @@ describe("terrain-measure readout", () => {
     assert.equal(terrainReadoutIsPartial(readout), false);
   });
 
+  it("flags a readout as partial when some samples have no elevation", async () => {
+    const patchyMap: TerrainMapLike = {
+      getTerrain: () => ({ exaggeration: 1 }),
+      // Northern half of the line has no loaded DEM tile.
+      queryTerrainElevation: (point) => (point[1] > 0.005 ? null : 100),
+    };
+    const readout = await computeTerrainReadout(
+      {
+        id: "m-partial",
+        mode: "distance",
+        points: [
+          { lng: 0, lat: 0 },
+          { lng: 0, lat: 0.01 },
+        ],
+        distance: 1113,
+      },
+      patchyMap,
+    );
+    assert.ok(readout);
+    if (readout.kind !== "distance") assert.fail("expected a distance readout");
+    assert.equal(terrainReadoutIsPartial(readout), true);
+    assert.ok(readout.result.missingCount > 0);
+    assert.ok(readout.result.sampledCount > 0);
+  });
+
   it("renders unit-aware rows", async () => {
     const readout = await computeTerrainReadout(
       {
@@ -342,7 +367,7 @@ describe("terrain-measure readout", () => {
     });
     assert.equal(rows.length, 3);
     assert.match(rows[0][1], /km$/);
-    assert.match(rows[1][1], /m/);
+    assert.match(rows[1][1], /\bm$/);
     const imperialRows = terrainReadoutRows(readout, {
       distanceUnit: "miles",
       areaUnit: "acres",

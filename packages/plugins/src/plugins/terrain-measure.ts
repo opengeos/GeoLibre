@@ -173,19 +173,25 @@ export async function sampleRemoteElevations(
   points: LngLat[],
   fetchImpl?: FetchLike,
 ): Promise<(number | null)[]> {
-  const results: (number | null)[] = [];
+  const chunks: LngLat[][] = [];
   for (let i = 0; i < points.length; i += MAX_POINTS_PER_REQUEST) {
-    const chunk = points.slice(i, i + MAX_POINTS_PER_REQUEST);
-    try {
-      const elevations = await fetchElevations(chunk, fetchImpl);
-      for (const elevation of elevations) {
-        results.push(Number.isFinite(elevation) ? elevation : null);
-      }
-    } catch {
-      for (let j = 0; j < chunk.length; j += 1) results.push(null);
-    }
+    chunks.push(points.slice(i, i + MAX_POINTS_PER_REQUEST));
   }
-  return results;
+  // The chunks are independent, so fire them concurrently; Promise.all
+  // preserves their order for reassembly.
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      try {
+        const elevations = await fetchElevations(chunk, fetchImpl);
+        return elevations.map((elevation) =>
+          Number.isFinite(elevation) ? elevation : null,
+        );
+      } catch {
+        return chunk.map(() => null);
+      }
+    }),
+  );
+  return chunkResults.flat();
 }
 
 /** The computed terrain readout for the most recent measurement. */
@@ -201,6 +207,28 @@ interface MeasureStateLike {
 /** The private panel element of the upstream MeasureControl. */
 interface MeasureControlInternals {
   _panel?: HTMLElement;
+}
+
+/**
+ * The MeasureControl's panel element. `_panel` is a private member as of
+ * maplibre-gl-components@0.25.x; if a future version renames it, everything
+ * layered on the panel (the terrain section, the resize styling) silently
+ * disappears while planar measuring keeps working — so warn loudly to catch
+ * the regression when bumping the dependency. Shared by this module and
+ * `makeMeasurePanelResizable` so an upstream rename needs one fix.
+ */
+export function measurePanelElement(
+  control: MeasureControl,
+): HTMLElement | null {
+  const panel = (control as unknown as MeasureControlInternals)._panel;
+  if (!panel) {
+    console.warn(
+      "MeasureControl: _panel not found; the Terrain (3D) section and panel " +
+        "resize styling are inactive. Check maplibre-gl-components.",
+    );
+    return null;
+  }
+  return panel;
 }
 
 /**
@@ -339,16 +367,8 @@ export function attachTerrainMeasure(
   control: MeasureControl,
   getMap: () => TerrainMapLike | null,
 ): () => void {
-  // `_panel` is a private member of MeasureControl as of
-  // maplibre-gl-components@0.25.x. If a future version renames it, the terrain
-  // section silently disappears while planar measuring keeps working — warn
-  // loudly so the regression is caught when bumping the dependency.
-  const panel = (control as unknown as MeasureControlInternals)._panel;
+  const panel = measurePanelElement(control);
   if (!panel) {
-    console.warn(
-      "MeasureControl: _panel not found; the Terrain (3D) section is " +
-        "inactive. Check maplibre-gl-components.",
-    );
     return () => {};
   }
 
@@ -426,6 +446,10 @@ export function attachTerrainMeasure(
     if (!measurement) return;
     const token = ++requestToken;
     pendingMeasurementId = measurement.id;
+    // Drop the previous readout now: it no longer matches what the section
+    // shows ("Computing…"), and a stale id here would let the removal of an
+    // older measurement cancel this newer in-flight computation.
+    current = null;
     showComputing();
     computeTerrainReadout(measurement, getMap())
       .then((readout) => {

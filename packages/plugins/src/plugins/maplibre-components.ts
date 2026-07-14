@@ -76,7 +76,11 @@ import type {
   GeoLibrePlugin,
 } from "../types";
 import { ensureMercatorProjection } from "./map-projection-utils";
-import { attachTerrainMeasure, type TerrainMapLike } from "./terrain-measure";
+import {
+  attachTerrainMeasure,
+  measurePanelElement,
+  type TerrainMapLike,
+} from "./terrain-measure";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
   KerchunkReferenceStore,
@@ -3424,19 +3428,11 @@ function createMeasureControl(
  * The MeasureControl's panel ships with a hard pixel max-height that forces
  * its content (measurement list, terrain section) to scroll. Let the panel
  * size to its content up to most of the viewport instead, and hand the user
- * the native bottom-right resize handle for manual control. Reads the private
- * `_panel` member (same access, and same loud warning on an upstream rename,
- * as the terrain-measure attachment).
+ * the native bottom-right resize handle for manual control.
  */
 function makeMeasurePanelResizable(control: MeasureControl): void {
-  const panel = (control as unknown as { _panel?: HTMLElement })._panel;
-  if (!panel) {
-    console.warn(
-      "MeasureControl: _panel not found; Measure panel resize styling is " +
-        "inactive. Check maplibre-gl-components."
-    );
-    return;
-  }
+  const panel = measurePanelElement(control);
+  if (!panel) return;
   // Fit content instead of scrolling at the fixed cap, but never outgrow the
   // viewport; the map's own chrome needs the remaining room.
   panel.style.height = "auto";
