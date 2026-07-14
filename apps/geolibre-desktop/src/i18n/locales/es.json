@@ -2026,6 +2026,22 @@
     "labelColor": "Color de etiqueta",
     "labelSize": "Tamaño de etiqueta"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Año del timelapse",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "speed": "Velocidad",
+    "secondsPerYear": "Segundos por año",
+    "secondsPerYearSuffix": "s/año",
+    "loop": "Bucle",
+    "record": "Grabar vídeo",
+    "stopRecording": "Detener grabación",
+    "recording": "Grabando",
+    "recordingFailed": "Error al grabar.",
+    "recordingUnsupported": "Este navegador no admite la grabación del lienzo.",
+    "loadingTiles": "Cargando teselas…"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Cambiar a «{{name}}» reemplaza todo el estilo del mapa y eliminará el mapa base apilado que añadió. ¿Continuar?",
     "confirmStyleReplace_other": "Cambiar a «{{name}}» reemplaza todo el estilo del mapa y eliminará los {{count}} mapas base apilados que añadió. ¿Continuar?"

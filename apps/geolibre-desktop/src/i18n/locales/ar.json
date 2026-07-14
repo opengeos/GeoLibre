@@ -2335,6 +2335,22 @@
     "labelColor": "لون التسمية",
     "labelSize": "حجم التسمية"
   },
+  "timelapse": {
+    "title": "التسلسل الزمني",
+    "yearSlider": "سنة التسلسل الزمني",
+    "play": "تشغيل",
+    "pause": "إيقاف مؤقت",
+    "speed": "السرعة",
+    "secondsPerYear": "ثوانٍ لكل سنة",
+    "secondsPerYearSuffix": "ث/سنة",
+    "loop": "تكرار",
+    "record": "تسجيل فيديو",
+    "stopRecording": "إيقاف التسجيل",
+    "recording": "جارٍ التسجيل",
+    "recordingFailed": "فشل التسجيل.",
+    "recordingUnsupported": "تسجيل اللوحة غير مدعوم في هذا المتصفح.",
+    "loadingTiles": "جارٍ تحميل المربعات…"
+  },
   "mapillary": {
     "title": "Mapillary",
     "hint": "انقر فوق نقطة تغطية على الخريطة لعرض الصور على مستوى الشارع.",

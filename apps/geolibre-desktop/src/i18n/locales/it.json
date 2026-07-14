@@ -2026,6 +2026,22 @@
     "labelColor": "Colore etichetta",
     "labelSize": "Dimensione etichetta"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Anno del timelapse",
+    "play": "Riproduci",
+    "pause": "Pausa",
+    "speed": "Velocità",
+    "secondsPerYear": "Secondi per anno",
+    "secondsPerYearSuffix": "s/anno",
+    "loop": "Ciclo",
+    "record": "Registra video",
+    "stopRecording": "Interrompi registrazione",
+    "recording": "Registrazione",
+    "recordingFailed": "Registrazione non riuscita.",
+    "recordingUnsupported": "La registrazione del canvas non è supportata in questo browser.",
+    "loadingTiles": "Caricamento tasselli…"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Passando a \"{{name}}\" sostituirai l'intero stile della mappa e rimuoverai la mappa di base sovrapposta che hai aggiunto. Continuare?",
     "confirmStyleReplace_other": "Passando a \"{{name}}\" sostituirai l'intero stile della mappa e rimuoverai le {{count}} mappe di base sovrapposte che hai aggiunto. Continuare?"

@@ -48,19 +48,19 @@ export interface TimelapseProvider {
 
 export const EOX_S2CLOUDLESS_PROVIDER_ID = "eox-s2cloudless";
 
-const EOX_FIRST_YEAR = 2016;
+/**
+ * The mosaic range starts at 2018: earlier EOX layers exist in the WMTS
+ * capabilities but are unusable for a continuous timelapse — the unsuffixed
+ * `s2cloudless_3857` layer is the 2016 mosaic, and `s2cloudless-2017_3857` is
+ * published but serves blank placeholder tiles (~700 bytes) instead of
+ * imagery, which would flash an empty year mid-animation.
+ */
+const EOX_FIRST_YEAR = 2018;
 const EOX_LAST_YEAR = 2025;
 
-/**
- * The EOX WMTS layer identifier for a mosaic year. The very first mosaic
- * (2016) is published without a year suffix (`s2cloudless_3857`); every later
- * year carries one (`s2cloudless-2017_3857`, ...). Verified against
- * https://tiles.maps.eox.at/wmts/1.0.0/WMTSCapabilities.xml.
- */
+/** The EOX WMTS layer identifier for a mosaic year (2017+ carry the suffix). */
 function eoxLayerIdentifier(year: number): string {
-  return year === EOX_FIRST_YEAR
-    ? "s2cloudless_3857"
-    : `s2cloudless-${year}_3857`;
+  return `s2cloudless-${year}_3857`;
 }
 
 /**
@@ -79,7 +79,7 @@ function eoxAttribution(year: number): string {
 }
 
 /**
- * EOX Sentinel-2 cloudless annual mosaics (2016–2025) — global, keyless,
+ * EOX Sentinel-2 cloudless annual mosaics (2018–2025) — global, keyless,
  * CC BY 4.0. Sentinel-2's native 10 m resolution tops out around zoom 14, so
  * the source maxzoom is capped at 15 and MapLibre overzooms beyond it, which
  * keeps the pre-warmed 10-source stack from fetching needless deep tiles.

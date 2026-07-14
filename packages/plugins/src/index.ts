@@ -404,16 +404,20 @@ export {
   getLayerTimeBinding,
 } from "./plugins/maplibre-time-slider";
 export {
+  DEFAULT_TIMELAPSE_LABELS,
   getActiveTimelapseControl,
   maplibreTimelapsePlugin,
   recordTimelapseCycle,
+  setTimelapseLabels,
   setTimelapseVideoSaver,
+  TIMELAPSE_PANEL_ID,
   TIMELAPSE_PLUGIN_ID,
   TIMELAPSE_SOURCE_KIND,
   timelapseStoreLayerId,
   TimelapseControl,
   TimelapseVideoUnsupportedError,
   type RecordTimelapseCycleOptions,
+  type TimelapseLabels,
   type TimelapseRecording,
   type TimelapseVideoSaver,
 } from "./plugins/maplibre-timelapse";

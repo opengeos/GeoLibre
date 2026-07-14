@@ -5,11 +5,15 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 import {
   getActiveTimelapseControl,
   maplibreTimelapsePlugin as plugin,
+  TIMELAPSE_PANEL_ID,
   TIMELAPSE_PLUGIN_ID,
   TIMELAPSE_SOURCE_KIND,
   timelapseStoreLayerId,
 } from "../packages/plugins/src/plugins/maplibre-timelapse";
-import type { GeoLibreAppAPI } from "../packages/plugins/src/types";
+import type {
+  GeoLibreAppAPI,
+  GeoLibreFloatingPanelRegistration,
+} from "../packages/plugins/src/types";
 
 /** A recording fake of the MapLibre surface the plugin touches. */
 function fakeMap() {
@@ -54,32 +58,43 @@ function fakeMap() {
 
 type FakeMap = ReturnType<typeof fakeMap>;
 
-function fakeApp(
-  map: FakeMap,
-  options: { addControlSucceeds?: boolean } = {},
-): GeoLibreAppAPI & { removed: unknown[]; basemapCallbacks: Array<() => void> } {
-  const removed: unknown[] = [];
+function fakeApp(map: FakeMap): GeoLibreAppAPI & {
+  registered: GeoLibreFloatingPanelRegistration[];
+  opened: string[];
+  unregistered: number;
+  basemapCallbacks: Array<() => void>;
+} {
+  const registered: GeoLibreFloatingPanelRegistration[] = [];
+  const opened: string[] = [];
   const basemapCallbacks: Array<() => void> = [];
-  return {
-    removed,
+  const self = {
+    registered,
+    opened,
+    unregistered: 0,
     basemapCallbacks,
     getMap: () => map as unknown as MapLibreMap,
-    addMapControl: () => options.addControlSucceeds ?? true,
-    removeMapControl: (control: unknown) => {
-      removed.push(control);
+    registerFloatingPanel: (panel: GeoLibreFloatingPanelRegistration) => {
+      registered.push(panel);
+      return () => {
+        self.unregistered += 1;
+      };
     },
+    openFloatingPanel: (id: string) => {
+      opened.push(id);
+      return true;
+    },
+    closeFloatingPanel: () => {},
     getActiveBasemap: () => "https://tiles.openfreemap.org/styles/liberty",
     onBasemapChange: (callback: () => void) => {
       basemapCallbacks.push(callback);
       return () => {};
     },
-  } as unknown as GeoLibreAppAPI & {
-    removed: unknown[];
-    basemapCallbacks: Array<() => void>;
   };
+  return self as unknown as GeoLibreAppAPI & typeof self;
 }
 
 const STORE_LAYER_ID = timelapseStoreLayerId("eox-s2cloudless");
+const FRAME_COUNT = 8; // 2018–2025
 
 function storeLayer() {
   return useAppStore
@@ -107,9 +122,9 @@ describe("maplibreTimelapsePlugin", () => {
     const map = fakeMap();
     plugin.activate(fakeApp(map));
 
-    // Ten sources and ten raster layers, all visible.
-    assert.equal(map.sources.size, 10);
-    assert.equal(map.layers.size, 10);
+    // Eight sources and eight raster layers (2018–2025), all visible.
+    assert.equal(map.sources.size, FRAME_COUNT);
+    assert.equal(map.layers.size, FRAME_COUNT);
     for (const spec of map.layers.values()) {
       const layer = spec as {
         layout: { visibility: string };
@@ -124,13 +139,16 @@ describe("maplibreTimelapsePlugin", () => {
         (spec as { paint: Record<string, unknown> }).paint["raster-opacity"],
     );
     assert.equal(opacities.filter((value) => value === 1).length, 1);
-    assert.equal(opacities.filter((value) => value === 0).length, 9);
+    assert.equal(
+      opacities.filter((value) => value === 0).length,
+      FRAME_COUNT - 1,
+    );
 
-    // The 2016 source uses the unsuffixed EOX layer identifier.
-    const source2016 = map.sources.get(
-      "timelapse-source-s2cloudless-2016",
+    // Every source uses the year-suffixed EOX layer identifier.
+    const source2018 = map.sources.get(
+      "timelapse-source-s2cloudless-2018",
     ) as { tiles: string[] };
-    assert.ok(source2016.tiles[0].includes("/s2cloudless_3857/"));
+    assert.ok(source2018.tiles[0].includes("/s2cloudless-2018_3857/"));
 
     // One tidy store layer mirrors the whole stack.
     const layer = storeLayer();
@@ -138,8 +156,11 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(layer.metadata.sourceKind, TIMELAPSE_SOURCE_KIND);
     assert.equal(layer.metadata.customLayerType, "timelapse-frames");
     assert.equal(layer.metadata.externalNativeLayer, true);
-    assert.equal((layer.metadata.nativeLayerIds as string[]).length, 10);
-    assert.equal((layer.metadata.sourceIds as string[]).length, 10);
+    assert.equal(
+      (layer.metadata.nativeLayerIds as string[]).length,
+      FRAME_COUNT,
+    );
+    assert.equal((layer.metadata.sourceIds as string[]).length, FRAME_COUNT);
     assert.equal(
       useAppStore
         .getState()
@@ -148,6 +169,33 @@ describe("maplibreTimelapsePlugin", () => {
         ).length,
       1,
     );
+  });
+
+  it("registers and opens the floating panel", () => {
+    const map = fakeMap();
+    const app = fakeApp(map);
+    plugin.activate(app);
+
+    assert.equal(app.registered.length, 1);
+    assert.equal(app.registered[0].id, TIMELAPSE_PANEL_ID);
+    assert.ok(app.registered[0].title.length > 0);
+    assert.equal(typeof app.registered[0].render, "function");
+    assert.deepEqual(app.opened, [TIMELAPSE_PANEL_ID]);
+  });
+
+  it("re-registers the panel when its opening corner changes", () => {
+    const map = fakeMap();
+    const app = fakeApp(map);
+    plugin.activate(app);
+
+    plugin.setMapControlPosition?.(app, "top-right");
+
+    assert.equal(plugin.getMapControlPosition?.(), "top-right");
+    assert.equal(app.registered.length, 2);
+    assert.equal(app.registered[1].position, "top-right");
+    // The stack and store layer are untouched by a reposition.
+    assert.equal(map.layers.size, FRAME_COUNT);
+    assert.ok(storeLayer());
   });
 
   it("swaps a year with exactly two raster-opacity writes", () => {
@@ -164,12 +212,12 @@ describe("maplibreTimelapsePlugin", () => {
     );
     assert.equal(opacityWrites.length, 2);
     assert.deepEqual(opacityWrites[0], {
-      layerId: "timelapse-layer-s2cloudless-2016",
+      layerId: "timelapse-layer-s2cloudless-2018",
       name: "raster-opacity",
       value: 0,
     });
     assert.deepEqual(opacityWrites[1], {
-      layerId: "timelapse-layer-s2cloudless-2019",
+      layerId: "timelapse-layer-s2cloudless-2021",
       name: "raster-opacity",
       value: 1,
     });
@@ -201,7 +249,7 @@ describe("maplibreTimelapsePlugin", () => {
     const visibilityWrites = map.layoutWrites.filter(
       (write) => write.name === "visibility",
     );
-    assert.equal(visibilityWrites.length, 10);
+    assert.equal(visibilityWrites.length, FRAME_COUNT);
     assert.ok(visibilityWrites.every((write) => write.value === "none"));
     assert.equal(control.isPlaying(), false);
 
@@ -211,7 +259,7 @@ describe("maplibreTimelapsePlugin", () => {
       map.layoutWrites.filter(
         (write) => write.name === "visibility" && write.value === "visible",
       ).length,
-      10,
+      FRAME_COUNT,
     );
   });
 
@@ -226,7 +274,7 @@ describe("maplibreTimelapsePlugin", () => {
       (write) => write.name === "raster-opacity",
     );
     assert.equal(writes.length, 1);
-    assert.equal(writes[0].layerId, "timelapse-layer-s2cloudless-2016");
+    assert.equal(writes[0].layerId, "timelapse-layer-s2cloudless-2018");
     assert.equal(writes[0].value, 0.5);
   });
 
@@ -245,20 +293,9 @@ describe("maplibreTimelapsePlugin", () => {
 
     // Interacting again (Play) re-creates the stack and the store layer.
     control.play();
-    assert.equal(map.layers.size, 10);
+    assert.equal(map.layers.size, FRAME_COUNT);
     assert.ok(storeLayer());
     control.pause();
-  });
-
-  it("rolls back when the control cannot be added", () => {
-    const map = fakeMap();
-    const result = plugin.activate(
-      fakeApp(map, { addControlSucceeds: false }),
-    );
-    assert.equal(result, false);
-    assert.equal(getActiveTimelapseControl(), null);
-    assert.equal(storeLayer(), undefined);
-    assert.equal(map.sources.size, 0);
   });
 
   it("rebuilds the native stack after a basemap change", () => {
@@ -271,42 +308,20 @@ describe("maplibreTimelapsePlugin", () => {
     map.layers.clear();
     for (const callback of app.basemapCallbacks) callback();
 
-    assert.equal(map.sources.size, 10);
-    assert.equal(map.layers.size, 10);
+    assert.equal(map.sources.size, FRAME_COUNT);
+    assert.equal(map.layers.size, FRAME_COUNT);
   });
 
-  it("tears down fully when repositioning fails to re-add the control", () => {
-    const map = fakeMap();
-    plugin.activate(fakeApp(map));
-    const control = getActiveTimelapseControl();
-    assert.ok(control);
-    control.setFrameIndex(3);
-
-    const failingApp = fakeApp(map, { addControlSucceeds: false });
-    const result = plugin.setMapControlPosition?.(failingApp, "top-right");
-
-    assert.equal(result, false);
-    assert.equal(getActiveTimelapseControl(), null);
-    assert.equal(map.layers.size, 0);
-    assert.equal(map.sources.size, 0);
-    assert.equal(storeLayer(), undefined);
-    // The failure keeps the last state, so re-activation restores the year.
-    plugin.activate(fakeApp(map));
-    assert.equal(getActiveTimelapseControl()?.getFrameIndex(), 3);
-  });
-
-  it("deactivate removes the control, native stack, and store layer", () => {
+  it("deactivate removes the panel, native stack, and store layer", () => {
     const map = fakeMap();
     const app = fakeApp(map);
     plugin.activate(app);
-    const control = getActiveTimelapseControl();
-    assert.ok(control);
+    assert.ok(getActiveTimelapseControl());
 
     plugin.deactivate(app);
 
     assert.equal(getActiveTimelapseControl(), null);
-    assert.equal(app.removed.length, 1);
-    assert.equal(app.removed[0], control);
+    assert.equal(app.unregistered, 1);
     assert.equal(map.layers.size, 0);
     assert.equal(map.sources.size, 0);
     assert.equal(storeLayer(), undefined);
@@ -318,7 +333,7 @@ describe("maplibreTimelapsePlugin", () => {
     plugin.activate(app);
     const control = getActiveTimelapseControl();
     assert.ok(control);
-    control.setFrameIndex(5); // 2021
+    control.setFrameIndex(3); // 2021
     control.setSecondsPerYear(2);
     control.setLoop(false);
 
@@ -335,7 +350,7 @@ describe("maplibreTimelapsePlugin", () => {
     assert.equal(state.year, 2021);
     assert.equal(state.secondsPerYear, 2);
     assert.equal(state.loop, false);
-    assert.equal(restored.getFrameIndex(), 5);
+    assert.equal(restored.getFrameIndex(), 3);
   });
 
   it("clamps a hand-edited project year into the provider range", () => {

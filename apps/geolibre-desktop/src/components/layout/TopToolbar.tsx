@@ -28,6 +28,7 @@ import {
   setMapillaryLabels,
   setOpenAerialMapLabels,
   setReverseGeocodeLabels,
+  setTimelapseLabels,
   DECK_VIZ_PLUGIN_ID,
   DIRECTIONS_PLUGIN_ID,
   GRATICULE_PLUGIN_ID,
@@ -300,6 +301,22 @@ export function TopToolbar({
       edgesAll: t("graticule.edgesAll"),
       labelColor: t("graticule.labelColor"),
       labelSize: t("graticule.labelSize"),
+    });
+    setTimelapseLabels({
+      title: t("timelapse.title"),
+      yearSlider: t("timelapse.yearSlider"),
+      play: t("timelapse.play"),
+      pause: t("timelapse.pause"),
+      speed: t("timelapse.speed"),
+      secondsPerYear: t("timelapse.secondsPerYear"),
+      secondsPerYearSuffix: t("timelapse.secondsPerYearSuffix"),
+      loop: t("timelapse.loop"),
+      record: t("timelapse.record"),
+      stopRecording: t("timelapse.stopRecording"),
+      recording: t("timelapse.recording"),
+      recordingFailed: t("timelapse.recordingFailed"),
+      recordingUnsupported: t("timelapse.recordingUnsupported"),
+      loadingTiles: t("timelapse.loadingTiles"),
     });
   }, [t]);
 

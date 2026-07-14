@@ -2026,6 +2026,22 @@
     "labelColor": "Cor do rótulo",
     "labelSize": "Tamanho do rótulo"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Ano do timelapse",
+    "play": "Reproduzir",
+    "pause": "Pausar",
+    "speed": "Velocidade",
+    "secondsPerYear": "Segundos por ano",
+    "secondsPerYearSuffix": "s/ano",
+    "loop": "Repetir",
+    "record": "Gravar vídeo",
+    "stopRecording": "Parar gravação",
+    "recording": "Gravando",
+    "recordingFailed": "Falha na gravação.",
+    "recordingUnsupported": "A gravação do canvas não é suportada neste navegador.",
+    "loadingTiles": "Carregando blocos…"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Mudar para \"{{name}}\" substitui todo o estilo do mapa e removerá o mapa base empilhado que você adicionou. Continuar?",
     "confirmStyleReplace_other": "Mudar para \"{{name}}\" substitui todo o estilo do mapa e removerá os {{count}} mapas base empilhados que você adicionou. Continuar?"

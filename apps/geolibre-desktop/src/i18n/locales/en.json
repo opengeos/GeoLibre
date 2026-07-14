@@ -2182,6 +2182,22 @@
     "labelColor": "Label color",
     "labelSize": "Label size"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Timelapse year",
+    "play": "Play",
+    "pause": "Pause",
+    "speed": "Speed",
+    "secondsPerYear": "Seconds per year",
+    "secondsPerYearSuffix": "s/yr",
+    "loop": "Loop",
+    "record": "Record video",
+    "stopRecording": "Stop recording",
+    "recording": "Recording",
+    "recordingFailed": "Recording failed.",
+    "recordingUnsupported": "Canvas recording is not supported in this browser.",
+    "loadingTiles": "Loading tiles…"
+  },
   "mapillary": {
     "title": "Mapillary",
     "hint": "Click a coverage point on the map to view street-level imagery.",

@@ -57,13 +57,13 @@ describe("clampSecondsPerYear", () => {
 
 describe("frameIndexForYear", () => {
   it("finds the matching frame", () => {
-    assert.equal(frameIndexForYear(frames, 2016), 0);
-    assert.equal(frameIndexForYear(frames, 2020), 4);
-    assert.equal(frameIndexForYear(frames, 2025), 9);
+    assert.equal(frameIndexForYear(frames, 2018), 0);
+    assert.equal(frameIndexForYear(frames, 2020), 2);
+    assert.equal(frameIndexForYear(frames, 2025), 7);
   });
 
   it("clamps out-of-range years to the nearest end", () => {
-    assert.equal(frameIndexForYear(frames, 2050), 9);
+    assert.equal(frameIndexForYear(frames, 2050), 7);
     assert.equal(frameIndexForYear(frames, 1999), 0);
   });
 
@@ -84,10 +84,9 @@ describe("normalizeTimelapseProjectState", () => {
     const state = normalizeTimelapseProjectState({}, frames);
     assert.deepEqual(state, {
       providerId: "eox-s2cloudless",
-      year: 2016,
+      year: 2018,
       secondsPerYear: DEFAULT_SECONDS_PER_YEAR,
       loop: true,
-      collapsed: false,
     });
   });
 
@@ -111,7 +110,6 @@ describe("normalizeTimelapseProjectState", () => {
       year: 2021,
       secondsPerYear: 2,
       loop: false,
-      collapsed: true,
     };
     const state = normalizeTimelapseProjectState(
       JSON.parse(JSON.stringify(original)),

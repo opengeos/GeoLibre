@@ -1986,6 +1986,22 @@
     "labelColor": "Warna label",
     "labelSize": "Ukuran label"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Tahun timelapse",
+    "play": "Putar",
+    "pause": "Jeda",
+    "speed": "Kecepatan",
+    "secondsPerYear": "Detik per tahun",
+    "secondsPerYearSuffix": "dtk/thn",
+    "loop": "Ulangi",
+    "record": "Rekam video",
+    "stopRecording": "Hentikan perekaman",
+    "recording": "Merekam",
+    "recordingFailed": "Perekaman gagal.",
+    "recordingUnsupported": "Perekaman kanvas tidak didukung di browser ini.",
+    "loadingTiles": "Memuat ubin…"
+  },
   "basemaps": {
     "confirmStyleReplace_other": "Beralih ke \"{{name}}\" mengganti seluruh gaya peta dan akan menghapus {{count}} peta dasar bertumpuk yang Anda tambahkan. Lanjutkan?"
   },

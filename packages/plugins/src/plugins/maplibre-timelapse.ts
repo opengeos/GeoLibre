@@ -1,10 +1,11 @@
 /**
  * Timelapse mode — animate through annual satellite imagery basemaps.
  *
- * The plugin adds an on-map control with a year slider, play/pause, speed and
- * loop settings, and a Record button that exports one animation cycle to
- * MP4/WebM. Frames come from a {@link TimelapseProvider} (EOX Sentinel-2
- * cloudless annual mosaics by default; see timelapse-providers.ts).
+ * The plugin opens a draggable, resizable floating panel (the host's
+ * floating-panel card) with a year slider, play/pause, speed and loop
+ * settings, and a Record button that exports one animation cycle to MP4/WebM.
+ * Frames come from a {@link TimelapseProvider} (EOX Sentinel-2 cloudless
+ * annual mosaics by default; see timelapse-providers.ts).
  *
  * Flicker-free playback: all frames are added as raster sources/layers up
  * front, every layer `visibility: visible` with `raster-opacity: 0` except the
@@ -25,9 +26,10 @@ import {
   useAppStore,
   type GeoLibreLayer,
 } from "@geolibre/core";
-import type { IControl, Map as MapLibreMap } from "maplibre-gl";
+import type { Map as MapLibreMap } from "maplibre-gl";
 import type {
   GeoLibreAppAPI,
+  GeoLibreFloatingPanelRegistration,
   GeoLibreMapControlPosition,
   GeoLibrePlugin,
 } from "../types";
@@ -52,6 +54,9 @@ import {
 } from "./timelapse-providers";
 
 export const TIMELAPSE_PLUGIN_ID = "geolibre-timelapse";
+
+/** Floating-panel card id (registered with the host's panel registry). */
+export const TIMELAPSE_PANEL_ID = "geolibre-timelapse-panel";
 
 /** Tags the plugin's own store layer so it can find and prune only its own. */
 export const TIMELAPSE_SOURCE_KIND = "timelapse";
@@ -109,16 +114,15 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * User-facing strings for the control. This package is framework-agnostic and
+ * User-facing strings for the panel. This package is framework-agnostic and
  * cannot call react-i18next's `t()` directly, so the host pushes translated
  * values via {@link setTimelapseLabels} on every language change (the pattern
  * used by `maplibre-graticule` / `maplibre-reverse-geocode`; wired from
  * `TopToolbar.tsx`). Defaults are English.
  */
 export interface TimelapseLabels {
-  /** Control name: the toggle button tooltip and the panel header prefix. */
+  /** Panel title shown in the floating card's title bar. */
   title: string;
-  collapse: string;
   yearSlider: string;
   play: string;
   pause: string;
@@ -139,7 +143,6 @@ export interface TimelapseLabels {
 
 export const DEFAULT_TIMELAPSE_LABELS: TimelapseLabels = {
   title: "Timelapse",
-  collapse: "Collapse",
   yearSlider: "Timelapse year",
   play: "Play",
   pause: "Pause",
@@ -159,11 +162,12 @@ let labels: TimelapseLabels = { ...DEFAULT_TIMELAPSE_LABELS };
 
 /**
  * Replace the user-facing strings (the host calls this with translations on
- * every language change) and push them into the live control.
+ * every language change) and push them into the live panel.
  */
 export function setTimelapseLabels(next: Partial<TimelapseLabels>): void {
   labels = { ...labels, ...next };
   timelapseControl?.refreshLabels();
+  syncPanelRegistration();
 }
 
 /** Shared styling for the panel's labelled (Play/Record) buttons. */
@@ -171,10 +175,6 @@ function stylePillButton(button: HTMLButtonElement): void {
   button.type = "button";
   button.style.cursor = "pointer";
   button.style.whiteSpace = "nowrap";
-  // MapLibre's .maplibregl-ctrl-group button rule fixes buttons at 29px
-  // square (meant for icon buttons); undo that for these labelled buttons.
-  button.style.width = "auto";
-  button.style.height = "auto";
   button.style.padding = "2px 10px";
   button.style.border = "1px solid hsl(var(--border))";
   button.style.borderRadius = "4px";
@@ -233,7 +233,7 @@ function removeTimelapseStoreLayers(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Control
+// Panel
 // ---------------------------------------------------------------------------
 
 interface TimelapseControlOptions {
@@ -244,11 +244,12 @@ interface TimelapseControlOptions {
 }
 
 /**
- * The on-map timelapse control (plain DOM, per the plugin contract — external
- * plugins share no React with the host). All map/store work is guarded so the
- * class is also usable headless in unit tests, where `onAdd` never runs.
+ * The timelapse engine + floating-panel body (plain DOM, per the plugin
+ * contract — external plugins share no React with the host). All map/store
+ * work is guarded so the class is also usable headless in unit tests, where
+ * {@link renderInto} never runs.
  */
-export class TimelapseControl implements IControl {
+export class TimelapseControl {
   readonly provider: TimelapseProvider;
   readonly frames: TimelapseFrame[];
 
@@ -256,7 +257,6 @@ export class TimelapseControl implements IControl {
   private frameIndex = 0;
   private secondsPerYear: number;
   private loop: boolean;
-  private collapsed: boolean;
   private playing = false;
   private recording = false;
   private tilesReady = false;
@@ -264,12 +264,12 @@ export class TimelapseControl implements IControl {
   private playTimer: ReturnType<typeof setTimeout> | null = null;
   private recordAbort: AbortController | null = null;
 
-  private container: HTMLElement | null = null;
-  private panel: HTMLElement | null = null;
-  private toggleButton: HTMLButtonElement | null = null;
   private slider: HTMLInputElement | null = null;
   private playButton: HTMLButtonElement | null = null;
   private yearLabel: HTMLElement | null = null;
+  private speedText: Text | null = null;
+  private speedSelect: HTMLSelectElement | null = null;
+  private loopText: Text | null = null;
   private recordButton: HTMLButtonElement | null = null;
   private recordStatus: HTMLElement | null = null;
   private attributionLine: HTMLElement | null = null;
@@ -282,41 +282,7 @@ export class TimelapseControl implements IControl {
     const initial = options.initial;
     this.secondsPerYear = clampSecondsPerYear(initial?.secondsPerYear);
     this.loop = initial?.loop ?? true;
-    this.collapsed = initial?.collapsed ?? false;
     this.frameIndex = frameIndexForYear(this.frames, initial?.year);
-  }
-
-  // --- IControl --------------------------------------------------------------
-
-  onAdd(map: MapLibreMap): HTMLElement {
-    this.map = map;
-    const container = document.createElement("div");
-    container.className =
-      "maplibregl-ctrl maplibregl-ctrl-group geolibre-timelapse-ctrl";
-    container.appendChild(this.buildToggleButton());
-    container.appendChild(this.buildPanel());
-    this.container = container;
-    this.mountBadge();
-    this.updateUi();
-    this.setCollapsed(this.collapsed);
-    return container;
-  }
-
-  onRemove(): void {
-    this.pause();
-    this.recordAbort?.abort();
-    this.badge?.remove();
-    this.badge = null;
-    this.container?.parentNode?.removeChild(this.container);
-    this.container = null;
-    this.panel = null;
-    this.toggleButton = null;
-    this.slider = null;
-    this.playButton = null;
-    this.yearLabel = null;
-    this.recordButton = null;
-    this.recordStatus = null;
-    this.attributionLine = null;
   }
 
   // --- Public state ------------------------------------------------------------
@@ -331,7 +297,6 @@ export class TimelapseControl implements IControl {
       year: this.frames[this.frameIndex]?.year ?? 0,
       secondsPerYear: this.secondsPerYear,
       loop: this.loop,
-      collapsed: this.collapsed,
     };
   }
 
@@ -339,8 +304,7 @@ export class TimelapseControl implements IControl {
     this.secondsPerYear = clampSecondsPerYear(state.secondsPerYear);
     this.loop = state.loop;
     this.setFrameIndex(frameIndexForYear(this.frames, state.year));
-    this.setCollapsed(state.collapsed);
-    this.updateUi();
+    this.refreshLabels();
   }
 
   getFrameIndex(): number {
@@ -353,14 +317,6 @@ export class TimelapseControl implements IControl {
 
   isRecording(): boolean {
     return this.recording;
-  }
-
-  expand(): void {
-    this.setCollapsed(false);
-  }
-
-  collapse(): void {
-    this.setCollapsed(true);
   }
 
   // --- Native frame stack -------------------------------------------------------
@@ -553,6 +509,13 @@ export class TimelapseControl implements IControl {
     this.recordAbort?.abort();
   }
 
+  /** Release DOM owned outside the panel container (the on-map year badge). */
+  dispose(): void {
+    this.stopForTeardown();
+    this.badge?.remove();
+    this.badge = null;
+  }
+
   private scheduleTick(): void {
     if (this.playTimer !== null) clearTimeout(this.playTimer);
     this.playTimer = setTimeout(() => {
@@ -661,54 +624,20 @@ export class TimelapseControl implements IControl {
 
   // --- DOM ------------------------------------------------------------------------
 
-  private buildToggleButton(): HTMLElement {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.title = "Timelapse";
-    button.setAttribute("aria-label", "Timelapse");
-    button.style.display = "flex";
-    button.style.alignItems = "center";
-    button.style.justifyContent = "center";
-    button.innerHTML = TIMELAPSE_ICON_SVG;
-    button.addEventListener("click", () => this.setCollapsed(!this.collapsed));
-    this.toggleButton = button;
-    return button;
-  }
-
-  private buildPanel(): HTMLElement {
-    const panel = document.createElement("div");
-    panel.style.display = "none";
-    panel.style.flexDirection = "column";
-    panel.style.gap = "8px";
-    panel.style.padding = "10px 12px";
-    panel.style.width = "280px";
-    panel.style.fontSize = "12px";
-    panel.style.background = "hsl(var(--background))";
-    panel.style.color = "hsl(var(--foreground))";
-    panel.style.borderRadius = "6px";
-
-    // Header: title + collapse.
-    const header = document.createElement("div");
-    header.style.display = "flex";
-    header.style.alignItems = "center";
-    header.style.justifyContent = "space-between";
-    const title = document.createElement("div");
-    title.style.fontWeight = "600";
-    title.textContent = `Timelapse — ${this.provider.name}`;
-    const collapseButton = document.createElement("button");
-    collapseButton.type = "button";
-    collapseButton.textContent = "–";
-    collapseButton.title = "Collapse";
-    collapseButton.setAttribute("aria-label", "Collapse timelapse panel");
-    collapseButton.style.border = "none";
-    collapseButton.style.background = "transparent";
-    collapseButton.style.color = "inherit";
-    collapseButton.style.cursor = "pointer";
-    collapseButton.style.fontSize = "14px";
-    collapseButton.addEventListener("click", () => this.setCollapsed(true));
-    header.appendChild(title);
-    header.appendChild(collapseButton);
-    panel.appendChild(header);
+  /**
+   * Fill the floating-panel card body. Called by the host's `render` contract
+   * each time the panel opens; returns the cleanup the host runs on close.
+   */
+  renderInto(container: HTMLElement): () => void {
+    container.innerHTML = "";
+    // Tag the panel so index.css can theme its native form controls (the
+    // select's option popup cannot be styled inline).
+    container.classList.add("geolibre-timelapse-panel");
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.gap = "8px";
+    container.style.padding = "10px 12px";
+    container.style.fontSize = "12px";
 
     // Year slider with range labels.
     const sliderRow = document.createElement("div");
@@ -726,7 +655,6 @@ export class TimelapseControl implements IControl {
     slider.step = "1";
     slider.value = String(this.frameIndex);
     slider.style.flex = "1";
-    slider.setAttribute("aria-label", "Timelapse year");
     slider.addEventListener("input", () => {
       // Read the value first: pause() runs updateUi(), which writes the
       // current frame back into the slider and would erase the user's drag.
@@ -739,7 +667,7 @@ export class TimelapseControl implements IControl {
     sliderRow.appendChild(firstLabel);
     sliderRow.appendChild(slider);
     sliderRow.appendChild(lastLabel);
-    panel.appendChild(sliderRow);
+    container.appendChild(sliderRow);
 
     // Transport: play/pause + current year.
     const transport = document.createElement("div");
@@ -761,7 +689,7 @@ export class TimelapseControl implements IControl {
     this.yearLabel = yearLabel;
     transport.appendChild(playButton);
     transport.appendChild(yearLabel);
-    panel.appendChild(transport);
+    container.appendChild(transport);
 
     // Speed + loop.
     const optionsRow = document.createElement("div");
@@ -772,9 +700,10 @@ export class TimelapseControl implements IControl {
     speedLabel.style.display = "flex";
     speedLabel.style.alignItems = "center";
     speedLabel.style.gap = "4px";
-    speedLabel.append("Speed");
+    const speedText = document.createTextNode(labels.speed);
+    speedLabel.appendChild(speedText);
+    this.speedText = speedText;
     const speedSelect = document.createElement("select");
-    speedSelect.setAttribute("aria-label", "Seconds per year");
     // Inline (not just the index.css block, which themes the option popup):
     // rules from other control stylesheets can outrank a class selector here.
     speedSelect.style.background = "hsl(var(--background))";
@@ -793,13 +722,13 @@ export class TimelapseControl implements IControl {
     for (const step of TIMELAPSE_SPEED_STEPS) {
       const option = document.createElement("option");
       option.value = String(step);
-      option.textContent = `${step} s/yr`;
       option.selected = step === this.secondsPerYear;
       speedSelect.appendChild(option);
     }
     speedSelect.addEventListener("change", () =>
       this.setSecondsPerYear(Number(speedSelect.value)),
     );
+    this.speedSelect = speedSelect;
     speedLabel.appendChild(speedSelect);
     const loopLabel = document.createElement("label");
     loopLabel.style.display = "flex";
@@ -813,10 +742,12 @@ export class TimelapseControl implements IControl {
       this.setLoop(loopCheckbox.checked),
     );
     loopLabel.appendChild(loopCheckbox);
-    loopLabel.append("Loop");
+    const loopText = document.createTextNode(labels.loop);
+    loopLabel.appendChild(loopText);
+    this.loopText = loopText;
     optionsRow.appendChild(speedLabel);
     optionsRow.appendChild(loopLabel);
-    panel.appendChild(optionsRow);
+    container.appendChild(optionsRow);
 
     // Record.
     const recordRow = document.createElement("div");
@@ -834,7 +765,7 @@ export class TimelapseControl implements IControl {
     this.recordStatus = recordStatus;
     recordRow.appendChild(recordButton);
     recordRow.appendChild(recordStatus);
-    panel.appendChild(recordRow);
+    container.appendChild(recordRow);
 
     // Attribution (per-frame, year-specific — updated in updateUi).
     const attribution = document.createElement("div");
@@ -842,20 +773,34 @@ export class TimelapseControl implements IControl {
     attribution.style.opacity = "0.7";
     attribution.style.lineHeight = "1.4";
     this.attributionLine = attribution;
-    panel.appendChild(attribution);
+    container.appendChild(attribution);
 
-    this.panel = panel;
-    return panel;
+    this.mountBadge();
+    this.refreshLabels();
+
+    return () => {
+      // The card body is discarded on close; only the on-map badge outlives it.
+      this.slider = null;
+      this.playButton = null;
+      this.yearLabel = null;
+      this.speedText = null;
+      this.speedSelect = null;
+      this.loopText = null;
+      this.recordButton = null;
+      this.recordStatus = null;
+      this.attributionLine = null;
+    };
   }
 
   /** Big on-map year overlay (screen only; recordings burn their own copy). */
   private mountBadge(): void {
+    if (this.badge) return;
     const container = this.map?.getContainer?.();
     if (!container) return;
     const badge = document.createElement("div");
     badge.className = "geolibre-timelapse-badge";
     badge.style.position = "absolute";
-    // Clear MapLibre's bottom attribution bar and the control's own panel.
+    // Clear MapLibre's bottom attribution bar.
     badge.style.bottom = "72px";
     badge.style.left = "50%";
     badge.style.transform = "translateX(-50%)";
@@ -869,12 +814,19 @@ export class TimelapseControl implements IControl {
     this.badge = badge;
   }
 
-  private setCollapsed(collapsed: boolean): void {
-    this.collapsed = collapsed;
-    if (this.panel) this.panel.style.display = collapsed ? "none" : "flex";
-    if (this.toggleButton) {
-      this.toggleButton.style.display = collapsed ? "flex" : "none";
+  /** Re-apply the current {@link labels} to the static panel strings. */
+  refreshLabels(): void {
+    if (this.slider) {
+      this.slider.setAttribute("aria-label", labels.yearSlider);
     }
+    if (this.speedText) this.speedText.textContent = labels.speed;
+    if (this.speedSelect) {
+      this.speedSelect.setAttribute("aria-label", labels.secondsPerYear);
+      for (const option of this.speedSelect.options) {
+        option.textContent = `${option.value} ${labels.secondsPerYearSuffix}`;
+      }
+    }
+    if (this.loopText) this.loopText.textContent = labels.loop;
     this.updateUi();
   }
 
@@ -882,20 +834,19 @@ export class TimelapseControl implements IControl {
     const frame = this.frames[this.frameIndex];
     if (this.slider) this.slider.value = String(this.frameIndex);
     if (this.yearLabel) this.yearLabel.textContent = frame?.label ?? "";
-    if (this.badge) {
-      this.badge.textContent = frame?.label ?? "";
-      this.badge.style.display = this.collapsed ? "none" : "block";
-    }
+    if (this.badge) this.badge.textContent = frame?.label ?? "";
     if (this.playButton) {
-      this.playButton.textContent = this.playing ? "⏸ Pause" : "▶ Play";
+      this.playButton.textContent = this.playing
+        ? `⏸ ${labels.pause}`
+        : `▶ ${labels.play}`;
       this.playButton.disabled = this.recording || this.frames.length < 2;
       this.playButton.title =
-        !this.tilesReady && !this.playing ? "Loading tiles…" : "";
+        !this.tilesReady && !this.playing ? labels.loadingTiles : "";
     }
     if (this.recordButton) {
       this.recordButton.textContent = this.recording
-        ? "■ Stop recording"
-        : "● Record video";
+        ? `■ ${labels.stopRecording}`
+        : `● ${labels.record}`;
     }
     if (this.slider) this.slider.disabled = this.recording;
     if (this.attributionLine && frame) {
@@ -1154,6 +1105,31 @@ let timelapseControl: TimelapseControl | null = null;
 let savedState: TimelapseProjectState | null = null;
 let unsubscribeStore: (() => void) | null = null;
 let unsubscribeBasemap: (() => void) | null = null;
+let unregisterPanel: (() => void) | null = null;
+let appRef: GeoLibreAppAPI | null = null;
+
+/**
+ * The floating-panel registration. A single mutable object (the Mapillary
+ * pattern): re-registering the same identity updates its title/position
+ * without rebuilding an open card's body.
+ */
+const floatingPanelRegistration: GeoLibreFloatingPanelRegistration = {
+  id: TIMELAPSE_PANEL_ID,
+  title: DEFAULT_TIMELAPSE_LABELS.title,
+  defaultWidth: 320,
+  position: timelapsePosition,
+  render: (container) => timelapseControl?.renderInto(container),
+};
+
+/** Push the current labels/position into the registration (and the host). */
+function syncPanelRegistration(): void {
+  floatingPanelRegistration.title = labels.title;
+  floatingPanelRegistration.position = timelapsePosition;
+  if (unregisterPanel && appRef) {
+    unregisterPanel =
+      appRef.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
+  }
+}
 
 /** The live control, for tests and e2e hooks. */
 export function getActiveTimelapseControl(): TimelapseControl | null {
@@ -1183,14 +1159,13 @@ function activateWithFrames(
   frames: TimelapseFrame[],
 ): boolean | void {
   if (frames.length === 0) return false;
+  appRef = app;
   const control = new TimelapseControl({
     map: app.getMap?.() ?? null,
     provider,
     frames,
     initial: savedState,
   });
-  const added = app.addMapControl(control, timelapsePosition);
-  if (!added) return false;
   timelapseControl = control;
   control.ensureStack();
   unsubscribeStore = subscribeStoreLayer(control);
@@ -1204,15 +1179,17 @@ function activateWithFrames(
     if (map.isStyleLoaded?.()) rebuild();
     else map.once("style.load", rebuild);
   });
-  if (savedState?.collapsed !== true) {
-    setTimeout(() => timelapseControl?.expand(), 0);
-  }
+  floatingPanelRegistration.title = labels.title;
+  floatingPanelRegistration.position = timelapsePosition;
+  unregisterPanel =
+    app.registerFloatingPanel?.(floatingPanelRegistration) ?? null;
+  app.openFloatingPanel?.(TIMELAPSE_PANEL_ID);
 }
 
 export const maplibreTimelapsePlugin: GeoLibrePlugin = {
   id: TIMELAPSE_PLUGIN_ID,
   name: "Timelapse",
-  version: "0.1.0",
+  version: "0.2.0",
   activate: (app: GeoLibreAppAPI) => {
     const provider = getTimelapseProvider(savedState?.providerId);
     const frames = provider.listFrames();
@@ -1221,45 +1198,30 @@ export const maplibreTimelapsePlugin: GeoLibrePlugin = {
       activateWithFrames(app, provider, resolved),
     );
   },
-  deactivate: (app: GeoLibreAppAPI) => {
+  deactivate: (_app: GeoLibreAppAPI) => {
     unsubscribeBasemap?.();
     unsubscribeBasemap = null;
     unsubscribeStore?.();
     unsubscribeStore = null;
+    unregisterPanel?.();
+    unregisterPanel = null;
+    appRef = null;
     if (!timelapseControl) return;
     savedState = timelapseControl.getState();
-    timelapseControl.stopForTeardown();
-    app.removeMapControl(timelapseControl);
+    timelapseControl.dispose();
     timelapseControl.removeStack();
     removeTimelapseStoreLayers();
     timelapseControl = null;
   },
+  // The floating card is freely draggable; the position submenu in the
+  // Plugins menu just picks which corner it opens at.
   getMapControlPosition: () => timelapsePosition,
   setMapControlPosition: (
-    app: GeoLibreAppAPI,
+    _app: GeoLibreAppAPI,
     position: GeoLibreMapControlPosition,
   ) => {
     timelapsePosition = position;
-    if (!timelapseControl) return;
-    app.removeMapControl(timelapseControl);
-    const added = app.addMapControl(timelapseControl, timelapsePosition);
-    if (!added) {
-      // Full teardown, mirroring deactivate(): without it the native frame
-      // stack, the mirrored store layer, and the store/basemap subscriptions
-      // would outlive the abandoned control — and deactivate() early-returns
-      // on a null control, so the leak would be unrecoverable from the UI.
-      unsubscribeBasemap?.();
-      unsubscribeBasemap = null;
-      unsubscribeStore?.();
-      unsubscribeStore = null;
-      savedState = timelapseControl.getState();
-      timelapseControl.stopForTeardown();
-      timelapseControl.removeStack();
-      removeTimelapseStoreLayers();
-      timelapseControl = null;
-      return false;
-    }
-    setTimeout(() => timelapseControl?.expand(), 0);
+    syncPanelRegistration();
   },
   getProjectState: () =>
     timelapseControl?.getState() ?? savedState ?? undefined,
@@ -1291,5 +1253,3 @@ function syncFramesForNormalization(state: unknown): TimelapseFrame[] {
   const frames = provider.listFrames();
   return Array.isArray(frames) ? frames : [];
 }
-
-const TIMELAPSE_ICON_SVG = `<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><circle cx="9" cy="9" r="7"/><polyline points="9 5 9 9 12 11"/><path d="M2 9a7 7 0 0 0 1 3.6" stroke-dasharray="1.5 2"/></svg>`;

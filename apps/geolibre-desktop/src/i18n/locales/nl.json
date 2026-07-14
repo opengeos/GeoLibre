@@ -2026,6 +2026,22 @@
     "labelColor": "Labelkleur",
     "labelSize": "Labelgrootte"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Timelapse-jaar",
+    "play": "Afspelen",
+    "pause": "Pauzeren",
+    "speed": "Snelheid",
+    "secondsPerYear": "Seconden per jaar",
+    "secondsPerYearSuffix": "s/jaar",
+    "loop": "Herhalen",
+    "record": "Video opnemen",
+    "stopRecording": "Opname stoppen",
+    "recording": "Opnemen",
+    "recordingFailed": "Opname mislukt.",
+    "recordingUnsupported": "Canvasopname wordt niet ondersteund in deze browser.",
+    "loadingTiles": "Tegels laden…"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Overschakelen naar \"{{name}}\" vervangt de volledige kaartstijl en verwijdert de gestapelde basiskaart die u hebt toegevoegd. Doorgaan?",
     "confirmStyleReplace_other": "Overschakelen naar \"{{name}}\" vervangt de volledige kaartstijl en verwijdert de {{count}} gestapelde basiskaarten die u hebt toegevoegd. Doorgaan?"

@@ -1986,6 +1986,22 @@
     "labelColor": "ラベルの色",
     "labelSize": "ラベルサイズ"
   },
+  "timelapse": {
+    "title": "タイムラプス",
+    "yearSlider": "タイムラプスの年",
+    "play": "再生",
+    "pause": "一時停止",
+    "speed": "速度",
+    "secondsPerYear": "1年あたりの秒数",
+    "secondsPerYearSuffix": "秒/年",
+    "loop": "ループ",
+    "record": "動画を録画",
+    "stopRecording": "録画を停止",
+    "recording": "録画中",
+    "recordingFailed": "録画に失敗しました。",
+    "recordingUnsupported": "このブラウザはキャンバス録画に対応していません。",
+    "loadingTiles": "タイルを読み込み中…"
+  },
   "basemaps": {
     "confirmStyleReplace_other": "「{{name}}」に切り替えると、マップスタイル全体が置き換えられ、追加した{{count}}件の重ねたベースマップが削除されます。続行しますか?"
   },

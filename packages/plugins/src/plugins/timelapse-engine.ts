@@ -66,7 +66,6 @@ export interface TimelapseProjectState {
   year: number;
   secondsPerYear: number;
   loop: boolean;
-  collapsed: boolean;
 }
 
 /**
@@ -91,7 +90,5 @@ export function normalizeTimelapseProjectState(
     year: frames[frameIndex]?.year ?? 0,
     secondsPerYear: clampSecondsPerYear(candidate.secondsPerYear),
     loop: typeof candidate.loop === "boolean" ? candidate.loop : true,
-    collapsed:
-      typeof candidate.collapsed === "boolean" ? candidate.collapsed : false,
   };
 }

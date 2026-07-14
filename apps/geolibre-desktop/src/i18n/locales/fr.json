@@ -2026,6 +2026,22 @@
     "labelColor": "Couleur des étiquettes",
     "labelSize": "Taille des étiquettes"
   },
+  "timelapse": {
+    "title": "Timelapse",
+    "yearSlider": "Année du timelapse",
+    "play": "Lecture",
+    "pause": "Pause",
+    "speed": "Vitesse",
+    "secondsPerYear": "Secondes par année",
+    "secondsPerYearSuffix": "s/an",
+    "loop": "Boucle",
+    "record": "Enregistrer une vidéo",
+    "stopRecording": "Arrêter l'enregistrement",
+    "recording": "Enregistrement",
+    "recordingFailed": "Échec de l'enregistrement.",
+    "recordingUnsupported": "L'enregistrement du canevas n'est pas pris en charge par ce navigateur.",
+    "loadingTiles": "Chargement des tuiles…"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Passer à « {{name}} » remplace tout le style de la carte et supprimera le fond de carte superposé que vous avez ajouté. Continuer ?",
     "confirmStyleReplace_other": "Passer à « {{name}} » remplace tout le style de la carte et supprimera les {{count}} fonds de carte superposés que vous avez ajoutés. Continuer ?"

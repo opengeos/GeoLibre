@@ -2026,6 +2026,22 @@
     "labelColor": "Beschriftungsfarbe",
     "labelSize": "Beschriftungsgröße"
   },
+  "timelapse": {
+    "title": "Zeitraffer",
+    "yearSlider": "Zeitraffer-Jahr",
+    "play": "Abspielen",
+    "pause": "Pause",
+    "speed": "Geschwindigkeit",
+    "secondsPerYear": "Sekunden pro Jahr",
+    "secondsPerYearSuffix": "s/Jahr",
+    "loop": "Schleife",
+    "record": "Video aufnehmen",
+    "stopRecording": "Aufnahme stoppen",
+    "recording": "Aufnahme läuft",
+    "recordingFailed": "Aufnahme fehlgeschlagen.",
+    "recordingUnsupported": "Canvas-Aufnahme wird in diesem Browser nicht unterstützt.",
+    "loadingTiles": "Kacheln werden geladen…"
+  },
   "basemaps": {
     "confirmStyleReplace_one": "Der Wechsel zu „{{name}}“ ersetzt den gesamten Kartenstil und entfernt die von Ihnen hinzugefügte gestapelte Basiskarte. Fortfahren?",
     "confirmStyleReplace_other": "Der Wechsel zu „{{name}}“ ersetzt den gesamten Kartenstil und entfernt die {{count}} von Ihnen hinzugefügten gestapelten Basiskarten. Fortfahren?"

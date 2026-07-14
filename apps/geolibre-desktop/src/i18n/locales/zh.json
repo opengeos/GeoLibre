@@ -1986,6 +1986,22 @@
     "labelColor": "标签颜色",
     "labelSize": "标签大小"
   },
+  "timelapse": {
+    "title": "延时影像",
+    "yearSlider": "延时年份",
+    "play": "播放",
+    "pause": "暂停",
+    "speed": "速度",
+    "secondsPerYear": "每年秒数",
+    "secondsPerYearSuffix": "秒/年",
+    "loop": "循环",
+    "record": "录制视频",
+    "stopRecording": "停止录制",
+    "recording": "正在录制",
+    "recordingFailed": "录制失败。",
+    "recordingUnsupported": "此浏览器不支持画布录制。",
+    "loadingTiles": "正在加载瓦片…"
+  },
   "basemaps": {
     "confirmStyleReplace_other": "切换到“{{name}}”将替换整个地图样式，并移除您添加的 {{count}} 个叠加底图。是否继续？"
   },
