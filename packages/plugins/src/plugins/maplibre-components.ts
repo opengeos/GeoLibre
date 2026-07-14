@@ -2994,6 +2994,12 @@ export function subscribeSwipeCogChanges(listener: () => void): () => void {
  * Snapshots the store's CogLayerControl COG rasters for the Layer Swipe
  * provider, in store (paint) order.
  *
+ * Scope: only `cog-url` rasters (Vantor / STAC, rendered by the shared
+ * CogLayerControl) are surfaced. Locally-added GeoTIFFs (`geotiff-url`,
+ * rendered on the separate geoTiffRasterOverlay) are also deck.gl custom layers
+ * with the same #1240 root cause, but they use a different renderer and are out
+ * of scope here; extend this and the mirror to cover them in a follow-up.
+ *
  * @returns One snapshot per "cog-url" store layer with a URL source.
  */
 export function getSwipeCogRasters(): SwipeCogRasterSnapshot[] {
@@ -3047,6 +3053,21 @@ export function setCogRasterMainVisibility(
   opacity: number
 ): void {
   cogRasterControl?.setLayerVisibility(id, visible, opacity);
+}
+
+/**
+ * Reads a COG raster's current visibility on the main map from the control
+ * itself, so Layer Swipe can compare against the live state rather than its own
+ * cached intent. The control's visibility is also driven independently by the
+ * store-diff subscription (a Layers-panel visibility toggle), so a cached value
+ * can drift; reading live avoids leaving a right-only raster shown after such a
+ * toggle. Defaults to visible when the control or layer is absent.
+ *
+ * @param id - The raster layer id.
+ * @returns Whether the raster currently renders on the main map.
+ */
+export function getCogRasterMainVisibility(id: string): boolean {
+  return cogRasterControl?.getLayerVisibility(id) ?? true;
 }
 
 /**

@@ -13,6 +13,7 @@ import type {
 } from "../types";
 import { INTERNAL_HELPER_LAYER_PATTERNS } from "./internal-layers";
 import {
+  getCogRasterMainVisibility,
   getSwipeCogRasters,
   setCogRasterMainVisibility,
   subscribeSwipeCogChanges,
@@ -115,18 +116,24 @@ function reconcileCogSwipe(): void {
   }
 
   // Main map: hide right-only rasters (shown on the comparison side instead);
-  // keep every other visible raster on the main map. Hidden rasters are left
-  // untouched. Only toggle when the target differs from the last forced value.
+  // keep every other visible raster on the main map. Rasters the user hid are
+  // left untouched (their store `visible` is false). Compare against the
+  // control's LIVE visibility, not a cached value: the store-diff subscription
+  // in maplibre-components also toggles the control (a Layers-panel visibility
+  // flip), so a cached target can drift and leave a right-only raster shown.
   for (const raster of rasters) {
-    if (!raster.visible) continue;
+    if (!raster.visible) {
+      cogMainForced.delete(raster.id);
+      continue;
+    }
     const wantVisible = sideFor(raster) !== "right";
-    if (cogMainForced.get(raster.id)?.visible !== wantVisible) {
-      cogMainForced.set(raster.id, {
-        visible: wantVisible,
-        opacity: raster.opacity,
-      });
+    if (getCogRasterMainVisibility(raster.id) !== wantVisible) {
       setCogRasterMainVisibility(raster.id, wantVisible, raster.opacity);
     }
+    cogMainForced.set(raster.id, {
+      visible: wantVisible,
+      opacity: raster.opacity,
+    });
   }
 }
 

@@ -27,6 +27,11 @@ export class SwipeCogMirror {
   // The last-rendered set, so redundant syncs (e.g. on slider drag) are skipped
   // and a stale in-flight sync can detect it was superseded.
   private fingerprint = "";
+  // Rasters are added sequentially (configure + addLayer share the control's
+  // form state, so concurrent adds would race). Cap each add so one slow/hung
+  // COG server does not stall the rest of the mirror; a late resolve still adds
+  // the layer, and the next sync reconciles it.
+  private static readonly ADD_TIMEOUT_MS = 20_000;
 
   constructor(map: MapLibreMap) {
     this.map = map;
@@ -89,11 +94,27 @@ export class SwipeCogMirror {
       // while awaiting the previous addLayer.
       if (this.destroyed || this.fingerprint !== fingerprint) return;
       try {
-        await mirrorAddCogLayer(control, raster);
+        await this.addWithTimeout(control, raster);
       } catch (error) {
         console.debug("[GeoLibre] swipe COG mirror: addLayer", error);
       }
     }
+  }
+
+  private addWithTimeout(
+    control: CogLayerControl,
+    raster: SwipeCogRasterSnapshot,
+  ): Promise<void> {
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<void>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`mirror addLayer timed out: ${raster.id}`)),
+        SwipeCogMirror.ADD_TIMEOUT_MS,
+      );
+    });
+    return Promise.race([mirrorAddCogLayer(control, raster), timeout]).finally(
+      () => clearTimeout(timer),
+    );
   }
 
   /** Removes the mirror control from the comparison map. */
