@@ -2971,7 +2971,7 @@ function notifySwipeCogChange(): void {
  * guards.
  */
 function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
-  const parts: string[] = [];
+  const parts: unknown[][] = [];
   for (const layer of layers) {
     if (!isCogRasterControlLayer(layer)) continue;
     const source = layer.source as {
@@ -2982,22 +2982,22 @@ function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
       rescaleMax?: unknown;
       nodata?: unknown;
     };
-    parts.push(
-      [
-        layer.id,
-        layer.name,
-        layer.visible,
-        layer.opacity,
-        source.url,
-        source.bands,
-        source.colormap,
-        source.rescaleMin,
-        source.rescaleMax,
-        source.nodata,
-      ].join("|"),
-    );
+    // JSON.stringify (not a delimiter join) so a "|"/";" in a layer name or URL
+    // cannot make two genuinely-different states collide and skip a refresh.
+    parts.push([
+      layer.id,
+      layer.name,
+      layer.visible,
+      layer.opacity,
+      source.url,
+      source.bands,
+      source.colormap,
+      source.rescaleMin,
+      source.rescaleMax,
+      source.nodata,
+    ]);
   }
-  return parts.join(";");
+  return JSON.stringify(parts);
 }
 
 /**
@@ -3162,20 +3162,13 @@ export async function mirrorAddCogLayer(
     nodata: snapshot.nodata,
     opacity: snapshot.opacity,
   });
-  // addLayer generates the id internally and reports it via 'layeradd'; capture
-  // the one matching this URL so the caller can target it for later opacity
-  // updates / removal.
-  let layerId: string | null = null;
-  const handler: CogLayerEventHandler = (event) => {
-    if (event.url === snapshot.url && event.layerId) layerId = event.layerId;
-  };
-  control.on("layeradd", handler);
-  try {
-    await control.addLayer(snapshot.url);
-  } finally {
-    control.off("layeradd", handler);
-  }
-  return layerId;
+  // addLayer generates the id internally; diff the control's layer-id set
+  // around the call to find it, rather than relying on 'layeradd' firing before
+  // the promise settles. Deterministic and independent of event/promise
+  // ordering.
+  const before = new Set(control.getLayerIds());
+  await control.addLayer(snapshot.url);
+  return control.getLayerIds().find((id) => !before.has(id)) ?? null;
 }
 
 /**
