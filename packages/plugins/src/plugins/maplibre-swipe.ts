@@ -98,6 +98,15 @@ function reconcileCogSwipe(): void {
   }
 
   const rasters = getSwipeCogRasters();
+
+  // Drop bookkeeping for rasters removed from the store while swiping (the loop
+  // below only visits still-present rasters, so their entries would otherwise
+  // linger until teardown).
+  const rasterIds = new Set(rasters.map((raster) => raster.id));
+  for (const id of [...cogMainForced.keys()]) {
+    if (!rasterIds.has(id)) cogMainForced.delete(id);
+  }
+
   const sideFor = (raster: SwipeCogRasterSnapshot): SwipeLayerSide =>
     sides.get(raster.id) ?? "none";
 

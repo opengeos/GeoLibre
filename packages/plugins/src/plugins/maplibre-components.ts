@@ -2965,6 +2965,42 @@ function notifySwipeCogChange(): void {
 }
 
 /**
+ * A lightweight fingerprint of the store's COG rasters (id/name/visibility/
+ * opacity/visualization), so the swipe subscription can skip notifying when an
+ * unrelated layer changed. Cheaper than the refreshLayers()/reconcile pass it
+ * guards.
+ */
+function swipeCogFingerprint(layers: GeoLibreLayer[]): string {
+  const parts: string[] = [];
+  for (const layer of layers) {
+    if (!isCogRasterControlLayer(layer)) continue;
+    const source = layer.source as {
+      url?: unknown;
+      bands?: unknown;
+      colormap?: unknown;
+      rescaleMin?: unknown;
+      rescaleMax?: unknown;
+      nodata?: unknown;
+    };
+    parts.push(
+      [
+        layer.id,
+        layer.name,
+        layer.visible,
+        layer.opacity,
+        source.url,
+        source.bands,
+        source.colormap,
+        source.rescaleMin,
+        source.rescaleMax,
+        source.nodata,
+      ].join("|"),
+    );
+  }
+  return parts.join(";");
+}
+
+/**
  * Subscribes to COG raster set/state changes (add/remove/visibility/opacity),
  * so the Layer Swipe plugin can keep its panel list and comparison-map mirror
  * in sync while a swipe is active.
@@ -2979,7 +3015,16 @@ export function subscribeSwipeCogChanges(listener: () => void): () => void {
   // diffing here. Swipe's own main-map hide goes through the control directly
   // (setCogRasterMainVisibility), not the store, so it cannot loop back.
   swipeCogStoreUnsubscribe ??= useAppStore.subscribe((state, previous) => {
-    if (state.layers !== previous.layers) notifySwipeCogChange();
+    // Cheap reference gate first; then only notify when the COG-raster subset
+    // actually changed, so unrelated layer edits during a swipe don't trigger a
+    // needless refreshLayers()/reconcile pass. Swipe's own main-map hide goes
+    // through the control directly, not the store, so it cannot loop back.
+    if (state.layers === previous.layers) return;
+    if (
+      swipeCogFingerprint(state.layers) !== swipeCogFingerprint(previous.layers)
+    ) {
+      notifySwipeCogChange();
+    }
   });
   return () => {
     swipeCogChangeListeners.delete(listener);
