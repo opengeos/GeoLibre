@@ -633,9 +633,23 @@ export function ProcessingDialog({
           : null,
       );
     };
+    // Coalesce the flurry of `resize` events during a live OS window-resize drag
+    // into one clamp per frame (matching the rAF pattern used by the pointer
+    // drag/resize handlers), so the tool browser doesn't re-render every tick.
+    let raf = 0;
+    const onResize = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        clampToViewport();
+      });
+    };
     clampToViewport();
-    window.addEventListener("resize", clampToViewport);
-    return () => window.removeEventListener("resize", clampToViewport);
+    window.addEventListener("resize", onResize);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
   }, [open]);
 
   // The non-modal panel no longer gets Radix's focus management, so move focus
@@ -1414,7 +1428,7 @@ export function ProcessingDialog({
       ref={panelRef}
       role="dialog"
       tabIndex={-1}
-      aria-label={t("processing.whitebox.toolbox")}
+      aria-labelledby="whitebox-toolbox-title"
       aria-modal={false}
       style={{
         // Inline width/height (once resized) override the responsive w-/h- classes.
@@ -1444,7 +1458,10 @@ export function ProcessingDialog({
             aria-hidden="true"
           />
           <div className="min-w-0">
-            <h2 className="text-lg font-semibold leading-none tracking-tight">
+            <h2
+              id="whitebox-toolbox-title"
+              className="text-lg font-semibold leading-none tracking-tight"
+            >
               {t("processing.whitebox.toolbox")}
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
