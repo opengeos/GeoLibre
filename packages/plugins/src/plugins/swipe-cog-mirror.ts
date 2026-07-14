@@ -4,8 +4,32 @@ import {
   clearMirrorCogLayers,
   createSwipeCogMirrorControl,
   mirrorAddCogLayer,
+  mirrorRemoveCogLayer,
+  mirrorSetCogOpacity,
   type SwipeCogRasterSnapshot,
 } from "./maplibre-components";
+
+// The non-opacity visualization of a mirrored raster; a change here needs a
+// reload (re-add), whereas an opacity-only change is applied in place.
+function structuralFingerprint(raster: SwipeCogRasterSnapshot): string {
+  return JSON.stringify([
+    raster.url,
+    raster.bands,
+    raster.colormap,
+    raster.rescaleMin,
+    raster.rescaleMax,
+    raster.nodata,
+  ]);
+}
+
+interface MirroredEntry {
+  /** The mirror control's own layer id (for opacity/remove). */
+  mirrorId: string;
+  /** Last-applied structural fingerprint (reload trigger). */
+  structFp: string;
+  /** Last-applied opacity. */
+  opacity: number;
+}
 
 /**
  * Renders a copy of GeoLibre's deck.gl COG rasters onto the Layer Swipe
@@ -17,16 +41,20 @@ import {
  * The main map keeps rendering its rasters through the normal CogLayerControl;
  * the swipe provider hides right-only rasters there. This mirror is an
  * independent, hidden CogLayerControl bound to the comparison map, so it never
- * touches the main deck overlay or the app store.
+ * touches the main deck overlay or the app store. It diffs per raster id so an
+ * opacity nudge (or an edit to one of several mirrored rasters) does not tear
+ * down and reload the others.
  */
 export class SwipeCogMirror {
   private map: MapLibreMap;
   private control: CogLayerControl | null = null;
   private controlPromise: Promise<CogLayerControl | null> | null = null;
   private destroyed = false;
-  // The last-rendered set, so redundant syncs (e.g. on slider drag) are skipped
-  // and a stale in-flight sync can detect it was superseded.
-  private fingerprint = "";
+  // The mirrored rasters, keyed by store raster id.
+  private applied = new Map<string, MirroredEntry>();
+  // Serialises overlapping sync() calls: adds share the control's form state, so
+  // two syncs must not interleave their configure+addLayer.
+  private syncChain: Promise<void> = Promise.resolve();
 
   constructor(map: MapLibreMap) {
     this.map = map;
@@ -58,52 +86,73 @@ export class SwipeCogMirror {
   }
 
   /**
-   * Renders exactly `desired` on the comparison map. Rebuilds the mirror's
-   * layers whenever the set (or any raster's visualization) changes, matching
-   * the main map. A no-op when nothing changed.
+   * Reconciles the comparison map's mirrored rasters to `desired`: adds new
+   * ones, drops removed ones, reloads a raster whose visualization changed, and
+   * applies an opacity-only change in place (no reload / flash).
    *
    * @param desired - The rasters that should render on the comparison side.
    */
-  async sync(desired: SwipeCogRasterSnapshot[]): Promise<void> {
-    const fingerprint = JSON.stringify(
-      desired.map((raster) => [
-        raster.id,
-        raster.url,
-        raster.opacity,
-        raster.bands,
-        raster.colormap,
-        raster.rescaleMin,
-        raster.rescaleMax,
-        raster.nodata,
-      ]),
-    );
-    if (fingerprint === this.fingerprint) return;
-    this.fingerprint = fingerprint;
+  sync(desired: SwipeCogRasterSnapshot[]): Promise<void> {
+    // Serialise: chain after any in-flight sync so their sequential adds (which
+    // share the control's form state) never interleave.
+    this.syncChain = this.syncChain
+      .catch(() => {})
+      .then(() => this.reconcile(desired));
+    return this.syncChain;
+  }
+
+  private async reconcile(desired: SwipeCogRasterSnapshot[]): Promise<void> {
+    if (this.destroyed) return;
 
     // Nothing to mirror: don't mount a real CogLayerControl/deck overlay on the
-    // comparison map just to render zero layers (the common case for projects
-    // with no COG rasters). Only clear an already-mounted control.
+    // comparison map just to render zero layers (the common no-COG case).
     if (desired.length === 0) {
-      if (this.control) clearMirrorCogLayers(this.control);
+      if (this.control && this.applied.size > 0) {
+        clearMirrorCogLayers(this.control);
+        this.applied.clear();
+      }
       return;
     }
 
     const control = await this.ensureControl();
     if (!control || this.destroyed) return;
 
-    clearMirrorCogLayers(control);
-    // Adds run sequentially and each awaits fully before the next: configure +
-    // addLayer share the control's `_state`, which addLayer reads lazily *after*
-    // its async GeoTIFF load, so overlapping adds would let a later raster's
-    // settings bleed into an earlier one. A hung add would stall the rest, but
-    // the mirror loads URLs the main map already loaded, so that is unlikely and
-    // only affects the comparison side.
+    const desiredIds = new Set(desired.map((raster) => raster.id));
+    for (const [id, entry] of [...this.applied]) {
+      if (!desiredIds.has(id)) {
+        mirrorRemoveCogLayer(control, entry.mirrorId);
+        this.applied.delete(id);
+      }
+    }
+
     for (const raster of desired) {
-      // Bail if a newer sync superseded this one (or the mirror was destroyed)
-      // while awaiting the previous addLayer.
-      if (this.destroyed || this.fingerprint !== fingerprint) return;
+      if (this.destroyed) return;
+      const structFp = structuralFingerprint(raster);
+      const existing = this.applied.get(raster.id);
+
+      if (existing && existing.structFp === structFp) {
+        // Same data + visualization; only opacity may have changed.
+        if (existing.opacity !== raster.opacity) {
+          mirrorSetCogOpacity(control, existing.mirrorId, raster.opacity);
+          existing.opacity = raster.opacity;
+        }
+        continue;
+      }
+
+      // New raster, or a structural change that needs a reload.
+      if (existing) {
+        mirrorRemoveCogLayer(control, existing.mirrorId);
+        this.applied.delete(raster.id);
+      }
       try {
-        await mirrorAddCogLayer(control, raster);
+        const mirrorId = await mirrorAddCogLayer(control, raster);
+        if (mirrorId && !this.destroyed) {
+          this.applied.set(raster.id, {
+            mirrorId,
+            structFp,
+            opacity: raster.opacity,
+          });
+        }
       } catch (error) {
         console.debug("[GeoLibre] swipe COG mirror: addLayer", error);
       }
@@ -113,7 +162,7 @@ export class SwipeCogMirror {
   /** Removes the mirror control from the comparison map. */
   destroy(): void {
     this.destroyed = true;
-    this.fingerprint = "";
+    this.applied.clear();
     const control = this.control;
     this.control = null;
     this.controlPromise = null;

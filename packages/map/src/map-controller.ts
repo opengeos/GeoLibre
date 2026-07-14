@@ -2099,7 +2099,9 @@ export class MapController {
       ...layers
         .filter(
           (layer) =>
-            layer.type === "cog" && layer.metadata.sourceKind === "cog-url",
+            layer.type === "cog" &&
+            layer.metadata.sourceKind === "cog-url" &&
+            layer.metadata.externalNativeLayer === true,
         )
         .map((layer): [string, string] => [layer.id, layer.name]),
       // The Layer Swipe panel groups all basemap layers under "__basemap__";

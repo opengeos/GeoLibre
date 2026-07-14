@@ -3140,15 +3140,18 @@ export async function createSwipeCogMirrorControl(
 
 /**
  * Renders one COG snapshot on a mirror control, matching the main map's
- * visualization (bands/colormap/rescale/nodata/opacity).
+ * visualization (bands/colormap/rescale/nodata/opacity), and returns the
+ * control-assigned layer id so the caller can later update or remove just that
+ * layer.
  *
  * @param control - A mirror control from {@link createSwipeCogMirrorControl}.
  * @param snapshot - The COG raster to render.
+ * @returns The new mirror layer id, or null if the add produced no layer.
  */
 export async function mirrorAddCogLayer(
   control: CogLayerControl,
   snapshot: SwipeCogRasterSnapshot
-): Promise<void> {
+): Promise<string | null> {
   configureCogRasterControl(control, {
     url: snapshot.url,
     name: snapshot.name,
@@ -3159,7 +3162,48 @@ export async function mirrorAddCogLayer(
     nodata: snapshot.nodata,
     opacity: snapshot.opacity,
   });
-  await control.addLayer(snapshot.url);
+  // addLayer generates the id internally and reports it via 'layeradd'; capture
+  // the one matching this URL so the caller can target it for later opacity
+  // updates / removal.
+  let layerId: string | null = null;
+  const handler: CogLayerEventHandler = (event) => {
+    if (event.url === snapshot.url && event.layerId) layerId = event.layerId;
+  };
+  control.on("layeradd", handler);
+  try {
+    await control.addLayer(snapshot.url);
+  } finally {
+    control.off("layeradd", handler);
+  }
+  return layerId;
+}
+
+/**
+ * Sets the opacity of a single mirrored raster without a reload.
+ *
+ * @param control - A mirror control from {@link createSwipeCogMirrorControl}.
+ * @param mirrorLayerId - The mirror layer id from {@link mirrorAddCogLayer}.
+ * @param opacity - The opacity (0-1).
+ */
+export function mirrorSetCogOpacity(
+  control: CogLayerControl,
+  mirrorLayerId: string,
+  opacity: number
+): void {
+  control.setLayerOpacity(mirrorLayerId, opacity);
+}
+
+/**
+ * Removes a single mirrored raster by its mirror layer id.
+ *
+ * @param control - A mirror control from {@link createSwipeCogMirrorControl}.
+ * @param mirrorLayerId - The mirror layer id from {@link mirrorAddCogLayer}.
+ */
+export function mirrorRemoveCogLayer(
+  control: CogLayerControl,
+  mirrorLayerId: string
+): void {
+  control.removeLayer(mirrorLayerId);
 }
 
 /**
