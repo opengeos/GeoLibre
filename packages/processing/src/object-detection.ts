@@ -73,7 +73,7 @@ export { ORT_VERSION } from "./ort";
  * @param raster The decoded source raster.
  * @returns The per-channel band arrays, the divisor, and the source NoData.
  */
-function rgbBands(raster: RasterData): {
+export function rgbBands(raster: RasterData): {
   r: Float32Array;
   g: Float32Array;
   b: Float32Array;
@@ -217,7 +217,7 @@ function iou(a: [number, number, number, number], b: [number, number, number, nu
   return inter / (areaA + areaB - inter);
 }
 
-interface Candidate {
+export interface Candidate {
   box: [number, number, number, number];
   classIndex: number;
   score: number;
@@ -230,7 +230,10 @@ interface Candidate {
  * @param iouThreshold Boxes overlapping a kept box above this IoU are dropped.
  * @returns The surviving detections, highest score first.
  */
-function nonMaxSuppression(candidates: Candidate[], iouThreshold: number): Candidate[] {
+export function nonMaxSuppression(
+  candidates: Candidate[],
+  iouThreshold: number,
+): Candidate[] {
   const sorted = [...candidates].sort((p, q) => q.score - p.score);
   const kept: Candidate[] = [];
   for (const cand of sorted) {
@@ -251,7 +254,8 @@ function nonMaxSuppression(candidates: Candidate[], iouThreshold: number): Candi
  *
  * Auto-detects the Ultralytics YOLOv8/v11 layout (`[1, 4 + nc, anchors]`, no
  * objectness) versus the YOLOv5 layout (`[1, anchors, 5 + nc]`, with an
- * objectness channel) from the relative size of the two trailing dimensions.
+ * objectness channel) by matching each trailing dim against the anchor count a
+ * standard head produces at `inputSize`.
  *
  * Assumes the model output is already sigmoid-activated, which is true of the
  * standard Ultralytics ONNX export (`yolo export format=onnx`) for both v5 and
@@ -261,12 +265,14 @@ function nonMaxSuppression(candidates: Candidate[], iouThreshold: number): Candi
  * @param data Flat output values.
  * @param dims Output tensor dimensions.
  * @param confidenceThreshold Minimum score to keep a box.
+ * @param inputSize The square model input edge (drives the anchor-count match).
  * @returns Candidate detections before NMS.
  */
-function decodeYolo(
+export function decodeYolo(
   data: Float32Array,
   dims: readonly number[],
   confidenceThreshold: number,
+  inputSize: number,
 ): Candidate[] {
   if (dims.length !== 3) {
     throw new Error(
@@ -275,14 +281,19 @@ function decodeYolo(
   }
   const d1 = dims[1];
   const d2 = dims[2];
-  // v8/v11: channels (4 + nc) are fewer than the anchor count, so the smaller
-  // trailing dim is the channel axis and there is no objectness term. On a tie
-  // (d1 === d2, e.g. a degenerate `[1, 84, 84]`) prefer the v8 layout: a real
-  // v5 head has far more anchors than channels (d1 >> d2), so equality is never
-  // genuine v5.
-  const v8 = d1 <= d2;
-  const numAnchors = v8 ? d2 : d1;
-  const numChannels = v8 ? d1 : d2;
+  // Pick the anchor axis by which trailing dim is closest to the anchor count a
+  // standard 3-level (stride 8/16/32) head yields at `inputSize`. This beats a
+  // bare "anchors > channels" ratio, which misfires at very small inputSize with
+  // many classes (few anchors, but more channels), silently swapping the axes.
+  // The channel axis is then the other dim; whether it sits on d1 (v8/v11, no
+  // objectness) or d2 (v5, with objectness) determines the layout.
+  const expectedAnchors =
+    (inputSize / 8) ** 2 + (inputSize / 16) ** 2 + (inputSize / 32) ** 2;
+  const d2IsAnchors =
+    Math.abs(d2 - expectedAnchors) <= Math.abs(d1 - expectedAnchors);
+  const numAnchors = d2IsAnchors ? d2 : d1;
+  const numChannels = d2IsAnchors ? d1 : d2;
+  const v8 = d2IsAnchors;
   const hasObjectness = !v8;
   const numClasses = numChannels - (hasObjectness ? 5 : 4);
   if (numClasses < 1) {
@@ -403,7 +414,12 @@ export async function detectObjects(
     }
     const outData = output.data as Float32Array;
 
-    const candidates = decodeYolo(outData, output.dims, confidenceThreshold);
+    const candidates = decodeYolo(
+      outData,
+      output.dims,
+      confidenceThreshold,
+      inputSize,
+    );
     const kept = nonMaxSuppression(candidates, iouThreshold);
 
     // Undo the letterbox (input pixels -> source pixels) and clamp to the raster.
@@ -422,6 +438,10 @@ export async function detectObjects(
       score: cand.score,
     }));
   } finally {
-    await session.release();
+    // Swallow a cleanup failure so it can never replace the primary error (a
+    // decode/inference throw in the try) as the caller-visible message.
+    await session.release().catch((err) => {
+      console.warn("object-detection: session.release() failed", err);
+    });
   }
 }

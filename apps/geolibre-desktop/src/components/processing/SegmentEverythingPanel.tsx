@@ -67,13 +67,13 @@ function masksToFeatureCollection(
   masks: SegmentMask[],
   raster: RasterData,
 ): FeatureCollection {
-  const { originX, originY, resX, resY } = raster;
+  const { originX, originY, resX, resY, flipX, flipY } = raster;
+  // Honour the raster's resolution sign (flipX = east-to-west, flipY = south-up)
+  // so mirrored/flipped GeoTIFFs are georeferenced correctly, not mislocated.
+  const worldX = (px: number) => (flipX ? originX - px * resX : originX + px * resX);
+  const worldY = (py: number) => (flipY ? originY + py * resY : originY - py * resY);
   const features: Feature[] = masks.map((mask, index) => {
-    // North-to-south row order (resY is its magnitude); min pixel row -> max Y.
-    const ring = mask.polygon.map(([px, py]) => [
-      originX + px * resX,
-      originY - py * resY,
-    ]);
+    const ring = mask.polygon.map(([px, py]) => [worldX(px), worldY(py)]);
     return {
       type: "Feature",
       properties: {

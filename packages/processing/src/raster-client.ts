@@ -33,10 +33,17 @@ export interface RasterData {
   originX: number;
   /** World Y of the top-left corner of pixel (0, 0). */
   originY: number;
-  /** Pixel width in CRS units (positive). */
+  /** Pixel width in CRS units (positive; see `flipX` for the original sign). */
   resX: number;
-  /** Pixel height in CRS units (positive). */
+  /** Pixel height in CRS units (positive; see `flipY` for the original sign). */
   resY: number;
+  /** True when the source pixel X resolution was negative (east-to-west, rare):
+   * world X decreases with pixel column. Absent/false = normal west-to-east. */
+  flipX?: boolean;
+  /** True when the source pixel Y resolution was positive (south-up): world Y
+   * increases with pixel row. Absent/false = normal north-up (originY is the
+   * northern edge). Lets georeferencing consumers handle flipped rasters. */
+  flipY?: boolean;
   /** NoData value, or null when the source declares none. */
   nodata: number | null;
   /** GeoTIFF GeoKeys carried through to the output so the CRS is preserved. */
@@ -109,6 +116,11 @@ export async function readRasterData(bytes: ArrayBuffer): Promise<RasterData> {
     originY,
     resX: Math.abs(resolutionX),
     resY: Math.abs(resolutionY),
+    // Preserve the resolution sign (discarded by the abs above) so georeferencing
+    // consumers can handle mirrored / south-up rasters instead of silently
+    // placing features at the wrong location.
+    flipX: resolutionX < 0,
+    flipY: resolutionY > 0,
     nodata: noData != null && Number.isFinite(noData) ? noData : null,
     geoKeys: (image.getGeoKeys() as Record<string, unknown>) ?? {},
   };

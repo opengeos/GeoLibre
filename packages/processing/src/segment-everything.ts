@@ -256,6 +256,15 @@ interface Candidate {
   bbox: [number, number, number, number];
 }
 
+/** Absolute area of a closed polygon ring (shoelace formula). */
+function polygonArea(ring: [number, number][]): number {
+  let sum = 0;
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    sum += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1];
+  }
+  return Math.abs(sum) / 2;
+}
+
 /** IoU of two `[minX, minY, maxX, maxY]` boxes. */
 function boxIou(
   a: [number, number, number, number],
@@ -333,9 +342,17 @@ export async function segmentEverything(
   const encoder = await ort.InferenceSession.create(new Uint8Array(encoderBytes), {
     executionProviders: ["wasm"],
   });
-  const decoder = await ort.InferenceSession.create(new Uint8Array(decoderBytes), {
-    executionProviders: ["wasm"],
-  });
+  let decoder: import("onnxruntime-web/wasm").InferenceSession;
+  try {
+    decoder = await ort.InferenceSession.create(new Uint8Array(decoderBytes), {
+      executionProviders: ["wasm"],
+    });
+  } catch (err) {
+    // Release the already-created encoder so its WASM heap doesn't leak when
+    // decoder creation fails (both sessions live outside the finally below).
+    await encoder.release().catch(() => {});
+    throw err;
+  }
 
   try {
     const { width, height } = raster;
@@ -415,7 +432,9 @@ export async function segmentEverything(
             }
           }
         }
-        // Mask pixel → source pixel scale factor (256→1024 then 1024→source).
+        // Cheap pre-filter on the thresholded pixel count (all blobs) before the
+        // more expensive contour trace; the reported `area` below is taken from
+        // the traced polygon so it stays consistent with the emitted geometry.
         const px2 = (MASK_UPSCALE / scale) * (MASK_UPSCALE / scale);
         if (count * px2 < minArea) continue;
 
@@ -425,11 +444,15 @@ export async function segmentEverything(
         if (simplified.length < 3) continue;
 
         // Map ring vertices from mask (256) space to source pixels and close.
+        // traceContour walks only the first connected component, so `polygon`,
+        // its `bbox`, and its `area` all describe that one blob consistently.
         const polygon: [number, number][] = simplified.map(([mx, my]) => [
           Math.min(width, (mx * MASK_UPSCALE) / scale),
           Math.min(height, (my * MASK_UPSCALE) / scale),
         ]);
         polygon.push(polygon[0]);
+        const area = polygonArea(polygon);
+        if (area < minArea) continue;
 
         let minX = Infinity;
         let minY = Infinity;
@@ -444,7 +467,7 @@ export async function segmentEverything(
         candidates.push({
           polygon,
           score: bestScore,
-          area: count * px2,
+          area,
           bbox: [minX, minY, maxX, maxY],
         });
       }
@@ -457,7 +480,9 @@ export async function segmentEverything(
       area: c.area,
     }));
   } finally {
-    await encoder.release();
-    await decoder.release();
+    // Swallow cleanup failures so a release() error can never mask the primary
+    // error from the try above.
+    await encoder.release().catch(() => {});
+    await decoder.release().catch(() => {});
   }
 }

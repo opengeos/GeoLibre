@@ -102,18 +102,22 @@ function detectionsToFeatureCollection(
   raster: RasterData,
   names: string[],
 ): FeatureCollection {
-  const { originX, originY, resX, resY } = raster;
+  const { originX, originY, resX, resY, flipX, flipY } = raster;
+  // Map a source pixel to world coords, honouring the raster's resolution sign
+  // (flipX = east-to-west, flipY = south-up) so mirrored/flipped GeoTIFFs are
+  // georeferenced correctly instead of silently mislocated.
+  const worldX = (px: number) => (flipX ? originX - px * resX : originX + px * resX);
+  const worldY = (py: number) => (flipY ? originY + py * resY : originY - py * resY);
   const features: Feature[] = detections.map((det) => {
     const [minPxX, minPxY, maxPxX, maxPxY] = det.bbox;
-    // Assumes the standard north-to-south row order (resolutionY < 0), where
-    // readRasterData's originY is the northern edge and resY is its magnitude,
-    // so the min pixel row maps to max world Y. A rare south-to-north GeoTIFF
-    // (resolutionY > 0) would need `+` here, but readRasterData does not surface
-    // the sign today.
-    const west = originX + minPxX * resX;
-    const east = originX + maxPxX * resX;
-    const north = originY - minPxY * resY;
-    const south = originY - maxPxY * resY;
+    const x1 = worldX(minPxX);
+    const x2 = worldX(maxPxX);
+    const y1 = worldY(minPxY);
+    const y2 = worldY(maxPxY);
+    const west = Math.min(x1, x2);
+    const east = Math.max(x1, x2);
+    const south = Math.min(y1, y2);
+    const north = Math.max(y1, y2);
     return {
       type: "Feature",
       properties: {
@@ -511,9 +515,14 @@ export function ObjectDetectionDialog({
             <Select
               id="det-model-source"
               value={modelSource}
-              onChange={(e) =>
-                setModelSource(e.target.value as "builtin" | "local")
-              }
+              onChange={(e) => {
+                const next = e.target.value as "builtin" | "local";
+                setModelSource(next);
+                // Switching back to a built-in repopulates its class names (and
+                // input size); pickModel clears them for a local file, and the
+                // built-in dropdown's own onChange doesn't fire on this switch.
+                if (next === "builtin") selectBuiltinModel(builtinModelId);
+              }}
             >
               <option value="builtin">
                 {t("objectDetection.modelSourceBuiltin")}
@@ -636,14 +645,21 @@ export function ObjectDetectionDialog({
                 step={32}
                 value={String(inputSize)}
                 onChange={(e) => {
+                  // Accept any in-range intermediate value while typing (e.g.
+                  // "3" on the way to "320"); a controlled input that rejected
+                  // <32 would revert the keystroke and make the field untypable.
                   const parsed = Number(e.target.value);
-                  if (!Number.isFinite(parsed) || parsed < 32) return;
-                  // Round to the nearest multiple of 32 (YOLO stride requirement)
-                  // and clamp to the upper bound: the HTML `step`/`max` are
-                  // advisory, but a non-multiple or oversized input would yield
-                  // a misaligned or huge inference tensor.
-                  setInputSize(Math.min(4096, Math.round(parsed / 32) * 32));
+                  if (e.target.value !== "" && !Number.isFinite(parsed)) return;
+                  setInputSize(e.target.value === "" ? 0 : parsed);
                 }}
+                onBlur={() =>
+                  // Snap to a valid multiple of 32 (YOLO stride) in [32, 4096]:
+                  // the HTML step/max are advisory, and a non-multiple or
+                  // oversized input yields a misaligned or huge inference tensor.
+                  setInputSize((prev) =>
+                    Math.min(4096, Math.max(32, Math.round(prev / 32) * 32)),
+                  )
+                }
               />
             </div>
           </div>

@@ -11,6 +11,13 @@
  * bundle them. Because they are COCO/ground-level models they detect everyday
  * objects well but perform poorly on top-down aerial imagery, where a
  * user-supplied overhead-trained model is the better choice.
+ *
+ * Provenance/trust note: these URLs point at a third-party individual's public
+ * repos, not an official Ultralytics/ONNX-zoo source. The immutable commit-SHA
+ * pin is the main mitigation (jsDelivr serves that exact byte content); the
+ * remaining risk is availability if the account/repo is ever deleted. Follow-up:
+ * mirror these files into a GeoLibre-controlled repo so the built-in option does
+ * not depend on an external account.
  */
 
 /** The 80 COCO class names, in model output order. */
