@@ -5,12 +5,13 @@
  * raster tile URL template the plugin turns into a pre-warmed MapLibre raster
  * layer. Providers with remote discovery (Google Earth Engine per-year
  * composites, Planetary Computer mosaic searches) can return a Promise from
- * {@link TimelapseProvider.listFrames}; the three built-in providers (EOX
- * Sentinel-2 cloudless, NASA GIBS Landsat/WELD, and NASA GIBS MODIS land
- * cover) are static. Register more with {@link registerTimelapseProvider} —
- * the control only shows a provider picker when more than one is registered. A
- * thematic provider may add a {@link TimelapseProvider.legend} the panel
- * renders (the imagery providers omit it).
+ * {@link TimelapseProvider.listFrames}; the four built-in providers (EOX
+ * Sentinel-2 cloudless, NASA GIBS Landsat/WELD true color and NDVI, and NASA
+ * GIBS MODIS land cover) are static. Register more with
+ * {@link registerTimelapseProvider} — the control only shows a provider picker
+ * when more than one is registered. A thematic provider may add a
+ * {@link TimelapseProvider.legend} the panel renders (the imagery providers
+ * omit it).
  */
 
 /** One dated imagery frame (a year) a timelapse steps through. */
@@ -184,6 +185,61 @@ export const nasaGibsWeldProvider: TimelapseProvider = {
     })),
 };
 
+export const NASA_GIBS_WELD_NDVI_PROVIDER_ID = "nasa-gibs-landsat-weld-ndvi";
+
+/**
+ * Representative bins of the WELD NDVI color ramp, sampled from GIBS's colormap
+ * (a continuous 68-step gradient). NDVI is a continuous index, so these are
+ * labelled ranges rather than discrete classes — enough to read the animation.
+ */
+const GIBS_WELD_NDVI_LEGEND: TimelapseLegendItem[] = [
+  { color: "rgb(225,225,225)", label: "Water / non-vegetated (< 0)" },
+  { color: "rgb(192,176,150)", label: "Sparse (0.0–0.2)" },
+  { color: "rgb(143,183,21)", label: "Grass / shrub (0.2–0.4)" },
+  { color: "rgb(51,131,0)", label: "Moderate (0.4–0.6)" },
+  { color: "rgb(0,72,0)", label: "Dense (0.6–0.8)" },
+  { color: "rgb(0,18,0)", label: "Very dense (0.8–1.0)" },
+];
+
+/** WELD NDVI shares the true-color layer's credit; the year names the mosaic. */
+function gibsWeldNdviAttribution(year: number): string {
+  return (
+    `Landsat/WELD ${year} NDVI — imagery courtesy of ` +
+    '<a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-gweldyr-031" ' +
+    'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>'
+  );
+}
+
+/**
+ * NASA GIBS Landsat/WELD NDVI (Normalized Difference Vegetation Index) global
+ * annual — the vegetation-greenness companion to the true-color WELD provider,
+ * from the same product and so the same sparse years ({@link GIBS_WELD_YEARS};
+ * 1983–2000 with gaps, land-only, 30 m). Continuous index, shown with a binned
+ * {@link GIBS_WELD_NDVI_LEGEND} so the green ramp is readable.
+ */
+export const nasaGibsWeldNdviProvider: TimelapseProvider = {
+  id: NASA_GIBS_WELD_NDVI_PROVIDER_ID,
+  name: "Landsat NDVI (NASA GIBS)",
+  legend: GIBS_WELD_NDVI_LEGEND,
+  attribution:
+    "Landsat/WELD 1983–2000 NDVI — imagery courtesy of " +
+    '<a href="https://www.earthdata.nasa.gov/data/catalog/lpcloud-gweldyr-031" ' +
+    'target="_blank" rel="noreferrer">NASA EOSDIS GIBS</a>',
+  listFrames: () =>
+    GIBS_WELD_YEARS.map((year) => ({
+      id: `gibs-weld-ndvi-${year}`,
+      label: String(year),
+      year,
+      tileUrlTemplate:
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" +
+        "Landsat_WELD_NDVI_Global_Annual/default/" +
+        `${year}-12-01/GoogleMapsCompatible_Level12/{z}/{y}/{x}.jpeg`,
+      attribution: gibsWeldNdviAttribution(year),
+      maxzoom: GIBS_WELD_MAXZOOM,
+      tileSize: 256,
+    })),
+};
+
 export const MODIS_LANDCOVER_PROVIDER_ID = "nasa-gibs-modis-landcover";
 
 const MODIS_LANDCOVER_FIRST_YEAR = 2001;
@@ -270,6 +326,7 @@ export const modisLandCoverProvider: TimelapseProvider = {
 const providers = new Map<string, TimelapseProvider>([
   [eoxS2CloudlessProvider.id, eoxS2CloudlessProvider],
   [nasaGibsWeldProvider.id, nasaGibsWeldProvider],
+  [nasaGibsWeldNdviProvider.id, nasaGibsWeldNdviProvider],
   [modisLandCoverProvider.id, modisLandCoverProvider],
 ]);
 

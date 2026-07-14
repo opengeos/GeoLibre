@@ -7,6 +7,8 @@ import {
   listTimelapseProviders,
   MODIS_LANDCOVER_PROVIDER_ID,
   modisLandCoverProvider,
+  NASA_GIBS_WELD_NDVI_PROVIDER_ID,
+  nasaGibsWeldNdviProvider,
   NASA_GIBS_WELD_PROVIDER_ID,
   nasaGibsWeldProvider,
   registerTimelapseProvider,
@@ -114,6 +116,52 @@ describe("nasaGibsWeldProvider", () => {
   });
 });
 
+describe("nasaGibsWeldNdviProvider", () => {
+  function frames(): TimelapseFrame[] {
+    const result = nasaGibsWeldNdviProvider.listFrames();
+    assert.ok(Array.isArray(result), "WELD NDVI provider is synchronous");
+    return result;
+  }
+
+  it("shares the WELD sparse annual years (1983–2000 with gaps)", () => {
+    assert.deepEqual(
+      frames().map((frame) => frame.year),
+      [1983, 1984, 1985, 1988, 1989, 1990, 1998, 1999, 2000],
+    );
+  });
+
+  it("targets the WELD NDVI WMTS layer with the December date", () => {
+    for (const frame of frames()) {
+      assert.equal(
+        frame.tileUrlTemplate,
+        "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/" +
+          "Landsat_WELD_NDVI_Global_Annual/default/" +
+          `${frame.year}-12-01/GoogleMapsCompatible_Level12/{z}/{y}/{x}.jpeg`,
+      );
+      assert.equal(frame.maxzoom, 12);
+      assert.equal(frame.tileSize, 256);
+    }
+  });
+
+  it("carries a binned NDVI legend as rgb swatches", () => {
+    const legend = nasaGibsWeldNdviProvider.legend;
+    assert.ok(legend, "provider has a legend");
+    assert.ok(legend.length >= 4);
+    for (const item of legend) {
+      assert.match(item.color, /^rgb\(\d+,\d+,\d+\)$/);
+      assert.ok(item.label.length > 0);
+    }
+  });
+
+  it("credits NASA EOSDIS GIBS with the mosaic year in each frame", () => {
+    for (const frame of frames()) {
+      assert.ok(frame.attribution.includes(String(frame.year)));
+      assert.ok(frame.attribution.includes("NDVI"));
+      assert.ok(frame.attribution.includes("NASA EOSDIS GIBS"));
+    }
+  });
+});
+
 describe("modisLandCoverProvider", () => {
   function frames(): TimelapseFrame[] {
     const result = modisLandCoverProvider.listFrames();
@@ -180,12 +228,17 @@ describe("timelapse provider registry", () => {
       nasaGibsWeldProvider,
     );
     assert.equal(
+      getTimelapseProvider(NASA_GIBS_WELD_NDVI_PROVIDER_ID),
+      nasaGibsWeldNdviProvider,
+    );
+    assert.equal(
       getTimelapseProvider(MODIS_LANDCOVER_PROVIDER_ID),
       modisLandCoverProvider,
     );
     const all = listTimelapseProviders();
     assert.ok(all.includes(eoxS2CloudlessProvider));
     assert.ok(all.includes(nasaGibsWeldProvider));
+    assert.ok(all.includes(nasaGibsWeldNdviProvider));
     assert.ok(all.includes(modisLandCoverProvider));
   });
 
