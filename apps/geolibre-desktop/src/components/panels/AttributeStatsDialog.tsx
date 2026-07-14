@@ -154,7 +154,7 @@ export function AttributeStatsDialog({
 
         <div className="flex items-center justify-end gap-2">
           {copied ? (
-            <span className="mr-auto text-xs text-muted-foreground">
+            <span className="me-auto text-xs text-muted-foreground">
               Copied to clipboard.
             </span>
           ) : null}

@@ -111,8 +111,8 @@ export function NotebookPanel({
       aria-label={t("notebook.title")}
       className={
         isCollapsed
-          ? "flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-l md:border-t-0 md:py-2"
-          : "relative flex h-72 w-full shrink-0 flex-col border-t bg-card md:h-auto md:w-[var(--notebook-panel-width)] md:border-l md:border-t-0"
+          ? "flex h-11 w-full shrink-0 items-center gap-2 border-t bg-card px-2 md:h-auto md:w-11 md:flex-col md:border-s md:border-t-0 md:py-2"
+          : "relative flex h-72 w-full shrink-0 flex-col border-t bg-card md:h-auto md:w-[var(--notebook-panel-width)] md:border-s md:border-t-0"
       }
     >
       {isCollapsed ? (
@@ -140,13 +140,13 @@ export function NotebookPanel({
             role="separator"
             aria-orientation="vertical"
             aria-label={t("notebook.resize")}
-            className="absolute -left-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-l border-transparent hover:border-primary md:block"
+            className="absolute -start-1 top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-s border-transparent hover:border-primary md:block"
             onPointerDown={onResizeStart}
           />
           <div className="flex items-center gap-2 border-b px-3 py-1.5">
             <NotebookPen className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold">{t("notebook.title")}</span>
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ms-auto flex items-center gap-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -189,7 +189,7 @@ export function NotebookPanel({
           </div>
         ) : !loaded ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-card text-xs text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="me-2 h-4 w-4 animate-spin" />
             {t("notebook.loading")}
           </div>
         ) : null}

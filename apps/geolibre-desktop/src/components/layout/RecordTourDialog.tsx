@@ -766,7 +766,7 @@ export function RecordTourDialog({
             disabled={editingFrozen}
             onClick={handleLoadConfig}
           >
-            <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
+            <FolderOpen className="me-1.5 h-3.5 w-3.5" />
             {t("recordTour.loadConfig")}
           </Button>
           <Button
@@ -777,7 +777,7 @@ export function RecordTourDialog({
             disabled={editingFrozen || keyframes.length === 0}
             onClick={handleSaveConfig}
           >
-            <Download className="mr-1.5 h-3.5 w-3.5" />
+            <Download className="me-1.5 h-3.5 w-3.5" />
             {t("recordTour.saveConfig")}
           </Button>
         </div>
@@ -790,7 +790,7 @@ export function RecordTourDialog({
             disabled={editingFrozen}
             onClick={addCurrentView}
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            <Plus className="me-1.5 h-3.5 w-3.5" />
             {t("recordTour.addView")}
           </Button>
           <span className="text-xs text-muted-foreground">
@@ -890,7 +890,7 @@ export function RecordTourDialog({
                   disabled={editingFrozen || !selectedPathLayer}
                   onClick={generateFromPath}
                 >
-                  <Route className="mr-1.5 h-3.5 w-3.5" />
+                  <Route className="me-1.5 h-3.5 w-3.5" />
                   {t("recordTour.pathGenerate")}
                 </Button>
               </div>
@@ -903,7 +903,7 @@ export function RecordTourDialog({
             {t("recordTour.empty")}
           </p>
         ) : (
-          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+          <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pe-1">
             <ol className="space-y-2">
               {keyframes.map((kf, index) => (
                 <KeyframeRow
@@ -1055,7 +1055,7 @@ export function RecordTourDialog({
                 className="flex-1"
                 onClick={handleSave}
               >
-                <Save className="mr-1.5 h-4 w-4" />
+                <Save className="me-1.5 h-4 w-4" />
                 {t("recordTour.saveVideo")}
               </Button>
               <Button
@@ -1074,7 +1074,7 @@ export function RecordTourDialog({
             disabled={!canRecord}
             onClick={handleRecord}
           >
-            <Video className="mr-1.5 h-4 w-4" />
+            <Video className="me-1.5 h-4 w-4" />
             {t("recordTour.record")}
           </Button>
         )}
@@ -1092,7 +1092,7 @@ export function RecordTourDialog({
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
         onKeyDown={onResizeKey("sw")}
-        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-bl-lg border-b-2 border-l-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
+        className="absolute bottom-0 left-0 h-4 w-4 cursor-sw-resize touch-none rounded-es-lg border-b-2 border-s-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
       <button
         type="button"
@@ -1102,7 +1102,7 @@ export function RecordTourDialog({
         onPointerUp={onResizeEnd}
         onPointerCancel={onResizeEnd}
         onKeyDown={onResizeKey("se")}
-        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-br-lg border-b-2 border-r-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
+        className="absolute bottom-0 right-0 h-4 w-4 cursor-se-resize touch-none rounded-ee-lg border-b-2 border-e-2 border-transparent hover:border-muted-foreground/50 focus-visible:border-ring focus-visible:outline-none"
       />
     </div>
   );
@@ -1299,7 +1299,7 @@ function KeyframeRow({
         </span>
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground disabled:hover:text-current"
+          className="flex min-w-0 flex-1 items-center gap-1.5 text-start hover:text-foreground disabled:hover:text-current"
           title={`${t("recordTour.flyToKeyframe")} · ${coords}`}
           disabled={previewDisabled}
           onClick={onPreview}
@@ -1362,7 +1362,7 @@ function KeyframeRow({
           next one (greyed out on the last keyframe, which has no next view).
           Both sit on one line with a single "sec" unit at the end, so the
           spinners keep their full width. */}
-      <div className="flex items-center gap-2.5 pl-8">
+      <div className="flex items-center gap-2.5 ps-8">
         <SecondsField
           label={t("recordTour.hold")}
           ariaLabel={t("recordTour.holdSeconds")}

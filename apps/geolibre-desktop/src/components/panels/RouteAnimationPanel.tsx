@@ -388,7 +388,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="ml-auto h-6 w-6"
+            className="ms-auto h-6 w-6"
             disabled={!hasRoute || busy}
             aria-label={
               playing
@@ -407,7 +407,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
         <Button
           variant="ghost"
           size="icon"
-          className={collapsed ? "h-6 w-6" : "ml-auto h-6 w-6"}
+          className={collapsed ? "h-6 w-6" : "ms-auto h-6 w-6"}
           // Collapsing hides the Stop control, so keep the panel expanded while a
           // capture is running.
           disabled={busy}
@@ -668,7 +668,7 @@ function RouteAnimationCard({ mapControllerRef }: RouteAnimationPanelProps) {
                   disabled={!hasRoute}
                   onClick={handleRecord}
                 >
-                  <Film className="mr-1.5 h-3.5 w-3.5" />
+                  <Film className="me-1.5 h-3.5 w-3.5" />
                   {VIDEO_EXTENSION === "mp4"
                     ? t("toolbar.routeAnimation.saveVideoMp4")
                     : t("toolbar.routeAnimation.saveVideoWebm")}

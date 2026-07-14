@@ -503,7 +503,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             {t("assistant.thinking")}
           </span>
         ) : null}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-1">
           {hasKey && provider && providers.length > 0 ? (
             <>
               {providers.length > 1 ? (
@@ -594,11 +594,11 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                     </span>
                     {/* One chip per variable so a multi-credential provider
                         never reads as a single oddly-named env var. */}
-                    <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-right font-mono text-[11px] text-muted-foreground">
+                    <span className="flex flex-wrap justify-end gap-x-1 gap-y-0.5 text-end font-mono text-[11px] text-muted-foreground">
                       {envs.map((name, index) => (
                         <span key={name} className="whitespace-nowrap">
                           {index > 0 ? (
-                            <span className="mr-1 text-muted-foreground/60">
+                            <span className="me-1 text-muted-foreground/60">
                               +
                             </span>
                           ) : null}
@@ -660,8 +660,8 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
                 className={cn(
                   "text-foreground",
                   "[&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0",
-                  "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5",
-                  "[&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5",
+                  "[&_ul]:my-1 [&_ul]:list-disc [&_ul]:ps-5",
+                  "[&_ol]:my-1 [&_ol]:list-decimal [&_ol]:ps-5",
                   "[&_a]:text-primary [&_a]:underline",
                   "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
                   "[&_pre]:my-1 [&_pre]:overflow-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2",
@@ -685,7 +685,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
             className="w-full"
             onClick={() => openSettingsSection("ai")}
           >
-            <Settings className="mr-1 h-4 w-4" />
+            <Settings className="me-1 h-4 w-4" />
             {t("assistant.setupOpenSettings")}
           </Button>
         </div>
@@ -711,7 +711,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               onClick={stop}
               title={t("assistant.stop")}
             >
-              <Square className="mr-1 h-4 w-4" />
+              <Square className="me-1 h-4 w-4" />
               {t("assistant.stop")}
             </Button>
           ) : (
@@ -721,7 +721,7 @@ export function AssistantPanel({ mapControllerRef }: AssistantPanelProps) {
               disabled={!hasKey || !input.trim()}
               title={t("assistant.sendHint")}
             >
-              <Send className="mr-1 h-4 w-4" />
+              <Send className="me-1 h-4 w-4" />
               {t("assistant.send")}
             </Button>
           )}

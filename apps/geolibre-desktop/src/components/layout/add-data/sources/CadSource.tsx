@@ -246,7 +246,7 @@ export function CadSource() {
             onClick={handleChooseFile}
             disabled={isReadingLayers || source.isSubmitting}
           >
-            <FileUp className="mr-2 h-3.5 w-3.5" />
+            <FileUp className="me-2 h-3.5 w-3.5" />
             {t("addData.common.chooseFile")}
           </Button>
           <span className="min-w-0 truncate text-xs text-muted-foreground">
@@ -258,7 +258,7 @@ export function CadSource() {
 
         <div className="space-y-1.5">
           <Label htmlFor="cad-layer">
-            <Layers className="mr-1 inline h-3.5 w-3.5 align-text-bottom" />
+            <Layers className="me-1 inline h-3.5 w-3.5 align-text-bottom" />
             {t("addData.cad.layer")}
           </Label>
           <Select

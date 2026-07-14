@@ -271,7 +271,7 @@ function PaneLayerToggle({ viewId, index, is3d }: PaneLayerToggleProps) {
               >
                 <span className="truncate">{layer.name}</span>
                 {only2d ? (
-                  <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
+                  <span className="ms-auto shrink-0 ps-2 text-xs text-muted-foreground">
                     {t("mapGrid.only2d")}
                   </span>
                 ) : null}

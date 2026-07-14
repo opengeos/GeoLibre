@@ -243,9 +243,9 @@ export function AddDataFooter({
         <Button type="submit" disabled={submitDisabled}>
           {!isSubmitting ? (
             useServiceIcon ? (
-              <Globe2 className="mr-2 h-3.5 w-3.5" />
+              <Globe2 className="me-2 h-3.5 w-3.5" />
             ) : (
-              <MapIcon className="mr-2 h-3.5 w-3.5" />
+              <MapIcon className="me-2 h-3.5 w-3.5" />
             )
           ) : null}
           {isSubmitting ? t("addData.shared.adding") : t("addData.shared.addLayer")}

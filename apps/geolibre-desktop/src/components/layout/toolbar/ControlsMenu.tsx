@@ -313,19 +313,19 @@ export function ControlsMenu({
               show("controls.recordVideo")) && <DropdownMenuSeparator />}
           {show("controls.fieldCollection") && (
             <DropdownMenuItem onSelect={onOpenFieldCollection}>
-              <ClipboardList className="mr-2 h-3.5 w-3.5" />
+              <ClipboardList className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.fieldCollection")}
             </DropdownMenuItem>
           )}
           {show("controls.recordTour") && (
             <DropdownMenuItem onSelect={onOpenRecordTour}>
-              <Video className="mr-2 h-3.5 w-3.5" />
+              <Video className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.recordTour")}
             </DropdownMenuItem>
           )}
           {show("controls.recordVideo") && (
             <DropdownMenuItem onSelect={onOpenRecordVideo}>
-              <Clapperboard className="mr-2 h-3.5 w-3.5" />
+              <Clapperboard className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.recordVideo")}
             </DropdownMenuItem>
           )}

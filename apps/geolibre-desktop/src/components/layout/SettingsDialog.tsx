@@ -1158,7 +1158,7 @@ export function SettingsDialog({
           <DropdownMenuSeparator />
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <Languages className="mr-2 h-3.5 w-3.5" />
+              <Languages className="me-2 h-3.5 w-3.5" />
               {t("language.label")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="w-44">
@@ -1187,7 +1187,7 @@ export function SettingsDialog({
                 setOpen(true);
               }}
             >
-              <MapPinned className="mr-2 h-3.5 w-3.5" />
+              <MapPinned className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.mapPreferences")}
             </DropdownMenuItem>
           )}
@@ -1287,7 +1287,7 @@ export function SettingsDialog({
                   >
                     <span
                       aria-hidden
-                      className="mr-2 h-3.5 w-3.5 shrink-0 rounded-full border"
+                      className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
                       style={{ backgroundColor: scheme.swatch }}
                     />
                     {t(scheme.labelKey)}
@@ -1307,7 +1307,7 @@ export function SettingsDialog({
                 >
                   <span
                     aria-hidden
-                    className="mr-2 h-3.5 w-3.5 shrink-0 rounded-full border"
+                    className="me-2 h-3.5 w-3.5 shrink-0 rounded-full border"
                     style={{ backgroundColor: desktopSettings.theme.customColor }}
                   />
                   {t("settings.appearance.custom")}
@@ -1380,7 +1380,7 @@ export function SettingsDialog({
                 setOpen(true);
               }}
             >
-              <Locate className="mr-2 h-3.5 w-3.5" />
+              <Locate className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.geocoding")}
             </DropdownMenuItem>
           )}
@@ -1391,7 +1391,7 @@ export function SettingsDialog({
                 setOpen(true);
               }}
             >
-              <Bot className="mr-2 h-3.5 w-3.5" />
+              <Bot className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.ai")}
             </DropdownMenuItem>
           )}
@@ -1402,7 +1402,7 @@ export function SettingsDialog({
                 setOpen(true);
               }}
             >
-              <Braces className="mr-2 h-3.5 w-3.5" />
+              <Braces className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.environmentVariables")}
             </DropdownMenuItem>
           )}
@@ -1416,13 +1416,13 @@ export function SettingsDialog({
                 setOpen(true);
               }}
             >
-              <DownloadCloud className="mr-2 h-3.5 w-3.5" />
+              <DownloadCloud className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.updates")}
             </DropdownMenuItem>
           )}
           {showSettingsItem("settings.managePlugins") && (
             <DropdownMenuItem onSelect={() => onOpenManagePlugins()}>
-              <Puzzle className="mr-2 h-3.5 w-3.5" />
+              <Puzzle className="me-2 h-3.5 w-3.5" />
               {t("settings.menu.managePlugins")}
             </DropdownMenuItem>
           )}
@@ -1438,7 +1438,7 @@ export function SettingsDialog({
             <DialogDescription>{t("settings.description")}</DialogDescription>
           </DialogHeader>
           <div className="grid min-h-0 grid-cols-1 md:grid-cols-[12rem_1fr]">
-            <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-r">
+            <nav className="flex gap-1 border-b p-3 md:flex-col md:border-b-0 md:border-e">
               {SECTION_ITEMS.filter((item) => isSectionVisible(item.id)).map(
                 renderSectionButton,
               )}
@@ -1797,7 +1797,7 @@ export function SettingsDialog({
                             <ModeIcon className="h-5 w-5 shrink-0" />
                             <span>{t(`settings.appearance.mode.${mode}`)}</span>
                             {active ? (
-                              <Check className="ml-auto h-4 w-4 text-primary" />
+                              <Check className="ms-auto h-4 w-4 text-primary" />
                             ) : null}
                           </button>
                         );
@@ -1832,7 +1832,7 @@ export function SettingsDialog({
                             />
                             <span>{t(scheme.labelKey)}</span>
                             {active ? (
-                              <Check className="ml-auto h-4 w-4 text-primary" />
+                              <Check className="ms-auto h-4 w-4 text-primary" />
                             ) : null}
                           </button>
                         );
@@ -1859,7 +1859,7 @@ export function SettingsDialog({
                         />
                         <span>{t("settings.appearance.custom")}</span>
                         {desktopSettings.theme.scheme === "custom" ? (
-                          <Check className="ml-auto h-4 w-4 text-primary" />
+                          <Check className="ms-auto h-4 w-4 text-primary" />
                         ) : null}
                       </button>
                     </div>
@@ -1885,7 +1885,7 @@ export function SettingsDialog({
                           type="text"
                           spellCheck={false}
                           autoComplete="off"
-                          className="ml-auto w-24 rounded border bg-transparent px-2 py-1 text-right font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
+                          className="ms-auto w-24 rounded border bg-transparent px-2 py-1 text-end font-mono text-xs uppercase text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-destructive aria-[invalid=true]:text-destructive"
                           value={
                             customColorDraft ??
                             desktopSettings.theme.customColor
@@ -2384,7 +2384,7 @@ export function SettingsDialog({
                             >
                               {t(field.labelKey)}
                               {field.required ? null : (
-                                <span className="ml-1 font-normal text-muted-foreground">
+                                <span className="ms-1 font-normal text-muted-foreground">
                                   {t("settings.ai.optionalMark")}
                                 </span>
                               )}

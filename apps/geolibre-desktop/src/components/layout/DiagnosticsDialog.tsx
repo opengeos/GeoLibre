@@ -55,9 +55,9 @@ function formatTime(timestamp: string): string {
 }
 
 function recordAccent(record: DiagnosticRecord): string {
-  if (record.level === "error") return "border-l-destructive";
-  if (record.level === "warning") return "border-l-amber-500";
-  return "border-l-primary";
+  if (record.level === "error") return "border-s-destructive";
+  if (record.level === "warning") return "border-s-amber-500";
+  return "border-s-primary";
 }
 
 function recordLevelClass(record: DiagnosticRecord): string {
@@ -143,7 +143,7 @@ export function DiagnosticsDialog({
         className="max-h-[min(760px,92vh)] max-w-5xl"
         bodyClassName="grid-rows-[auto_auto_minmax(0,1fr)] overflow-hidden p-0"
       >
-        <DialogHeader className="border-b px-6 py-4 pr-12">
+        <DialogHeader className="border-b px-6 py-4 pe-12">
           <DialogTitle>Diagnostics</DialogTitle>
           <DialogDescription>
             Recent network requests, MapLibre errors, console warnings, and
@@ -266,7 +266,7 @@ export function DiagnosticsDialog({
               {filteredRecords.map((record) => (
                 <li
                   key={record.id}
-                  className={cn("border-l-2 px-6 py-3", recordAccent(record))}
+                  className={cn("border-s-2 px-6 py-3", recordAccent(record))}
                 >
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span

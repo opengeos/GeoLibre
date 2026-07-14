@@ -646,7 +646,7 @@ export function OfflineRegionDialog({
             // the dialog, rather than re-enabling a blue "Download" button that
             // reads as "nothing happened" and invites a duplicate run (#993).
             <Button onClick={() => onOpenChange(false)}>
-              <CheckCircle2 className="mr-2 h-4 w-4" />
+              <CheckCircle2 className="me-2 h-4 w-4" />
               {t("common.done")}
             </Button>
           ) : (
@@ -671,7 +671,7 @@ export function OfflineRegionDialog({
                   // it uses evictionBlocked rather than the full downloadDisabled.
                   disabled={evictionBlocked}
                 >
-                  <RotateCw className="mr-2 h-4 w-4" />
+                  <RotateCw className="me-2 h-4 w-4" />
                   {t("offline.retryFailed", { count: progress.failed })}
                 </Button>
               )}
@@ -683,11 +683,11 @@ export function OfflineRegionDialog({
                 disabled={downloadDisabled}
               >
                 {phase === "running" ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="me-2 h-4 w-4 animate-spin" />
                 ) : hasFailures ? (
-                  <RotateCw className="mr-2 h-4 w-4" />
+                  <RotateCw className="me-2 h-4 w-4" />
                 ) : (
-                  <Download className="mr-2 h-4 w-4" />
+                  <Download className="me-2 h-4 w-4" />
                 )}
                 {hasFailures ? t("offline.retryAll") : t("offline.download")}
               </Button>

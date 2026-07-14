@@ -110,27 +110,27 @@ export function ProjectMenu({
         <DropdownMenuSeparator />
         {show("project.new") && (
           <DropdownMenuItem onSelect={onNewProject}>
-            <FilePlus2 className="mr-2 h-3.5 w-3.5" />
+            <FilePlus2 className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.newEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.openFrom") && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <FolderOpen className="mr-2 h-3.5 w-3.5" />
+              <FolderOpen className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.openFrom")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuItem onSelect={onOpenFromFile}>
-                <FileText className="mr-2 h-3.5 w-3.5" />
+                <FileText className="me-2 h-3.5 w-3.5" />
                 {t("toolbar.item.fileEllipsis")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={onOpenFromUrl}>
-                <Link2 className="mr-2 h-3.5 w-3.5" />
+                <Link2 className="me-2 h-3.5 w-3.5" />
                 {t("toolbar.item.urlEllipsis")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={onOpenGallery}>
-                <LayoutGrid className="mr-2 h-3.5 w-3.5" />
+                <LayoutGrid className="me-2 h-3.5 w-3.5" />
                 {t("toolbar.item.galleryEllipsis")}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
@@ -139,7 +139,7 @@ export function ProjectMenu({
         {show("project.openRecent") && (
         <DropdownMenuSub>
           <DropdownMenuSubTrigger disabled={recentProjects.length === 0}>
-            <History className="mr-2 h-3.5 w-3.5" />
+            <History className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.openRecent")}
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-80">
@@ -168,7 +168,7 @@ export function ProjectMenu({
                       <span className="flex max-w-full items-start gap-1 text-xs text-muted-foreground">
                         <History className="h-3 w-3 shrink-0" />
                         <span
-                          className="break-all text-left leading-snug"
+                          className="break-all text-start leading-snug"
                           title={project.path}
                         >
                           {openedAt
@@ -210,50 +210,50 @@ export function ProjectMenu({
         {showSaveGroup && <DropdownMenuSeparator />}
         {show("project.save") && (
           <DropdownMenuItem onSelect={onSave}>
-            <Save className="mr-2 h-3.5 w-3.5" />
+            <Save className="me-2 h-3.5 w-3.5" />
             {t("common.save")}
           </DropdownMenuItem>
         )}
         {show("project.saveAs") && (
           <DropdownMenuItem onSelect={onSaveAs}>
-            <FilePen className="mr-2 h-3.5 w-3.5" />
+            <FilePen className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.saveAsEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.share") && (
           <DropdownMenuItem onSelect={onShare}>
-            <Share2 className="mr-2 h-3.5 w-3.5" />
+            <Share2 className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.shareEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.exportHtml") && (
           <DropdownMenuItem onSelect={onExportHtml}>
-            <FileCode2 className="mr-2 h-3.5 w-3.5" />
+            <FileCode2 className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.exportHtmlEllipsis")}
           </DropdownMenuItem>
         )}
         {collaborationEnabled && show("project.collaborate") && (
           <DropdownMenuItem onSelect={onCollaborate}>
-            <Users className="mr-2 h-3.5 w-3.5" />
+            <Users className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.collaborateEllipsis")}
           </DropdownMenuItem>
         )}
         {showPrintGroup && <DropdownMenuSeparator />}
         {show("project.printLayout") && (
           <DropdownMenuItem onSelect={onPrintLayout}>
-            <Printer className="mr-2 h-3.5 w-3.5" />
+            <Printer className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.printLayoutEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.offlineRegion") && (
           <DropdownMenuItem onSelect={onDownloadOffline}>
-            <HardDriveDownload className="mr-2 h-3.5 w-3.5" />
+            <HardDriveDownload className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.offlineRegionEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.offlineManager") && (
           <DropdownMenuItem onSelect={onManageOffline}>
-            <HardDrive className="mr-2 h-3.5 w-3.5" />
+            <HardDrive className="me-2 h-3.5 w-3.5" />
             {t("toolbar.item.offlineManagerEllipsis")}
           </DropdownMenuItem>
         )}
@@ -261,7 +261,7 @@ export function ProjectMenu({
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => setStorymapPanelOpen(true)}>
-              <BookOpen className="mr-2 h-3.5 w-3.5" />
+              <BookOpen className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.storymapEllipsis")}
             </DropdownMenuItem>
           </>

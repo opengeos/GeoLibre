@@ -191,7 +191,7 @@ export function LayerPanelPlaceSearch({
                     role="option"
                     aria-selected={index === activeIndex}
                     id={`${resultsId}-option-${index}`}
-                    className={`flex w-full items-start gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted ${
+                    className={`flex w-full items-start gap-2 px-3 py-1.5 text-start text-xs hover:bg-muted ${
                       index === activeIndex ? "bg-muted" : ""
                     }`}
                     // Use mousedown so the selection runs before the input's
@@ -212,7 +212,7 @@ export function LayerPanelPlaceSearch({
         </div>
       ) : null}
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute start-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="text"
           role="combobox"
@@ -227,7 +227,7 @@ export function LayerPanelPlaceSearch({
           value={query}
           placeholder={t("layers.searchPlacesPlaceholder")}
           aria-label={t("layers.searchPlaces")}
-          className="h-8 pl-7 pr-7 text-xs"
+          className="h-8 ps-7 pe-7 text-xs"
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => {
             if (results.length > 0 || status !== "idle") setOpen(true);
@@ -257,7 +257,7 @@ export function LayerPanelPlaceSearch({
         {query ? (
           <button
             type="button"
-            className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="absolute end-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label={t("layers.searchPlacesClear")}
             title={t("layers.searchPlacesClear")}
             onClick={handleClear}

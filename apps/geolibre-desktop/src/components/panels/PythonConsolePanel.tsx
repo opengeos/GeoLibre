@@ -411,7 +411,7 @@ export function PythonConsolePanel({
             {status}
           </span>
         ) : null}
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-1">
           <Button
             variant={editorVisible ? "secondary" : "ghost"}
             size="icon"
@@ -523,9 +523,9 @@ export function PythonConsolePanel({
               title={t("pythonConsole.runHint")}
             >
               {running ? (
-                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                <Loader2 className="me-1 h-4 w-4 animate-spin" />
               ) : (
-                <Play className="mr-1 h-4 w-4" />
+                <Play className="me-1 h-4 w-4" />
               )}
               {t("pythonConsole.run")}
             </Button>
@@ -543,7 +543,7 @@ export function PythonConsolePanel({
             />
             <div
               ref={editorPaneRef}
-              className="flex shrink-0 grow-0 flex-col border-l"
+              className="flex shrink-0 grow-0 flex-col border-s"
               style={{ flexBasis: `${editorFraction * 100}%` }}
             >
               <PythonEditorPane

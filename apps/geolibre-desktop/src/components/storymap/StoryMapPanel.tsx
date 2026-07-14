@@ -539,7 +539,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline">
-                    <Upload className="mr-1 h-4 w-4" />
+                    <Upload className="me-1 h-4 w-4" />
                     {t("storymap.import")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -555,7 +555,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button size="sm" variant="outline" disabled={chapters.length === 0}>
-                    <Download className="mr-1 h-4 w-4" />
+                    <Download className="me-1 h-4 w-4" />
                     {t("storymap.exportData")}
                   </Button>
                 </DropdownMenuTrigger>
@@ -569,7 +569,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button size="sm" variant="outline" onClick={handleAddChapter}>
-                <Plus className="mr-1 h-4 w-4" />
+                <Plus className="me-1 h-4 w-4" />
                 {t("storymap.addChapter")}
               </Button>
               <Button
@@ -579,7 +579,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 title={t("storymap.resetTitle")}
                 onClick={handleReset}
               >
-                <RotateCcw className="mr-1 h-4 w-4" />
+                <RotateCcw className="me-1 h-4 w-4" />
                 {t("storymap.reset")}
               </Button>
             </div>
@@ -589,7 +589,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
             <div className="flex flex-col items-center gap-3 rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
               <p>{t("storymap.empty")}</p>
               <Button size="sm" variant="secondary" onClick={handleLoadSample}>
-                <Sparkles className="mr-1 h-4 w-4" />
+                <Sparkles className="me-1 h-4 w-4" />
                 {t("storymap.loadSample")}
               </Button>
             </div>
@@ -638,7 +638,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               disabled={chapters.length === 0}
               onClick={() => void handleExport()}
             >
-              <Download className="mr-1 h-4 w-4" />
+              <Download className="me-1 h-4 w-4" />
               {t("storymap.exportHtml")}
             </Button>
             <Button
@@ -647,7 +647,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               disabled={chapters.length === 0}
               onClick={() => setHandoutOpen(true)}
             >
-              <FileDown className="mr-1 h-4 w-4" />
+              <FileDown className="me-1 h-4 w-4" />
               {t("storymap.handout.button")}
             </Button>
             <Button
@@ -655,7 +655,7 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
               disabled={chapters.length === 0}
               onClick={handlePresent}
             >
-              <Play className="mr-1 h-4 w-4" />
+              <Play className="me-1 h-4 w-4" />
               {t("storymap.present")}
             </Button>
           </div>
@@ -889,7 +889,7 @@ function ChapterCard({
       <div className="flex items-center gap-1 px-2 py-1.5">
         <button
           type="button"
-          className="flex flex-1 items-center gap-2 truncate text-left text-sm font-medium"
+          className="flex flex-1 items-center gap-2 truncate text-start text-sm font-medium"
           onClick={onToggle}
         >
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-muted text-xs">
@@ -1039,7 +1039,7 @@ function ChapterCard({
                   className="h-7"
                   onClick={onCaptureView}
                 >
-                  <Crosshair className="mr-1 h-3.5 w-3.5" />
+                  <Crosshair className="me-1 h-3.5 w-3.5" />
                   {t("storymap.captureView")}
                 </Button>
                 <Button
@@ -1048,7 +1048,7 @@ function ChapterCard({
                   className="h-7"
                   onClick={onCompose}
                 >
-                  <Frame className="mr-1 h-3.5 w-3.5" />
+                  <Frame className="me-1 h-3.5 w-3.5" />
                   {t("storymap.composeOnMap")}
                 </Button>
               </div>
@@ -1117,7 +1117,7 @@ function LayerEffectsEditor({
             ])
           }
         >
-          <Plus className="mr-1 h-3 w-3" />
+          <Plus className="me-1 h-3 w-3" />
           {t("storymap.addEffect")}
         </Button>
       </div>
@@ -1150,7 +1150,7 @@ function LayerEffectsEditor({
               if (typeof next === "number") update(i, { opacity: next });
             }}
           />
-          <span className="w-8 shrink-0 text-right font-mono text-xs">
+          <span className="w-8 shrink-0 text-end font-mono text-xs">
             {change.opacity.toFixed(1)}
           </span>
           <Input

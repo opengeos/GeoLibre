@@ -105,7 +105,7 @@ export function CommandPalette({
         className="top-[15%] max-w-xl translate-y-0"
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <div className="flex items-center gap-2 border-b px-3 pr-10">
+        <div className="flex items-center gap-2 border-b px-3 pe-10">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             autoFocus
@@ -156,7 +156,7 @@ export function CommandPalette({
                     role="option"
                     aria-selected={isActive}
                     data-active={isActive}
-                    className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+                    className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-start text-sm ${
                       isActive
                         ? "bg-accent text-accent-foreground"
                         : "text-foreground"

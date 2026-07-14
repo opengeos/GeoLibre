@@ -305,7 +305,7 @@ export function AttributeChartDialog({
 
         <div className="flex items-center justify-end gap-2">
           {exportError ? (
-            <span className="mr-auto truncate text-xs text-destructive">
+            <span className="me-auto truncate text-xs text-destructive">
               {exportError}
             </span>
           ) : null}

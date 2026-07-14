@@ -1036,7 +1036,7 @@ export function TopToolbar({
     toolbarButtonClass,
     "hidden md:inline-flex",
   );
-  const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:mr-1");
+  const toolbarIconClassName = cn("h-3.5 w-3.5", showLabels && "sm:me-1");
   const appTitle = isTauri() ? "GeoLibre Desktop" : "GeoLibre";
   const renderToolbarLabel = (label: string) =>
     showLabels ? <span className="hidden sm:inline">{label}</span> : null;
@@ -1058,7 +1058,7 @@ export function TopToolbar({
             "flex-wrap px-2 md:flex-nowrap md:overflow-x-auto",
       )}
     >
-      <span className="mr-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:mr-2">
+      <span className="me-1 flex shrink-0 items-center gap-1.5 text-sm font-semibold text-primary md:me-2">
         <Map className="h-4 w-4" />
         {showProjectInfo ? (
           <span className="hidden sm:inline">{appTitle}</span>
@@ -1342,7 +1342,7 @@ export function TopToolbar({
         commands={commands}
         onOpenChange={setShortcutsOpen}
       />
-      <div className="ml-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="ms-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Button
           aria-label={
             themeMode === "dark"

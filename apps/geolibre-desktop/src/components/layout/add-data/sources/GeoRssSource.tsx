@@ -146,7 +146,7 @@ export function GeoRssSource() {
         {georssMode === "file" ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" variant="outline" onClick={handleChooseFile}>
-              <FileUp className="mr-2 h-3.5 w-3.5" />
+              <FileUp className="me-2 h-3.5 w-3.5" />
               {t("addData.common.chooseFile")}
             </Button>
             <span className="min-w-0 truncate text-xs text-muted-foreground">

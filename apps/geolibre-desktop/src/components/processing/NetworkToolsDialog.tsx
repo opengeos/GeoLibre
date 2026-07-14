@@ -248,7 +248,7 @@ export function NetworkToolsDialog({
                   type="button"
                   onClick={() => setSelectedId(entry.id)}
                   className={cn(
-                    "w-full rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                    "w-full rounded-md px-2 py-1.5 text-start text-sm transition-colors hover:bg-accent",
                     entry.id === selectedId &&
                       "bg-accent font-medium text-accent-foreground",
                   )}

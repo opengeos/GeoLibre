@@ -358,7 +358,7 @@ export function RecordVideoDialog({
                 disabled={editingFrozen}
                 onClick={() => chooseMode("whole")}
               >
-                <Maximize className="mr-1.5 h-3.5 w-3.5" />
+                <Maximize className="me-1.5 h-3.5 w-3.5" />
                 {t("recordVideo.wholeMap")}
               </Button>
               <Button
@@ -368,7 +368,7 @@ export function RecordVideoDialog({
                 disabled={editingFrozen}
                 onClick={startSelect}
               >
-                <Crop className="mr-1.5 h-3.5 w-3.5" />
+                <Crop className="me-1.5 h-3.5 w-3.5" />
                 {region && mode === "region"
                   ? t("recordVideo.redrawArea")
                   : t("recordVideo.selectArea")}
@@ -428,7 +428,7 @@ export function RecordVideoDialog({
                 className="flex-1"
                 onClick={stopRecording}
               >
-                <Square className="mr-1.5 h-3.5 w-3.5 fill-current" />
+                <Square className="me-1.5 h-3.5 w-3.5 fill-current" />
                 {t("recordVideo.stop")}
               </Button>
               <span className="flex items-center gap-1.5 text-xs font-medium text-red-500">
@@ -456,7 +456,7 @@ export function RecordVideoDialog({
               </div>
               <div className="flex items-center gap-2">
                 <Button type="button" className="flex-1" onClick={handleSave}>
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  <Download className="me-1.5 h-3.5 w-3.5" />
                   {t("recordVideo.saveVideo")}
                 </Button>
                 <Button
@@ -464,7 +464,7 @@ export function RecordVideoDialog({
                   variant="outline"
                   onClick={discardRecording}
                 >
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  <Trash2 className="me-1.5 h-3.5 w-3.5" />
                   {t("recordVideo.discard")}
                 </Button>
               </div>
@@ -480,7 +480,7 @@ export function RecordVideoDialog({
               }
               onClick={startRecording}
             >
-              <Video className="mr-1.5 h-3.5 w-3.5" />
+              <Video className="me-1.5 h-3.5 w-3.5" />
               {status === "saving"
                 ? t("recordVideo.savingStatus")
                 : t("recordVideo.record")}

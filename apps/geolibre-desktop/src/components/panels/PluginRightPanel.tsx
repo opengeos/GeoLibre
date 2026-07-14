@@ -162,7 +162,7 @@ export function PluginRightPanel({
       <PanelRight className="h-4 w-4" />
     );
 
-  const borderSide = isLayersSide ? "md:border-r" : "md:border-l";
+  const borderSide = isLayersSide ? "md:border-e" : "md:border-s";
   const canMoveLeft = activeDock !== "left-of-layers";
   const canMoveRight = activeDock !== "right-of-style";
 
@@ -185,7 +185,7 @@ export function PluginRightPanel({
           role="separator"
           aria-orientation="vertical"
           aria-label={t("pluginPanel.resize")}
-          className={`absolute ${isLayersSide ? "-right-1 border-r" : "-left-1 border-l"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
+          className={`absolute ${isLayersSide ? "-end-1 border-e" : "-start-1 border-s"} top-0 z-20 hidden h-full w-2 cursor-col-resize touch-none select-none border-transparent hover:border-primary md:block`}
           onPointerDown={handleResizeStart}
         />
       ) : null}

@@ -61,7 +61,7 @@ function renderItems(
       return (
         <DropdownMenuSub key={item.id}>
           <DropdownMenuSubTrigger>
-            {/* No mr-2: DropdownMenuSubTrigger already spaces its leading icon
+            {/* No me-2: DropdownMenuSubTrigger already spaces its leading icon
                 (matches the built-in menus' submenu triggers). */}
             <MenuIcon icon={item.icon} className="h-4 w-4 shrink-0 object-contain" />
             {item.label}
@@ -88,7 +88,7 @@ function renderItems(
           }
         }}
       >
-        <MenuIcon icon={item.icon} className="mr-2 h-4 w-4 shrink-0 object-contain" />
+        <MenuIcon icon={item.icon} className="me-2 h-4 w-4 shrink-0 object-contain" />
         {item.label}
       </DropdownMenuItem>
     );

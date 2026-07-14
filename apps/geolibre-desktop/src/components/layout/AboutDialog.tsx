@@ -173,7 +173,7 @@ export function AboutDialog({
             size={buttonSize}
             aria-label={t("about.trigger")}
           >
-            <Info className={iconClassName ?? "h-3.5 w-3.5 sm:mr-1"} />
+            <Info className={iconClassName ?? "h-3.5 w-3.5 sm:me-1"} />
             {showLabels ? (
               <span className="hidden sm:inline">{t("about.trigger")}</span>
             ) : null}

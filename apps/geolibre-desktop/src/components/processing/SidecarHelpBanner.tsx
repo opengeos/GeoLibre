@@ -100,7 +100,7 @@ export function SidecarHelpBanner({
     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 text-sm">
       <button
         type="button"
-        className="flex w-full items-start gap-2 px-3 py-2 text-left"
+        className="flex w-full items-start gap-2 px-3 py-2 text-start"
         aria-expanded={expanded}
         // Only reference the panel while it is in the DOM; the collapsed banner
         // doesn't render it, and aria-controls must point at an existing node.
@@ -177,7 +177,7 @@ export function SidecarHelpBanner({
             <p className="text-xs font-medium text-foreground">
               {resolvedTroubleshootingTitle}
             </p>
-            <ol className="grid list-decimal gap-1 pl-5 text-xs text-muted-foreground">
+            <ol className="grid list-decimal gap-1 ps-5 text-xs text-muted-foreground">
               {resolvedSteps.map((step, index) => (
                 // index is a safe key: caller-authored fixed list, never reordered
                 <li key={index}>{step}</li>

@@ -269,9 +269,9 @@ export function CollaborateDialog({
                   className="w-full"
                 >
                   {busy ? (
-                    <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Users className="mr-2 h-3.5 w-3.5" />
+                    <Users className="me-2 h-3.5 w-3.5" />
                   )}
                   {t("collaborate.joinSession")}
                 </Button>
@@ -318,9 +318,9 @@ export function CollaborateDialog({
                     className="w-full"
                   >
                     {busy ? (
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      <Loader2 className="me-2 h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Users className="mr-2 h-3.5 w-3.5" />
+                      <Users className="me-2 h-3.5 w-3.5" />
                     )}
                     {t("collaborate.start")}
                   </Button>
@@ -514,7 +514,7 @@ function ActiveSession({
         {isHost || collaboration.mode === "co-edit"
           ? t("collaborate.goToMap")
           : t("collaborate.goToMapViewOnly")}
-        <ArrowRight className="ml-2 h-3.5 w-3.5" />
+        <ArrowRight className="ms-2 h-3.5 w-3.5" />
       </Button>
 
       <div className="flex justify-between gap-2">
@@ -536,7 +536,7 @@ function ActiveSession({
           <span />
         )}
         <Button type="button" variant="destructive" onClick={onLeave}>
-          <LogOut className="mr-2 h-3.5 w-3.5" />
+          <LogOut className="me-2 h-3.5 w-3.5" />
           {t("collaborate.leave")}
         </Button>
       </div>

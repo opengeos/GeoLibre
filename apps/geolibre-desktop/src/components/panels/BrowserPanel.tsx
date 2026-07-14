@@ -581,9 +581,9 @@ export function BrowserPanel({
     // move/merge/collapse/close controls, and the dock rail around this.
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative border-b px-2 py-2">
-        <Search className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute start-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="h-8 pl-7 text-sm"
+          className="h-8 ps-7 text-sm"
           placeholder={t("browser.searchPlaceholder")}
           value={query}
           aria-label={t("browser.searchPlaceholder")}

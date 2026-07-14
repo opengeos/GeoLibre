@@ -76,7 +76,7 @@ export function OnboardingDialog({ open, onClose }: OnboardingDialogProps) {
             <button
               key={level}
               type="button"
-              className="w-full rounded-md border p-3 text-left transition hover:bg-accent"
+              className="w-full rounded-md border p-3 text-start transition hover:bg-accent"
               onClick={() => choose(level)}
             >
               <span className="block text-sm font-semibold">

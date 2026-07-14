@@ -173,7 +173,7 @@ export function usePyCompletion({
           key={candidate}
           role="option"
           aria-selected={i === completion.index}
-          className={`block w-full px-3 py-1 text-left font-mono text-xs ${
+          className={`block w-full px-3 py-1 text-start font-mono text-xs ${
             i === completion.index
               ? "bg-accent text-accent-foreground"
               : "hover:bg-accent/50"
