@@ -204,6 +204,8 @@ export interface AppState {
     statisticsToolOpen: StatisticsToolKind | null;
     rasterToolOpen: RasterToolKind | null;
     segmentationOpen: boolean;
+    objectDetectionOpen: boolean;
+    segmentEverythingOpen: boolean;
     geocodeOpen: boolean;
     sqlWorkspaceOpen: boolean;
     loadEditorFeaturesOpen: boolean;
@@ -320,6 +322,8 @@ export interface AppState {
   setStatisticsToolOpen: (kind: StatisticsToolKind | null) => void;
   setRasterToolOpen: (kind: RasterToolKind | null) => void;
   setSegmentationOpen: (open: boolean) => void;
+  setObjectDetectionOpen: (open: boolean) => void;
+  setSegmentEverythingOpen: (open: boolean) => void;
   setGeocodeOpen: (open: boolean) => void;
   setSqlWorkspaceOpen: (open: boolean) => void;
   setLoadEditorFeaturesOpen: (open: boolean, layerId?: string | null) => void;
@@ -659,6 +663,8 @@ export const useAppStore = create<AppState>()(
         statisticsToolOpen: null,
         rasterToolOpen: null,
         segmentationOpen: false,
+        objectDetectionOpen: false,
+        segmentEverythingOpen: false,
         geocodeOpen: false,
         sqlWorkspaceOpen: false,
         loadEditorFeaturesOpen: false,
@@ -910,6 +916,10 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, rasterToolOpen: kind } })),
       setSegmentationOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, segmentationOpen: open } })),
+      setObjectDetectionOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, objectDetectionOpen: open } })),
+      setSegmentEverythingOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, segmentEverythingOpen: open } })),
       setGeocodeOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, geocodeOpen: open } })),
       setSqlWorkspaceOpen: (open) =>

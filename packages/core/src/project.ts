@@ -20,6 +20,7 @@ import {
   type LegendConfig,
   type LegendItemOverride,
   type MapGridLayout,
+  type MapScaleUnit,
   type MapViewState,
   type ProcessingModel,
   type SecondaryMapView,
@@ -745,6 +746,9 @@ function normalizeProjectPreferences(preferences: unknown): ProjectPreferences {
       ellipsoidId: getEllipsoid(
         (map as Partial<ProjectPreferences["map"]>).ellipsoidId,
       ).id,
+      scaleUnit: normalizeScaleUnit(
+        (map as Partial<ProjectPreferences["map"]>).scaleUnit,
+      ),
     },
     environmentVariables: Array.isArray(candidate.environmentVariables)
       ? candidate.environmentVariables
@@ -794,6 +798,11 @@ function normalizeGeocodingPreferences(
         ? candidate.email.trim()
         : undefined,
   };
+}
+
+/** Coerce an unknown value to a supported scale unit, defaulting to metric. */
+function normalizeScaleUnit(value: unknown): MapScaleUnit {
+  return value === "imperial" || value === "nautical" ? value : "metric";
 }
 
 function normalizeBounds(bounds: unknown): ProjectPreferences["map"]["bounds"] {

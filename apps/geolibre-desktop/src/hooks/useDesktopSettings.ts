@@ -137,9 +137,13 @@ export const DEFAULT_DESKTOP_LAYOUT_SETTINGS: DesktopLayoutSettings = {
 };
 
 export const DEFAULT_UI_PROFILE_SETTINGS: UiProfileSettings = {
+  // Ship the Advanced interface by default (`enabled: false` shows every item,
+  // which `activeInterfaceProfile` reports as "advanced") and skip the
+  // first-launch welcome dialog (`onboarded: true`). Users can still switch to a
+  // curated preset from the Settings dialog.
   enabled: false,
   level: null,
-  onboarded: false,
+  onboarded: true,
   locked: false,
   hiddenDataSources: [],
   hiddenPlugins: [],

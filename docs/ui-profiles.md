@@ -10,15 +10,16 @@ inside a saved `.geolibre.json` project.
 
 ### Onboarding
 
-On first launch (when no administrator profile is present) GeoLibre asks for an
-experience level:
+By default GeoLibre starts on the **Advanced** interface — everything visible —
+and does not show a first-launch welcome dialog. Choose a simpler experience
+level at any time from **Settings → Interface** (see below):
 
 - **Beginner** — only the essential data sources and tools.
 - **Intermediate** — common data sources, services, and plugins.
-- **Advanced** — everything GeoLibre offers.
+- **Advanced** — everything GeoLibre offers (the default).
 
-Choosing *Skip — show everything* keeps the full interface. The wizard appears
-only once; you can revisit the choice later in **Settings → Interface**.
+An administrator profile can pre-configure the interface for a whole deployment
+and lock these controls.
 
 ### Settings → Interface
 

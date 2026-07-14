@@ -310,6 +310,32 @@ const SegmentationDialog = lazy(() =>
     }),
 );
 
+const ObjectDetectionDialog = lazy(() =>
+  import("../processing/ObjectDetectionDialog")
+    .then((module) => ({
+      default: module.ObjectDetectionDialog,
+    }))
+    .catch((error) => {
+      console.error("Failed to load ObjectDetectionDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ObjectDetectionDialog").ObjectDetectionDialog;
+      return { default: Fallback };
+    }),
+);
+
+const SegmentEverythingPanel = lazy(() =>
+  import("../processing/SegmentEverythingPanel")
+    .then((module) => ({
+      default: module.SegmentEverythingPanel,
+    }))
+    .catch((error) => {
+      console.error("Failed to load SegmentEverythingPanel", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/SegmentEverythingPanel").SegmentEverythingPanel;
+      return { default: Fallback };
+    }),
+);
+
 const SqlWorkspacePanel = lazy(() =>
   import("../panels/SqlWorkspacePanel")
     .then((module) => ({
@@ -2013,6 +2039,12 @@ export function DesktopShell({
                 onClose={() => setRasterSubsetLayer(null)}
                 mapControllerRef={mapControllerRef}
               />
+              <Suspense fallback={null}>
+                <ObjectDetectionDialog mapControllerRef={mapControllerRef} />
+              </Suspense>
+              <Suspense fallback={null}>
+                <SegmentEverythingPanel mapControllerRef={mapControllerRef} />
+              </Suspense>
               <TerrainSettingsDialog mapControllerRef={mapControllerRef} />
               <StoryMapComposeBar mapControllerRef={mapControllerRef} />
             </MapGrid>

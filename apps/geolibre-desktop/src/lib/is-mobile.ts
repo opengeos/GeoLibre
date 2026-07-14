@@ -3,9 +3,10 @@
  *
  * This is distinct from a narrow *viewport* (see `useIsMobileViewport`): a
  * desktop window resized small is narrow but not mobile. Mobile platforms cannot
- * run the bundled Python sidecar or spawn local helper processes (Whitebox,
- * rasterio, format conversion, AI segmentation, the Martin tile server), so the
- * UI uses this to hide those tools instead of presenting them and failing.
+ * run the bundled Python sidecar or spawn local helper processes (rasterio,
+ * format conversion, AI segmentation, the Martin tile server), so the UI uses
+ * this to hide those tools instead of presenting them and failing. WebAssembly-
+ * backed tools (the Whitebox toolbox) run in the browser and stay available.
  *
  * Detection is user-agent based so it needs no extra Tauri plugin or Rust/
  * capability wiring (the Tauri Android webview reports an "Android" UA). iPadOS

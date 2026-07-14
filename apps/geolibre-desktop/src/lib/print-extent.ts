@@ -139,6 +139,15 @@ export interface DrawPrintExtentOptions {
   aspect?: number;
   /** Aborts the interaction (resolves with `null`) e.g. on dialog unmount. */
   signal?: AbortSignal;
+  /** Draw the extent box on the map as a MapLibre fill/line source (default
+   * true). Set false when the caller renders its own preview (e.g. a DOM/SVG
+   * overlay that must sit above an interleaved deck.gl raster, which occludes
+   * MapLibre layers). */
+  drawBox?: boolean;
+  /** Called with the current extent as the box is dragged (and `null` when the
+   * draw ends or is cancelled), so a caller drawing its own preview can follow
+   * the drag. */
+  onPreview?: (extent: PrintExtent | null) => void;
 }
 
 /**
@@ -191,6 +200,8 @@ export function drawPrintExtent(
       if (panWasEnabled) map.dragPan.enable();
       if (scrollWasEnabled) map.scrollZoom.enable();
       if (dblClickWasEnabled) map.doubleClickZoom.enable();
+      // Clear any caller-drawn preview on every exit (commit, cancel, abort).
+      options.onPreview?.(null);
       resolve(result);
     };
     const onAbort = () => finish(null);
@@ -235,7 +246,9 @@ export function drawPrintExtent(
 
     const preview = (raw: { x: number; y: number }, shiftKey: boolean) => {
       if (!start) return;
-      showPrintExtent(map, extentFromPixels(start, settlePoint(raw, shiftKey)));
+      const extent = extentFromPixels(start, settlePoint(raw, shiftKey));
+      if (options.drawBox !== false) showPrintExtent(map, extent);
+      options.onPreview?.(extent);
     };
 
     const commit = (raw: { x: number; y: number }, shiftKey: boolean) => {
@@ -252,7 +265,7 @@ export function drawPrintExtent(
         return finish(null);
       }
       const extent = extentFromPixels(start, end);
-      showPrintExtent(map, extent);
+      if (options.drawBox !== false) showPrintExtent(map, extent);
       finish(extent);
     };
 
