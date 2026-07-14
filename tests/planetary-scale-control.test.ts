@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   greatCircleMeters,
   getRoundNum,
+  scaleSpan,
 } from "../packages/map/src/planetary-scale-control";
 import { getEllipsoid, meanRadiusMeters } from "../packages/core/src/ellipsoids";
 
@@ -67,5 +68,35 @@ describe("getRoundNum", () => {
   it("returns 0 for non-positive input", () => {
     assert.equal(getRoundNum(0), 0);
     assert.equal(getRoundNum(-5), 0);
+  });
+});
+
+describe("scaleSpan", () => {
+  it("uses m below 1 km and km above for metric", () => {
+    assert.deepEqual(scaleSpan(500, "metric"), { span: 500, label: "m" });
+    assert.deepEqual(scaleSpan(2500, "metric"), { span: 2.5, label: "km" });
+    assert.deepEqual(scaleSpan(1000, "metric"), { span: 1, label: "km" });
+  });
+
+  it("uses ft below a mile and mi above for imperial", () => {
+    // 100 m ≈ 328.08 ft (under a mile) → feet.
+    const short = scaleSpan(100, "imperial");
+    assert.equal(short.label, "ft");
+    assert.ok(Math.abs(short.span - 328.084) < 1e-2, `${short.span}`);
+    // Exactly one statute mile (1609.344 m) → 1 mi.
+    const mile = scaleSpan(1609.344, "imperial");
+    assert.equal(mile.label, "mi");
+    assert.ok(Math.abs(mile.span - 1) < 1e-6, `${mile.span}`);
+    // 10 km ≈ 6.2137 mi.
+    const long = scaleSpan(10000, "imperial");
+    assert.equal(long.label, "mi");
+    assert.ok(Math.abs(long.span - 6.21371) < 1e-4, `${long.span}`);
+  });
+
+  it("reports nautical miles for nautical", () => {
+    const nm = scaleSpan(1852, "nautical");
+    assert.equal(nm.label, "nmi");
+    assert.ok(Math.abs(nm.span - 1) < 1e-9, `${nm.span}`);
+    assert.ok(Math.abs(scaleSpan(9260, "nautical").span - 5) < 1e-9);
   });
 });

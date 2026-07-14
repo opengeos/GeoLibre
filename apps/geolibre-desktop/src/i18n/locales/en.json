@@ -1306,6 +1306,11 @@
       "renderWorldCopies": "Render world copies",
       "ellipsoid": "Celestial body",
       "ellipsoidHint": "Sets the radius used for distance, area, and scale measurements. Pick a matching planetary basemap under Add Data.",
+      "scaleUnit": "Scale bar units",
+      "scaleUnitMetric": "Metric (m / km)",
+      "scaleUnitImperial": "Imperial (ft / mi)",
+      "scaleUnitNautical": "Nautical (nmi)",
+      "scaleUnitHint": "Choose the units shown on the scale bar at the bottom of the map.",
       "errorBoundsUnavailable": "The map bounds are not available yet."
     },
     "layout": {

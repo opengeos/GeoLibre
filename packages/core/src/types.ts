@@ -708,6 +708,12 @@ export interface CollaborationState {
 /** Map projection the renderer uses. Mirrors the GlobeControl toggle. */
 export type MapProjection = "globe" | "mercator";
 
+/**
+ * Unit system the scale bar reports distances in. `"metric"` uses m/km,
+ * `"imperial"` uses ft/mi, and `"nautical"` uses nautical miles.
+ */
+export type MapScaleUnit = "metric" | "imperial" | "nautical";
+
 export interface MapPreferences {
   restrictBounds: boolean;
   bounds: [number, number, number, number];
@@ -722,6 +728,11 @@ export interface MapPreferences {
    * with planetary basemaps. Defaults to `"earth"` (WGS 84).
    */
   ellipsoidId: string;
+  /**
+   * Unit system the scale bar displays. Defaults to `"metric"`; switch to
+   * `"imperial"` for feet/miles or `"nautical"` for nautical miles.
+   */
+  scaleUnit: MapScaleUnit;
 }
 
 export interface RuntimeEnvironmentVariable {
@@ -785,6 +796,7 @@ export const DEFAULT_PROJECT_PREFERENCES: ProjectPreferences = {
     renderWorldCopies: true,
     projection: "globe",
     ellipsoidId: "earth",
+    scaleUnit: "metric",
   },
   environmentVariables: [],
   geocoding: {

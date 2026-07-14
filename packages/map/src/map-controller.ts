@@ -878,9 +878,12 @@ export class MapController {
       createMapTransformConstraint(preferences, this.map, minZoom, maxZoom),
     );
     this.applyView(this.readView());
-    // The ellipsoid can change here (Settings' celestial-body dropdown) without
-    // the basemap changing, so redraw the body-aware scale bar now — the store's
-    // ellipsoid subscription has already updated the active-radius singleton.
+    // The ellipsoid or the scale unit can change here (Settings' dropdowns)
+    // without the basemap changing, so push the unit and redraw the body-aware
+    // scale bar now — the store's ellipsoid subscription has already updated the
+    // active-radius singleton. setUnit redraws only when the unit differs, so
+    // refresh() still covers an ellipsoid-only change.
+    this.scaleControl?.setUnit(preferences.scaleUnit);
     this.scaleControl?.refresh();
   }
 
@@ -2357,9 +2360,12 @@ export class MapController {
       return false;
     }
     // A body-aware scale bar (MapLibre's built-in ScaleControl assumes Earth's
-    // radius, so it is wrong on Moon/Mars/Mercury/etc.). Metric only, matching
-    // the previous configuration.
-    this.scaleControl = new PlanetaryScaleControl({ maxWidth: 120 });
+    // radius, so it is wrong on Moon/Mars/Mercury/etc.). The unit system follows
+    // the project's map preference (metric / imperial / nautical).
+    this.scaleControl = new PlanetaryScaleControl({
+      maxWidth: 120,
+      unit: this.mapPreferences.scaleUnit,
+    });
     this.map.addControl(this.scaleControl, this.controlPositions.scale);
     return true;
   }

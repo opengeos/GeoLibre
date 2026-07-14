@@ -7,6 +7,7 @@ import {
   useAppStore,
   type MapPreferences,
   type MapProjection,
+  type MapScaleUnit,
   type ProjectPreferences,
   type RuntimeEnvironmentVariable,
 } from "@geolibre/core";
@@ -1620,6 +1621,33 @@ export function SettingsDialog({
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       {t("settings.map.ellipsoidHint")}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="settings-scale-unit">
+                      {t("settings.map.scaleUnit")}
+                    </Label>
+                    <Select
+                      id="settings-scale-unit"
+                      value={draftPreferences.map.scaleUnit}
+                      onChange={(event) =>
+                        updateMapPreferences({
+                          scaleUnit: event.target.value as MapScaleUnit,
+                        })
+                      }
+                    >
+                      <option value="metric">
+                        {t("settings.map.scaleUnitMetric")}
+                      </option>
+                      <option value="imperial">
+                        {t("settings.map.scaleUnitImperial")}
+                      </option>
+                      <option value="nautical">
+                        {t("settings.map.scaleUnitNautical")}
+                      </option>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {t("settings.map.scaleUnitHint")}
                     </p>
                   </div>
                 </div>

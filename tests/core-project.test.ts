@@ -121,6 +121,30 @@ describe("project parsing", () => {
     assert.equal(reloaded.preferences.map.projection, "mercator");
   });
 
+  it("round-trips the scale unit preference and defaults unknown values to metric", () => {
+    const base = createEmptyProject("Scale");
+    assert.equal(base.preferences.map.scaleUnit, "metric");
+    const imperial = {
+      ...base,
+      preferences: {
+        ...base.preferences,
+        map: { ...base.preferences.map, scaleUnit: "imperial" as const },
+      },
+    };
+    const reloaded = parseProject(serializeProject(imperial));
+    assert.equal(reloaded.preferences.map.scaleUnit, "imperial");
+    // A hand-edited project with a bogus unit falls back to metric.
+    const bogus = parseProject(
+      JSON.stringify({
+        version: "0.1.0",
+        name: "Bogus",
+        mapView: { center: [0, 0], zoom: 2, bearing: 0, pitch: 0 },
+        preferences: { map: { scaleUnit: "furlongs" } },
+      }),
+    );
+    assert.equal(bogus.preferences.map.scaleUnit, "metric");
+  });
+
   it("normalizes a legend config, dropping malformed overrides", () => {
     const project = parseProject(
       JSON.stringify({

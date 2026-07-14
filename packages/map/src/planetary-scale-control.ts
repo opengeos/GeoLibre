@@ -1,4 +1,4 @@
-import { getActiveMeanRadiusMeters } from "@geolibre/core";
+import { getActiveMeanRadiusMeters, type MapScaleUnit } from "@geolibre/core";
 import maplibregl from "maplibre-gl";
 
 /**
@@ -15,16 +15,27 @@ import maplibregl from "maplibre-gl";
  *
  * The radius is read lazily on each update, and {@link refresh} lets the map
  * controller redraw the bar the instant the basemap (and thus the body) changes,
- * without waiting for the next pan.
+ * without waiting for the next pan. The unit system (metric / imperial /
+ * nautical) is set with {@link setUnit} and follows the project's map
+ * preferences.
  */
 export class PlanetaryScaleControl implements maplibregl.IControl {
   private map: maplibregl.Map | null = null;
   private container: HTMLElement | null = null;
   private readonly maxWidth: number;
+  private unit: MapScaleUnit;
   private readonly onMove = () => this.update();
 
-  constructor(options: { maxWidth?: number } = {}) {
+  constructor(options: { maxWidth?: number; unit?: MapScaleUnit } = {}) {
     this.maxWidth = options.maxWidth ?? 100;
+    this.unit = options.unit ?? "metric";
+  }
+
+  /** Switch the unit system and redraw immediately if the bar is on the map. */
+  setUnit(unit: MapScaleUnit): void {
+    if (this.unit === unit) return;
+    this.unit = unit;
+    this.update();
   }
 
   onAdd(map: maplibregl.Map): HTMLElement {
@@ -71,7 +82,7 @@ export class PlanetaryScaleControl implements maplibregl.IControl {
       return;
     }
     container.style.display = "";
-    setMetricScale(container, this.maxWidth, maxMeters);
+    setScale(container, this.maxWidth, maxMeters, this.unit);
   }
 }
 
@@ -115,18 +126,45 @@ function formatNum(value: number): string {
   return Number.parseFloat(value.toPrecision(12)).toString();
 }
 
-/** Size the bar and label to a round metric distance (km above 1 km, else m). */
-function setMetricScale(
+const FEET_PER_METER = 3.2808398950131235; // 1 / 0.3048
+const FEET_PER_MILE = 5280;
+const METERS_PER_NAUTICAL_MILE = 1852;
+
+/** Size the bar and label to a round distance in the requested unit system. */
+function setScale(
   el: HTMLElement,
   maxWidth: number,
   maxMeters: number,
+  unit: MapScaleUnit,
 ): void {
-  const inKm = maxMeters >= 1000;
-  const span = inKm ? maxMeters / 1000 : maxMeters;
+  const { span, label } = scaleSpan(maxMeters, unit);
   const rounded = getRoundNum(span);
   // rounded ≤ span, so the bar is never wider than maxWidth; clamp anyway as a
   // hard guard against any pathological span slipping through.
   const width = Math.min(maxWidth, maxWidth * (rounded / span));
   el.style.width = `${width}px`;
-  el.textContent = `${formatNum(rounded)} ${inKm ? "km" : "m"}`;
+  el.textContent = `${formatNum(rounded)} ${label}`;
+}
+
+/**
+ * Convert a ground distance in metres into the unit the bar rounds and labels
+ * with: km/m for metric, mi/ft for imperial, and nautical miles for nautical.
+ * The unit crosses to the larger denomination once the span exceeds one of it.
+ */
+export function scaleSpan(
+  maxMeters: number,
+  unit: MapScaleUnit,
+): { span: number; label: string } {
+  if (unit === "imperial") {
+    const feet = maxMeters * FEET_PER_METER;
+    return feet >= FEET_PER_MILE
+      ? { span: feet / FEET_PER_MILE, label: "mi" }
+      : { span: feet, label: "ft" };
+  }
+  if (unit === "nautical") {
+    return { span: maxMeters / METERS_PER_NAUTICAL_MILE, label: "nmi" };
+  }
+  return maxMeters >= 1000
+    ? { span: maxMeters / 1000, label: "km" }
+    : { span: maxMeters, label: "m" };
 }
