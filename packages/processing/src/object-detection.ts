@@ -85,11 +85,19 @@ let ortPromise: Promise<typeof import("onnxruntime-web/wasm")> | null = null;
  */
 function loadOrt(): Promise<typeof import("onnxruntime-web/wasm")> {
   if (!ortPromise) {
-    ortPromise = import("onnxruntime-web/wasm").then((ort) => {
-      ort.env.wasm.numThreads = 1;
-      ort.env.wasm.wasmPaths = ORT_WASM_BASE;
-      return ort;
-    });
+    ortPromise = import("onnxruntime-web/wasm")
+      .then((ort) => {
+        ort.env.wasm.numThreads = 1;
+        ort.env.wasm.wasmPaths = ORT_WASM_BASE;
+        return ort;
+      })
+      .catch((err) => {
+        // Clear the singleton so a transient failure (network blip, blocked
+        // CDN) does not permanently poison every later retry with the same
+        // rejected promise; the next call re-attempts the import.
+        ortPromise = null;
+        throw err;
+      });
   }
   return ortPromise;
 }
@@ -136,7 +144,11 @@ function rgbBands(raster: RasterData): {
   // in a mostly-NoData raster), assume 8-bit range so the tensor receives 0-1
   // values rather than raw 0-255 counts.
   if (!hasValid) max = 255;
-  const divisor = max <= 1.5 ? 1 : max <= 255 ? 255 : max;
+  // Only treat a raster as 8-bit when its sampled max is a whole number in
+  // (1.5, 255]: floats never land on exact integers, so a reflectance/index/DEM
+  // raster peaking in that range auto-scales by its own max instead of being
+  // divided by 255 (which would push a value of 2.0 to a near-black 0.008).
+  const divisor = max <= 1.5 ? 1 : max <= 255 && Number.isInteger(max) ? 255 : max;
   return { r, g, b, divisor, nodata };
 }
 
@@ -422,6 +434,15 @@ export async function detectObjects(
       throw new Error(
         `Model produced no usable output. Available outputs: ${session.outputNames.join(", ")}. ` +
           "Export a detection model with a single [1, C, N] head (no baked-in NMS).",
+      );
+    }
+    // decodeYolo reads the buffer as float32. A model exported with an fp16 or
+    // int8-quantised output head returns a Uint16Array/Uint8Array here (ORT does
+    // not upcast), so the values would be misread as garbage boxes/scores; fail
+    // with a clear message instead. Re-export the model with a float32 head.
+    if (output.type !== "float32") {
+      throw new Error(
+        `Model output dtype "${output.type}" is not supported. Export the model with a float32 detection head.`,
       );
     }
     const outData = output.data as Float32Array;

@@ -139,6 +139,13 @@ function detectionsToFeatureCollection(
   };
   if (epsg && epsg !== 4326) {
     fc.crs = { type: "name", properties: { name: `EPSG:${epsg}` } };
+  } else if (!epsg && (raster.originX !== 0 || raster.originY !== 0)) {
+    // No recognised EPSG (user-defined CRS, or WKT-only georeferencing): the
+    // boxes stay in the raster's native coordinates and are not reprojected, so
+    // a projected raster's detections can land far from their true location.
+    console.warn(
+      "objectDetection: no recognised EPSG code in the raster GeoKeys — detections will not be reprojected and may appear at the wrong location.",
+    );
   }
   return fc;
 }
@@ -217,6 +224,10 @@ export function ObjectDetectionDialog({
       setModelBytes(result.data);
       const name = (result.path || "model.onnx").split(/[/\\]/).pop();
       setModelName(name || "model.onnx");
+      // Clear the built-in model's leftover class names so a custom model does
+      // not mislabel its detections by indexing into an unrelated COCO list;
+      // the field falls back to class_<index> until the user fills it in.
+      setClassNames("");
     }
   }, []);
 
@@ -225,7 +236,13 @@ export function ObjectDetectionDialog({
   const selectBuiltinModel = useCallback((id: string) => {
     setBuiltinModelId(id);
     const model = BUILTIN_DETECTION_MODELS.find((m) => m.id === id);
-    if (model) setClassNames(model.classNames.join(", "));
+    if (model) {
+      setClassNames(model.classNames.join(", "));
+      // Also apply the model's native input edge so a built-in exported at a
+      // non-640 size runs at its documented resolution rather than whatever the
+      // user last set.
+      setInputSize(model.inputSize);
+    }
   }, []);
 
   const handleRun = useCallback(async () => {
@@ -296,19 +313,31 @@ export function ObjectDetectionDialog({
         else byClass.set(cls, [feature]);
       }
 
-      let firstLayerId: string | null = null;
       for (const [cls, features] of byClass) {
-        const layerId = addGeoJsonLayer(
-          t("objectDetection.layerName", { class: cls }),
-          { type: "FeatureCollection", features },
-        );
-        if (!firstLayerId) firstLayerId = layerId;
+        addGeoJsonLayer(t("objectDetection.layerName", { class: cls }), {
+          type: "FeatureCollection",
+          features,
+        });
       }
-      if (firstLayerId) {
-        const layer = useAppStore
-          .getState()
-          .layers.find((item) => item.id === firstLayerId);
-        if (layer) mapControllerRef.current?.fitLayer(layer);
+      // Fit to the union of every detected box across all classes, not just the
+      // first class's layer, so no class's detections end up off-screen.
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const feature of fc.features) {
+        if (feature.geometry?.type !== "Polygon") continue;
+        for (const ring of feature.geometry.coordinates) {
+          for (const [x, y] of ring) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      if (Number.isFinite(minX)) {
+        mapControllerRef.current?.fitBounds([minX, minY, maxX, maxY]);
       }
       setResultMessage(
         t("objectDetection.added", {
