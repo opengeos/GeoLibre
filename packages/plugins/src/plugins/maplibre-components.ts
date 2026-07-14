@@ -3165,10 +3165,19 @@ export async function mirrorAddCogLayer(
   // addLayer generates the id internally; diff the control's layer-id set
   // around the call to find it, rather than relying on 'layeradd' firing before
   // the promise settles. Deterministic and independent of event/promise
-  // ordering.
+  // ordering. Assumes addLayer adds exactly one new id; if a future
+  // CogLayerControl dedupes/reuses an id and the diff is empty, log it so the
+  // caller's "retry as a fresh add" fallback is visible rather than silent.
   const before = new Set(control.getLayerIds());
   await control.addLayer(snapshot.url);
-  return control.getLayerIds().find((id) => !before.has(id)) ?? null;
+  const newId = control.getLayerIds().find((id) => !before.has(id)) ?? null;
+  if (!newId) {
+    console.debug(
+      "[GeoLibre] swipe COG mirror: no new layer id after addLayer",
+      snapshot.url,
+    );
+  }
+  return newId;
 }
 
 /**

@@ -32,6 +32,37 @@ interface MirroredEntry {
 }
 
 /**
+ * The mirror-control operations {@link SwipeCogMirror} depends on. Injectable so
+ * tests can exercise the diffing/serialization logic with fakes instead of a
+ * real CogLayerControl + deck.gl overlay.
+ */
+export interface SwipeCogMirrorDeps {
+  createControl: (map: MapLibreMap) => Promise<CogLayerControl | null>;
+  addLayer: (
+    control: CogLayerControl,
+    snapshot: SwipeCogRasterSnapshot,
+  ) => Promise<string | null>;
+  setOpacity: (
+    control: CogLayerControl,
+    mirrorLayerId: string,
+    opacity: number,
+  ) => void;
+  removeLayer: (control: CogLayerControl, mirrorLayerId: string) => void;
+  clearLayers: (control: CogLayerControl) => void;
+  removeControl: (map: MapLibreMap, control: CogLayerControl) => void;
+}
+
+const DEFAULT_DEPS: SwipeCogMirrorDeps = {
+  createControl: (map) => createSwipeCogMirrorControl(map),
+  addLayer: (control, snapshot) => mirrorAddCogLayer(control, snapshot),
+  setOpacity: (control, id, opacity) =>
+    mirrorSetCogOpacity(control, id, opacity),
+  removeLayer: (control, id) => mirrorRemoveCogLayer(control, id),
+  clearLayers: (control) => clearMirrorCogLayers(control),
+  removeControl: (map, control) => map.removeControl(control),
+};
+
+/**
  * Renders a copy of GeoLibre's deck.gl COG rasters onto the Layer Swipe
  * comparison map, so a raster assigned to the right (or both) side of the swipe
  * shows there. The comparison map's canvas is already clipped to the swipe
@@ -47,6 +78,7 @@ interface MirroredEntry {
  */
 export class SwipeCogMirror {
   private map: MapLibreMap;
+  private deps: SwipeCogMirrorDeps;
   private control: CogLayerControl | null = null;
   private controlPromise: Promise<CogLayerControl | null> | null = null;
   private destroyed = false;
@@ -56,8 +88,9 @@ export class SwipeCogMirror {
   // two syncs must not interleave their configure+addLayer.
   private syncChain: Promise<void> = Promise.resolve();
 
-  constructor(map: MapLibreMap) {
+  constructor(map: MapLibreMap, deps: SwipeCogMirrorDeps = DEFAULT_DEPS) {
     this.map = map;
+    this.deps = deps;
   }
 
   /** The comparison map this mirror renders onto (identity check for reuse). */
@@ -67,7 +100,7 @@ export class SwipeCogMirror {
 
   private ensureControl(): Promise<CogLayerControl | null> {
     if (this.destroyed) return Promise.resolve(null);
-    this.controlPromise ??= createSwipeCogMirrorControl(this.map).then(
+    this.controlPromise ??= this.deps.createControl(this.map).then(
       (control) => {
         if (this.destroyed) {
           if (control) this.tryRemoveControl(control);
@@ -108,7 +141,7 @@ export class SwipeCogMirror {
     // comparison map just to render zero layers (the common no-COG case).
     if (desired.length === 0) {
       if (this.control && this.applied.size > 0) {
-        clearMirrorCogLayers(this.control);
+        this.deps.clearLayers(this.control);
         this.applied.clear();
       }
       return;
@@ -120,7 +153,7 @@ export class SwipeCogMirror {
     const desiredIds = new Set(desired.map((raster) => raster.id));
     for (const [id, entry] of [...this.applied]) {
       if (!desiredIds.has(id)) {
-        mirrorRemoveCogLayer(control, entry.mirrorId);
+        this.deps.removeLayer(control, entry.mirrorId);
         this.applied.delete(id);
       }
     }
@@ -133,7 +166,7 @@ export class SwipeCogMirror {
       if (existing && existing.structFp === structFp) {
         // Same data + visualization; only opacity may have changed.
         if (existing.opacity !== raster.opacity) {
-          mirrorSetCogOpacity(control, existing.mirrorId, raster.opacity);
+          this.deps.setOpacity(control, existing.mirrorId, raster.opacity);
           existing.opacity = raster.opacity;
         }
         continue;
@@ -141,11 +174,11 @@ export class SwipeCogMirror {
 
       // New raster, or a structural change that needs a reload.
       if (existing) {
-        mirrorRemoveCogLayer(control, existing.mirrorId);
+        this.deps.removeLayer(control, existing.mirrorId);
         this.applied.delete(raster.id);
       }
       try {
-        const mirrorId = await mirrorAddCogLayer(control, raster);
+        const mirrorId = await this.deps.addLayer(control, raster);
         if (mirrorId && !this.destroyed) {
           this.applied.set(raster.id, {
             mirrorId,
@@ -171,7 +204,7 @@ export class SwipeCogMirror {
 
   private tryRemoveControl(control: CogLayerControl): void {
     try {
-      this.map.removeControl(control);
+      this.deps.removeControl(this.map, control);
     } catch (error) {
       // The comparison map may already be gone (removed by the swipe control).
       console.debug("[GeoLibre] swipe COG mirror: removeControl", error);
