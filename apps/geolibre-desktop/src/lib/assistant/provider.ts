@@ -142,6 +142,50 @@ export function scopeOsEnvToProject(
   return scoped;
 }
 
+/** The environment sources merged into the runtime env, from lowest to highest precedence. */
+export interface RuntimeEnvSources {
+  /** Variables read from the OS environment (desktop only). Lowest precedence. */
+  osEnv: RuntimeEnv;
+  /** Device-local AI provider credentials (Settings -> AI Providers). */
+  aiEnv: Record<string, string>;
+  /** Derived `VITE_GEOCODER_*` variables from the geocoding preference. */
+  geocoderEnv: Record<string, string>;
+  /** The device-local Cesium Ion token as `VITE_CESIUM_TOKEN`, or empty. */
+  cesiumEnv: Record<string, string>;
+  /** The project's explicit Environment variables. Highest precedence. */
+  projectEnv: Record<string, string>;
+}
+
+/**
+ * Merge the runtime environment sources into a single record, applying the
+ * precedence the app relies on: an explicit project Environment variable wins,
+ * then the device-local AI provider keys, and the OS environment only fills the
+ * remaining gaps. {@link scopeOsEnvToProject} additionally drops OS aliases that
+ * a project or device credential already covers under a different alias, so the
+ * "explicit value always wins" guarantee holds across alias collisions too.
+ *
+ * Extracted from `useRuntimeEnvironmentVariables` so the precedence ordering can
+ * be unit-tested directly (swapping two spreads here is an easy silent bug).
+ */
+export function mergeRuntimeEnv({
+  osEnv,
+  aiEnv,
+  geocoderEnv,
+  cesiumEnv,
+  projectEnv,
+}: RuntimeEnvSources): RuntimeEnv {
+  return {
+    ...scopeOsEnvToProject(
+      osEnv,
+      new Set([...Object.keys(projectEnv), ...Object.keys(aiEnv)]),
+    ),
+    ...aiEnv,
+    ...geocoderEnv,
+    ...cesiumEnv,
+    ...projectEnv,
+  };
+}
+
 /**
  * Selectable models per provider, recommended/newest first. The first entry is
  * the provider default. Users can pin any other id via `GEOLIBRE_ASSISTANT_MODEL`

@@ -1,7 +1,7 @@
 import { normalizeGeocodingProviderId, useAppStore } from "@geolibre/core";
 import { useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { scopeOsEnvToProject, type RuntimeEnv } from "../lib/assistant/provider";
+import { mergeRuntimeEnv, type RuntimeEnv } from "../lib/assistant/provider";
 import { loadOsEnvVars, readOsEnv } from "../lib/assistant/os-env";
 import { useDesktopSettingsStore } from "./useDesktopSettings";
 
@@ -84,24 +84,15 @@ export function useRuntimeEnvironmentVariables() {
       ? { VITE_CESIUM_TOKEN: cesiumIonToken.trim() }
       : {};
 
-    const runtimeEnv = {
-      // OS-provided AI keys sit at the lowest precedence: an explicit value in
-      // the project's Environment variables (or a derived geocoder var) always
-      // wins, then the device-local AI provider keys, and the OS environment
-      // only fills the remaining gaps. scopeOsEnvToProject also drops OS aliases
-      // covered by a project or device credential under a different alias, so the
-      // "explicit value always wins" guarantee holds across alias collisions too.
-      ...scopeOsEnvToProject(
-        osEnv,
-        new Set([...Object.keys(projectEnv), ...Object.keys(aiEnv)]),
-      ),
-      // Device-local AI keys outrank the OS environment but yield to an explicit
-      // same-named project Environment variable (spread last below).
-      ...aiEnv,
-      ...geocoderEnv,
-      ...cesiumEnv,
-      ...projectEnv,
-    };
+    // Precedence (low -> high): OS env < device AI keys < geocoder < cesium <
+    // explicit project Environment variables. See mergeRuntimeEnv for details.
+    const runtimeEnv = mergeRuntimeEnv({
+      osEnv,
+      aiEnv,
+      geocoderEnv,
+      cesiumEnv,
+      projectEnv,
+    });
 
     // Always keep the global env in sync so plugins can read it when they
     // activate, even before the first change event.

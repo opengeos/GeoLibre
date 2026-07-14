@@ -249,16 +249,6 @@ function createDraftId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-// Every env var name any AI provider field reads (canonical names plus the
-// aliases provider.ts also honors). The AI Providers section owns these keys,
-// so on save any value still sitting in the project's Environment variables is
-// migrated into the device-local store — see saveSettings.
-const AI_PROVIDER_ENV_KEYS: ReadonlySet<string> = new Set(
-  Object.values(PROVIDER_FIELDS).flatMap((fields: readonly ProviderField[]) =>
-    fields.flatMap((field) => [field.envKey, ...(field.aliases ?? [])]),
-  ),
-);
-
 function clonePreferences(preferences: ProjectPreferences): DraftPreferences {
   return {
     map: { ...preferences.map },
@@ -1132,39 +1122,7 @@ export function SettingsDialog({
       return;
     }
 
-    // Migrate any AI provider credential still held in the project's Environment
-    // variables into the device-local store, even when the user never re-typed
-    // it this session (e.g. a key loaded from a `.geolibre.json`). Without this,
-    // an untouched row keeps getting serialized into the shared project file,
-    // defeating the point of the device-local store. A value already in the
-    // device store wins; the migrated rows are then dropped from the project.
-    const aiProviderEnvToSave: Record<string, string> = {
-      ...draftDesktopSettings.aiProviderEnv,
-    };
-    const migratedEnvKeys = new Set<string>();
-    for (const variable of normalized.environmentVariables) {
-      if (
-        variable.enabled &&
-        variable.value &&
-        AI_PROVIDER_ENV_KEYS.has(variable.key)
-      ) {
-        if (!(variable.key in aiProviderEnvToSave)) {
-          aiProviderEnvToSave[variable.key] = variable.value;
-        }
-        migratedEnvKeys.add(variable.key);
-      }
-    }
-    const preferencesToSave =
-      migratedEnvKeys.size > 0
-        ? {
-            ...normalized,
-            environmentVariables: normalized.environmentVariables.filter(
-              (variable) => !migratedEnvKeys.has(variable.key),
-            ),
-          }
-        : normalized;
-
-    setPreferences(preferencesToSave);
+    setPreferences(normalized);
     // When a level preset is still active, recompute its hidden lists from the
     // current plugin registry at save time. The draft was snapshotted when the
     // dialog opened, so this picks up any external plugins that loaded since
@@ -1188,7 +1146,7 @@ export function SettingsDialog({
       layout: draftDesktopSettings.layout,
       shareToken: draftDesktopSettings.shareToken,
       cesiumIonToken: draftDesktopSettings.cesiumIonToken,
-      aiProviderEnv: aiProviderEnvToSave,
+      aiProviderEnv: draftDesktopSettings.aiProviderEnv,
       uiProfile: committedUiProfile,
       updates: draftDesktopSettings.updates,
     });
