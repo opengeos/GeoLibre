@@ -176,7 +176,7 @@ jobs:
           echo "signed=$sign_mode" >> "$GITHUB_OUTPUT"
 
       - name: Upload signed APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: geolibre-android-release-apks
           path: ${{ runner.temp }}/apks/*.apk
