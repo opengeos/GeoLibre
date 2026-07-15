@@ -28,16 +28,6 @@ export function isPmtilesStyleUrl(url: string): boolean {
   }
 }
 
-// A small deterministic hash so the same URL reuses one registry id (changing
-// its flavor replaces the entry) while distinct URLs get distinct ids.
-function hashUrl(url: string): string {
-  let hash = 0;
-  for (let i = 0; i < url.length; i += 1) {
-    hash = (hash * 31 + url.charCodeAt(i)) | 0;
-  }
-  return (hash >>> 0).toString(36);
-}
-
 /**
  * Builds and registers a Protomaps basemap style for a remote PMTiles URL and
  * returns the sentinel URL to set as the basemap style (`setBasemapStyleUrl`).
@@ -59,5 +49,11 @@ export function buildRemotePmtilesBasemap(
     // "/basemaps-assets" would 404. Mirrors BasemapExtractPanel's BASEMAP_ASSETS_BASE.
     assetsBaseUrl: `${import.meta.env.BASE_URL}basemaps-assets`,
   });
-  return registerOfflineBasemapStyle(`remote-pmtiles-${hashUrl(sourceUrl)}`, style);
+  // The percent-encoded URL is the registry id: the same URL reuses one entry
+  // (a flavor change replaces it) and distinct URLs never collide — a fixed-
+  // width hash could, silently evicting one basemap when another is applied.
+  return registerOfflineBasemapStyle(
+    `remote-pmtiles-${encodeURIComponent(sourceUrl)}`,
+    style,
+  );
 }

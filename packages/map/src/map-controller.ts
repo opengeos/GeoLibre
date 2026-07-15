@@ -225,7 +225,12 @@ function resolveMapStyle(
 ): string | maplibregl.StyleSpecification {
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
   const offline = getOfflineBasemapStyle(styleUrl);
-  if (offline) return offline;
+  // Return a fresh copy (like the planetary path below builds a new object each
+  // call): MapLibre normalises/mutates the style it's handed, and the registry
+  // holds a single shared object — in split/compare view two Map instances
+  // resolve the same sentinel, so handing both the same object would let them
+  // corrupt each other's style state.
+  if (offline) return structuredClone(offline);
   // An offline-basemap sentinel with no registered style (e.g. a project saved
   // with one, reopened in a fresh session where the in-memory archive is gone)
   // must not be fetched as a URL. Fall back to the default basemap.
