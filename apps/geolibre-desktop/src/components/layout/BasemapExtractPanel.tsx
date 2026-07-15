@@ -17,7 +17,7 @@ import {
   extractPmtiles,
   type PmtilesExtractProgress,
 } from "@geolibre/processing";
-import { Button, Input, Label } from "@geolibre/ui";
+import { Button, Input, Label, Select } from "@geolibre/ui";
 import {
   CheckCircle2,
   Download,
@@ -45,9 +45,30 @@ import { sanitizeExportFileName } from "../../lib/vector-export";
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 320;
 const PANEL_MARGIN = 12;
+/** Smallest the panel can be resized to, so the form stays usable. */
+const PANEL_MIN_W = 260;
+const PANEL_MIN_H = 240;
 
 /** Remembered across sessions so repeat extracts don't retype the archive URL. */
 const URL_STORAGE_KEY = "geolibre.basemapExtract.url";
+
+/** GeoLibre's Cloudflare Worker (workers/tiles) range-proxies the Protomaps
+ * daily planet builds with CORS, so the extractor can pull them from any
+ * origin (build.protomaps.com itself only allowlists a few). */
+const PLANET_PROXY_BASE = "https://tiles.geolibre.app/pmtiles";
+
+/**
+ * Default archive URL: the Protomaps planet build from a couple of days ago
+ * (a margin so the daily build is reliably published and still within the
+ * proxy's retention) through GeoLibre's CORS proxy. Computed at open time so it
+ * stays fresh instead of hardcoding a date that would go stale.
+ */
+function defaultPlanetBuildUrl(): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() - 2);
+  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
+  return `${PLANET_PROXY_BASE}/${ymd}.pmtiles`;
+}
 
 /** Above this planned size the user must explicitly confirm the download. */
 const CONFIRM_BYTES = 150 * 1024 * 1024;
@@ -214,6 +235,20 @@ export function BasemapExtractPanel({
 
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<PanelPos | null>(null);
+  // Explicit size, null until first resized (the responsive default applies).
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const resizeStart = useRef<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    // Parent-relative top-start corner (the panel is absolute within MapGrid),
+    // matching the drag coordinate system so pinning doesn't jump.
+    left: number;
+    top: number;
+    parentW: number;
+    parentH: number;
+  } | null>(null);
   const [screenPoints, setScreenPoints] = useState<ScreenPoint[] | null>(null);
 
   // Cancels an in-flight extraction when the panel closes or a new run starts.
@@ -246,17 +281,22 @@ export function BasemapExtractPanel({
       return null;
     });
     setPos(null);
-    if (!open) {
-      setCoords(EMPTY_COORDS);
-      return;
-    }
+    setSize(null);
+    // Start with no bounding box: the user draws one or clicks "Use view". Auto-
+    // seeding the whole view would, at a globe/world zoom, produce a near-global
+    // box whose projected overlay degenerates into a stray line across the map.
+    setCoords(EMPTY_COORDS);
+    if (!open) return;
+    // Seed with the last-used URL, or the Protomaps planet build (via the CORS
+    // proxy) as a ready-to-use default on first open.
+    let seededUrl = defaultPlanetBuildUrl();
     try {
-      setUrl(localStorage.getItem(URL_STORAGE_KEY) ?? "");
+      seededUrl = localStorage.getItem(URL_STORAGE_KEY) || seededUrl;
     } catch {
-      // Storage may be unavailable (private mode); keep the empty default.
+      // Storage may be unavailable (private mode); keep the computed default.
     }
-    seedFromView();
-  }, [open, seedFromView]);
+    setUrl(seededUrl);
+  }, [open]);
 
   // Latest box, read inside the projection callback so the map listeners don't
   // need `bbox` as a dependency (which changes on every drag mousemove).
@@ -280,6 +320,14 @@ export function BasemapExtractPanel({
         return;
       }
       const [w, s, e, n] = b;
+      // A near-global box (e.g. "Use view" at a world/globe zoom) has corners
+      // that project to the same pole or wrap around, so the four-corner polygon
+      // degenerates into a stray diagonal line. Skip the overlay for such boxes;
+      // the extraction still works, there's just no meaningful rectangle to draw.
+      if (e - w > 170 || n - s > 170) {
+        setScreenPoints(null);
+        return;
+      }
       const corners: [number, number][] = [
         [w, n],
         [e, n],
@@ -432,6 +480,68 @@ export function BasemapExtractPanel({
       handle.addEventListener("pointercancel", end);
     },
     [pos],
+  );
+
+  // Resize from the bottom-end grip. Pins the top-start corner so the panel
+  // grows toward the grip, clamped to a usable minimum and the room to the
+  // viewport edge. Mirrors the Processing dialog's resize.
+  const handleResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+      const el = panelRef.current;
+      if (!el) return;
+      const parent =
+        (el.offsetParent as HTMLElement | null) ?? el.parentElement ?? null;
+      const pb = parent?.getBoundingClientRect();
+      const eb = el.getBoundingClientRect();
+      const left = eb.left - (pb?.left ?? 0);
+      const top = eb.top - (pb?.top ?? 0);
+      // Pin the top-start corner (parent-relative) so the panel grows toward the
+      // grip without jumping.
+      setPos({ x: left, y: top });
+      resizeStart.current = {
+        x: event.clientX,
+        y: event.clientY,
+        w: eb.width,
+        h: eb.height,
+        left,
+        top,
+        parentW: pb?.width ?? window.innerWidth,
+        parentH: pb?.height ?? window.innerHeight,
+      };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [],
+  );
+
+  const handleResizeMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const start = resizeStart.current;
+      if (!start) return;
+      const availW = start.parentW - start.left - PANEL_MARGIN;
+      const availH = start.parentH - start.top - PANEL_MARGIN;
+      setSize({
+        w: clamp(
+          start.w + (event.clientX - start.x),
+          Math.min(PANEL_MIN_W, availW),
+          Math.max(PANEL_MIN_W, availW),
+        ),
+        h: clamp(
+          start.h + (event.clientY - start.y),
+          Math.min(PANEL_MIN_H, availH),
+          Math.max(PANEL_MIN_H, availH),
+        ),
+      });
+    },
+    [],
+  );
+
+  const handleResizeEnd = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      resizeStart.current = null;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    },
+    [],
   );
 
   const minZoomValue = Number(minZoom);
@@ -670,10 +780,13 @@ export function BasemapExtractPanel({
         ref={panelRef}
         className={
           pos
-            ? "pointer-events-auto absolute z-20 flex w-80 flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-            : "pointer-events-auto absolute start-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+            ? "pointer-events-auto absolute z-20 flex w-[26rem] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+            : "pointer-events-auto absolute start-3 top-3 z-20 flex max-h-[calc(100%-1.5rem)] w-[min(26rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
         }
-        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        style={{
+          ...(pos ? { left: pos.x, top: pos.y } : {}),
+          ...(size ? { width: size.w, height: size.h } : {}),
+        }}
         role="region"
         aria-label={t("basemapExtract.title")}
         data-testid="basemap-extract-panel"
@@ -700,7 +813,7 @@ export function BasemapExtractPanel({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3 overflow-auto p-3 text-sm">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3 text-sm">
           <div className="space-y-1">
             <Label htmlFor="basemap-extract-url" className="text-xs">
               {t("basemapExtract.url")}
@@ -716,9 +829,6 @@ export function BasemapExtractPanel({
                 clearStatus();
               }}
             />
-            <p className="text-xs text-muted-foreground">
-              {t("basemapExtract.urlHint")}
-            </p>
           </div>
 
           <div className="flex gap-2">
@@ -738,6 +848,7 @@ export function BasemapExtractPanel({
               type="button"
               size="sm"
               variant="outline"
+              className="flex-1"
               disabled={running}
               onClick={handleUseView}
             >
@@ -830,9 +941,8 @@ export function BasemapExtractPanel({
             <Label htmlFor="basemap-extract-style" className="text-xs">
               {t("basemapExtract.style")}
             </Label>
-            <select
+            <Select
               id="basemap-extract-style"
-              className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
               value={flavor}
               disabled={running}
               onChange={(e) => {
@@ -846,7 +956,7 @@ export function BasemapExtractPanel({
                 </option>
               ))}
               <option value="">{t("basemapExtract.flavorOverlay")}</option>
-            </select>
+            </Select>
             <p className="text-xs text-muted-foreground">
               {flavor === ""
                 ? t("basemapExtract.styleHintOverlay")
@@ -905,6 +1015,25 @@ export function BasemapExtractPanel({
                   style={{ width: `${percent}%` }}
                 />
               </div>
+              {progress && progress.estimatedOutputBytes > 0 ? (
+                <p
+                  className={
+                    progress.estimatedOutputBytes >= CONFIRM_BYTES
+                      ? "text-xs font-medium text-amber-600 dark:text-amber-400"
+                      : "text-xs text-muted-foreground"
+                  }
+                >
+                  {progress.estimatedOutputBytes >= CONFIRM_BYTES
+                    ? t("basemapExtract.estimatedSizeLarge", {
+                        size: formatBytes(progress.estimatedOutputBytes),
+                        tiles: progress.tilesSelected.toLocaleString(),
+                      })
+                    : t("basemapExtract.estimatedSize", {
+                        size: formatBytes(progress.estimatedOutputBytes),
+                        tiles: progress.tilesSelected.toLocaleString(),
+                      })}
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -941,6 +1070,16 @@ export function BasemapExtractPanel({
             </Button>
           </div>
         </div>
+
+        <div
+          className="absolute bottom-0 end-0 h-4 w-4 cursor-se-resize touch-none rtl:cursor-sw-resize"
+          onPointerDown={handleResizeStart}
+          onPointerMove={handleResizeMove}
+          onPointerUp={handleResizeEnd}
+          onPointerCancel={handleResizeEnd}
+          role="separator"
+          aria-label={t("basemapExtract.resize")}
+        />
       </div>
     </>
   );
