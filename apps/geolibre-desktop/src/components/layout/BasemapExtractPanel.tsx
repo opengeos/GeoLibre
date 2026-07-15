@@ -1,4 +1,5 @@
 import {
+  DEFAULT_BASEMAP,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   useAppStore,
@@ -57,6 +58,7 @@ import {
   upsertOfflineBasemap,
 } from "../../lib/offline-basemaps";
 import { formatBytes } from "../../lib/offline-regions";
+import { layerNameFromPath } from "./add-data/helpers";
 import {
   isTauri,
   openLocalDataFileWithFallback,
@@ -205,25 +207,48 @@ const BASEMAP_ASSETS_BASE = `${import.meta.env.BASE_URL}basemaps-assets`;
 // applied styled offline basemap. A styled basemap is not a GeoLibreLayer, so
 // removeLayerFromMap never frees its archive; we free the previous one here
 // when a different basemap is applied, deleted, or the panel supersedes it.
-let activeStyledBasemap: { archiveKey: string; id: string } | null = null;
+//
+// Kept on globalThis (like the style registry and archive-key set this feature
+// adds) so it survives a Vite HMR reload of this module — a plain module `let`
+// would reset to null on reload and then fail to free the archive the live
+// PMTiles protocol still holds.
+type ActiveStyledBasemap = { archiveKey: string; id: string } | null;
+const ACTIVE_STYLED_BASEMAP_KEY = "__geolibreActiveStyledBasemap";
+
+function activeStyledBasemap(): ActiveStyledBasemap {
+  const scope = globalThis as typeof globalThis & {
+    [ACTIVE_STYLED_BASEMAP_KEY]?: ActiveStyledBasemap;
+  };
+  return scope[ACTIVE_STYLED_BASEMAP_KEY] ?? null;
+}
+
+function setActiveStyledBasemap(value: ActiveStyledBasemap): void {
+  (
+    globalThis as typeof globalThis & {
+      [ACTIVE_STYLED_BASEMAP_KEY]?: ActiveStyledBasemap;
+    }
+  )[ACTIVE_STYLED_BASEMAP_KEY] = value;
+}
 
 /** Records the archive/id now backing the styled basemap, freeing the one it
  * replaces (a different id) so archives don't accumulate for the session. */
 function trackStyledBasemap(id: string, archiveKey: string): void {
-  if (activeStyledBasemap && activeStyledBasemap.id !== id) {
-    unregisterPMTilesArchive(activeStyledBasemap.archiveKey);
-    evictOfflineBasemapStyle(activeStyledBasemap.id);
+  const active = activeStyledBasemap();
+  if (active && active.id !== id) {
+    unregisterPMTilesArchive(active.archiveKey);
+    evictOfflineBasemapStyle(active.id);
   }
-  activeStyledBasemap = { id, archiveKey };
+  setActiveStyledBasemap({ id, archiveKey });
 }
 
 /** Frees a styled basemap's archive/style if it is the active one (e.g. on
  * delete), so nothing keeps its bytes resident after it's gone. */
 function forgetStyledBasemap(id: string): void {
-  if (activeStyledBasemap?.id !== id) return;
-  unregisterPMTilesArchive(activeStyledBasemap.archiveKey);
+  const active = activeStyledBasemap();
+  if (active?.id !== id) return;
+  unregisterPMTilesArchive(active.archiveKey);
   evictOfflineBasemapStyle(id);
-  activeStyledBasemap = null;
+  setActiveStyledBasemap(null);
 }
 
 /** A layer/file base name from the archive URL, e.g. "planet" for
@@ -969,9 +994,9 @@ export function BasemapExtractPanel({
       trackStyledBasemap(id, key);
       upsertOfflineBasemap({
         id,
-        name: sanitizeExportFileName(
-          (picked.path || "basemap").replace(/\.pmtiles$/i, ""),
-        ),
+        // `picked.path` is a full absolute path on desktop; take just the file's
+        // base name so the saved entry reads "tuscany", not "home-alice-…".
+        name: layerNameFromPath(picked.path || "", "basemap"),
         bbox: info.bounds,
         minZoom: info.minZoom,
         maxZoom: info.maxZoom,
@@ -1435,6 +1460,14 @@ export function BasemapExtractPanel({
                               className="rounded p-1 text-destructive hover:bg-destructive/10"
                               onClick={() => {
                                 deleteOfflineBasemap(entry.id);
+                                // If this is the live basemap, switch back to the
+                                // default first — otherwise the applied MapLibre
+                                // style is left pointing at a pmtiles:// source
+                                // whose archive we're about to free, and pans
+                                // into unfetched tiles would silently 404.
+                                if (activeStyledBasemap()?.id === entry.id) {
+                                  setBasemapStyleUrl(DEFAULT_BASEMAP);
+                                }
                                 // Free its in-memory archive/style if it's the
                                 // one currently applied, so nothing lingers.
                                 forgetStyledBasemap(entry.id);
