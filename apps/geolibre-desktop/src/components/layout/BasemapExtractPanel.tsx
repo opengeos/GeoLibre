@@ -5,6 +5,7 @@ import {
 } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
+  evictOfflineBasemapStyle,
   hasPMTilesArchive,
   type MapController,
   pmtilesNativeLayerIds,
@@ -13,6 +14,7 @@ import {
   readPMTilesArchiveInfo,
   registerOfflineBasemapStyle,
   registerPMTilesArchive,
+  unregisterPMTilesArchive,
 } from "@geolibre/map";
 import {
   extractPmtiles,
@@ -181,9 +183,47 @@ function coordsFromBbox(bbox: [number, number, number, number]): CoordFields {
  * rather than a flat overlay. */
 const PROTOMAPS_SCHEMA_LAYERS = ["earth", "water", "roads", "places", "landcover"];
 
+/** `earth`/`water` are distinctively Protomaps-schema; `roads`/`places` are
+ * generic names other vector schemas also use. Requiring one of the former
+ * (plus two schema layers overall) keeps a non-Protomaps archive that merely
+ * has a `roads`/`places` layer from being styled with Protomaps-specific
+ * expressions and rendering blank. */
 function isProtomapsCompatible(sourceLayers: string[]): boolean {
   const set = new Set(sourceLayers);
+  if (!set.has("earth") && !set.has("water")) return false;
   return PROTOMAPS_SCHEMA_LAYERS.filter((l) => set.has(l)).length >= 2;
+}
+
+/** Bundled Protomaps glyphs/sprites live under the app's public dir; resolve
+ * them against the deployment base (BASE_URL, e.g. "/" or "/geolibre/") so a
+ * styled offline basemap keeps its labels and icons when the web build is
+ * served under a sub-path (GEOLIBRE_APP_BASE). A bare "/basemaps-assets" would
+ * 404 in that mode. */
+const BASEMAP_ASSETS_BASE = `${import.meta.env.BASE_URL}basemaps-assets`;
+
+// Tracks the in-memory archive (and style-registry id) backing the currently
+// applied styled offline basemap. A styled basemap is not a GeoLibreLayer, so
+// removeLayerFromMap never frees its archive; we free the previous one here
+// when a different basemap is applied, deleted, or the panel supersedes it.
+let activeStyledBasemap: { archiveKey: string; id: string } | null = null;
+
+/** Records the archive/id now backing the styled basemap, freeing the one it
+ * replaces (a different id) so archives don't accumulate for the session. */
+function trackStyledBasemap(id: string, archiveKey: string): void {
+  if (activeStyledBasemap && activeStyledBasemap.id !== id) {
+    unregisterPMTilesArchive(activeStyledBasemap.archiveKey);
+    evictOfflineBasemapStyle(activeStyledBasemap.id);
+  }
+  activeStyledBasemap = { id, archiveKey };
+}
+
+/** Frees a styled basemap's archive/style if it is the active one (e.g. on
+ * delete), so nothing keeps its bytes resident after it's gone. */
+function forgetStyledBasemap(id: string): void {
+  if (activeStyledBasemap?.id !== id) return;
+  unregisterPMTilesArchive(activeStyledBasemap.archiveKey);
+  evictOfflineBasemapStyle(id);
+  activeStyledBasemap = null;
 }
 
 /** A layer/file base name from the archive URL, e.g. "planet" for
@@ -552,14 +592,23 @@ export function BasemapExtractPanel({
     (event: ReactPointerEvent<HTMLDivElement>) => {
       const start = resizeStart.current;
       if (!start) return;
-      const availW = start.parentW - start.left - PANEL_MARGIN;
+      // In an RTL layout the grip renders on the physical left, so the drag
+      // delta is inverted and the room to the edge is measured to the left. Pin
+      // the physical right edge by shifting `pos.x` as the width changes.
+      const isRtl = document.documentElement.dir === "rtl";
+      const availW = isRtl
+        ? start.left + start.w - PANEL_MARGIN
+        : start.parentW - start.left - PANEL_MARGIN;
       const availH = start.parentH - start.top - PANEL_MARGIN;
+      const deltaX = event.clientX - start.x;
+      const newW = clamp(
+        start.w + (isRtl ? -deltaX : deltaX),
+        Math.min(PANEL_MIN_W, availW),
+        Math.max(PANEL_MIN_W, availW),
+      );
+      if (isRtl) setPos({ x: start.left + start.w - newW, y: start.top });
       setSize({
-        w: clamp(
-          start.w + (event.clientX - start.x),
-          Math.min(PANEL_MIN_W, availW),
-          Math.max(PANEL_MIN_W, availW),
-        ),
+        w: newW,
         h: clamp(
           start.h + (event.clientY - start.y),
           Math.min(PANEL_MIN_H, availH),
@@ -655,8 +704,10 @@ export function BasemapExtractPanel({
         const style = buildProtomapsBasemapStyle({
           sourceUrl: layerUrl,
           flavor,
+          assetsBaseUrl: BASEMAP_ASSETS_BASE,
         });
         setBasemapStyleUrl(registerOfflineBasemapStyle(layerId, style));
+        trackStyledBasemap(layerId, `${layerId}.pmtiles`);
       } else {
         const fillColor = DEFAULT_LAYER_STYLE.fillColor;
         const layer: GeoLibreLayer = {
@@ -804,7 +855,11 @@ export function BasemapExtractPanel({
   // .pmtiles file (works on web, where there is no stable path).
   const applySaved = useCallback(
     async (entry: OfflineBasemap) => {
-      if (entry.tileType !== "vector") return;
+      // Only styled vector entries can be re-applied as a basemap. Entries saved
+      // as overlays (user picked "None", or the archive failed the Protomaps
+      // schema check) have `flavor === null` — forcing them through
+      // buildProtomapsBasemapStyle would render a blank/broken basemap.
+      if (entry.tileType !== "vector" || entry.flavor == null) return;
       setApplyingId(entry.id);
       setError(null);
       setSuccess(null);
@@ -829,8 +884,10 @@ export function BasemapExtractPanel({
         const style = buildProtomapsBasemapStyle({
           sourceUrl: `pmtiles://${key}`,
           flavor: (entry.flavor as ProtomapsFlavor) || "light",
+          assetsBaseUrl: BASEMAP_ASSETS_BASE,
         });
         setBasemapStyleUrl(registerOfflineBasemapStyle(entry.id, style));
+        trackStyledBasemap(entry.id, key);
         setSuccess(t("basemapExtract.successBasemapApplied"));
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -894,8 +951,10 @@ export function BasemapExtractPanel({
       const style = buildProtomapsBasemapStyle({
         sourceUrl: `pmtiles://${key}`,
         flavor: useFlavor,
+        assetsBaseUrl: BASEMAP_ASSETS_BASE,
       });
       setBasemapStyleUrl(registerOfflineBasemapStyle(id, style));
+      trackStyledBasemap(id, key);
       upsertOfflineBasemap({
         id,
         name: sanitizeExportFileName(
@@ -1363,6 +1422,9 @@ export function BasemapExtractPanel({
                               className="rounded p-1 text-destructive hover:bg-destructive/10"
                               onClick={() => {
                                 deleteOfflineBasemap(entry.id);
+                                // Free its in-memory archive/style if it's the
+                                // one currently applied, so nothing lingers.
+                                forgetStyledBasemap(entry.id);
                                 setConfirmDeleteId(null);
                               }}
                               title={t("basemapExtract.delete")}
@@ -1390,6 +1452,7 @@ export function BasemapExtractPanel({
                               className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
                               disabled={
                                 entry.tileType !== "vector" ||
+                                entry.flavor == null ||
                                 applyingId === entry.id
                               }
                               onClick={() => void applySaved(entry)}

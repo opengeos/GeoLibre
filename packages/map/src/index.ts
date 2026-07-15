@@ -46,6 +46,7 @@ export { isPlaceholderLayer, placeholderMessage } from "./placeholders";
 export {
   buildProtomapsBasemapStyle,
   registerOfflineBasemapStyle,
+  evictOfflineBasemapStyle,
   isOfflineBasemapSentinel,
   PROTOMAPS_FLAVORS,
   type ProtomapsFlavor,

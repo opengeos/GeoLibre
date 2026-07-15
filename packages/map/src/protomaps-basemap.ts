@@ -121,6 +121,20 @@ function nextOfflineBasemapSeq(): number {
   return scope[SEQ_KEY];
 }
 
+/**
+ * Drops every registered style whose sentinel belongs to `id` (there is at most
+ * one live sentinel per id — see registerOfflineBasemapStyle). Call this when an
+ * offline basemap is replaced or deleted so the registry doesn't retain the
+ * generated style (and, transitively, keep its in-memory archive reachable).
+ */
+export function evictOfflineBasemapStyle(id: string): void {
+  const reg = registry();
+  const prefix = `${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`;
+  for (const key of reg.keys()) {
+    if (key.startsWith(prefix)) reg.delete(key);
+  }
+}
+
 /** The registered style for an offline-basemap sentinel, or null. */
 export function getOfflineBasemapStyle(
   styleUrl: string | undefined,

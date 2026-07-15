@@ -20,8 +20,8 @@
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-layer-control": "^0.17.4",
     "pmtiles": "^4.4.1",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

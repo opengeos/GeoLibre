@@ -186,6 +186,34 @@ const CORS_HEADERS: Record<string, string> = {
 const PMTILES_PATH = /^\/pmtiles\/([A-Za-z0-9._-]+\.pmtiles)$/;
 const PMTILES_UPSTREAM = "https://build.protomaps.com";
 
+// A PMTiles reader only fetches small chunks (the 127-byte header, the root/leaf
+// directories, and individual tile blobs), so we cap the proxied range well
+// below any full-file transfer. This keeps the endpoint from being used to pull
+// a 100+ GB planet build through the Worker (its real bandwidth-containment
+// guard — merely requiring a Range header does not bound the span).
+const PMTILES_MAX_RANGE_BYTES = 32 * 1024 * 1024;
+
+/**
+ * The byte span a single `bytes=` range asks for, or null if it is malformed,
+ * multi-range, or open-ended (`bytes=0-`, which would stream the rest of the
+ * file). `bytes=-N` (suffix) counts as N bytes.
+ */
+function pmtilesRangeSpan(range: string): number | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+  if (!match) return null;
+  const [, startStr, endStr] = match;
+  if (startStr === "") {
+    // `bytes=-N`: the last N bytes. `bytes=-` (both empty) is invalid.
+    return endStr === "" ? null : Number(endStr);
+  }
+  // `bytes=start-` is open-ended (unbounded) — reject it.
+  if (endStr === "") return null;
+  const start = Number(startStr);
+  const end = Number(endStr);
+  if (end < start) return null;
+  return end - start + 1;
+}
+
 // `/pmtiles/latest.pmtiles` resolves to the most recent daily build. Protomaps
 // publishes `<YYYYMMDD>.pmtiles` with no "latest" alias and no index, so we
 // probe backward from today until one exists, then cache the resolved date so
@@ -281,8 +309,9 @@ interface Env {}
  * Range-proxies one Protomaps planet build. Forwards the client's `Range`
  * header to build.protomaps.com and re-emits the (usually 206) response with
  * CORS + range headers so an in-browser PMTiles reader can extract from it.
- * Only byte-range GETs are proxied — a full-file GET (no Range) is refused so
- * this can't be used to pull the whole 100+ GB archive through the Worker.
+ * Only small, bounded byte-range GETs are proxied — a full-file GET (no Range)
+ * or an open-ended/oversized range is refused so this can't be used to pull the
+ * whole 100+ GB archive through the Worker.
  */
 async function handlePmtilesRange(
   request: Request,
@@ -293,6 +322,13 @@ async function handlePmtilesRange(
     return new Response(
       "This endpoint only serves HTTP range requests (send a Range header).",
       { status: 400, headers: CORS_HEADERS },
+    );
+  }
+  const span = pmtilesRangeSpan(range);
+  if (span === null || span > PMTILES_MAX_RANGE_BYTES) {
+    return new Response(
+      "This endpoint only serves bounded byte-range reads; the requested range is open-ended or too large.",
+      { status: 416, headers: CORS_HEADERS },
     );
   }
   let target = name;
@@ -311,8 +347,15 @@ async function handlePmtilesRange(
     originResponse = await fetch(`${PMTILES_UPSTREAM}/${target}`, {
       headers: { range },
       // The upstream is range-cacheable at Cloudflare's edge; identical range
-      // requests (directory reads) are served from the PoP.
-      cf: { cacheEverything: true },
+      // requests (directory reads) are served from the PoP. Cloudflare's default
+      // cache key is URL-only and does *not* vary by the `Range` header, so a
+      // cached 206 for one range could be served for a different range of the
+      // same file — corrupting the bytes a PMTiles reader assembles. Fold the
+      // range into the cache key so each distinct range caches independently.
+      cf: {
+        cacheEverything: true,
+        cacheKey: `pmtiles:${target}:${range}`,
+      },
     });
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
