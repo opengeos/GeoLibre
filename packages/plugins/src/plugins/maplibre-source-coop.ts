@@ -39,6 +39,7 @@ import {
   isAddable,
   isTooLargeToOpen,
   listProductObjects,
+  MAX_VECTOR_BYTES,
   objectNote,
   parseProductRef,
   SOURCE_COOP_API_BASE,
@@ -97,8 +98,12 @@ export interface SourceCoopLabels {
   largeFileWarning: (size: string) => string;
   /** Nudge toward Stream on a GeoParquet big enough that a copy may not fit. */
   streamHint: (size: string) => string;
-  /** Shown for a vector file past what DuckDB-WASM can open at all. */
-  tooLargeToOpen: (size: string) => string;
+  /**
+   * Shown for a vector file past what DuckDB-WASM can open at all. `limit` is
+   * rendered from `MAX_VECTOR_BYTES` rather than written into the sentence, so
+   * the number the user reads cannot drift from the gate that produced it.
+   */
+  tooLargeToOpen: (size: string, limit: string) => string;
 }
 
 export const DEFAULT_SOURCE_COOP_LABELS: SourceCoopLabels = {
@@ -144,12 +149,12 @@ export const DEFAULT_SOURCE_COOP_LABELS: SourceCoopLabels = {
     `This file is ${size}. It streams from the source, so only the parts in view are read.`,
   streamHint: (size) =>
     `This file is ${size}. Add copies it into memory; Stream reads only the parts in view.`,
-  // "2 GB" rather than the strictly correct "2 GiB": formatBytes is 1024-based
-  // but labels its units GB/MB, and renders this very limit as "2.0 GB", so GiB
-  // here would visibly disagree with the size on the same line. The units the
-  // panel prints are what the sentence has to speak.
-  tooLargeToOpen: (size) =>
-    `This file is ${size} — too large for the browser to open (2 GB limit). ` +
+  // The limit is formatted by the same formatBytes as `size`, so the two halves
+  // of the sentence cannot disagree on units. (That matters here: formatBytes is
+  // 1024-based but labels its units GB/MB, so a hand-written "2 GiB" would read
+  // against a "19.2 GB" produced by the same function.)
+  tooLargeToOpen: (size, limit) =>
+    `This file is ${size} — too large for the browser to open (${limit} limit). ` +
     `Download it, or use a partitioned version of this dataset.`,
 };
 
@@ -439,20 +444,26 @@ function formatLabel(format: SourceCoopFormat): string {
   return format === "other" ? "file" : format;
 }
 
-/** Renders {@link objectNote}'s decision with the current translations. */
-function noteText(object: SourceCoopObject): string {
+/**
+ * Renders {@link objectNote}'s decision with the current translations.
+ *
+ * @param choiceMade - Whether the Add/Stream choice is already settled, either
+ *   in flight or on the map. Suppresses the note that exists only to inform it.
+ */
+function noteText(object: SourceCoopObject, choiceMade: boolean): string {
   const size = formatBytes(object.size);
   switch (objectNote(object)) {
     case "streams":
       return labels.largeFileWarning(size);
     case "streamChoice":
-      // A decision aid for two buttons that are gone once the file is on the
-      // map, where it would read as advice for an action no longer offered. The
-      // Streaming badge reports the outcome instead. The other notes are facts
-      // about the file rather than about a choice, so they stand either way.
-      return isAdded(object) ? "" : labels.streamHint(size);
+      // A decision aid for two buttons that are disabled the moment the choice
+      // is made and gone once the file is on the map — past that it reads as
+      // advice for an action no longer on offer, and the Streaming badge
+      // reports the outcome instead. The other notes are facts about the file
+      // rather than about a choice, so they stand either way.
+      return choiceMade ? "" : labels.streamHint(size);
     case "tooLarge":
-      return labels.tooLargeToOpen(size);
+      return labels.tooLargeToOpen(size, formatBytes(MAX_VECTOR_BYTES));
     default:
       return "";
   }
@@ -758,14 +769,15 @@ function buildPanel(
     card.appendChild(titleRow);
     card.appendChild(el("div", CSS.sub, objectSubtitle(object)));
 
-    const note = noteText(object);
+    const added = isAdded(object);
+    const pendingMode = addInFlight.get(object.key);
+    const pending = pendingMode !== undefined;
+
+    const note = noteText(object, added || pending);
     if (note) card.appendChild(el("div", CSS.note, note));
 
     const actions = el("div", CSS.actions);
     if (isAddable(object.format)) {
-      const added = isAdded(object);
-      const pendingMode = addInFlight.get(object.key);
-      const pending = pendingMode !== undefined;
       // Kept visible but inert past the 2 GiB limit: the note above says why,
       // which is more use than a card that silently drops the button.
       const tooLarge = isTooLargeToOpen(object);
@@ -782,7 +794,10 @@ function buildPanel(
         added
           ? labels.removeTitle
           : tooLarge
-            ? labels.tooLargeToOpen(formatBytes(object.size))
+            ? labels.tooLargeToOpen(
+                formatBytes(object.size),
+                formatBytes(MAX_VECTOR_BYTES),
+              )
             : labels.addTitle,
       );
       addButton.disabled = pending || (tooLarge && !added);

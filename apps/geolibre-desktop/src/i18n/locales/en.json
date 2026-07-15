@@ -2354,7 +2354,7 @@
     "addError": "Could not add this file: {{message}}",
     "largeFileWarning": "This file is {{size}}. It streams from the source, so only the parts in view are read.",
     "streamHint": "This file is {{size}}. Add copies it into memory; Stream reads only the parts in view.",
-    "tooLargeToOpen": "This file is {{size}} — too large for the browser to open (2 GB limit). Download it, or use a partitioned version of this dataset."
+    "tooLargeToOpen": "This file is {{size}} — too large for the browser to open ({{limit}} limit). Download it, or use a partitioned version of this dataset."
   },
   "basemaps": {
     "confirmStyleReplace_one": "Switching to \"{{name}}\" replaces the whole map style and will remove the stacked basemap you added. Continue?",

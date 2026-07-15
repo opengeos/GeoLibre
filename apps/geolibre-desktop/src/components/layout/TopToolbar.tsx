@@ -318,7 +318,8 @@ export function TopToolbar({
       addError: (message) => t("sourceCoop.addError", { message }),
       largeFileWarning: (size) => t("sourceCoop.largeFileWarning", { size }),
       streamHint: (size) => t("sourceCoop.streamHint", { size }),
-      tooLargeToOpen: (size) => t("sourceCoop.tooLargeToOpen", { size }),
+      tooLargeToOpen: (size, limit) =>
+        t("sourceCoop.tooLargeToOpen", { size, limit }),
     });
     setGraticuleLabels({
       title: t("graticule.title"),
