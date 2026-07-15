@@ -49,6 +49,32 @@ const BLANK_CHOICE = "__blank__";
 const CUSTOM_CHOICE = "__custom__";
 const OFFLINE_CHOICE = "__offline__";
 
+// The last custom URL (and PMTiles flavor) the user applied, so the field is
+// repopulated next time the picker opens — a PMTiles basemap resolves to an
+// opaque sentinel that can't be reversed back into its URL, so we remember it.
+const CUSTOM_URL_STORAGE_KEY = "geolibre.basemapPicker.customUrl";
+const CUSTOM_FLAVOR_STORAGE_KEY = "geolibre.basemapPicker.customFlavor";
+
+function readStoredCustomUrl(): string {
+  try {
+    return localStorage.getItem(CUSTOM_URL_STORAGE_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function readStoredCustomFlavor(): ProtomapsFlavor {
+  try {
+    const stored = localStorage.getItem(CUSTOM_FLAVOR_STORAGE_KEY);
+    if (stored && (PROTOMAPS_FLAVORS as readonly string[]).includes(stored)) {
+      return stored as ProtomapsFlavor;
+    }
+  } catch {
+    // Ignore unavailable storage.
+  }
+  return "light";
+}
+
 interface PresetButtonProps {
   name: string;
   selected: boolean;
@@ -138,17 +164,20 @@ export function BasemapPickerDialog({
     return preset ? preset.id : CUSTOM_CHOICE;
   }, [allPresets, basemapStyleUrl]);
 
-  // Seed the custom URL field with the active style when it is not one of the
-  // known presets (i.e. the project was created from a custom style URL).
+  // Seed the custom URL field when the dialog opens: prefer the active custom
+  // style URL, else fall back to the last custom URL the user applied (a PMTiles
+  // basemap resolves to a sentinel that can't be reversed to its URL).
   const [customUrl, setCustomUrl] = useState("");
+  const [customFlavor, setCustomFlavor] = useState<ProtomapsFlavor>("light");
   useEffect(() => {
     if (!open) return;
-    setCustomUrl(activeChoice === CUSTOM_CHOICE ? basemapStyleUrl : "");
+    setCustomUrl(
+      activeChoice === CUSTOM_CHOICE ? basemapStyleUrl : readStoredCustomUrl(),
+    );
+    setCustomFlavor(readStoredCustomFlavor());
     // Re-seed only when the dialog opens, not on every store change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
-
-  const [customFlavor, setCustomFlavor] = useState<ProtomapsFlavor>("light");
 
   const customStyleUrl = customUrl.trim();
   const customIsPmtiles = isPmtilesStyleUrl(customStyleUrl);
@@ -191,6 +220,14 @@ export function BasemapPickerDialog({
   const applyCustom = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!isCustomUrlValid) return;
+    try {
+      localStorage.setItem(CUSTOM_URL_STORAGE_KEY, customStyleUrl);
+      if (customIsPmtiles) {
+        localStorage.setItem(CUSTOM_FLAVOR_STORAGE_KEY, customFlavor);
+      }
+    } catch {
+      // Ignore unavailable storage; persistence is best-effort.
+    }
     setBasemapStyleUrl(
       customIsPmtiles
         ? buildRemotePmtilesBasemap(customStyleUrl, customFlavor)
