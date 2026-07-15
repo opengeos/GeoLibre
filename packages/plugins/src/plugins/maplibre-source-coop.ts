@@ -214,6 +214,15 @@ const mountedPanels = new Set<() => void>();
 let catalog: SourceCoopProduct[] | null = null;
 /** Products discovered by browsing an account or resolving an id, merged into search. */
 const extraProducts = new Map<string, SourceCoopProduct>();
+/**
+ * Enriched records for pinned products, keyed `account/product` and cached
+ * across panel rebuilds. A language change remounts every panel (see
+ * {@link setSourceCoopLabels}), which would otherwise drop the fetched title
+ * back to the fallback and re-request the metadata each time — the same reason
+ * `catalog` is cached above. Kept separate from `extraProducts` so a pinned
+ * panel never quietly changes what the browse panel's search turns up.
+ */
+const pinnedProducts = new Map<string, SourceCoopProduct>();
 
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -393,7 +402,9 @@ function buildPanel(
   let view: View = pinned
     ? {
         kind: "product",
-        product: synthesizeProduct(pinned.accountId, pinned.productId, pinned.title),
+        product:
+          pinnedProducts.get(`${pinned.accountId}/${pinned.productId}`) ??
+          synthesizeProduct(pinned.accountId, pinned.productId, pinned.title),
         prefix: `${pinned.productId}/`,
       }
     : { kind: "browse" };
@@ -880,6 +891,10 @@ function buildPanel(
    */
   async function enrichPinnedProduct(): Promise<void> {
     if (!pinned) return;
+    const id = `${pinned.accountId}/${pinned.productId}`;
+    // Enriched on an earlier mount, and already used for the initial `view`
+    // above — so a language change costs no request and shows no flash.
+    if (pinnedProducts.has(id)) return;
     const controller = new AbortController();
     enrichInflight = controller;
     const product = await fetchProduct(
@@ -887,15 +902,19 @@ function buildPanel(
       pinned.productId,
       clientOptions(app, controller.signal),
     );
+    // Cached even if the panel has gone away: the record is still valid, so the
+    // next mount reads it from here instead of asking again. An abort that
+    // landed mid-flight leaves `product` null (`fetchProduct` maps a rejection
+    // to null), so nothing is cached in that case.
+    if (product) pinnedProducts.set(id, product);
     // The panel was torn down (or rebuilt for a language change) while this was
-    // in flight — `root` is detached, so rendering into it would be wasted work.
-    // Checked explicitly rather than relying on the abort: `fetchProduct` maps a
-    // rejection to null, so an abort that lands mid-flight is already handled
-    // below, but one that lands after the fetch resolves is not.
-    if (controller.signal.aborted) return;
+    // in flight — `root` is detached, so rendering into it is wasted work. The
+    // abort is checked explicitly because one that lands *after* the fetch
+    // resolves leaves `product` set and would otherwise render.
+    if (controller.signal.aborted || !product) return;
     // The user may have navigated into a subfolder meanwhile, so keep the
     // current prefix and swap only the record.
-    if (!product || view.kind !== "product") return;
+    if (view.kind !== "product") return;
     view = { ...view, product };
     render();
   }
