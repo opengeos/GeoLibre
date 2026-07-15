@@ -1195,6 +1195,17 @@
     "maxZoom": "Max zoom",
     "zoomHint": "Zoom levels must be whole numbers with min ≤ max (0–30). Levels above the archive's maximum are ignored.",
     "errorNoSourceLayers": "This vector archive has no layer metadata, so it can't be rendered. Try a different archive.",
+    "style": "Basemap style",
+    "flavor": {
+      "light": "Light",
+      "dark": "Dark",
+      "white": "White",
+      "grayscale": "Grayscale",
+      "black": "Black"
+    },
+    "flavorOverlay": "None (overlay layer)",
+    "styleHintBasemap": "Renders the extract as a styled Protomaps basemap (roads, water, labels), offline.",
+    "styleHintOverlay": "Adds the extract as a plain overlay layer instead of a styled basemap.",
     "phaseDirectories": "Reading archive directories…",
     "phaseData": "Downloading tiles…",
     "planWarning": "This extract is about {{size}} across {{tiles}} tiles and is assembled in memory. Continue?",
@@ -1203,7 +1214,10 @@
     "extracting": "Extracting…",
     "successSaved": "Saved to {{path}} and added to the map.",
     "successAdded": "Added to the map (the file was not saved).",
-    "successAddedSaveFailed": "Added to the map, but saving to disk failed: {{error}}"
+    "successAddedSaveFailed": "Added to the map, but saving to disk failed: {{error}}",
+    "successBasemapSaved": "Saved to {{path}} and set as the basemap.",
+    "successBasemapApplied": "Set as the basemap (the file was not saved).",
+    "successBasemapSaveFailed": "Set as the basemap, but saving to disk failed: {{error}}"
   },
   "rasterSubset": {
     "title": "Extract subset",
@@ -1831,8 +1845,7 @@
       "collaborateEllipsis": "Collaborate...",
       "printEllipsis": "Print...",
       "printLayoutEllipsis": "Print Layout...",
-      "offlineRegionEllipsis": "Download Offline Area...",
-      "offlineManagerEllipsis": "Manage Offline Areas...",
+      "offlineBasemapEllipsis": "Offline Basemap...",
       "undo": "Undo",
       "redo": "Redo",
       "previousView": "Previous View",

@@ -44,6 +44,10 @@ import {
 } from "./layer-sync";
 import { installGlobePopupOcclusion } from "./globe-popup-occlusion";
 import { PlanetaryScaleControl } from "./planetary-scale-control";
+import {
+  getOfflineBasemapStyle,
+  isOfflineBasemapSentinel,
+} from "./protomaps-basemap";
 import { ResetBearingControl } from "./reset-bearing-control";
 import {
   TerrainControl,
@@ -220,6 +224,17 @@ function resolveMapStyle(
   styleUrl: string | undefined,
 ): string | maplibregl.StyleSpecification {
   if (styleUrl === BLANK_BASEMAP) return createBlankMapStyle();
+  const offline = getOfflineBasemapStyle(styleUrl);
+  if (offline) return offline;
+  // An offline-basemap sentinel with no registered style (e.g. a project saved
+  // with one, reopened in a fresh session where the in-memory archive is gone)
+  // must not be fetched as a URL. Fall back to the default basemap.
+  if (isOfflineBasemapSentinel(styleUrl)) {
+    console.warn(
+      `Offline basemap "${styleUrl}" is not available in this session; falling back to the default basemap.`,
+    );
+    return DEFAULT_BASEMAP;
+  }
   const planetary = getPlanetaryBasemapByStyleUrl(styleUrl);
   if (planetary) return createPlanetaryMapStyle(planetary);
   // A planetary sentinel that no longer resolves (e.g. a project saved with a

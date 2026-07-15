@@ -118,8 +118,6 @@ import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { RecordTourDialog } from "./RecordTourDialog";
 import { RecordVideoDialog } from "./RecordVideoDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
-import { OfflineRegionDialog } from "./OfflineRegionDialog";
-import { OfflineManagerDialog } from "./OfflineManagerDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
 import { ConsentNoticeDialogs } from "./toolbar/ConsentNoticeDialogs";
 import { ControlsMenu } from "./toolbar/ControlsMenu";
@@ -464,8 +462,6 @@ export function TopToolbar({
   const [galleryDialogOpen, setGalleryDialogOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
-  const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
-  const [offlineManagerOpen, setOfflineManagerOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [recordTourOpen, setRecordTourOpen] = useState(false);
   const [recordVideoOpen, setRecordVideoOpen] = useState(false);
@@ -1107,8 +1103,7 @@ export function TopToolbar({
           onExportHtml={() => void projectFiles.handleExportHtml()}
           onCollaborate={() => setCollaborateDialogOpen(true)}
           onPrintLayout={() => setPrintLayoutOpen(true)}
-          onDownloadOffline={() => setOfflineRegionOpen(true)}
-          onManageOffline={() => setOfflineManagerOpen(true)}
+          onOpenOfflineBasemap={onOpenBasemapExtract}
         />
       )}
       {isMenuVisible(uiProfile, "edit") && <EditMenu chrome={chrome} />}
@@ -1243,15 +1238,6 @@ export function TopToolbar({
         open={printLayoutOpen}
         onOpenChange={setPrintLayoutOpen}
         mapControllerRef={mapControllerRef}
-      />
-      <OfflineRegionDialog
-        open={offlineRegionOpen}
-        onOpenChange={setOfflineRegionOpen}
-        mapControllerRef={mapControllerRef}
-      />
-      <OfflineManagerDialog
-        open={offlineManagerOpen}
-        onOpenChange={setOfflineManagerOpen}
       />
       <FieldCollectionDialog
         open={fieldCollectionOpen}

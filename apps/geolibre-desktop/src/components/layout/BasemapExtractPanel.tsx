@@ -4,9 +4,13 @@ import {
   useAppStore,
 } from "@geolibre/core";
 import {
+  buildProtomapsBasemapStyle,
   type MapController,
   pmtilesNativeLayerIds,
+  PROTOMAPS_FLAVORS,
+  type ProtomapsFlavor,
   readPMTilesArchiveInfo,
+  registerOfflineBasemapStyle,
   registerPMTilesArchive,
 } from "@geolibre/map";
 import {
@@ -136,6 +140,16 @@ function coordsFromBbox(bbox: [number, number, number, number]): CoordFields {
   };
 }
 
+/** Source layers a Protomaps basemap style targets; if an archive exposes some
+ * of these it can render with the Protomaps flavors (styled as a basemap)
+ * rather than a flat overlay. */
+const PROTOMAPS_SCHEMA_LAYERS = ["earth", "water", "roads", "places", "landcover"];
+
+function isProtomapsCompatible(sourceLayers: string[]): boolean {
+  const set = new Set(sourceLayers);
+  return PROTOMAPS_SCHEMA_LAYERS.filter((l) => set.has(l)).length >= 2;
+}
+
 /** A layer/file base name from the archive URL, e.g. "planet" for
  * `https://host/planet.pmtiles`. */
 function baseNameFromUrl(url: string): string {
@@ -164,12 +178,16 @@ export function BasemapExtractPanel({
 }: BasemapExtractPanelProps) {
   const { t } = useTranslation();
   const addLayer = useAppStore((state) => state.addLayer);
+  const setBasemapStyleUrl = useAppStore((state) => state.setBasemapStyleUrl);
 
   const [coords, setCoords] = useState<CoordFields>(EMPTY_COORDS);
   const [drawing, setDrawing] = useState(false);
   const [url, setUrl] = useState("");
   const [minZoom, setMinZoom] = useState("0");
   const [maxZoom, setMaxZoom] = useState("15");
+  // When set, apply the extract as a styled Protomaps basemap in this flavor
+  // instead of adding it as a flat overlay layer.
+  const [flavor, setFlavor] = useState<ProtomapsFlavor | "">("light");
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState<PmtilesExtractProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -475,47 +493,65 @@ export function BasemapExtractPanel({
         return;
       }
 
-      // Render the extract from memory first so a disk-write failure below can't
-      // discard a successful in-memory extraction.
+      // Register the archive in the shared pmtiles protocol (used by both the
+      // styled-basemap style and the flat-overlay layer). Done before saving so
+      // a disk-write failure below can't discard a successful extraction.
       const layerId = `basemap-extract-${Date.now().toString(36)}`;
       const layerUrl = registerPMTilesArchive(`${layerId}.pmtiles`, archive);
-      const fillColor = DEFAULT_LAYER_STYLE.fillColor;
-      const layer: GeoLibreLayer = {
-        id: layerId,
-        name: fileName,
-        type: "pmtiles",
-        source: {
-          sourceId: layerId,
-          sourceLayers: info.sourceLayers,
-          tileType: info.tileType,
-          type: info.tileType === "raster" ? "raster" : "vector",
-          url: layerUrl,
-        },
-        visible: true,
-        // Raster basemaps render dimmed (raster-opacity reads the layer-level
-        // `opacity`, not style.fillOpacity); vector renders fully opaque.
-        opacity: info.tileType === "raster" ? 0.6 : 1,
-        style: {
-          ...DEFAULT_LAYER_STYLE,
-          fillColor,
-          strokeColor: fillColor,
-        },
-        metadata: {
-          externalNativeLayer: true,
-          nativeLayerIds: pmtilesNativeLayerIds(
-            layerId,
-            info.tileType,
-            info.sourceLayers,
-          ),
-          pickable: true,
-          sourceId: layerId,
-          sourceKind: "pmtiles-url",
-          sourceLayers: info.sourceLayers,
-          tileType: info.tileType,
-        },
-        sourcePath: layerUrl,
-      };
-      addLayer(layer);
+
+      // A Protomaps-schema vector archive can render as a proper styled basemap
+      // (roads/water/labels) in the chosen flavor; anything else is added as a
+      // flat single-symbology overlay layer.
+      const asStyledBasemap =
+        flavor !== "" &&
+        info.tileType === "vector" &&
+        isProtomapsCompatible(info.sourceLayers);
+
+      if (asStyledBasemap) {
+        const style = buildProtomapsBasemapStyle({
+          sourceUrl: layerUrl,
+          flavor,
+        });
+        setBasemapStyleUrl(registerOfflineBasemapStyle(layerId, style));
+      } else {
+        const fillColor = DEFAULT_LAYER_STYLE.fillColor;
+        const layer: GeoLibreLayer = {
+          id: layerId,
+          name: fileName,
+          type: "pmtiles",
+          source: {
+            sourceId: layerId,
+            sourceLayers: info.sourceLayers,
+            tileType: info.tileType,
+            type: info.tileType === "raster" ? "raster" : "vector",
+            url: layerUrl,
+          },
+          visible: true,
+          // Raster basemaps render dimmed (raster-opacity reads the layer-level
+          // `opacity`, not style.fillOpacity); vector renders fully opaque.
+          opacity: info.tileType === "raster" ? 0.6 : 1,
+          style: {
+            ...DEFAULT_LAYER_STYLE,
+            fillColor,
+            strokeColor: fillColor,
+          },
+          metadata: {
+            externalNativeLayer: true,
+            nativeLayerIds: pmtilesNativeLayerIds(
+              layerId,
+              info.tileType,
+              info.sourceLayers,
+            ),
+            pickable: true,
+            sourceId: layerId,
+            sourceKind: "pmtiles-url",
+            sourceLayers: info.sourceLayers,
+            tileType: info.tileType,
+          },
+          sourcePath: layerUrl,
+        };
+        addLayer(layer);
+      }
       setPhase("done");
 
       // Persisting to disk is best-effort and independent of the layer that is
@@ -533,16 +569,34 @@ export function BasemapExtractPanel({
           ],
           mimeType: "application/octet-stream",
         });
-        setSuccess(
-          savedPath !== null
-            ? t("basemapExtract.successSaved", { path: savedPath })
-            : t("basemapExtract.successAdded"),
-        );
+        if (savedPath !== null) {
+          setSuccess(
+            t(
+              asStyledBasemap
+                ? "basemapExtract.successBasemapSaved"
+                : "basemapExtract.successSaved",
+              { path: savedPath },
+            ),
+          );
+        } else {
+          setSuccess(
+            t(
+              asStyledBasemap
+                ? "basemapExtract.successBasemapApplied"
+                : "basemapExtract.successAdded",
+            ),
+          );
+        }
       } catch (saveErr) {
         setSuccess(
-          t("basemapExtract.successAddedSaveFailed", {
-            error: saveErr instanceof Error ? saveErr.message : String(saveErr),
-          }),
+          t(
+            asStyledBasemap
+              ? "basemapExtract.successBasemapSaveFailed"
+              : "basemapExtract.successAddedSaveFailed",
+            {
+              error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+            },
+          ),
         );
       }
     } catch (err) {
@@ -561,7 +615,17 @@ export function BasemapExtractPanel({
         setPhase((current) => (current === "running" ? "idle" : current));
       }
     }
-  }, [bbox, zoomInvalid, urlValue, minZoomValue, maxZoomValue, addLayer, t]);
+  }, [
+    bbox,
+    zoomInvalid,
+    urlValue,
+    minZoomValue,
+    maxZoomValue,
+    flavor,
+    addLayer,
+    setBasemapStyleUrl,
+    t,
+  ]);
 
   const handleCancel = useCallback(() => {
     abortRef.current?.abort();
@@ -761,6 +825,34 @@ export function BasemapExtractPanel({
               {t("basemapExtract.zoomHint")}
             </p>
           ) : null}
+
+          <div className="space-y-1">
+            <Label htmlFor="basemap-extract-style" className="text-xs">
+              {t("basemapExtract.style")}
+            </Label>
+            <select
+              id="basemap-extract-style"
+              className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+              value={flavor}
+              disabled={running}
+              onChange={(e) => {
+                setFlavor(e.target.value as ProtomapsFlavor | "");
+                clearStatus();
+              }}
+            >
+              {PROTOMAPS_FLAVORS.map((f) => (
+                <option key={f} value={f}>
+                  {t(`basemapExtract.flavor.${f}`)}
+                </option>
+              ))}
+              <option value="">{t("basemapExtract.flavorOverlay")}</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {flavor === ""
+                ? t("basemapExtract.styleHintOverlay")
+                : t("basemapExtract.styleHintBasemap")}
+            </p>
+          </div>
 
           {pendingPlan ? (
             <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">

@@ -12,6 +12,7 @@
     "@geolibre/core": "*",
     "@maplibre/geojson-vt": "^6.1.1",
     "@maplibre/vt-pbf": "^4.3.2",
+    "@protomaps/basemaps": "^5.7.2",
     "@turf/bbox": "^7.3.5",
     "@turf/helpers": "^7.3.5",
     "cesium": "^1.143.0",
@@ -19,8 +20,8 @@
     "maplibre-gl": "^5.24.0",
     "maplibre-gl-layer-control": "^0.17.4",
     "pmtiles": "^4.4.1",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",

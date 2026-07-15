@@ -19,7 +19,6 @@ import {
   FileText,
   Folder,
   FolderOpen,
-  HardDrive,
   HardDriveDownload,
   History,
   LayoutGrid,
@@ -49,8 +48,7 @@ interface ProjectMenuProps {
   onExportHtml: () => void;
   onCollaborate: () => void;
   onPrintLayout: () => void;
-  onDownloadOffline: () => void;
-  onManageOffline: () => void;
+  onOpenOfflineBasemap: () => void;
 }
 
 /** The Project menu: new/open/save/share, recent projects, print, and storymap. */
@@ -68,8 +66,7 @@ export function ProjectMenu({
   onExportHtml,
   onCollaborate,
   onPrintLayout,
-  onDownloadOffline,
-  onManageOffline,
+  onOpenOfflineBasemap,
 }: ProjectMenuProps) {
   const { t } = useTranslation();
   const projectPath = useAppStore((s) => s.projectPath);
@@ -88,9 +85,7 @@ export function ProjectMenu({
     show("project.exportHtml") ||
     (collaborationEnabled && show("project.collaborate"));
   const showPrintGroup =
-    show("project.printLayout") ||
-    show("project.offlineRegion") ||
-    show("project.offlineManager");
+    show("project.printLayout") || show("project.offlineRegion");
 
   return (
     <DropdownMenu>
@@ -246,15 +241,9 @@ export function ProjectMenu({
           </DropdownMenuItem>
         )}
         {show("project.offlineRegion") && (
-          <DropdownMenuItem onSelect={onDownloadOffline}>
+          <DropdownMenuItem onSelect={onOpenOfflineBasemap}>
             <HardDriveDownload className="me-2 h-3.5 w-3.5" />
-            {t("toolbar.item.offlineRegionEllipsis")}
-          </DropdownMenuItem>
-        )}
-        {show("project.offlineManager") && (
-          <DropdownMenuItem onSelect={onManageOffline}>
-            <HardDrive className="me-2 h-3.5 w-3.5" />
-            {t("toolbar.item.offlineManagerEllipsis")}
+            {t("toolbar.item.offlineBasemapEllipsis")}
           </DropdownMenuItem>
         )}
         {show("project.storymap") && (

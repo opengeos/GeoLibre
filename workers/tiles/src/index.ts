@@ -171,8 +171,20 @@ const MAX_WMS_ZOOM = 8;
 const CORS_HEADERS: Record<string, string> = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET, OPTIONS",
+  // Allow the Range request header (the /pmtiles route needs it) and expose the
+  // response headers a range reader relies on. Harmless for the tile routes.
+  "access-control-allow-headers": "range",
+  "access-control-expose-headers":
+    "content-range, content-length, etag, accept-ranges",
   "access-control-max-age": "86400",
 };
+
+/** `/pmtiles/<name>.pmtiles` range-proxies the Protomaps daily planet builds,
+ * adding CORS so the in-browser PMTiles extractor can byte-range them from any
+ * origin (build.protomaps.com only allowlists a few). Scoped to that one host
+ * and `.pmtiles` paths so this is never an open proxy. */
+const PMTILES_PATH = /^\/pmtiles\/([A-Za-z0-9._-]+\.pmtiles)$/;
+const PMTILES_UPSTREAM = "https://build.protomaps.com";
 
 // Cache tiles for a day at the edge and let browsers hold them for an hour. The
 // mosaics are static, so a long TTL is safe and keeps the map responsive.
@@ -228,6 +240,54 @@ function isAllowedOamOrigin(origin: string | null): boolean {
 
 interface Env {}
 
+/**
+ * Range-proxies one Protomaps planet build. Forwards the client's `Range`
+ * header to build.protomaps.com and re-emits the (usually 206) response with
+ * CORS + range headers so an in-browser PMTiles reader can extract from it.
+ * Only byte-range GETs are proxied — a full-file GET (no Range) is refused so
+ * this can't be used to pull the whole 100+ GB archive through the Worker.
+ */
+async function handlePmtilesRange(
+  request: Request,
+  name: string,
+): Promise<Response> {
+  const range = request.headers.get("range");
+  if (!range) {
+    return new Response(
+      "This endpoint only serves HTTP range requests (send a Range header).",
+      { status: 400, headers: CORS_HEADERS },
+    );
+  }
+  let originResponse: Response;
+  try {
+    originResponse = await fetch(`${PMTILES_UPSTREAM}/${name}`, {
+      headers: { range },
+      // The upstream is range-cacheable at Cloudflare's edge; identical range
+      // requests (directory reads) are served from the PoP.
+      cf: { cacheEverything: true },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  for (const key of [
+    "content-type",
+    "content-length",
+    "content-range",
+    "accept-ranges",
+    "etag",
+    "last-modified",
+    "cache-control",
+  ]) {
+    const value = originResponse.headers.get(key);
+    if (value) headers.set(key, value);
+  }
+  return new Response(originResponse.body, {
+    status: originResponse.status,
+    headers,
+  });
+}
+
 export default {
   async fetch(
     request: Request,
@@ -255,7 +315,8 @@ export default {
           `    Datasets: ${Object.keys(DATASETS).join(", ")}\n` +
           "  Reprojected WMS: /wms/<dataset>/<z>/<x>/<y>.png\n" +
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
-          "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n",
+          "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
+          "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
         { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
       );
     }
@@ -320,6 +381,11 @@ export default {
         status: originResponse.status,
         headers,
       });
+    }
+
+    const pmtilesMatch = PMTILES_PATH.exec(url.pathname);
+    if (pmtilesMatch) {
+      return handlePmtilesRange(request, pmtilesMatch[1]);
     }
 
     const match = TILE_PATH.exec(url.pathname);
