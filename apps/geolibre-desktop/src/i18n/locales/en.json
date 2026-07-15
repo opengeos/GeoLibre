@@ -2345,7 +2345,7 @@
     "copied": "Copied",
     "openProduct": "Open on source.coop",
     "addTitle": "Add this file to the map",
-    "streamTitle": "Query this file where it sits, reading only the parts in view. Nothing is copied into memory — best for large files.",
+    "streamTitle": "Query this file where it sits, reading only the parts in view. The whole file is never copied into DuckDB — best for large files.",
     "removeTitle": "Remove this file from the map",
     "downloadTitle": "Download this file",
     "copyUrlTitle": "Copy this file's URL",

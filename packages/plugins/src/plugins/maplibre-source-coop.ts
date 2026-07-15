@@ -133,7 +133,7 @@ export const DEFAULT_SOURCE_COOP_LABELS: SourceCoopLabels = {
   addTitle: "Add this file to the map",
   streamTitle:
     "Query this file where it sits, reading only the parts in view. " +
-    "Nothing is copied into memory — best for large files.",
+    "The whole file is never copied into DuckDB — best for large files.",
   removeTitle: "Remove this file from the map",
   downloadTitle: "Download this file",
   copyUrlTitle: "Copy this file's URL",
