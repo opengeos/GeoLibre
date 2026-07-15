@@ -1199,6 +1199,7 @@
     "apply": "Use as basemap",
     "rename": "Rename",
     "delete": "Delete",
+    "confirmDelete": "Delete?",
     "style": "Basemap style",
     "flavor": {
       "light": "Light",

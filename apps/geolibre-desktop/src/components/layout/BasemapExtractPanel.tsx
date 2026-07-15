@@ -72,23 +72,14 @@ const PANEL_MIN_H = 240;
 /** Remembered across sessions so repeat extracts don't retype the archive URL. */
 const URL_STORAGE_KEY = "geolibre.basemapExtract.url";
 
-/** GeoLibre's Cloudflare Worker (workers/tiles) range-proxies the Protomaps
- * daily planet builds with CORS, so the extractor can pull them from any
- * origin (build.protomaps.com itself only allowlists a few). */
-const PLANET_PROXY_BASE = "https://tiles.geolibre.app/pmtiles";
-
 /**
- * Default archive URL: the Protomaps planet build from a couple of days ago
- * (a margin so the daily build is reliably published and still within the
- * proxy's retention) through GeoLibre's CORS proxy. Computed at open time so it
- * stays fresh instead of hardcoding a date that would go stale.
+ * Default archive URL: the latest Protomaps planet build through GeoLibre's
+ * Cloudflare Worker (workers/tiles). The Worker resolves `latest` to the newest
+ * daily build and adds CORS, so this URL is always current (no client-side date
+ * to go stale) and works from any origin — build.protomaps.com itself only
+ * allowlists a few and has no `latest` alias.
  */
-function defaultPlanetBuildUrl(): string {
-  const date = new Date();
-  date.setUTCDate(date.getUTCDate() - 2);
-  const ymd = date.toISOString().slice(0, 10).replace(/-/g, "");
-  return `${PLANET_PROXY_BASE}/${ymd}.pmtiles`;
-}
+const DEFAULT_ARCHIVE_URL = "https://tiles.geolibre.app/pmtiles/latest.pmtiles";
 
 /** Above this planned size the user must explicitly confirm the download. */
 const CONFIRM_BYTES = 150 * 1024 * 1024;
@@ -252,6 +243,7 @@ export function BasemapExtractPanel({
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const bbox = useMemo(() => parseBbox(coords), [coords]);
   const bboxInvalid =
@@ -309,6 +301,8 @@ export function BasemapExtractPanel({
     setProgress(null);
     setError(null);
     setSuccess(null);
+    setRenamingId(null);
+    setConfirmDeleteId(null);
     setPendingPlan((pending) => {
       pending?.resolve(false);
       return null;
@@ -320,13 +314,13 @@ export function BasemapExtractPanel({
     // box whose projected overlay degenerates into a stray line across the map.
     setCoords(EMPTY_COORDS);
     if (!open) return;
-    // Seed with the last-used URL, or the Protomaps planet build (via the CORS
-    // proxy) as a ready-to-use default on first open.
-    let seededUrl = defaultPlanetBuildUrl();
+    // Seed with the last-used URL, or the latest Protomaps planet build (via the
+    // CORS proxy) as a ready-to-use default on first open.
+    let seededUrl = DEFAULT_ARCHIVE_URL;
     try {
       seededUrl = localStorage.getItem(URL_STORAGE_KEY) || seededUrl;
     } catch {
-      // Storage may be unavailable (private mode); keep the computed default.
+      // Storage may be unavailable (private mode); keep the default.
     }
     setUrl(seededUrl);
   }, [open]);
@@ -1272,47 +1266,87 @@ export function BasemapExtractPanel({
                             </span>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
-                          disabled={
-                            entry.tileType !== "vector" ||
-                            applyingId === entry.id
-                          }
-                          onClick={() => void applySaved(entry)}
-                          title={t("basemapExtract.apply")}
-                          aria-label={t("basemapExtract.apply")}
-                        >
-                          {applyingId === entry.id ? (
-                            <Loader2
-                              className="h-3.5 w-3.5 animate-spin"
-                              aria-hidden="true"
-                            />
-                          ) : (
-                            <Layers
-                              className="h-3.5 w-3.5"
-                              aria-hidden="true"
-                            />
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded p-1 text-muted-foreground hover:text-foreground"
-                          onClick={() => startRename(entry)}
-                          title={t("basemapExtract.rename")}
-                          aria-label={t("basemapExtract.rename")}
-                        >
-                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
-                        <button
-                          type="button"
-                          className="rounded p-1 text-muted-foreground hover:text-destructive"
-                          onClick={() => deleteOfflineBasemap(entry.id)}
-                          title={t("basemapExtract.delete")}
-                          aria-label={t("basemapExtract.delete")}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                        </button>
+                        {confirmDeleteId === entry.id ? (
+                          <>
+                            <span className="text-[11px] text-muted-foreground">
+                              {t("basemapExtract.confirmDelete")}
+                            </span>
+                            <button
+                              type="button"
+                              className="rounded p-1 text-destructive hover:bg-destructive/10"
+                              onClick={() => {
+                                deleteOfflineBasemap(entry.id);
+                                setConfirmDeleteId(null);
+                              }}
+                              title={t("basemapExtract.delete")}
+                              aria-label={t("basemapExtract.delete")}
+                            >
+                              <Trash2
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded p-1 text-muted-foreground hover:text-foreground"
+                              onClick={() => setConfirmDeleteId(null)}
+                              title={t("common.cancel")}
+                              aria-label={t("common.cancel")}
+                            >
+                              <X className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                              disabled={
+                                entry.tileType !== "vector" ||
+                                applyingId === entry.id
+                              }
+                              onClick={() => void applySaved(entry)}
+                              title={t("basemapExtract.apply")}
+                              aria-label={t("basemapExtract.apply")}
+                            >
+                              {applyingId === entry.id ? (
+                                <Loader2
+                                  className="h-3.5 w-3.5 animate-spin"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <Layers
+                                  className="h-3.5 w-3.5"
+                                  aria-hidden="true"
+                                />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded p-1 text-muted-foreground hover:text-foreground"
+                              onClick={() => startRename(entry)}
+                              title={t("basemapExtract.rename")}
+                              aria-label={t("basemapExtract.rename")}
+                            >
+                              <Pencil
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded p-1 text-muted-foreground hover:text-destructive"
+                              onClick={() => setConfirmDeleteId(entry.id)}
+                              title={t("basemapExtract.delete")}
+                              aria-label={t("basemapExtract.delete")}
+                            >
+                              <Trash2
+                                className="h-3.5 w-3.5"
+                                aria-hidden="true"
+                              />
+                            </button>
+                          </>
+                        )}
                       </>
                     )}
                   </div>

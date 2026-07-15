@@ -186,6 +186,43 @@ const CORS_HEADERS: Record<string, string> = {
 const PMTILES_PATH = /^\/pmtiles\/([A-Za-z0-9._-]+\.pmtiles)$/;
 const PMTILES_UPSTREAM = "https://build.protomaps.com";
 
+// `/pmtiles/latest.pmtiles` resolves to the most recent daily build. Protomaps
+// publishes `<YYYYMMDD>.pmtiles` with no "latest" alias and no index, so we
+// probe backward from today until one exists, then cache the resolved date so
+// every range request in one extraction hits the same file (mismatched dates
+// would corrupt the assembled archive). The TTL is short enough to pick up the
+// next day's build but long enough to stay stable through any extraction.
+const LATEST_NAME = "latest.pmtiles";
+const LATEST_TTL_MS = 60 * 60 * 1000;
+const LATEST_MAX_LOOKBACK_DAYS = 7;
+let latestCache: { date: string; at: number } | null = null;
+
+function utcYmd(msSinceEpoch: number): string {
+  return new Date(msSinceEpoch).toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+/** Resolves `latest` to the newest available `<YYYYMMDD>` build, cached. */
+async function resolveLatestBuildDate(): Promise<string> {
+  const now = Date.now();
+  if (latestCache && now - latestCache.at < LATEST_TTL_MS) {
+    return latestCache.date;
+  }
+  for (let i = 0; i <= LATEST_MAX_LOOKBACK_DAYS; i++) {
+    const ymd = utcYmd(now - i * 86_400_000);
+    // A one-byte range is the cheapest existence check; edge-cache it so the
+    // probe is nearly free across requests.
+    const probe = await fetch(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
+      headers: { range: "bytes=0-0" },
+      cf: { cacheEverything: true, cacheTtl: 3600 },
+    });
+    if (probe.status === 206) {
+      latestCache = { date: ymd, at: now };
+      return ymd;
+    }
+  }
+  throw new Error("no recent Protomaps build found");
+}
+
 // Cache tiles for a day at the edge and let browsers hold them for an hour. The
 // mosaics are static, so a long TTL is safe and keeps the map responsive.
 const CACHE_CONTROL = "public, max-age=3600, s-maxage=86400";
@@ -258,9 +295,20 @@ async function handlePmtilesRange(
       { status: 400, headers: CORS_HEADERS },
     );
   }
+  let target = name;
+  if (name === LATEST_NAME) {
+    try {
+      target = `${await resolveLatestBuildDate()}.pmtiles`;
+    } catch {
+      return new Response("No recent Protomaps build available", {
+        status: 502,
+        headers: CORS_HEADERS,
+      });
+    }
+  }
   let originResponse: Response;
   try {
-    originResponse = await fetch(`${PMTILES_UPSTREAM}/${name}`, {
+    originResponse = await fetch(`${PMTILES_UPSTREAM}/${target}`, {
       headers: { range },
       // The upstream is range-cacheable at Cloudflare's edge; identical range
       // requests (directory reads) are served from the PoP.
