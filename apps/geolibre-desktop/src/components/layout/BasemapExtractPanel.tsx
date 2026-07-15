@@ -23,6 +23,7 @@ import {
   Check,
   CheckCircle2,
   Download,
+  Eraser,
   GripVertical,
   Layers,
   Loader2,
@@ -48,12 +49,14 @@ import {
   loadOfflineBasemaps,
   type OfflineBasemap,
   renameOfflineBasemap,
+  setOfflineBasemapFlavor,
   subscribeOfflineBasemaps,
   upsertOfflineBasemap,
 } from "../../lib/offline-basemaps";
 import { formatBytes } from "../../lib/offline-regions";
 import {
   isTauri,
+  openLocalDataFileWithFallback,
   readLocalFileBytes,
   saveBinaryFileWithFallback,
 } from "../../lib/tauri-io";
@@ -794,9 +797,10 @@ export function BasemapExtractPanel({
     setProgress(null);
   }, []);
 
-  // Re-apply a saved basemap as the styled Protomaps basemap: reuse the live
-  // in-memory archive if it's still registered this session, otherwise reload
-  // its bytes from the saved file (desktop only).
+  // Re-apply a saved basemap as the styled Protomaps basemap. If its archive is
+  // still registered this session, reuse it. Otherwise reload the bytes: from
+  // the remembered saved path on desktop, or by asking the user to locate the
+  // .pmtiles file (works on web, where there is no stable path).
   const applySaved = useCallback(
     async (entry: OfflineBasemap) => {
       if (entry.tileType !== "vector") return;
@@ -806,10 +810,20 @@ export function BasemapExtractPanel({
       try {
         const key = `${entry.id}.pmtiles`;
         if (!hasPMTilesArchive(key)) {
-          if (!entry.savedPath || !isTauri()) {
-            throw new Error(t("basemapExtract.errorReapplyUnavailable"));
+          let bytes: Uint8Array | null = null;
+          if (entry.savedPath && isTauri()) {
+            bytes = await readLocalFileBytes(entry.savedPath);
+          } else {
+            const picked = await openLocalDataFileWithFallback({
+              filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
+              accept: ".pmtiles",
+              readBinary: true,
+            });
+            // Cancelled the picker: nothing to apply, no error.
+            if (!picked?.data) return;
+            bytes = new Uint8Array(picked.data);
           }
-          registerPMTilesArchive(key, await readLocalFileBytes(entry.savedPath));
+          registerPMTilesArchive(key, bytes);
         }
         const style = buildProtomapsBasemapStyle({
           sourceUrl: `pmtiles://${key}`,
@@ -824,6 +838,19 @@ export function BasemapExtractPanel({
       }
     },
     [setBasemapStyleUrl, t],
+  );
+
+  // Change a saved basemap's flavor. Persists it, and re-styles live if the
+  // archive is already loaded (an instant restyle); otherwise it takes effect
+  // the next time "Use as basemap" loads it.
+  const handleSavedFlavorChange = useCallback(
+    (entry: OfflineBasemap, next: ProtomapsFlavor) => {
+      setOfflineBasemapFlavor(entry.id, next);
+      if (hasPMTilesArchive(`${entry.id}.pmtiles`)) {
+        void applySaved({ ...entry, flavor: next });
+      }
+    },
+    [applySaved],
   );
 
   const startRename = useCallback((entry: OfflineBasemap) => {
@@ -945,6 +972,23 @@ export function BasemapExtractPanel({
               <MapIcon className="h-3.5 w-3.5" aria-hidden="true" />
               {t("basemapExtract.useView")}
             </Button>
+            {bbox || bboxInvalid ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={running}
+                onClick={() => {
+                  setDrawing(false);
+                  setCoords(EMPTY_COORDS);
+                  clearStatus();
+                }}
+                title={t("basemapExtract.clearBbox")}
+                aria-label={t("basemapExtract.clearBbox")}
+              >
+                <Eraser className="h-3.5 w-3.5" aria-hidden="true" />
+              </Button>
+            ) : null}
           </div>
           {drawing ? (
             <p className="text-xs text-muted-foreground">
@@ -1195,20 +1239,38 @@ export function BasemapExtractPanel({
                       </>
                     ) : (
                       <>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0 flex-1 space-y-0.5">
                           <p
                             className="truncate text-xs font-medium"
                             title={entry.name}
                           >
                             {entry.name}
                           </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {formatBytes(entry.bytes)} · z{entry.minZoom}–
-                            {entry.maxZoom}
-                            {entry.flavor
-                              ? ` · ${t(`basemapExtract.flavor.${entry.flavor as ProtomapsFlavor}`)}`
-                              : ""}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            {entry.tileType === "vector" ? (
+                              <select
+                                className="h-6 rounded border border-input bg-background px-1 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={(entry.flavor as ProtomapsFlavor) || "light"}
+                                onChange={(e) =>
+                                  handleSavedFlavorChange(
+                                    entry,
+                                    e.target.value as ProtomapsFlavor,
+                                  )
+                                }
+                                aria-label={t("basemapExtract.style")}
+                              >
+                                {PROTOMAPS_FLAVORS.map((f) => (
+                                  <option key={f} value={f}>
+                                    {t(`basemapExtract.flavor.${f}`)}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : null}
+                            <span className="truncate text-[11px] text-muted-foreground">
+                              {formatBytes(entry.bytes)} · z{entry.minZoom}–
+                              {entry.maxZoom}
+                            </span>
+                          </div>
                         </div>
                         <button
                           type="button"

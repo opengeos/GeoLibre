@@ -99,6 +99,20 @@ export function renameOfflineBasemap(
   return list;
 }
 
+/** Sets a basemap's Protomaps flavor (its raw tiles are flavor-independent, so
+ * this just changes how it's styled). Returns the updated list. */
+export function setOfflineBasemapFlavor(
+  id: string,
+  flavor: string,
+  storage?: Storage,
+): OfflineBasemap[] {
+  const list = loadOfflineBasemaps(storage).map((b) =>
+    b.id === id ? { ...b, flavor } : b,
+  );
+  persist(list, storage);
+  return list;
+}
+
 /** Removes a basemap. Returns the updated list. */
 export function deleteOfflineBasemap(
   id: string,
