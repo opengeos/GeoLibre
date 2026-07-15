@@ -17,6 +17,7 @@ import {
   parseProductList,
   parseProductRef,
   SOURCE_COOP_DATA_BASE,
+  synthesizeProduct,
   type SourceCoopFetch,
   type SourceCoopProduct,
 } from "../packages/plugins/src/plugins/source-coop-api";
@@ -117,6 +118,32 @@ describe("parseProduct", () => {
     assert.deepEqual(
       parseProduct(rawProduct({ metadata: { tags: ["ok", 7] } }))?.tags,
       ["ok"],
+    );
+  });
+});
+
+describe("synthesizeProduct", () => {
+  it("builds a usable record from an id alone, for a pinned panel", () => {
+    const product = synthesizeProduct("opengeos", "natural-earth", "Natural Earth");
+    assert.equal(product.accountId, "opengeos");
+    assert.equal(product.productId, "natural-earth");
+    assert.equal(product.title, "Natural Earth");
+    assert.equal(product.url, "https://source.coop/opengeos/natural-earth");
+    // Left empty for a later fetchProduct to fill in.
+    assert.equal(product.description, "");
+    assert.deepEqual(product.tags, []);
+    assert.equal(product.updatedAt, null);
+    assert.equal(product.featured, false);
+  });
+
+  it("produces the ids that drive a file listing, so no metadata read is needed", () => {
+    const product = synthesizeProduct("opengeos", "natural-earth", "Natural Earth");
+    assert.equal(
+      buildListObjectsUrl({
+        accountId: product.accountId,
+        prefix: `${product.productId}/`,
+      }),
+      `${SOURCE_COOP_DATA_BASE}/opengeos?list-type=2&prefix=natural-earth%2F&max-keys=200&delimiter=%2F`,
     );
   });
 });

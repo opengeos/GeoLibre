@@ -16,6 +16,12 @@
  * GeoParquet and friends, `app.addCogLayer` for COG — so Source Cooperative
  * data lands in the Layers panel, styles, and persists exactly like the same
  * file added by hand through Add Data.
+ *
+ * `createSourceCoopPlugin` also backs the **Natural Earth** entry in the same
+ * menu, as this panel pinned to `opengeos/natural-earth`. A pinned panel drops
+ * the catalog and search and opens straight into the product's files, but is
+ * otherwise this browser exactly — so its layer list is the live bucket listing
+ * and there is no second catalog to keep in step.
  */
 
 import { useAppStore } from "@geolibre/core";
@@ -35,6 +41,7 @@ import {
   SOURCE_COOP_API_BASE,
   SOURCE_COOP_FEED_URL,
   SOURCE_COOP_PROXY_ENDPOINT,
+  synthesizeProduct,
   type SourceCoopClientOptions,
   type SourceCoopFetch,
   type SourceCoopFormat,
@@ -43,8 +50,6 @@ import {
 } from "./source-coop-api";
 
 export const SOURCE_COOP_PLUGIN_ID = "maplibre-gl-source-coop";
-
-const PANEL_ID = SOURCE_COOP_PLUGIN_ID;
 
 /** User-facing strings. The host pushes translations in via {@link setSourceCoopLabels}. */
 export interface SourceCoopLabels {
@@ -193,12 +198,13 @@ const CSS = {
     "font-size:10px;color:hsl(var(--muted-foreground));word-break:break-all;",
 } as const;
 
-let appRef: GeoLibreAppAPI | null = null;
-let unregisterPanel: (() => void) | null = null;
-// The mounted panel container and its teardown, tracked so a language change
-// can rebuild the panel in place (see setSourceCoopLabels).
-let panelContainer: HTMLElement | null = null;
-let disposePanel: (() => void) | null = null;
+/**
+ * Rebuild callbacks for the panels currently mounted, so a language change can
+ * repaint each in place (see {@link setSourceCoopLabels}). A set rather than a
+ * single slot because this panel is mounted more than once: the Natural Earth
+ * plugin reuses it pinned to one product (see {@link createSourceCoopPlugin}).
+ */
+const mountedPanels = new Set<() => void>();
 
 /**
  * The catalog, cached across panel opens. Fetching it costs two network reads
@@ -221,8 +227,11 @@ function isTauri(): boolean {
  * through the tiles Worker, which re-emits the JSON with CORS — source.coop
  * sends none, so a direct browser fetch is blocked outright.
  */
-function clientOptions(signal?: AbortSignal): SourceCoopClientOptions {
-  const fetchArrayBuffer = appRef?.fetchArrayBuffer;
+function clientOptions(
+  app: GeoLibreAppAPI | null,
+  signal?: AbortSignal,
+): SourceCoopClientOptions {
+  const fetchArrayBuffer = app?.fetchArrayBuffer;
   if (isTauri() && fetchArrayBuffer) {
     const fetchImpl: SourceCoopFetch = async (url) => {
       const buffer = await fetchArrayBuffer(url);
@@ -288,8 +297,10 @@ function isAdded(object: SourceCoopObject): boolean {
  * handles it (see the module comment). Returns false when the format has no
  * renderer, which the caller renders as download-only.
  */
-async function addObjectToMap(object: SourceCoopObject): Promise<boolean> {
-  const app = appRef;
+async function addObjectToMap(
+  app: GeoLibreAppAPI | null,
+  object: SourceCoopObject,
+): Promise<boolean> {
   // The URL is built by buildObjectUrl from an https base, but re-check at the
   // point it becomes a map source so this security-sensitive step stands alone.
   if (!app || !HTTP_URL_RE.test(object.url)) return false;
@@ -364,12 +375,28 @@ function formatLabel(format: SourceCoopFormat): string {
  * All view state lives in this closure, so the panel is self-contained and
  * `mountPanel` can rebuild it wholesale on a language change.
  */
-function buildPanel(container: HTMLElement): () => void {
+function buildPanel(
+  container: HTMLElement,
+  app: GeoLibreAppAPI | null,
+  pinned?: SourceCoopPinnedProduct,
+): () => void {
   type View =
     | { kind: "browse" }
     | { kind: "product"; product: SourceCoopProduct; prefix: string };
 
-  let view: View = { kind: "browse" };
+  // A pinned panel skips the catalog entirely and opens straight into its
+  // product, which is why the record is synthesized rather than fetched: the
+  // file listing needs only `accountId`/`productId`, and those are known. The
+  // metadata API is consulted afterwards purely to enrich the title and
+  // description (see `enrichPinnedProduct`), so the panel still works when that
+  // API — or the Worker proxy in front of it — is unreachable.
+  let view: View = pinned
+    ? {
+        kind: "product",
+        product: synthesizeProduct(pinned.accountId, pinned.productId, pinned.title),
+        prefix: `${pinned.productId}/`,
+      }
+    : { kind: "browse" };
   let query = "";
   let status = "";
   let error = "";
@@ -414,7 +441,7 @@ function buildPanel(container: HTMLElement): () => void {
     status = labels.loading;
     render();
     try {
-      const products = await fetchCatalog(clientOptions(signal));
+      const products = await fetchCatalog(clientOptions(app, signal));
       if (token !== generation) return;
       catalog = products;
       status = "";
@@ -460,7 +487,7 @@ function buildPanel(container: HTMLElement): () => void {
       const product = await fetchProduct(
         ref.accountId,
         ref.productId,
-        clientOptions(signal),
+        clientOptions(app, signal),
       );
       if (token !== generation) return;
       if (product) extraProducts.set(id, product);
@@ -487,7 +514,10 @@ function buildPanel(container: HTMLElement): () => void {
     status = labels.searching;
     render();
     try {
-      const products = await fetchAccountProducts(accountId, clientOptions(signal));
+      const products = await fetchAccountProducts(
+        accountId,
+        clientOptions(app, signal),
+      );
       if (token !== generation) return;
       for (const product of products) {
         extraProducts.set(`${product.accountId}/${product.productId}`, product);
@@ -572,7 +602,7 @@ function buildPanel(container: HTMLElement): () => void {
     error = "";
     render();
     try {
-      const added = await addObjectToMap(object);
+      const added = await addObjectToMap(app, object);
       if (!added) error = labels.addError(labels.unsupportedTitle);
     } catch (caught) {
       error = labels.addError(errorMessage(caught));
@@ -745,12 +775,16 @@ function buildPanel(container: HTMLElement): () => void {
 
   function renderProduct(product: SourceCoopProduct, prefix: string): void {
     const header = el("div", CSS.header);
-    const back = button(labels.back, CSS.secondaryButton);
-    back.addEventListener("click", () => {
-      view = { kind: "browse" };
-      render();
-    });
-    header.appendChild(back);
+    // A pinned panel has no catalog behind it, so Back would lead nowhere; the
+    // "Up one level" control below still walks back out of subfolders.
+    if (!pinned) {
+      const back = button(labels.back, CSS.secondaryButton);
+      back.addEventListener("click", () => {
+        view = { kind: "browse" };
+        render();
+      });
+      header.appendChild(back);
+    }
     header.appendChild(el("div", CSS.title, product.title));
     header.appendChild(
       el("div", CSS.sub, `${product.accountId}/${product.productId}`),
@@ -833,8 +867,34 @@ function buildPanel(container: HTMLElement): () => void {
     else renderProduct(view.product, view.prefix);
   }
 
+  /**
+   * Replaces a pinned panel's synthesized product record with the real one, so
+   * the header shows the published title and description instead of the
+   * fallback. Best-effort: `fetchProduct` already resolves to null rather than
+   * throwing, and a miss simply leaves the synthesized record in place — the
+   * file listing never depended on this.
+   */
+  async function enrichPinnedProduct(): Promise<void> {
+    if (!pinned) return;
+    const product = await fetchProduct(
+      pinned.accountId,
+      pinned.productId,
+      clientOptions(app),
+    );
+    // The user may have navigated into a subfolder meanwhile, so keep the
+    // current prefix and swap only the record.
+    if (!product || view.kind !== "product") return;
+    view = { ...view, product };
+    render();
+  }
+
   render();
-  void loadCatalog();
+  if (pinned) {
+    void loadFiles();
+    void enrichPinnedProduct();
+  } else {
+    void loadCatalog();
+  }
 
   // Repaint when the layer store changes, so Add/Remove reflects a layer the
   // user removed from the Layers panel. Guarded on the layers array identity so
@@ -851,54 +911,116 @@ function buildPanel(container: HTMLElement): () => void {
   };
 }
 
-function mountPanel(container: HTMLElement): void {
-  disposePanel?.();
-  container.replaceChildren();
-  panelContainer = container;
-  disposePanel = buildPanel(container);
-}
-
 /**
- * Replaces the panel's user-facing strings. The host calls this with
- * translations on activation and every language change; if the panel is open it
- * is rebuilt so the new strings take effect immediately.
+ * Replaces the panels' user-facing strings. The host calls this with
+ * translations on activation and every language change; any open panel is
+ * rebuilt so the new strings take effect immediately.
  */
 export function setSourceCoopLabels(next: Partial<SourceCoopLabels>): void {
   labels = { ...labels, ...next };
-  if (panelContainer) mountPanel(panelContainer);
+  for (const remount of mountedPanels) remount();
 }
 
-export const maplibreSourceCoopPlugin: GeoLibrePlugin = {
+/** A product this panel opens directly into, instead of the catalog. */
+export interface SourceCoopPinnedProduct {
+  accountId: string;
+  productId: string;
+  /** Fallback title, shown until the metadata API supplies the published one. */
+  title: string;
+}
+
+interface SourceCoopPluginConfig {
+  id: string;
+  /** Plugin and panel display name. */
+  name: string;
+  /** When set, the panel skips the catalog and opens at this product. */
+  pinnedProduct?: SourceCoopPinnedProduct;
+}
+
+/**
+ * Builds a panel plugin over the Source Cooperative browser.
+ *
+ * Exists so a curated entry point — Natural Earth, say — is a *configuration*
+ * of this browser rather than a second copy of it: same API client, same file
+ * listing, same add/download routing, so the two can never drift. All state is
+ * per-instance, so several of these can be active at once.
+ */
+function createSourceCoopPlugin(config: SourceCoopPluginConfig): GeoLibrePlugin {
+  let appRef: GeoLibreAppAPI | null = null;
+  let unregisterPanel: (() => void) | null = null;
+  // The mounted container and its teardown, tracked so a language change can
+  // rebuild the panel in place (see setSourceCoopLabels).
+  let panelContainer: HTMLElement | null = null;
+  let disposePanel: (() => void) | null = null;
+
+  function mountPanel(container: HTMLElement): void {
+    disposePanel?.();
+    container.replaceChildren();
+    panelContainer = container;
+    disposePanel = buildPanel(container, appRef, config.pinnedProduct);
+  }
+
+  const remount = (): void => {
+    if (panelContainer) mountPanel(panelContainer);
+  };
+
+  return {
+    id: config.id,
+    name: config.name,
+    version: "0.1.0",
+    activate: (app: GeoLibreAppAPI) => {
+      appRef = app;
+      mountedPanels.add(remount);
+      unregisterPanel =
+        app.registerRightPanel?.({
+          id: config.id,
+          title: config.name,
+          dock: "right-of-style",
+          defaultWidth: 340,
+          render: (container) => {
+            mountPanel(container);
+            return () => {
+              disposePanel?.();
+              disposePanel = null;
+              if (panelContainer === container) panelContainer = null;
+            };
+          },
+        }) ?? null;
+      app.openRightPanel?.(config.id);
+    },
+    deactivate: (app: GeoLibreAppAPI) => {
+      app.closeRightPanel?.(config.id);
+      unregisterPanel?.();
+      unregisterPanel = null;
+      mountedPanels.delete(remount);
+      // Layers the user added stay on the map: they are ordinary GeoLibre layers
+      // now, owned by the Layers panel, not by this browser.
+      appRef = null;
+    },
+  };
+}
+
+export const maplibreSourceCoopPlugin: GeoLibrePlugin = createSourceCoopPlugin({
   id: SOURCE_COOP_PLUGIN_ID,
   name: "Source Cooperative",
-  version: "0.1.0",
-  activate: (app: GeoLibreAppAPI) => {
-    appRef = app;
-    unregisterPanel =
-      app.registerRightPanel?.({
-        id: PANEL_ID,
-        title: "Source Cooperative",
-        dock: "right-of-style",
-        defaultWidth: 340,
-        render: (container) => {
-          mountPanel(container);
-          return () => {
-            disposePanel?.();
-            disposePanel = null;
-            if (panelContainer === container) panelContainer = null;
-          };
-        },
-      }) ?? null;
-    app.openRightPanel?.(PANEL_ID);
+});
+
+export const NATURAL_EARTH_PLUGIN_ID = "maplibre-gl-natural-earth";
+
+/**
+ * Natural Earth (https://source.coop/opengeos/natural-earth): the public-domain
+ * small-scale basemap dataset, re-exported as PMTiles, GeoParquet, GeoJSON, and
+ * shapefiles. It is the Source Cooperative browser pinned to one product, so
+ * the layer list comes from the live bucket listing and needs no catalog here.
+ */
+export const maplibreNaturalEarthPlugin: GeoLibrePlugin = createSourceCoopPlugin({
+  id: NATURAL_EARTH_PLUGIN_ID,
+  name: "Natural Earth",
+  pinnedProduct: {
+    accountId: "opengeos",
+    productId: "natural-earth",
+    title: "Natural Earth",
   },
-  deactivate: (app: GeoLibreAppAPI) => {
-    app.closeRightPanel?.(PANEL_ID);
-    unregisterPanel?.();
-    unregisterPanel = null;
-    // Layers the user added stay on the map: they are ordinary GeoLibre layers
-    // now, owned by the Layers panel, not by this browser.
-    appRef = null;
-  },
-};
+});
 
 export default maplibreSourceCoopPlugin;

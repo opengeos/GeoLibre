@@ -128,6 +128,11 @@ export const PLUGIN_TIERS: Record<string, ComplexityTier> = {
   "maplibre-layer-control": "basic",
   "maplibre-gl-basemap-control": "basic",
   "maplibre-gl-geo-editor": "basic",
+  // The one web service a beginner can use without knowing anything about the
+  // host: a fixed, curated set of public-domain basemap layers that add in one
+  // click. The general Source Cooperative browser it is built on stays advanced,
+  // since that one expects the user to bring a product id.
+  "maplibre-gl-natural-earth": "basic",
   // Advanced web services and specialist tools.
   "maplibre-gl-fema-wms": "advanced",
   "maplibre-gl-nasa-earthdata": "advanced",

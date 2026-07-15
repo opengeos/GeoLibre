@@ -86,6 +86,17 @@ describe("presetHiddenSets", () => {
     assert.deepEqual(sets.hiddenPlugins, []);
   });
 
+  it("keeps Natural Earth for beginners but not the browser it is built on", () => {
+    // Natural Earth is a fixed set of curated layers, so it stays at every
+    // level; the general Source Cooperative browser expects a product id and
+    // does not.
+    const sets = presetHiddenSets("beginner", [
+      "maplibre-gl-natural-earth",
+      "maplibre-gl-source-coop",
+    ]);
+    assert.deepEqual(sets.hiddenPlugins, ["maplibre-gl-source-coop"]);
+  });
+
   it("beginner hides every non-basic item", () => {
     const sets = presetHiddenSets("beginner", pluginIds);
     const basicIds = DATA_SOURCE_CATALOG.filter(

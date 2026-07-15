@@ -194,6 +194,33 @@ export function parseProduct(raw: unknown): SourceCoopProduct | null {
 }
 
 /**
+ * Builds a product record from an id alone, without touching the network.
+ *
+ * A product's *files* are listed straight off `data.source.coop` from the
+ * account and product id (see `buildListObjectsUrl`), so a panel pinned to a
+ * known product needs no metadata read to be useful — and this keeps it working
+ * when the metadata API, or the Worker proxy in front of it, is unreachable.
+ * The fields the API would supply are left empty for a later `fetchProduct` to
+ * fill in.
+ */
+export function synthesizeProduct(
+  accountId: string,
+  productId: string,
+  title: string,
+): SourceCoopProduct {
+  return {
+    accountId,
+    productId,
+    title,
+    description: "",
+    tags: [],
+    updatedAt: null,
+    featured: false,
+    url: `${SOURCE_COOP_SITE}/${accountId}/${productId}`,
+  };
+}
+
+/**
  * Normalizes a `/products/featured` or `/products/{account}` body, which wrap
  * the array in `{ products: [...] }`. A bare array is also accepted.
  */
