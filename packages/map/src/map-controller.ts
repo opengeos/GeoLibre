@@ -1574,13 +1574,16 @@ export class MapController {
       this.createLayerControlSignature(layerControlConfig);
     this.layerControl = new LayerControl({
       // The layer control fetches this URL to introspect the basemap's layers.
-      // Planetary basemaps use a non-fetchable `geolibre://` sentinel (expanded
-      // to an inline raster style by resolveMapStyle), so hand the control the
-      // blank sentinel instead — like blank/raster basemaps it then skips the
-      // fetch and shows a single background entry.
-      basemapStyleUrl: getPlanetaryBasemapByStyleUrl(this.basemapStyleUrl)
-        ? BLANK_BASEMAP
-        : this.basemapStyleUrl,
+      // Both planetary and offline basemaps use a non-fetchable `geolibre://`
+      // sentinel (expanded to an inline style by resolveMapStyle), so hand the
+      // control the blank sentinel instead — like blank/raster basemaps it then
+      // skips the fetch (which would otherwise throw "Failed to fetch" on the
+      // sentinel URL) and shows a single background entry.
+      basemapStyleUrl:
+        getPlanetaryBasemapByStyleUrl(this.basemapStyleUrl) ||
+        isOfflineBasemapSentinel(this.basemapStyleUrl)
+          ? BLANK_BASEMAP
+          : this.basemapStyleUrl,
       collapsed: true,
       panelWidth: 340,
       panelMinWidth: 240,

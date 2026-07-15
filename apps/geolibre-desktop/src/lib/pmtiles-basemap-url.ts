@@ -44,10 +44,15 @@ export function buildRemotePmtilesBasemap(
   const style = buildProtomapsBasemapStyle({
     sourceUrl,
     flavor,
-    // Resolve bundled glyphs/sprites against the deployment base so labels/icons
-    // survive a sub-path deployment (GEOLIBRE_APP_BASE) — a bare
-    // "/basemaps-assets" would 404. Mirrors BasemapExtractPanel's BASEMAP_ASSETS_BASE.
-    assetsBaseUrl: `${import.meta.env.BASE_URL}basemaps-assets`,
+    // Resolve bundled glyphs/sprites to a fully-qualified absolute URL that
+    // honours the deployment base. MapLibre rejects non-absolute sprite/glyph
+    // URLs, so a relative "./" base (embed/demo build) must be absolutised;
+    // document.baseURI also keeps a sub-path (GEOLIBRE_APP_BASE) working where a
+    // bare "/basemaps-assets" would 404. Mirrors BasemapExtractPanel.
+    assetsBaseUrl: new URL(
+      `${import.meta.env.BASE_URL}basemaps-assets`,
+      document.baseURI,
+    ).href,
   });
   // The percent-encoded URL is the registry id: the same URL reuses one entry
   // (a flavor change replaces it) and distinct URLs never collide — a fixed-

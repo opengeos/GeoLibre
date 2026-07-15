@@ -197,12 +197,17 @@ function isProtomapsCompatible(sourceLayers: string[]): boolean {
   return PROTOMAPS_SCHEMA_LAYERS.filter((l) => set.has(l)).length >= 2;
 }
 
-/** Bundled Protomaps glyphs/sprites live under the app's public dir; resolve
- * them against the deployment base (BASE_URL, e.g. "/" or "/geolibre/") so a
- * styled offline basemap keeps its labels and icons when the web build is
- * served under a sub-path (GEOLIBRE_APP_BASE). A bare "/basemaps-assets" would
- * 404 in that mode. */
-const BASEMAP_ASSETS_BASE = `${import.meta.env.BASE_URL}basemaps-assets`;
+/** Bundled Protomaps glyphs/sprites live under the app's public dir. Resolve
+ * them against the deployment base (BASE_URL — "/", "/geolibre/", or a relative
+ * "./" for the embed/demo build) AND to a fully-qualified absolute URL:
+ * MapLibre rejects non-absolute sprite/glyph URLs ("must be absolute"), so a
+ * bare "./basemaps-assets" from a relative base would break labels and icons,
+ * while a bare "/basemaps-assets" would 404 under a sub-path. `document.baseURI`
+ * turns the base-relative path into an absolute one that honours both. */
+const BASEMAP_ASSETS_BASE = new URL(
+  `${import.meta.env.BASE_URL}basemaps-assets`,
+  document.baseURI,
+).href;
 
 // Tracks the in-memory archive (and style-registry id) backing the currently
 // applied styled offline basemap. A styled basemap is not a GeoLibreLayer, so
