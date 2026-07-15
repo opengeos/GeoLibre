@@ -242,11 +242,14 @@ async function resolveLatestBuildDate(): Promise<string> {
   }
   for (let i = 0; i <= LATEST_MAX_LOOKBACK_DAYS; i++) {
     const ymd = utcYmd(now - i * 86_400_000);
-    // A one-byte range is the cheapest existence check; edge-cache it so the
-    // probe is nearly free across requests.
+    // A one-byte range is the cheapest existence check. Deliberately NOT
+    // edge-cached: `cacheEverything` would cache this 1-byte 206 under the
+    // URL-only cache key for `<ymd>.pmtiles` — the very URL handlePmtilesRange
+    // fetches next — so a later real range read could be served this 1-byte
+    // body instead of its bytes. The resolved date is memoised in `latestCache`
+    // already, so no edge cache is needed here.
     const probe = await fetch(`${PMTILES_UPSTREAM}/${ymd}.pmtiles`, {
       headers: { range: "bytes=0-0" },
-      cf: { cacheEverything: true, cacheTtl: 3600 },
     });
     if (probe.status === 206) {
       latestCache = { date: ymd, at: now };

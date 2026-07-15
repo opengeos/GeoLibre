@@ -33,6 +33,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
 import {
@@ -420,9 +421,8 @@ export function NewProjectDialog({
                     <Label htmlFor="custom-basemap-flavor" className="text-xs">
                       {t("basemapExtract.style")}
                     </Label>
-                    <select
+                    <Select
                       id="custom-basemap-flavor"
-                      className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
                       value={customFlavor}
                       onChange={(event) =>
                         setCustomFlavor(event.target.value as ProtomapsFlavor)
@@ -433,12 +433,12 @@ export function NewProjectDialog({
                           {t(`basemapExtract.flavor.${f}`)}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 ) : null}
                 {isCustomSelected && customStyleUrl && !isCustomUrlValid ? (
                   <p className="text-xs text-destructive">
-                    Enter a valid style.json or .pmtiles URL.
+                    {t("newProject.invalidCustomUrl")}
                   </p>
                 ) : null}
               </div>

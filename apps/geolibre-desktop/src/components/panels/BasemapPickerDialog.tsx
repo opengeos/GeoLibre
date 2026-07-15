@@ -15,6 +15,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  Select,
 } from "@geolibre/ui";
 import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -357,9 +358,8 @@ export function BasemapPickerDialog({
                 >
                   {t("basemapExtract.style")}
                 </Label>
-                <select
+                <Select
                   id="basemap-picker-custom-flavor"
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
                   value={customFlavor}
                   onChange={(event) =>
                     setCustomFlavor(event.target.value as ProtomapsFlavor)
@@ -370,7 +370,7 @@ export function BasemapPickerDialog({
                       {t(`basemapExtract.flavor.${f}`)}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             ) : null}
             {customStyleUrl && !isCustomUrlValid ? (

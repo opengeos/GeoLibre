@@ -125,6 +125,7 @@
     "sectionProtomaps": "Protomaps",
     "sectionOther": "Other",
     "customUrlButton": "Custom URL",
+    "invalidCustomUrl": "Enter a valid style.json or .pmtiles URL.",
     "savePromptTitle": "Save current project?",
     "savePromptDescription": "The current project has unsaved changes. Save them before creating a new project?",
     "doNotSave": "Do not save",
