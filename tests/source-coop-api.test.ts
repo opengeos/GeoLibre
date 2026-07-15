@@ -613,6 +613,18 @@ describe("formatBytes", () => {
   });
 });
 
+/** Every member of the SourceCoopFormat union. */
+const ALL_FORMATS: SourceCoopFormat[] = [
+  "pmtiles",
+  "geoparquet",
+  "cog",
+  "geojson",
+  "flatgeobuf",
+  "gpkg",
+  "csv",
+  "other",
+];
+
 function object(
   format: SourceCoopFormat,
   size: number,
@@ -647,6 +659,16 @@ describe("usesDuckDB", () => {
     assert.equal(usesDuckDB("pmtiles"), false);
     assert.equal(usesDuckDB("cog"), false);
     assert.equal(usesDuckDB("other"), false);
+  });
+
+  it("never claims a format is DuckDB-backed unless it can go on the map", () => {
+    // The two questions are independent, so this is the one relationship that
+    // does hold between them. FORMAT_READER is exhaustive over SourceCoopFormat
+    // at compile time, which is what stops a new format from drifting; this
+    // guards the direction a type cannot express.
+    for (const format of ALL_FORMATS) {
+      if (usesDuckDB(format)) assert.equal(isAddable(format), true, format);
+    }
   });
 });
 

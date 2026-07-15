@@ -446,7 +446,11 @@ function noteText(object: SourceCoopObject): string {
     case "streams":
       return labels.largeFileWarning(size);
     case "streamChoice":
-      return labels.streamHint(size);
+      // A decision aid for two buttons that are gone once the file is on the
+      // map, where it would read as advice for an action no longer offered. The
+      // Streaming badge reports the outcome instead. The other notes are facts
+      // about the file rather than about a choice, so they stand either way.
+      return isAdded(object) ? "" : labels.streamHint(size);
     case "tooLarge":
       return labels.tooLargeToOpen(size);
     default:

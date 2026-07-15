@@ -328,40 +328,46 @@ export function classifyKey(key: string): SourceCoopFormat {
   return "other";
 }
 
-/** Formats that GeoLibre can put on the map (the rest are download-only). */
-const ADDABLE_FORMATS = new Set<SourceCoopFormat>([
-  "pmtiles",
-  "geoparquet",
-  "cog",
-  "geojson",
-  "flatgeobuf",
-  "gpkg",
-  "csv",
-]);
+/**
+ * Which reader puts a format on the map — the one fact both {@link isAddable}
+ * and {@link usesDuckDB} are really asking about:
+ *
+ * - `duckdb` — read through the vector control, so DuckDB-WASM's limits apply
+ *   (see {@link isTooLargeToOpen}).
+ * - `range` — has its own range-request reader (MapLibre's PMTiles protocol, a
+ *   COG reader). Streams by nature, and none of the DuckDB limits apply.
+ * - `none` — GeoLibre cannot render it; download only.
+ *
+ * One `Record` over the whole union rather than a set per question: adding a
+ * member to {@link SourceCoopFormat} then fails to compile until it is
+ * classified here, so a new format cannot silently inherit the wrong reader's
+ * size rules. Deriving one set from the other would not hold — "addable" and
+ * "goes through DuckDB" are independent facts about a format, and treating
+ * DuckDB as everything-but-PMTiles/COG would quietly subject the next
+ * range-request format to a 2 GiB gate that does not apply to it.
+ */
+const FORMAT_READER: Record<SourceCoopFormat, "duckdb" | "range" | "none"> = {
+  pmtiles: "range",
+  cog: "range",
+  geoparquet: "duckdb",
+  geojson: "duckdb",
+  flatgeobuf: "duckdb",
+  gpkg: "duckdb",
+  csv: "duckdb",
+  other: "none",
+};
 
+/** Whether GeoLibre can put a format on the map (the rest are download-only). */
 export function isAddable(format: SourceCoopFormat): boolean {
-  return ADDABLE_FORMATS.has(format);
+  return FORMAT_READER[format] !== "none";
 }
 
 /** How a vector file is read into DuckDB. Mirrors `IngestMode` in maplibre-gl-vector. */
 export type SourceCoopIngestMode = "table" | "stream";
 
-/**
- * Formats that reach the map through the vector control, and so through
- * DuckDB-WASM. PMTiles and COG are the other addable formats; they are read by
- * their own range-request readers, so none of the DuckDB limits below apply to
- * them.
- */
-const DUCKDB_FORMATS = new Set<SourceCoopFormat>([
-  "geoparquet",
-  "geojson",
-  "flatgeobuf",
-  "gpkg",
-  "csv",
-]);
-
+/** Whether a format reaches the map through the vector control, and so DuckDB-WASM. */
 export function usesDuckDB(format: SourceCoopFormat): boolean {
-  return DUCKDB_FORMATS.has(format);
+  return FORMAT_READER[format] === "duckdb";
 }
 
 /**
