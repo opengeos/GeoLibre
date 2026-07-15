@@ -31,7 +31,6 @@ export interface AddLayerHandlers {
   stac: () => void;
   flatGeobuf: () => void;
   pmtiles: () => void;
-  basemapExtract: () => void;
   zarr: () => void;
   netcdf: () => void;
   lidar: () => void;

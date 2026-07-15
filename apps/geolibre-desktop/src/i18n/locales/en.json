@@ -1179,7 +1179,7 @@
   },
   "basemapExtract": {
     "title": "Extract Offline Basemap",
-    "url": "Archive URL",
+    "url": "Basemap URL",
     "urlPlaceholder": "https://data.source.coop/…/planet.pmtiles",
     "useView": "Use map view",
     "drawBbox": "Draw on map",
@@ -1196,6 +1196,9 @@
     "zoomHint": "Zoom levels must be whole numbers with min ≤ max (0–30). Levels above the archive's maximum are ignored.",
     "errorNoSourceLayers": "This vector archive has no layer metadata, so it can't be rendered. Try a different archive.",
     "savedTitle": "Saved basemaps",
+    "openFile": "Open file…",
+    "savedEmpty": "No saved basemaps yet. Extract one above, or open a .pmtiles file.",
+    "errorNotBasemap": "This file isn't a Protomaps vector basemap, so it can't be styled.",
     "apply": "Use as basemap",
     "rename": "Rename",
     "delete": "Delete",

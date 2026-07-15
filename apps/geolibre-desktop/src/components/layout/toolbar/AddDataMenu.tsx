@@ -81,7 +81,6 @@ export function AddDataMenu({
     geoparquet: { onSelect: addLayer.vector },
     flatgeobuf: { onSelect: addLayer.flatGeobuf },
     pmtiles: { onSelect: addLayer.pmtiles },
-    "basemap-extract": { onSelect: addLayer.basemapExtract },
     zarr: { onSelect: addLayer.zarr },
     netcdf: { onSelect: addLayer.netcdf },
     lidar: { onSelect: addLayer.lidar },

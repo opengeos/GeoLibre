@@ -503,7 +503,6 @@ export function TopToolbar({
     stac: () => openStacSearchLayerPanel(appApi),
     flatGeobuf: () => openFlatGeobufAddVectorLayerPanel(appApi),
     pmtiles: () => openPMTilesLayerPanel(appApi),
-    basemapExtract: onOpenBasemapExtract,
     zarr: () => openZarrLayerPanel(appApi),
     netcdf: () => setNetcdfDialogOpen(true),
     lidar: () => openLidarLayerPanel(appApi),

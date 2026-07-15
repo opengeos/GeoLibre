@@ -8,6 +8,7 @@ import {
   useAppStore,
   type MapViewState,
 } from "@geolibre/core";
+import { PROTOMAPS_FLAVORS, type ProtomapsFlavor } from "@geolibre/map";
 import {
   LIBERTY_3D_ID,
   resolveProtomapsPresets,
@@ -17,6 +18,10 @@ import {
   planetaryBasemapLabel,
   planetaryBasemapSectionKey,
 } from "../../lib/planetary-sections";
+import {
+  buildRemotePmtilesBasemap,
+  isPmtilesStyleUrl,
+} from "../../lib/pmtiles-basemap-url";
 import { CollapsibleSection } from "../CollapsibleSection";
 import {
   Button,
@@ -106,11 +111,13 @@ export function NewProjectDialog({
     useState<BasemapChoice>(DEFAULT_BASEMAP_ID);
   const [projectName, setProjectName] = useState(DEFAULT_PROJECT_NAME);
   const [customUrl, setCustomUrl] = useState("");
+  const [customFlavor, setCustomFlavor] = useState<ProtomapsFlavor>("light");
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const customUrlRef = useRef<HTMLInputElement>(null);
 
   const customStyleUrl = customUrl.trim();
+  const customIsPmtiles = isPmtilesStyleUrl(customStyleUrl);
   const isCustomSelected = selectedBasemapId === CUSTOM_BASEMAP_ID;
   const isBlankSelected = selectedBasemapId === BLANK_BASEMAP_ID;
   // Protomaps styles need an API key (VITE_PROTOMAPS_API_KEY). It can come from
@@ -160,7 +167,11 @@ export function NewProjectDialog({
     if (!customStyleUrl) return false;
     try {
       const url = new URL(customStyleUrl);
-      return url.protocol === "http:" || url.protocol === "https:";
+      return (
+        url.protocol === "http:" ||
+        url.protocol === "https:" ||
+        url.protocol === "pmtiles:"
+      );
     } catch {
       return false;
     }
@@ -173,6 +184,7 @@ export function NewProjectDialog({
     setSelectedBasemapId(DEFAULT_BASEMAP_ID);
     setProjectName(DEFAULT_PROJECT_NAME);
     setCustomUrl("");
+    setCustomFlavor("light");
     setShowSavePrompt(false);
     setIsSaving(false);
   };
@@ -186,7 +198,9 @@ export function NewProjectDialog({
     if (!canCreate) return;
 
     const basemapStyleUrl = isCustomSelected
-      ? customStyleUrl
+      ? customIsPmtiles
+        ? buildRemotePmtilesBasemap(customStyleUrl, customFlavor)
+        : customStyleUrl
       : isBlankSelected
         ? BLANK_BASEMAP
         : (selectedPreset ?? selectedPlanetary)?.styleUrl;
@@ -394,16 +408,37 @@ export function NewProjectDialog({
                 <Input
                   id="custom-basemap-url"
                   ref={customUrlRef}
-                  type="url"
+                  type="text"
                   inputMode="url"
-                  placeholder="https://example.com/style.json"
+                  placeholder="https://example.com/style.json or …/basemap.pmtiles"
                   value={customUrl}
                   disabled={!isCustomSelected}
                   onChange={(event) => setCustomUrl(event.target.value)}
                 />
+                {isCustomSelected && customIsPmtiles ? (
+                  <div className="space-y-1">
+                    <Label htmlFor="custom-basemap-flavor" className="text-xs">
+                      Basemap style
+                    </Label>
+                    <select
+                      id="custom-basemap-flavor"
+                      className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
+                      value={customFlavor}
+                      onChange={(event) =>
+                        setCustomFlavor(event.target.value as ProtomapsFlavor)
+                      }
+                    >
+                      {PROTOMAPS_FLAVORS.map((f) => (
+                        <option key={f} value={f}>
+                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 {isCustomSelected && customStyleUrl && !isCustomUrlValid ? (
                   <p className="text-xs text-destructive">
-                    Enter a valid HTTP or HTTPS style URL.
+                    Enter a valid style.json or .pmtiles URL.
                   </p>
                 ) : null}
               </div>

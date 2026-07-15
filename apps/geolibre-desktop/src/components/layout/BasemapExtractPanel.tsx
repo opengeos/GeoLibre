@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   Download,
   Eraser,
+  FolderOpen,
   GripVertical,
   Layers,
   Loader2,
@@ -72,14 +73,17 @@ const PANEL_MIN_H = 240;
 /** Remembered across sessions so repeat extracts don't retype the archive URL. */
 const URL_STORAGE_KEY = "geolibre.basemapExtract.url";
 
+/** GeoLibre's Cloudflare Worker (workers/tiles) range-proxies the Protomaps
+ * daily planet builds with CORS. */
+const PLANET_PROXY_PREFIX = "https://tiles.geolibre.app/pmtiles/";
+
 /**
- * Default archive URL: the latest Protomaps planet build through GeoLibre's
- * Cloudflare Worker (workers/tiles). The Worker resolves `latest` to the newest
- * daily build and adds CORS, so this URL is always current (no client-side date
- * to go stale) and works from any origin — build.protomaps.com itself only
- * allowlists a few and has no `latest` alias.
+ * Default archive URL: the latest Protomaps planet build through the proxy. The
+ * Worker resolves `latest` to the newest daily build, so this URL is always
+ * current (no client-side date to go stale) and works from any origin —
+ * build.protomaps.com itself only allowlists a few and has no `latest` alias.
  */
-const DEFAULT_ARCHIVE_URL = "https://tiles.geolibre.app/pmtiles/latest.pmtiles";
+const DEFAULT_ARCHIVE_URL = `${PLANET_PROXY_PREFIX}latest.pmtiles`;
 
 /** Above this planned size the user must explicitly confirm the download. */
 const CONFIRM_BYTES = 150 * 1024 * 1024;
@@ -314,11 +318,14 @@ export function BasemapExtractPanel({
     // box whose projected overlay degenerates into a stray line across the map.
     setCoords(EMPTY_COORDS);
     if (!open) return;
-    // Seed with the last-used URL, or the latest Protomaps planet build (via the
-    // CORS proxy) as a ready-to-use default on first open.
+    // Seed with the latest Protomaps planet build (via the proxy), or a
+    // remembered *custom* URL. A remembered proxy URL — including an old dated
+    // one saved before the `latest` default — defers to `latest` so the default
+    // never pins a stale date; only a different host is restored.
     let seededUrl = DEFAULT_ARCHIVE_URL;
     try {
-      seededUrl = localStorage.getItem(URL_STORAGE_KEY) || seededUrl;
+      const stored = localStorage.getItem(URL_STORAGE_KEY);
+      if (stored && !stored.startsWith(PLANET_PROXY_PREFIX)) seededUrl = stored;
     } catch {
       // Storage may be unavailable (private mode); keep the default.
     }
@@ -859,6 +866,59 @@ export function BasemapExtractPanel({
     });
   }, [renameValue]);
 
+  // Open a local .pmtiles file directly as a styled basemap — no download/
+  // extract needed. Applies it in the current flavor and records it under
+  // "Saved basemaps".
+  const [opening, setOpening] = useState(false);
+  const openPmtilesAsBasemap = useCallback(async () => {
+    setOpening(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const picked = await openLocalDataFileWithFallback({
+        filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
+        accept: ".pmtiles",
+        readBinary: true,
+      });
+      if (!picked?.data) return;
+      const bytes = new Uint8Array(picked.data);
+      const info = await readPMTilesArchiveInfo(bytes);
+      if (info.tileType !== "vector" || info.sourceLayers.length === 0) {
+        setError(t("basemapExtract.errorNotBasemap"));
+        return;
+      }
+      const id = `basemap-open-${Date.now().toString(36)}`;
+      const key = `${id}.pmtiles`;
+      registerPMTilesArchive(key, bytes);
+      const useFlavor: ProtomapsFlavor = flavor !== "" ? flavor : "light";
+      const style = buildProtomapsBasemapStyle({
+        sourceUrl: `pmtiles://${key}`,
+        flavor: useFlavor,
+      });
+      setBasemapStyleUrl(registerOfflineBasemapStyle(id, style));
+      upsertOfflineBasemap({
+        id,
+        name: sanitizeExportFileName(
+          (picked.path || "basemap").replace(/\.pmtiles$/i, ""),
+        ),
+        bbox: info.bounds,
+        minZoom: info.minZoom,
+        maxZoom: info.maxZoom,
+        flavor: useFlavor,
+        tileType: "vector",
+        bytes: bytes.length,
+        // A Tauri path is reloadable across sessions; a browser file name is not.
+        savedPath: isTauri() ? picked.path || null : null,
+        createdAt: Date.now(),
+      });
+      setSuccess(t("basemapExtract.successBasemapApplied"));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpening(false);
+    }
+  }, [flavor, setBasemapStyleUrl, t]);
+
   const percent =
     progress && progress.dataBytesTotal > 0
       ? Math.round((progress.dataBytesReceived / progress.dataBytesTotal) * 100)
@@ -1198,11 +1258,38 @@ export function BasemapExtractPanel({
             </Button>
           </div>
 
-          {savedBasemaps.length > 0 ? (
-            <div className="space-y-1.5 border-t pt-3">
+          <div className="space-y-1.5 border-t pt-3">
+            <div className="flex items-center justify-between gap-2">
               <Label className="text-xs">
                 {t("basemapExtract.savedTitle")}
               </Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                disabled={opening}
+                onClick={() => void openPmtilesAsBasemap()}
+              >
+                {opening ? (
+                  <Loader2
+                    className="me-1 h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <FolderOpen
+                    className="me-1 h-3.5 w-3.5"
+                    aria-hidden="true"
+                  />
+                )}
+                {t("basemapExtract.openFile")}
+              </Button>
+            </div>
+            {savedBasemaps.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t("basemapExtract.savedEmpty")}
+              </p>
+            ) : (
               <div className="max-h-48 space-y-1 overflow-auto">
                 {savedBasemaps.map((entry) => (
                   <div
@@ -1352,8 +1439,8 @@ export function BasemapExtractPanel({
                   </div>
                 ))}
               </div>
-            </div>
-          ) : null}
+            )}
+          </div>
         </div>
 
         <div
