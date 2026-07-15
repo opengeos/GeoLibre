@@ -284,6 +284,14 @@ describe("buildListObjectsUrl", () => {
     assert.equal(url.searchParams.get("prefix"), "openstreetmap/tiles/");
   });
 
+  it("encodes the account segment, so a stray URL character cannot truncate the path", () => {
+    // accountId comes from unvalidated API/feed text; `#` would otherwise cut
+    // the path short and silently list the wrong bucket.
+    const url = new URL(buildListObjectsUrl({ accountId: "a#b", prefix: "p/" }));
+    assert.equal(url.pathname, "/a%23b");
+    assert.equal(url.searchParams.get("prefix"), "p/");
+  });
+
   it("percent-encodes a continuation token", () => {
     const raw = "a+b/c=d";
     const url = buildListObjectsUrl({

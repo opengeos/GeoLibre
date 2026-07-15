@@ -1794,6 +1794,7 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
  * @param app - The GeoLibre app API.
  * @param url - An http(s) URL to a `.pmtiles` archive.
  * @returns True when the archive was added.
+ * @throws If the archive could not be loaded (unreachable, not PMTiles, 403).
  */
 export async function addPMTilesLayerFromUrl(
   app: GeoLibreAppAPI,
@@ -1817,6 +1818,15 @@ export async function addPMTilesLayerFromUrl(
   }
 
   await pmtilesControl.addLayer(url);
+  // A failed load does NOT reject: the control catches it, records it on
+  // `state.error`, and emits "error" (same convention as CogLayerControl, which
+  // addLayerWithCogRasterControl has to check the same way). Without this a
+  // broken archive would resolve as success, and because the control is mounted
+  // hidden its own on-panel error would never be seen either — the caller has
+  // to surface it. `_addLayer` clears `error` on entry, so this reads the
+  // outcome of the call above.
+  const { error } = pmtilesControl.getState();
+  if (error) throw new Error(error);
   return true;
 }
 

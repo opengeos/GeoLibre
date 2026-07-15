@@ -312,7 +312,20 @@ async function addObjectToMap(object: SourceCoopObject): Promise<boolean> {
   }
 }
 
-/** Triggers a browser download of a file. */
+/**
+ * Triggers a browser download of a file.
+ *
+ * `data.source.coop` is a different origin and sends no `Content-Disposition`,
+ * so the `download` attribute below is advisory only — the spec has browsers
+ * ignore it cross-origin. The download still happens, because the objects
+ * offered here are served as `octet-stream` (or another type the browser will
+ * not render), and the saved name matches `object.name` anyway since that is
+ * the URL's own last segment. The attribute is kept for the same-origin case.
+ *
+ * Routing this through a proxy to force `Content-Disposition: attachment` would
+ * mean streaming whole archives (100+ GB for some products) through the tiles
+ * Worker, so the direct link is deliberate.
+ */
 function downloadObject(object: SourceCoopObject): void {
   // Re-checked here because this value becomes an `<a href>`: it blocks a
   // `javascript:`/`data:` URL from ever reaching a click.

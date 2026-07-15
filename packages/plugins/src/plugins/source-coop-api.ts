@@ -264,7 +264,12 @@ export function parseFeed(xml: string): SourceCoopProduct[] {
   return products;
 }
 
-/** Extension → format. Order matters: `.geo.json` must beat `.json`. */
+/**
+ * Extension → format, first match wins. The patterns are mutually exclusive, so
+ * the order is presentational rather than load-bearing. Note `.geo.json` needs
+ * its own rule: the `geojson` alternative below requires that literal token, so
+ * it does not match a `.geo.json` suffix.
+ */
 const FORMAT_BY_EXTENSION: [RegExp, SourceCoopFormat][] = [
   [/\.pmtiles$/i, "pmtiles"],
   [/\.(geo)?parquet$/i, "geoparquet"],
@@ -336,7 +341,12 @@ export function buildListObjectsUrl(options: {
   /** Set false to list every key beneath the prefix instead of one level. */
   delimited?: boolean;
 }): string {
-  const url = new URL(`${SOURCE_COOP_DATA_BASE}/${options.accountId}`);
+  // Encoded like buildObjectUrl's account segment: `accountId` comes from
+  // unvalidated API/feed text, so a `#` or `?` in it would otherwise silently
+  // truncate the path here.
+  const url = new URL(
+    `${SOURCE_COOP_DATA_BASE}/${encodeURIComponent(options.accountId)}`,
+  );
   url.searchParams.set("list-type", "2");
   url.searchParams.set("prefix", options.prefix);
   url.searchParams.set(
