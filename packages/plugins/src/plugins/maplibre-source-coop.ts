@@ -344,23 +344,22 @@ function findAddedLayerId(object: SourceCoopObject): string | undefined {
   return findAddedLayer(object)?.id;
 }
 
-function isAdded(object: SourceCoopObject): boolean {
-  return findAddedLayerId(object) !== undefined;
-}
-
 /**
- * The mode a file on the map was actually added with, read back from the layer
- * the vector control synced into the store (`serializableVectorState` in
+ * The mode a layer was actually added with, read off the record the vector
+ * control synced into the store (`serializableVectorState` in
  * vector-layer-sync.ts). Read rather than remembered for the same reason as
- * {@link findAddedLayerId}, and because the control downgrades `stream` to
+ * {@link findAddedLayer}, and because the control downgrades `stream` to
  * `table` on its own whenever a file cannot be streamed — so this reports what
- * happened, not what was asked for. Undefined for a PMTiles/COG layer, which
- * has no ingest mode.
+ * happened, not what was asked for. Undefined when the file is not on the map,
+ * and for a PMTiles/COG layer, which has no ingest mode.
+ *
+ * Takes the layer rather than the object so a card can settle both questions it
+ * has for the store — is this added, and how — from one lookup.
  */
-function addedIngestMode(
-  object: SourceCoopObject,
+function ingestModeOf(
+  layer: ReturnType<typeof findAddedLayer>,
 ): SourceCoopIngestMode | undefined {
-  const vectorState = findAddedLayer(object)?.metadata.vectorState;
+  const vectorState = layer?.metadata.vectorState;
   if (typeof vectorState !== "object" || vectorState === null) return undefined;
   const mode = (vectorState as { ingestMode?: unknown }).ingestMode;
   return mode === "stream" || mode === "table" ? mode : undefined;
@@ -765,6 +764,10 @@ function buildPanel(
 
   function renderObjectCard(object: SourceCoopObject): HTMLElement {
     const card = el("div", CSS.card);
+    // One store lookup per card: both questions the card asks — is this on the
+    // map, and how was it read — are answered by the same layer record.
+    const addedLayer = findAddedLayer(object);
+    const added = addedLayer !== undefined;
 
     const titleRow = el("div", CSS.titleRow);
     const name = el("span", CSS.title, object.name);
@@ -776,13 +779,12 @@ function buildPanel(
     // Reports how the layer is actually being read, which the control decides:
     // it downgrades a stream request to a copy for anything it cannot query in
     // place, and the badge follows that rather than what the user clicked.
-    if (addedIngestMode(object) === "stream") {
+    if (ingestModeOf(addedLayer) === "stream") {
       titleRow.appendChild(el("span", CSS.badge, labels.streaming));
     }
     card.appendChild(titleRow);
     card.appendChild(el("div", CSS.sub, objectSubtitle(object)));
 
-    const added = isAdded(object);
     const pendingMode = addInFlight.get(object.key);
     const pending = pendingMode !== undefined;
 
