@@ -9,6 +9,7 @@ import {
   evictOfflineBasemapStyle,
   hasPMTilesArchive,
   type MapController,
+  OFFLINE_BASEMAP_SENTINEL_PREFIX,
   pmtilesNativeLayerIds,
   PROTOMAPS_FLAVORS,
   type ProtomapsFlavor,
@@ -280,6 +281,19 @@ export function BasemapExtractPanel({
   const { t } = useTranslation();
   const addLayer = useAppStore((state) => state.addLayer);
   const setBasemapStyleUrl = useAppStore((state) => state.setBasemapStyleUrl);
+  // The live basemap URL from the store — the source of truth for "is this saved
+  // entry the one currently on the map". The module-level tracker only sees
+  // applies made from this panel, so it goes stale once the user switches the
+  // basemap via the picker/New Project dialogs; comparing the store's sentinel
+  // avoids acting on a basemap this entry no longer controls.
+  const basemapStyleUrl = useAppStore((state) => state.basemapStyleUrl);
+  const isLiveOfflineBasemap = useCallback(
+    (id: string) =>
+      basemapStyleUrl?.startsWith(
+        `${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`,
+      ) ?? false,
+    [basemapStyleUrl],
+  );
 
   const [coords, setCoords] = useState<CoordFields>(EMPTY_COORDS);
   const [drawing, setDrawing] = useState(false);
@@ -933,11 +947,15 @@ export function BasemapExtractPanel({
       // a flavor here would push an incompatible archive through applySaved.
       if (entry.flavor == null) return;
       setOfflineBasemapFlavor(entry.id, next);
-      if (hasPMTilesArchive(`${entry.id}.pmtiles`)) {
+      // Re-style live only when this entry is the basemap currently on the map;
+      // otherwise just persist the flavor (it applies next "Use as basemap").
+      // Without the live check, tweaking a non-displayed entry's flavor would
+      // silently swap it in as the active basemap.
+      if (isLiveOfflineBasemap(entry.id) && hasPMTilesArchive(`${entry.id}.pmtiles`)) {
         void applySaved({ ...entry, flavor: next });
       }
     },
-    [applySaved],
+    [applySaved, isLiveOfflineBasemap],
   );
 
   const startRename = useCallback((entry: OfflineBasemap) => {
@@ -1460,12 +1478,15 @@ export function BasemapExtractPanel({
                               className="rounded p-1 text-destructive hover:bg-destructive/10"
                               onClick={() => {
                                 deleteOfflineBasemap(entry.id);
-                                // If this is the live basemap, switch back to the
-                                // default first — otherwise the applied MapLibre
-                                // style is left pointing at a pmtiles:// source
-                                // whose archive we're about to free, and pans
-                                // into unfetched tiles would silently 404.
-                                if (activeStyledBasemap()?.id === entry.id) {
+                                // If this entry is the live basemap, switch back
+                                // to the default first — otherwise the applied
+                                // MapLibre style is left pointing at a pmtiles://
+                                // source whose archive we're about to free, and
+                                // pans into unfetched tiles would silently 404.
+                                // Check the store (not the panel-local tracker,
+                                // which can be stale) so we never clobber a
+                                // basemap the user switched to elsewhere.
+                                if (isLiveOfflineBasemap(entry.id)) {
                                   setBasemapStyleUrl(DEFAULT_BASEMAP);
                                 }
                                 // Free its in-memory archive/style if it's the
