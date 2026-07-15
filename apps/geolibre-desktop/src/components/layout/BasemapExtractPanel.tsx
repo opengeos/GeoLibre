@@ -466,6 +466,15 @@ export function BasemapExtractPanel({
       const effectiveMax = Math.min(maxZoomValue, info.maxZoom);
       const fileName = `${base}-z${Math.max(minZoomValue, info.minZoom)}-${effectiveMax}`;
 
+      // A vector archive whose metadata has no `vector_layers` gives no source
+      // layers to render, which would add a silent placeholder while reporting
+      // success. Surface it as an error instead. (Raster archives have none.)
+      if (info.tileType === "vector" && info.sourceLayers.length === 0) {
+        setPhase("idle");
+        setError(t("basemapExtract.errorNoSourceLayers"));
+        return;
+      }
+
       // Render the extract from memory first so a disk-write failure below can't
       // discard a successful in-memory extraction.
       const layerId = `basemap-extract-${Date.now().toString(36)}`;
@@ -483,10 +492,11 @@ export function BasemapExtractPanel({
           url: layerUrl,
         },
         visible: true,
-        opacity: 1,
+        // Raster basemaps render dimmed (raster-opacity reads the layer-level
+        // `opacity`, not style.fillOpacity); vector renders fully opaque.
+        opacity: info.tileType === "raster" ? 0.6 : 1,
         style: {
           ...DEFAULT_LAYER_STYLE,
-          fillOpacity: info.tileType === "raster" ? 0.6 : 1,
           fillColor,
           strokeColor: fillColor,
         },
@@ -597,7 +607,7 @@ export function BasemapExtractPanel({
         className={
           pos
             ? "pointer-events-auto absolute z-20 flex w-80 flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
-            : "pointer-events-auto absolute left-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
+            : "pointer-events-auto absolute start-3 top-16 z-20 flex max-h-[calc(100%-6rem)] w-[min(20rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-lg border bg-background shadow-xl"
         }
         style={pos ? { left: pos.x, top: pos.y } : undefined}
         role="region"
@@ -819,7 +829,7 @@ export function BasemapExtractPanel({
           ) : null}
 
           <div className="flex flex-wrap justify-end gap-2">
-            {running ? (
+            {running && !pendingPlan ? (
               <Button type="button" size="sm" variant="outline" onClick={handleCancel}>
                 {t("common.cancel")}
               </Button>

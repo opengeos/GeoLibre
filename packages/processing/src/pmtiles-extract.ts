@@ -132,7 +132,19 @@ async function fetchRange(
         },
       });
       if (response.status === 206) {
-        return new Uint8Array(await response.arrayBuffer());
+        const body = new Uint8Array(await response.arrayBuffer());
+        // Trust but verify: a misbehaving proxy/CDN could answer 206 with a
+        // different (or full) body. Feeding mismatched bytes at range.offset
+        // would silently corrupt the assembled archive, so reject a wrong-sized
+        // 206 (retryable) instead. The final short range may be legitimately
+        // clipped at EOF, so only a body *longer* than requested is rejected;
+        // a shorter one is handled by the extractor's own bounds.
+        if (body.length > range.length) {
+          throw new Error(
+            `range request returned ${body.length} bytes, expected at most ${range.length}`,
+          );
+        }
+        return body;
       }
       if (response.status === 200) {
         // A range-less server must declare a small, known length up front:
