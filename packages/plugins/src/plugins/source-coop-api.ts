@@ -343,6 +343,100 @@ export function isAddable(format: SourceCoopFormat): boolean {
   return ADDABLE_FORMATS.has(format);
 }
 
+/** How a vector file is read into DuckDB. Mirrors `IngestMode` in maplibre-gl-vector. */
+export type SourceCoopIngestMode = "table" | "stream";
+
+/**
+ * Formats that reach the map through the vector control, and so through
+ * DuckDB-WASM. PMTiles and COG are the other addable formats; they are read by
+ * their own range-request readers, so none of the DuckDB limits below apply to
+ * them.
+ */
+const DUCKDB_FORMATS = new Set<SourceCoopFormat>([
+  "geoparquet",
+  "geojson",
+  "flatgeobuf",
+  "gpkg",
+  "csv",
+]);
+
+export function usesDuckDB(format: SourceCoopFormat): boolean {
+  return DUCKDB_FORMATS.has(format);
+}
+
+/**
+ * Whether a file can be queried in place rather than copied into DuckDB.
+ * GeoParquet only: the vector control ignores `stream` for every other format
+ * and quietly falls back to a copy, so offering the choice elsewhere would be a
+ * button that does nothing different.
+ */
+export function canStream(format: SourceCoopFormat): boolean {
+  return format === "geoparquet";
+}
+
+/**
+ * Largest remote file DuckDB-WASM can open, mirroring `MAX_REMOTE_FILE_BYTES`
+ * in maplibre-gl-vector. Duplicated rather than imported because the constant
+ * is internal to that package; {@link isTooLargeToOpen} explains why this
+ * module needs to know it.
+ */
+export const MAX_VECTOR_BYTES = 2 ** 31 - 1;
+
+/**
+ * PMTiles/COG at or above this size get a note that they stream rather than
+ * download. Deliberately not applied to the DuckDB formats: those do not read
+ * only the parts in view unless the user picks Stream, and at this size they do
+ * not open at all.
+ */
+export const LARGE_FILE_BYTES = 2 * 1024 ** 3;
+
+/**
+ * GeoParquet at or above this size gets a note nudging toward Stream. A copy
+ * materializes into the WASM heap and memory roughly tracks the *decompressed*
+ * dataset — several times a Parquet's on-disk size — which is where a large
+ * file runs the tab out of memory. Below this a copy is cheap enough that the
+ * nudge would be noise; the Stream button is still offered.
+ */
+export const STREAM_HINT_BYTES = 100 * 1024 ** 2;
+
+/**
+ * Whether the browser cannot open a file at all, at either ingest mode.
+ *
+ * DuckDB-WASM's HTTP filesystem holds remote file sizes in 32 bits, so it
+ * rejects anything of 2 GiB or more — and it rejects it *before* the ingest
+ * mode is consulted (`_registerSource` runs ahead of the stream branch in
+ * maplibre-gl-vector's DuckDBEngine), so streaming does not get past this.
+ * Knowing the limit lets the panel say so up front instead of offering an Add
+ * that is certain to fail.
+ */
+export function isTooLargeToOpen(object: SourceCoopObject): boolean {
+  return usesDuckDB(object.format) && object.size > MAX_VECTOR_BYTES;
+}
+
+/**
+ * Which advisory line a file's card should carry, if any. The cases are
+ * mutually exclusive and turn on format, because "large" means something
+ * different per reader: a PMTiles/COG of any size really does read only the
+ * parts in view, a DuckDB-format file past the 2 GiB limit cannot be opened at
+ * either mode, and a big GeoParquet has a real choice to make.
+ *
+ * Returns the decision only — the panel owns the wording (see
+ * `SourceCoopLabels`), which keeps this module DOM- and i18n-free.
+ */
+export type SourceCoopNote = "none" | "streams" | "streamChoice" | "tooLarge";
+
+export function objectNote(object: SourceCoopObject): SourceCoopNote {
+  if (!isAddable(object.format)) return "none";
+  if (isTooLargeToOpen(object)) return "tooLarge";
+  if (!usesDuckDB(object.format)) {
+    return object.size >= LARGE_FILE_BYTES ? "streams" : "none";
+  }
+  if (canStream(object.format) && object.size >= STREAM_HINT_BYTES) {
+    return "streamChoice";
+  }
+  return "none";
+}
+
 /**
  * Builds the browser-fetchable URL for a key. `key` is account-relative and
  * already carries the product prefix, so it is *not* repeated here.

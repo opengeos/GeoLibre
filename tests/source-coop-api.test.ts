@@ -3,14 +3,19 @@ import { describe, it } from "node:test";
 import {
   buildListObjectsUrl,
   buildObjectUrl,
+  canStream,
   classifyKey,
   fetchCatalog,
   fetchProduct,
   filterProducts,
   formatBytes,
   isAddable,
+  isTooLargeToOpen,
+  LARGE_FILE_BYTES,
   listProductObjects,
+  MAX_VECTOR_BYTES,
   mergeProducts,
+  objectNote,
   parseFeed,
   parseListObjects,
   parseProduct,
@@ -18,8 +23,12 @@ import {
   parseProductRef,
   productUrl,
   SOURCE_COOP_DATA_BASE,
+  STREAM_HINT_BYTES,
   synthesizeProduct,
+  usesDuckDB,
   type SourceCoopFetch,
+  type SourceCoopFormat,
+  type SourceCoopObject,
   type SourceCoopProduct,
 } from "../packages/plugins/src/plugins/source-coop-api";
 
@@ -601,5 +610,136 @@ describe("formatBytes", () => {
   it("handles a nonsense size without producing NaN", () => {
     assert.equal(formatBytes(Number.NaN), "0 B");
     assert.equal(formatBytes(-5), "0 B");
+  });
+});
+
+function object(
+  format: SourceCoopFormat,
+  size: number,
+  name = `data.${format}`,
+): SourceCoopObject {
+  return {
+    key: `product/${name}`,
+    name,
+    size,
+    lastModified: null,
+    format,
+    url: `${SOURCE_COOP_DATA_BASE}/account/product/${name}`,
+  };
+}
+
+describe("usesDuckDB", () => {
+  it("covers the formats the vector control reads", () => {
+    for (const format of [
+      "geoparquet",
+      "geojson",
+      "flatgeobuf",
+      "gpkg",
+      "csv",
+    ] as const) {
+      assert.equal(usesDuckDB(format), true, format);
+    }
+  });
+
+  it("excludes the formats read by their own range-request readers", () => {
+    // PMTiles and COG never touch DuckDB, so the 2 GiB limit must not reach
+    // them — a 40 GB PMTiles is a normal, working case.
+    assert.equal(usesDuckDB("pmtiles"), false);
+    assert.equal(usesDuckDB("cog"), false);
+    assert.equal(usesDuckDB("other"), false);
+  });
+});
+
+describe("canStream", () => {
+  it("is GeoParquet only", () => {
+    assert.equal(canStream("geoparquet"), true);
+  });
+
+  it("is false for formats the control would silently copy anyway", () => {
+    for (const format of [
+      "geojson",
+      "flatgeobuf",
+      "gpkg",
+      "csv",
+      "pmtiles",
+      "cog",
+      "other",
+    ] as const) {
+      assert.equal(canStream(format), false, format);
+    }
+  });
+});
+
+describe("isTooLargeToOpen", () => {
+  it("rejects a DuckDB-format file past what DuckDB-WASM can open", () => {
+    assert.equal(isTooLargeToOpen(object("geoparquet", 3 * 1024 ** 3)), true);
+    assert.equal(isTooLargeToOpen(object("geojson", 3 * 1024 ** 3)), true);
+  });
+
+  it("draws the line exactly at the 32-bit limit", () => {
+    assert.equal(
+      isTooLargeToOpen(object("geoparquet", MAX_VECTOR_BYTES)),
+      false,
+    );
+    assert.equal(
+      isTooLargeToOpen(object("geoparquet", MAX_VECTOR_BYTES + 1)),
+      true,
+    );
+  });
+
+  it("never rejects PMTiles or COG, at any size", () => {
+    // These stream through their own readers; the DuckDB limit is irrelevant.
+    assert.equal(isTooLargeToOpen(object("pmtiles", 40 * 1024 ** 3)), false);
+    assert.equal(isTooLargeToOpen(object("cog", 40 * 1024 ** 3)), false);
+  });
+
+  it("treats a missing size as openable rather than blocking the add", () => {
+    // listProductObjects defaults an unparseable <Size> to 0, which must not
+    // read as "too large" — the add should be attempted and allowed to fail.
+    assert.equal(isTooLargeToOpen(object("geoparquet", 0)), false);
+  });
+});
+
+describe("objectNote", () => {
+  it("promises streaming only for the formats that actually do it", () => {
+    assert.equal(objectNote(object("pmtiles", LARGE_FILE_BYTES)), "streams");
+    assert.equal(objectNote(object("cog", 40 * 1024 ** 3)), "streams");
+  });
+
+  it("stays quiet for a small PMTiles", () => {
+    assert.equal(objectNote(object("pmtiles", 10 * 1024 ** 2)), "none");
+  });
+
+  it("offers the choice on a large GeoParquet", () => {
+    assert.equal(
+      objectNote(object("geoparquet", STREAM_HINT_BYTES)),
+      "streamChoice",
+    );
+    assert.equal(
+      objectNote(object("geoparquet", 847 * 1024 ** 2)),
+      "streamChoice",
+    );
+  });
+
+  it("stays quiet on a small GeoParquet, where a copy is cheap", () => {
+    assert.equal(objectNote(object("geoparquet", 5 * 1024 ** 2)), "none");
+  });
+
+  it("says a big GeoParquet cannot be opened rather than promising streaming", () => {
+    // The regression this guards: at 2 GiB a GeoParquet does not stream, it
+    // fails outright, so the PMTiles wording must not be reused here.
+    assert.equal(objectNote(object("geoparquet", LARGE_FILE_BYTES)), "tooLarge");
+    assert.equal(objectNote(object("geojson", 3 * 1024 ** 3)), "tooLarge");
+  });
+
+  it("never nudges a non-streamable vector format toward Stream", () => {
+    // A big FlatGeobuf under the limit has no choice to offer: the control
+    // would copy it either way.
+    assert.equal(objectNote(object("flatgeobuf", 500 * 1024 ** 2)), "none");
+    assert.equal(objectNote(object("csv", 500 * 1024 ** 2)), "none");
+  });
+
+  it("stays quiet for a format that cannot go on the map at all", () => {
+    assert.equal(objectNote(object("other", 40 * 1024 ** 3)), "none");
   });
 });
