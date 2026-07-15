@@ -312,6 +312,16 @@ interface Env {}
  * Only small, bounded byte-range GETs are proxied — a full-file GET (no Range)
  * or an open-ended/oversized range is refused so this can't be used to pull the
  * whole 100+ GB archive through the Worker.
+ *
+ * Unlike `/oam/meta`, this route is deliberately *not* origin-gated: the
+ * Jupyter/embed builds run on arbitrary origins and legitimately need to extract
+ * offline basemaps, so an `isAllowedOamOrigin`-style check would break them. The
+ * abuse surface is instead bounded by (a) the per-request range cap above — a
+ * single request can't transfer more than a directory/tile-sized chunk — and
+ * (b) Cloudflare's platform abuse detection plus any zone rate-limiting rule in
+ * front of tiles.geolibre.app (the same defence the OAM route relies on for
+ * per-client throttling). The upstream is public and unauthenticated, so this is
+ * a Worker-egress cost concern, not an access-control bypass.
  */
 async function handlePmtilesRange(
   request: Request,
