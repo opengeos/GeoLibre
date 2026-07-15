@@ -117,6 +117,7 @@ import { useCollaboration } from "../../hooks/useCollaboration";
 import { MapModeBanner } from "./MapModeBanner";
 import { PixelTimeSeriesControl } from "./PixelTimeSeriesControl";
 import { RasterSubsetPanel } from "./RasterSubsetPanel";
+import { BasemapExtractPanel } from "./BasemapExtractPanel";
 import { TerrainSettingsDialog } from "./TerrainSettingsDialog";
 import { MapContextMenu } from "./MapContextMenu";
 import {
@@ -583,6 +584,10 @@ export function DesktopShell({
       setRasterSubsetLayer(null);
     }
   }, [rasterSubsetLayer, rasterSubsetLayerExists]);
+  // The Offline Basemap Extract panel is a non-modal floating panel over the
+  // map (so the map stays interactive for drawing a bbox), mounted here beside
+  // the Raster Subset panel and opened from the Add Data menu in the toolbar.
+  const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const dragDepthRef = useRef(0);
   const dropMessageTimeoutRef = useRef<number | null>(null);
   const materializingRef = useRef(false);
@@ -1912,6 +1917,7 @@ export function DesktopShell({
             projectFiles={projectFiles}
             onOpenDiagnostics={() => setDiagnosticsOpen(true)}
             onToggleThemeMode={onToggleThemeMode}
+            onOpenBasemapExtract={() => setBasemapExtractOpen(true)}
           />
         </SectionErrorBoundary>
       ) : null}
@@ -2062,6 +2068,11 @@ export function DesktopShell({
               <RasterSubsetPanel
                 layer={rasterSubsetLayer}
                 onClose={() => setRasterSubsetLayer(null)}
+                mapControllerRef={mapControllerRef}
+              />
+              <BasemapExtractPanel
+                open={basemapExtractOpen}
+                onClose={() => setBasemapExtractOpen(false)}
                 mapControllerRef={mapControllerRef}
               />
               <Suspense fallback={null}>

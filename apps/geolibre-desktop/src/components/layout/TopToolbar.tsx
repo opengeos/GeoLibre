@@ -117,7 +117,6 @@ import { FieldCollectionDialog } from "./FieldCollectionDialog";
 import { RecordTourDialog } from "./RecordTourDialog";
 import { RecordVideoDialog } from "./RecordVideoDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
-import { BasemapExtractDialog } from "./BasemapExtractDialog";
 import { OfflineRegionDialog } from "./OfflineRegionDialog";
 import { OfflineManagerDialog } from "./OfflineManagerDialog";
 import { AddDataMenu } from "./toolbar/AddDataMenu";
@@ -167,6 +166,9 @@ interface TopToolbarProps {
   projectFiles: ProjectFileActions;
   onOpenDiagnostics: () => void;
   onToggleThemeMode: () => void;
+  // Opens the Offline Basemap Extract panel, mounted in DesktopShell over the
+  // map so it can stay non-modal (the map is interactive for drawing a bbox).
+  onOpenBasemapExtract: () => void;
 }
 
 export function TopToolbar({
@@ -181,6 +183,7 @@ export function TopToolbar({
   projectFiles,
   onOpenDiagnostics,
   onToggleThemeMode,
+  onOpenBasemapExtract,
 }: TopToolbarProps) {
   const { t } = useTranslation();
   // The reverse-geocode plugin lives in the framework-agnostic plugins package
@@ -443,7 +446,6 @@ export function TopToolbar({
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [offlineRegionOpen, setOfflineRegionOpen] = useState(false);
-  const [basemapExtractOpen, setBasemapExtractOpen] = useState(false);
   const [offlineManagerOpen, setOfflineManagerOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
   const [recordTourOpen, setRecordTourOpen] = useState(false);
@@ -486,7 +488,7 @@ export function TopToolbar({
     stac: () => openStacSearchLayerPanel(appApi),
     flatGeobuf: () => openFlatGeobufAddVectorLayerPanel(appApi),
     pmtiles: () => openPMTilesLayerPanel(appApi),
-    basemapExtract: () => setBasemapExtractOpen(true),
+    basemapExtract: onOpenBasemapExtract,
     zarr: () => openZarrLayerPanel(appApi),
     netcdf: () => setNetcdfDialogOpen(true),
     lidar: () => openLidarLayerPanel(appApi),
@@ -1226,11 +1228,6 @@ export function TopToolbar({
       <OfflineRegionDialog
         open={offlineRegionOpen}
         onOpenChange={setOfflineRegionOpen}
-        mapControllerRef={mapControllerRef}
-      />
-      <BasemapExtractDialog
-        open={basemapExtractOpen}
-        onOpenChange={setBasemapExtractOpen}
         mapControllerRef={mapControllerRef}
       />
       <OfflineManagerDialog
