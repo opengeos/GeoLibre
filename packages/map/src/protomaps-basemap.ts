@@ -90,14 +90,35 @@ function registry(): Map<string, maplibregl.StyleSpecification> {
 /**
  * Registers a generated style under a fresh sentinel URL and returns it. Set
  * it as the basemap (`setBasemapStyleUrl(sentinel)`) to apply the style.
+ *
+ * The sentinel is unique per call (an incrementing suffix), so re-applying the
+ * same basemap with a different flavor produces a *different* sentinel — which
+ * is what makes the map's basemap-change effect fire (it early-returns when the
+ * style URL is unchanged). Any prior sentinel for the same id is dropped so the
+ * registry doesn't accumulate stale styles.
  */
 export function registerOfflineBasemapStyle(
   id: string,
   style: maplibregl.StyleSpecification,
 ): string {
-  const sentinel = `${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}`;
-  registry().set(sentinel, style);
+  const reg = registry();
+  const prefix = `${OFFLINE_BASEMAP_SENTINEL_PREFIX}${id}/`;
+  for (const key of reg.keys()) {
+    if (key.startsWith(prefix)) reg.delete(key);
+  }
+  const sentinel = `${prefix}${nextOfflineBasemapSeq()}`;
+  reg.set(sentinel, style);
   return sentinel;
+}
+
+// A monotonic counter on globalThis so sentinels stay unique across module
+// reloads (HMR), giving each apply a URL the map treats as a real change.
+const SEQ_KEY = "__geolibreOfflineBasemapSeq";
+
+function nextOfflineBasemapSeq(): number {
+  const scope = globalThis as typeof globalThis & { [SEQ_KEY]?: number };
+  scope[SEQ_KEY] = (scope[SEQ_KEY] ?? 0) + 1;
+  return scope[SEQ_KEY];
 }
 
 /** The registered style for an offline-basemap sentinel, or null. */
