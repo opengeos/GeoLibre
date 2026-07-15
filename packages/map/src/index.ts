@@ -51,6 +51,7 @@ export {
   type ProtomapsBasemapStyleOptions,
 } from "./protomaps-basemap";
 export {
+  hasPMTilesArchive,
   pmtilesNativeLayerIds,
   readPMTilesArchiveInfo,
   registerPMTilesArchive,

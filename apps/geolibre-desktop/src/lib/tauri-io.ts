@@ -463,7 +463,7 @@ async function parseGeoJsonText(text: string): Promise<FeatureCollection> {
  * @param path - Absolute local path to read.
  * @returns The file's raw bytes.
  */
-async function readLocalFileBytes(
+export async function readLocalFileBytes(
   path: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
   try {

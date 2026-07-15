@@ -1194,6 +1194,11 @@
     "maxZoom": "Max zoom",
     "zoomHint": "Zoom levels must be whole numbers with min ≤ max (0–30). Levels above the archive's maximum are ignored.",
     "errorNoSourceLayers": "This vector archive has no layer metadata, so it can't be rendered. Try a different archive.",
+    "errorReapplyUnavailable": "This basemap's data isn't loaded in this session. Re-extract it, or reopen it on desktop where it can reload from the saved file.",
+    "savedTitle": "Saved basemaps",
+    "apply": "Use as basemap",
+    "rename": "Rename",
+    "delete": "Delete",
     "style": "Basemap style",
     "flavor": {
       "light": "Light",

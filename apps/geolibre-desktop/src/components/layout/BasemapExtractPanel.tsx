@@ -5,6 +5,7 @@ import {
 } from "@geolibre/core";
 import {
   buildProtomapsBasemapStyle,
+  hasPMTilesArchive,
   type MapController,
   pmtilesNativeLayerIds,
   PROTOMAPS_FLAVORS,
@@ -19,12 +20,16 @@ import {
 } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import {
+  Check,
   CheckCircle2,
   Download,
   GripVertical,
+  Layers,
   Loader2,
   Map as MapIcon,
+  Pencil,
   Scan,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -38,8 +43,20 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
+import {
+  deleteOfflineBasemap,
+  loadOfflineBasemaps,
+  type OfflineBasemap,
+  renameOfflineBasemap,
+  subscribeOfflineBasemaps,
+  upsertOfflineBasemap,
+} from "../../lib/offline-basemaps";
 import { formatBytes } from "../../lib/offline-regions";
-import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
+import {
+  isTauri,
+  readLocalFileBytes,
+  saveBinaryFileWithFallback,
+} from "../../lib/tauri-io";
 import { sanitizeExportFileName } from "../../lib/vector-export";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
@@ -219,6 +236,19 @@ export function BasemapExtractPanel({
     progress: PmtilesExtractProgress;
     resolve: (go: boolean) => void;
   } | null>(null);
+
+  // The device-local catalogue of extracted basemaps, kept in sync so a new
+  // extract (or a rename/delete elsewhere) refreshes the "Saved basemaps" list.
+  const [savedBasemaps, setSavedBasemaps] = useState<OfflineBasemap[]>(() =>
+    loadOfflineBasemaps(),
+  );
+  useEffect(
+    () => subscribeOfflineBasemaps(() => setSavedBasemaps(loadOfflineBasemaps())),
+    [],
+  );
+  const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const bbox = useMemo(() => parseBbox(coords), [coords]);
   const bboxInvalid =
@@ -667,8 +697,9 @@ export function BasemapExtractPanel({
       // Persisting to disk is best-effort and independent of the layer that is
       // now on the map: a cancel returns null, a write error is reported but
       // does not undo the extraction.
+      let savedPath: string | null = null;
       try {
-        const savedPath = await saveBinaryFileWithFallback(archive, {
+        savedPath = await saveBinaryFileWithFallback(archive, {
           defaultName: `${fileName}.pmtiles`,
           filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
           browserTypes: [
@@ -709,6 +740,21 @@ export function BasemapExtractPanel({
           ),
         );
       }
+
+      // Record it in the device-local catalogue so the Saved basemaps list can
+      // rename, delete, and re-apply it.
+      upsertOfflineBasemap({
+        id: layerId,
+        name: fileName,
+        bbox,
+        minZoom: Math.max(minZoomValue, info.minZoom),
+        maxZoom: effectiveMax,
+        flavor: asStyledBasemap ? flavor : null,
+        tileType: info.tileType,
+        bytes: archive.byteLength,
+        savedPath,
+        createdAt: Date.now(),
+      });
     } catch (err) {
       if (controller.signal.aborted) return;
       if (err instanceof DOMException && err.name === "AbortError") {
@@ -747,6 +793,50 @@ export function BasemapExtractPanel({
     setPhase("idle");
     setProgress(null);
   }, []);
+
+  // Re-apply a saved basemap as the styled Protomaps basemap: reuse the live
+  // in-memory archive if it's still registered this session, otherwise reload
+  // its bytes from the saved file (desktop only).
+  const applySaved = useCallback(
+    async (entry: OfflineBasemap) => {
+      if (entry.tileType !== "vector") return;
+      setApplyingId(entry.id);
+      setError(null);
+      setSuccess(null);
+      try {
+        const key = `${entry.id}.pmtiles`;
+        if (!hasPMTilesArchive(key)) {
+          if (!entry.savedPath || !isTauri()) {
+            throw new Error(t("basemapExtract.errorReapplyUnavailable"));
+          }
+          registerPMTilesArchive(key, await readLocalFileBytes(entry.savedPath));
+        }
+        const style = buildProtomapsBasemapStyle({
+          sourceUrl: `pmtiles://${key}`,
+          flavor: (entry.flavor as ProtomapsFlavor) || "light",
+        });
+        setBasemapStyleUrl(registerOfflineBasemapStyle(entry.id, style));
+        setSuccess(t("basemapExtract.successBasemapApplied"));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setApplyingId(null);
+      }
+    },
+    [setBasemapStyleUrl, t],
+  );
+
+  const startRename = useCallback((entry: OfflineBasemap) => {
+    setRenamingId(entry.id);
+    setRenameValue(entry.name);
+  }, []);
+
+  const commitRename = useCallback(() => {
+    setRenamingId((id) => {
+      if (id) renameOfflineBasemap(id, renameValue);
+      return null;
+    });
+  }, [renameValue]);
 
   const percent =
     progress && progress.dataBytesTotal > 0
@@ -1069,6 +1159,105 @@ export function BasemapExtractPanel({
               {running ? t("basemapExtract.extracting") : t("basemapExtract.extract")}
             </Button>
           </div>
+
+          {savedBasemaps.length > 0 ? (
+            <div className="space-y-1.5 border-t pt-3">
+              <Label className="text-xs">
+                {t("basemapExtract.savedTitle")}
+              </Label>
+              <div className="max-h-48 space-y-1 overflow-auto">
+                {savedBasemaps.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-1 rounded-md border px-2 py-1.5"
+                  >
+                    {renamingId === entry.id ? (
+                      <>
+                        <Input
+                          autoFocus
+                          className="h-7 flex-1 text-xs"
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitRename();
+                            if (e.key === "Escape") setRenamingId(null);
+                          }}
+                          onBlur={commitRename}
+                        />
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:text-foreground"
+                          onClick={commitRename}
+                          aria-label={t("common.save")}
+                        >
+                          <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-xs font-medium"
+                            title={entry.name}
+                          >
+                            {entry.name}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {formatBytes(entry.bytes)} · z{entry.minZoom}–
+                            {entry.maxZoom}
+                            {entry.flavor
+                              ? ` · ${t(`basemapExtract.flavor.${entry.flavor as ProtomapsFlavor}`)}`
+                              : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+                          disabled={
+                            entry.tileType !== "vector" ||
+                            applyingId === entry.id
+                          }
+                          onClick={() => void applySaved(entry)}
+                          title={t("basemapExtract.apply")}
+                          aria-label={t("basemapExtract.apply")}
+                        >
+                          {applyingId === entry.id ? (
+                            <Loader2
+                              className="h-3.5 w-3.5 animate-spin"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <Layers
+                              className="h-3.5 w-3.5"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:text-foreground"
+                          onClick={() => startRename(entry)}
+                          title={t("basemapExtract.rename")}
+                          aria-label={t("basemapExtract.rename")}
+                        >
+                          <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1 text-muted-foreground hover:text-destructive"
+                          onClick={() => deleteOfflineBasemap(entry.id)}
+                          title={t("basemapExtract.delete")}
+                          aria-label={t("basemapExtract.delete")}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div

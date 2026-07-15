@@ -914,6 +914,12 @@ export function unregisterPMTilesArchive(key: string): boolean {
   return getSharedPMTilesProtocol().tiles.delete(name);
 }
 
+/** Whether an in-memory archive was registered under `key` this session — lets
+ * a caller decide between reusing it and reloading its bytes from disk. */
+export function hasPMTilesArchive(key: string): boolean {
+  return getRegisteredPMTilesArchiveKeys().has(stripPMTilesProtocol(key));
+}
+
 // The set of in-memory-archive keys lives on globalThis alongside the shared
 // Protocol, so the two share a lifetime across module reloads (HMR) and never
 // drift — a stale module-level set could otherwise refuse to free archives the
