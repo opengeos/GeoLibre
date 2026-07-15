@@ -10,6 +10,7 @@
  */
 import {
   buildProtomapsBasemapStyle,
+  ensureRemotePMTilesArchive,
   registerOfflineBasemapStyle,
   type ProtomapsFlavor,
 } from "@geolibre/map";
@@ -46,6 +47,10 @@ export function buildRemotePmtilesBasemap(
   flavor: ProtomapsFlavor,
 ): string {
   const sourceUrl = url.trim();
+  // Register the pmtiles:// protocol + a FetchSource for this archive so the
+  // style's `pmtiles://<url>` source can fetch tiles (a raw basemap style never
+  // hits the layer-sync path that would otherwise register the protocol).
+  ensureRemotePMTilesArchive(sourceUrl);
   const style = buildProtomapsBasemapStyle({ sourceUrl, flavor });
   return registerOfflineBasemapStyle(`remote-pmtiles-${hashUrl(sourceUrl)}`, style);
 }

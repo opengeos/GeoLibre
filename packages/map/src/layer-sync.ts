@@ -920,6 +920,19 @@ export function hasPMTilesArchive(key: string): boolean {
   return getRegisteredPMTilesArchiveKeys().has(stripPMTilesProtocol(key));
 }
 
+/**
+ * Ensures the `pmtiles://` protocol is registered with MapLibre and a *remote*
+ * archive at `url` is available to it, backed by a lightweight FetchSource over
+ * HTTP range requests. Needed when a basemap *style* (not a store layer)
+ * references `pmtiles://<remote-url>` — the layer-sync path that normally
+ * registers the protocol never runs for a raw style. Idempotent and safe to
+ * call before the style is applied; accepts a bare `https://…` URL or a
+ * `pmtiles://…` URL.
+ */
+export function ensureRemotePMTilesArchive(url: string): void {
+  ensurePMTilesProtocol(url);
+}
+
 // The set of in-memory-archive keys lives on globalThis alongside the shared
 // Protocol, so the two share a lifetime across module reloads (HMR) and never
 // drift — a stale module-level set could otherwise refuse to free archives the
