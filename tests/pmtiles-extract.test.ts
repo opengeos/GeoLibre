@@ -34,20 +34,32 @@ const wasmBytes = new Uint8Array(
 /** A fetch stub serving `bytes` with HTTP Range semantics (206 slices). */
 function rangeServer(
   bytes: Uint8Array,
-  options?: { failFirst?: number; ignoreRange?: boolean },
+  options?: {
+    failFirst?: number;
+    ignoreRange?: boolean;
+    omitContentLength?: boolean;
+    status429First?: number;
+  },
 ): { fetchImpl: typeof fetch; requests: () => number } {
   let requests = 0;
   let failures = options?.failFirst ?? 0;
+  let rateLimited = options?.status429First ?? 0;
   const fetchImpl = (async (_url, init) => {
     requests += 1;
     if (failures > 0) {
       failures -= 1;
       throw new TypeError("simulated network failure");
     }
+    if (rateLimited > 0) {
+      rateLimited -= 1;
+      return new Response(null, { status: 429 });
+    }
     if (options?.ignoreRange) {
       return new Response(bytes.slice() as unknown as BodyInit, {
         status: 200,
-        headers: { "content-length": String(bytes.length) },
+        headers: options?.omitContentLength
+          ? {}
+          : { "content-length": String(bytes.length) },
       });
     }
     const range = /bytes=(\d+)-(\d+)/.exec(
@@ -192,6 +204,30 @@ describe("extractPmtiles", () => {
     );
     const header = await referenceReader(out).getHeader();
     assert.equal(header.maxZoom, 4);
+  });
+
+  it("rejects a range-less 200 without a content-length instead of buffering it", async () => {
+    const { fetchImpl } = rangeServer(archive, {
+      ignoreRange: true,
+      omitContentLength: true,
+    });
+    await assert.rejects(
+      extractPmtiles("https://example.test/mini.pmtiles", {
+        bbox: WORLD_BBOX,
+        fetchImpl,
+      }),
+      /range requests/i,
+    );
+  });
+
+  it("retries HTTP 429 rate limiting", async () => {
+    const { fetchImpl, requests } = rangeServer(archive, { status429First: 1 });
+    const { archive: out } = await extractPmtiles(
+      "https://example.test/mini.pmtiles",
+      { bbox: WORLD_BBOX, fetchImpl },
+    );
+    assert.ok(out.length > 0);
+    assert.ok(requests() >= 2, "a 429 must be retried");
   });
 
   it("surfaces a clear error for an empty selection", async () => {

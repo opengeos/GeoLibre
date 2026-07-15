@@ -1200,7 +1200,8 @@
     "extract": "Extract",
     "extracting": "Extracting…",
     "successSaved": "Saved to {{path}} and added to the map.",
-    "successAdded": "Added to the map (the file was not saved)."
+    "successAdded": "Added to the map (the file was not saved).",
+    "successAddedSaveFailed": "Added to the map, but saving to disk failed: {{error}}"
   },
   "rasterSubset": {
     "title": "Extract subset",

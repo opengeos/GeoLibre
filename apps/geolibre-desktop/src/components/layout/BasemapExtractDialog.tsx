@@ -250,22 +250,10 @@ export function BasemapExtractDialog({
       const effectiveMax = Math.min(maxZoomValue, info.maxZoom);
       const fileName = `${base}-z${Math.max(minZoomValue, info.minZoom)}-${effectiveMax}`;
 
-      const savedPath = await saveBinaryFileWithFallback(archive, {
-        defaultName: `${fileName}.pmtiles`,
-        filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
-        browserTypes: [
-          {
-            description: "PMTiles",
-            accept: { "application/octet-stream": [".pmtiles"] },
-          },
-        ],
-        mimeType: "application/octet-stream",
-      });
-      if (controller.signal.aborted) return;
-
-      // Render the extract immediately from memory, whether or not the user
-      // kept the save dialog: the archive is registered under a synthetic
-      // pmtiles:// key that the layer references like any remote URL.
+      // Render the extract immediately from memory: the archive is registered
+      // under a synthetic pmtiles:// key that the layer references like any
+      // remote URL. Done before saving so a disk-write failure below can't
+      // discard a successful in-memory extraction.
       const layerId = `basemap-extract-${Date.now().toString(36)}`;
       const layerUrl = registerPMTilesArchive(
         `${layerId}.pmtiles`,
@@ -307,13 +295,35 @@ export function BasemapExtractDialog({
         sourcePath: layerUrl,
       };
       addLayer(layer);
-
       setPhase("done");
-      setSuccess(
-        savedPath !== null
-          ? t("basemapExtract.successSaved", { path: savedPath })
-          : t("basemapExtract.successAdded"),
-      );
+
+      // Persisting to disk is best-effort and independent of the layer that is
+      // now on the map: a cancel returns null, a write error is reported but
+      // does not undo the extraction.
+      try {
+        const savedPath = await saveBinaryFileWithFallback(archive, {
+          defaultName: `${fileName}.pmtiles`,
+          filters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
+          browserTypes: [
+            {
+              description: "PMTiles",
+              accept: { "application/octet-stream": [".pmtiles"] },
+            },
+          ],
+          mimeType: "application/octet-stream",
+        });
+        setSuccess(
+          savedPath !== null
+            ? t("basemapExtract.successSaved", { path: savedPath })
+            : t("basemapExtract.successAdded"),
+        );
+      } catch (saveErr) {
+        setSuccess(
+          t("basemapExtract.successAddedSaveFailed", {
+            error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+          }),
+        );
+      }
     } catch (err) {
       if (controller.signal.aborted) return;
       if (err instanceof DOMException && err.name === "AbortError") {

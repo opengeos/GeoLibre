@@ -47,6 +47,7 @@ export {
   pmtilesNativeLayerIds,
   readPMTilesArchiveInfo,
   registerPMTilesArchive,
+  unregisterPMTilesArchive,
   setExternalDeckLayerOrderHandler,
   type PMTilesArchiveInfo,
 } from "./layer-sync";

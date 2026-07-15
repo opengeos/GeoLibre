@@ -135,30 +135,29 @@ async function fetchRange(
         return new Uint8Array(await response.arrayBuffer());
       }
       if (response.status === 200) {
+        // A range-less server must declare a small, known length up front:
+        // without a finite content-length (e.g. chunked transfer) we can't tell
+        // a 1 KB body from a 136 GB planet build without buffering it first, so
+        // fail fast rather than risk streaming the whole archive into memory.
         const contentLength = Number(
           response.headers.get("content-length") ?? Number.NaN,
         );
         if (
-          Number.isFinite(contentLength) &&
+          !Number.isFinite(contentLength) ||
           contentLength > MAX_FULL_BODY_BYTES
         ) {
           throw new Error(
-            `server ignored the Range header on a ${contentLength}-byte archive; ` +
-              "the host must support HTTP range requests",
+            "server ignored the Range header and did not report a small " +
+              "content-length; the host must support HTTP range requests",
           );
         }
         const body = new Uint8Array(await response.arrayBuffer());
-        if (body.length > MAX_FULL_BODY_BYTES) {
-          throw new Error(
-            "server ignored the Range header on a large archive; " +
-              "the host must support HTTP range requests",
-          );
-        }
         return body.slice(range.offset, range.offset + range.length);
       }
-      // Retry server errors; fail fast on 4xx (the URL is simply wrong).
+      // Retry server errors and rate limiting (429); fail fast on other 4xx
+      // (the URL is simply wrong).
       const message = `range request failed: HTTP ${response.status}`;
-      if (response.status >= 500) {
+      if (response.status >= 500 || response.status === 429) {
         lastError = new Error(message);
         continue;
       }
@@ -181,24 +180,38 @@ async function fetchRange(
     : new Error("range request failed");
 }
 
-/** Run `worker` over `items` with at most `limit` in flight. */
+/**
+ * Run `worker` over `items` with at most `limit` in flight.
+ *
+ * Every lane runs to completion before this resolves or rejects: the first
+ * failure is recorded and stops lanes from picking up new items, but in-flight
+ * workers are awaited rather than abandoned. This matters because the caller
+ * frees the wasm extractor once this returns — a lane still awaiting a fetch
+ * after an early reject could otherwise call `feed()` on a freed object.
+ */
 async function runPool<T>(
   items: readonly T[],
   limit: number,
   worker: (item: T) => Promise<void>,
 ): Promise<void> {
   let next = 0;
+  let failure: unknown;
   const lanes = Array.from(
     { length: Math.max(1, Math.min(limit, items.length)) },
     async () => {
-      while (next < items.length) {
+      while (next < items.length && failure === undefined) {
         const item = items[next];
         next += 1;
-        await worker(item);
+        try {
+          await worker(item);
+        } catch (error) {
+          failure ??= error;
+        }
       }
     },
   );
   await Promise.all(lanes);
+  if (failure !== undefined) throw failure;
 }
 
 /**
