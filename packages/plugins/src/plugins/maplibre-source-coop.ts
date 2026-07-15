@@ -144,8 +144,12 @@ export const DEFAULT_SOURCE_COOP_LABELS: SourceCoopLabels = {
     `This file is ${size}. It streams from the source, so only the parts in view are read.`,
   streamHint: (size) =>
     `This file is ${size}. Add copies it into memory; Stream reads only the parts in view.`,
+  // "2 GB" rather than the strictly correct "2 GiB": formatBytes is 1024-based
+  // but labels its units GB/MB, and renders this very limit as "2.0 GB", so GiB
+  // here would visibly disagree with the size on the same line. The units the
+  // panel prints are what the sentence has to speak.
   tooLargeToOpen: (size) =>
-    `This file is ${size} — too large for the browser to open (2 GiB limit). ` +
+    `This file is ${size} — too large for the browser to open (2 GB limit). ` +
     `Download it, or use a partitioned version of this dataset.`,
 };
 
@@ -769,10 +773,12 @@ function buildPanel(
             ? labels.remove
             : labels.add,
         added ? CSS.actionActive : CSS.action,
-        tooLarge
-          ? labels.tooLargeToOpen(formatBytes(object.size))
-          : added
-            ? labels.removeTitle
+        // `added` wins over `tooLarge`: the button reads Remove and removal
+        // works, so the title has to describe that rather than the size gate.
+        added
+          ? labels.removeTitle
+          : tooLarge
+            ? labels.tooLargeToOpen(formatBytes(object.size))
             : labels.addTitle,
       );
       addButton.disabled = pending || (tooLarge && !added);
