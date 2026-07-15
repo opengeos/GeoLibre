@@ -445,25 +445,38 @@ function formatLabel(format: SourceCoopFormat): string {
 }
 
 /**
- * Renders {@link objectNote}'s decision with the current translations.
+ * Renders {@link objectNote}'s decision with the current translations, against
+ * what the card is currently doing — a note has to agree with the buttons
+ * beside it, and both of these notes describe something the card may have
+ * already moved past.
  *
- * @param choiceMade - Whether the Add/Stream choice is already settled, either
- *   in flight or on the map. Suppresses the note that exists only to inform it.
+ * @param state - Whether the file is on the map, and whether an add is in
+ *   flight for it.
  */
-function noteText(object: SourceCoopObject, choiceMade: boolean): string {
+function noteText(
+  object: SourceCoopObject,
+  state: { added: boolean; pending: boolean },
+): string {
   const size = formatBytes(object.size);
   switch (objectNote(object)) {
     case "streams":
+      // A fact about the file rather than about a choice — true whether or not
+      // it is on the map, so it always stands.
       return labels.largeFileWarning(size);
     case "streamChoice":
       // A decision aid for two buttons that are disabled the moment the choice
-      // is made and gone once the file is on the map — past that it reads as
+      // is made and gone once the file is on the map. Past that it reads as
       // advice for an action no longer on offer, and the Streaming badge
-      // reports the outcome instead. The other notes are facts about the file
-      // rather than about a choice, so they stand either way.
-      return choiceMade ? "" : labels.streamHint(size);
+      // reports the outcome instead.
+      return state.added || state.pending ? "" : labels.streamHint(size);
     case "tooLarge":
-      return labels.tooLargeToOpen(size, formatBytes(MAX_VECTOR_BYTES));
+      // A file already on the map is demonstrably openable — it was added when
+      // the listing was smaller, or under an earlier MAX_VECTOR_BYTES — and its
+      // Remove button works (see the title below). Claiming it is too large to
+      // open would contradict the button directly beneath it.
+      return state.added
+        ? ""
+        : labels.tooLargeToOpen(size, formatBytes(MAX_VECTOR_BYTES));
     default:
       return "";
   }
@@ -773,7 +786,7 @@ function buildPanel(
     const pendingMode = addInFlight.get(object.key);
     const pending = pendingMode !== undefined;
 
-    const note = noteText(object, added || pending);
+    const note = noteText(object, { added, pending });
     if (note) card.appendChild(el("div", CSS.note, note));
 
     const actions = el("div", CSS.actions);
