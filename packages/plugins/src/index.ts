@@ -372,6 +372,7 @@ export {
   parseProduct,
   parseProductList,
   parseProductRef,
+  productUrl,
   SOURCE_COOP_DATA_BASE,
   SOURCE_COOP_PROXY_ENDPOINT,
   synthesizeProduct,

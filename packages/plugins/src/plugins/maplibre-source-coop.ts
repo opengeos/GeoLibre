@@ -411,6 +411,10 @@ function buildPanel(
   // Ignore results from a superseded request, and cancel the in-flight one.
   let generation = 0;
   let inflight: AbortController | null = null;
+  // The pinned enrichment fetch runs *alongside* the first `loadFiles()` call,
+  // so it cannot share `inflight`: `beginRequest()` would abort the file
+  // listing it races. It gets its own controller, torn down with the rest.
+  let enrichInflight: AbortController | null = null;
   const addInFlight = new Set<string>();
 
   const root = el("div", CSS.panel);
@@ -876,11 +880,19 @@ function buildPanel(
    */
   async function enrichPinnedProduct(): Promise<void> {
     if (!pinned) return;
+    const controller = new AbortController();
+    enrichInflight = controller;
     const product = await fetchProduct(
       pinned.accountId,
       pinned.productId,
-      clientOptions(app),
+      clientOptions(app, controller.signal),
     );
+    // The panel was torn down (or rebuilt for a language change) while this was
+    // in flight — `root` is detached, so rendering into it would be wasted work.
+    // Checked explicitly rather than relying on the abort: `fetchProduct` maps a
+    // rejection to null, so an abort that lands mid-flight is already handled
+    // below, but one that lands after the fetch resolves is not.
+    if (controller.signal.aborted) return;
     // The user may have navigated into a subfolder meanwhile, so keep the
     // current prefix and swap only the record.
     if (!product || view.kind !== "product") return;
@@ -906,6 +918,8 @@ function buildPanel(
   return () => {
     inflight?.abort();
     inflight = null;
+    enrichInflight?.abort();
+    enrichInflight = null;
     unsubscribe?.();
     root.remove();
   };

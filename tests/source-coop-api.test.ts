@@ -16,6 +16,7 @@ import {
   parseProduct,
   parseProductList,
   parseProductRef,
+  productUrl,
   SOURCE_COOP_DATA_BASE,
   synthesizeProduct,
   type SourceCoopFetch,
@@ -119,6 +120,33 @@ describe("parseProduct", () => {
       parseProduct(rawProduct({ metadata: { tags: ["ok", 7] } }))?.tags,
       ["ok"],
     );
+  });
+});
+
+describe("productUrl", () => {
+  it("is the single source of the product page link", () => {
+    assert.equal(
+      productUrl("opengeos", "natural-earth"),
+      "https://source.coop/opengeos/natural-earth",
+    );
+  });
+
+  it("agrees with every record producer, so the three cannot drift", () => {
+    const expected = productUrl("opengeos", "natural-earth");
+    assert.equal(
+      synthesizeProduct("opengeos", "natural-earth", "Natural Earth").url,
+      expected,
+    );
+    assert.equal(
+      parseProduct({ account_id: "opengeos", product_id: "natural-earth" })?.url,
+      expected,
+    );
+    const [fromFeed] = parseFeed(
+      `<rss><channel><item><title>Natural Earth</title>` +
+        `<link>https://source.coop/opengeos/natural-earth</link>` +
+        `</item></channel></rss>`,
+    );
+    assert.equal(fromFeed.url, expected);
   });
 });
 

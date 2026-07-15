@@ -45,6 +45,14 @@
 /** The Source Cooperative website (used for human-facing product links). */
 export const SOURCE_COOP_SITE = "https://source.coop";
 
+/**
+ * A product's page on source.coop — the human-facing link, not the data URL
+ * (that is `buildObjectUrl`, on a different host).
+ */
+export function productUrl(accountId: string, productId: string): string {
+  return `${SOURCE_COOP_SITE}/${accountId}/${productId}`;
+}
+
 /** The metadata API. Not reachable from a browser: it sends no CORS headers. */
 export const SOURCE_COOP_API_BASE = "https://source.coop/api/v1";
 
@@ -189,7 +197,7 @@ export function parseProduct(raw: unknown): SourceCoopProduct | null {
     updatedAt: asString(record.updated_at) || null,
     // `featured` is a *number* in the API (a rank), not a boolean.
     featured: typeof record.featured === "number" && record.featured > 0,
-    url: `${SOURCE_COOP_SITE}/${accountId}/${productId}`,
+    url: productUrl(accountId, productId),
   };
 }
 
@@ -216,7 +224,7 @@ export function synthesizeProduct(
     tags: [],
     updatedAt: null,
     featured: false,
-    url: `${SOURCE_COOP_SITE}/${accountId}/${productId}`,
+    url: productUrl(accountId, productId),
   };
 }
 
@@ -285,7 +293,7 @@ export function parseFeed(xml: string): SourceCoopProduct[] {
           ? parsedDate.toISOString()
           : null,
       featured: false,
-      url: `${SOURCE_COOP_SITE}/${ref.accountId}/${ref.productId}`,
+      url: productUrl(ref.accountId, ref.productId),
     });
   }
   return products;
