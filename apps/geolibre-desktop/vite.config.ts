@@ -981,7 +981,22 @@ export default defineConfig({
     } satisfies RollupOptions,
   },
   resolve: {
-    dedupe: ["react", "react-dom", "maplibre-gl"],
+    // `@anthropic-ai/sdk` (and the other assistant provider SDKs) are optional
+    // peers of `@strands-agents/sdk`, which is hoisted to the monorepo root. When
+    // a provider SDK can't hoist to root alongside it (e.g. a duplicate version
+    // pulled in by another dependency), strands' bare `import '@anthropic-ai/sdk'`
+    // is unresolvable from the root and the production build emits a throwing stub
+    // ("Cannot destructure property 'AnthropicModel' … is undefined"). Deduping
+    // these forces resolution from this app's node_modules — where they are always
+    // installed — so the build is deterministic across environments (see #331).
+    dedupe: [
+      "react",
+      "react-dom",
+      "maplibre-gl",
+      "@anthropic-ai/sdk",
+      "openai",
+      "@google/genai",
+    ],
     alias: {
       "@": path.resolve(__dirname, "./src"),
       module: path.resolve(__dirname, "./src/lib/browser-node-module.ts"),
