@@ -204,12 +204,17 @@ function pmtilesRangeSpan(range: string): number | null {
   const [, startStr, endStr] = match;
   if (startStr === "") {
     // `bytes=-N`: the last N bytes. `bytes=-` (both empty) is invalid.
-    return endStr === "" ? null : Number(endStr);
+    if (endStr === "") return null;
+    const suffix = Number(endStr);
+    return Number.isSafeInteger(suffix) ? suffix : null;
   }
   // `bytes=start-` is open-ended (unbounded) — reject it.
   if (endStr === "") return null;
   const start = Number(startStr);
   const end = Number(endStr);
+  // The regex allows arbitrarily long digit strings; reject offsets past 2^53
+  // so `Number` precision loss can't collapse a huge span down under the cap.
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return null;
   if (end < start) return null;
   return end - start + 1;
 }
@@ -354,21 +359,28 @@ async function handlePmtilesRange(
   }
   let originResponse: Response;
   try {
+    // Deliberately no `cf.cacheEverything`: caching partial (206) responses is
+    // unsafe here because Cloudflare's default cache key is URL-only and does
+    // not vary by the `Range` header, so a cached 206 for one range could be
+    // served for a different range of the same file — corrupting the bytes a
+    // PMTiles reader assembles. `cf.cacheKey` would fix the key but only takes
+    // effect on Enterprise plans (silently ignored otherwise), so we don't rely
+    // on it. Without cacheEverything, Cloudflare doesn't edge-cache the 206 at
+    // all; the upstream still serves range requests directly.
     originResponse = await fetch(`${PMTILES_UPSTREAM}/${target}`, {
       headers: { range },
-      // The upstream is range-cacheable at Cloudflare's edge; identical range
-      // requests (directory reads) are served from the PoP. Cloudflare's default
-      // cache key is URL-only and does *not* vary by the `Range` header, so a
-      // cached 206 for one range could be served for a different range of the
-      // same file — corrupting the bytes a PMTiles reader assembles. Fold the
-      // range into the cache key so each distinct range caches independently.
-      cf: {
-        cacheEverything: true,
-        cacheKey: `pmtiles:${target}:${range}`,
-      },
     });
   } catch {
     return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  // If the origin ignored the `Range` and returned the whole object (200), refuse
+  // to stream it — that would defeat the range-only bandwidth guard and could
+  // pull a 100+ GB build through the Worker.
+  if (originResponse.status === 200) {
+    return new Response("Upstream did not honor the range request.", {
+      status: 502,
+      headers: CORS_HEADERS,
+    });
   }
   const headers = new Headers(CORS_HEADERS);
   for (const key of [

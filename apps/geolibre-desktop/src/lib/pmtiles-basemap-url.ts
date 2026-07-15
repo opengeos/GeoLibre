@@ -51,6 +51,13 @@ export function buildRemotePmtilesBasemap(
   // style's `pmtiles://<url>` source can fetch tiles (a raw basemap style never
   // hits the layer-sync path that would otherwise register the protocol).
   ensureRemotePMTilesArchive(sourceUrl);
-  const style = buildProtomapsBasemapStyle({ sourceUrl, flavor });
+  const style = buildProtomapsBasemapStyle({
+    sourceUrl,
+    flavor,
+    // Resolve bundled glyphs/sprites against the deployment base so labels/icons
+    // survive a sub-path deployment (GEOLIBRE_APP_BASE) — a bare
+    // "/basemaps-assets" would 404. Mirrors BasemapExtractPanel's BASEMAP_ASSETS_BASE.
+    assetsBaseUrl: `${import.meta.env.BASE_URL}basemaps-assets`,
+  });
   return registerOfflineBasemapStyle(`remote-pmtiles-${hashUrl(sourceUrl)}`, style);
 }

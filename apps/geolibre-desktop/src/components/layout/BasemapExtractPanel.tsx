@@ -903,6 +903,10 @@ export function BasemapExtractPanel({
   // the next time "Use as basemap" loads it.
   const handleSavedFlavorChange = useCallback(
     (entry: OfflineBasemap, next: ProtomapsFlavor) => {
+      // A flavor only applies to a styled basemap. Overlay-saved entries
+      // (flavor === null) can't be re-styled, so leave them untouched — forcing
+      // a flavor here would push an incompatible archive through applySaved.
+      if (entry.flavor == null) return;
       setOfflineBasemapFlavor(entry.id, next);
       if (hasPMTilesArchive(`${entry.id}.pmtiles`)) {
         void applySaved({ ...entry, flavor: next });
@@ -940,7 +944,15 @@ export function BasemapExtractPanel({
       if (!picked?.data) return;
       const bytes = new Uint8Array(picked.data);
       const info = await readPMTilesArchiveInfo(bytes);
-      if (info.tileType !== "vector" || info.sourceLayers.length === 0) {
+      // Only a Protomaps-schema vector archive can be styled as a basemap; a
+      // non-Protomaps archive (or a raster one) would render blank through
+      // buildProtomapsBasemapStyle, so refuse it here the same way handleExtract
+      // falls back to a flat overlay.
+      if (
+        info.tileType !== "vector" ||
+        info.sourceLayers.length === 0 ||
+        !isProtomapsCompatible(info.sourceLayers)
+      ) {
         setError(t("basemapExtract.errorNotBasemap"));
         return;
       }
@@ -1387,7 +1399,8 @@ export function BasemapExtractPanel({
                             {entry.name}
                           </p>
                           <div className="flex items-center gap-1.5">
-                            {entry.tileType === "vector" ? (
+                            {entry.tileType === "vector" &&
+                            entry.flavor != null ? (
                               <select
                                 className="h-6 rounded border border-input bg-background px-1 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                                 value={(entry.flavor as ProtomapsFlavor) || "light"}

@@ -418,7 +418,7 @@ export function NewProjectDialog({
                 {isCustomSelected && customIsPmtiles ? (
                   <div className="space-y-1">
                     <Label htmlFor="custom-basemap-flavor" className="text-xs">
-                      Basemap style
+                      {t("basemapExtract.style")}
                     </Label>
                     <select
                       id="custom-basemap-flavor"
@@ -430,7 +430,7 @@ export function NewProjectDialog({
                     >
                       {PROTOMAPS_FLAVORS.map((f) => (
                         <option key={f} value={f}>
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                          {t(`basemapExtract.flavor.${f}`)}
                         </option>
                       ))}
                     </select>
