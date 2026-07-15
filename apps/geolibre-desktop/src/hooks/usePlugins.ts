@@ -20,6 +20,7 @@ import {
   maplibreNasaEarthdataPlugin,
   maplibreNationalMapPlugin,
   maplibreOpenAerialMapPlugin,
+  maplibreSourceCoopPlugin,
   maplibreOvertureMapsPlugin,
   maplibreGraticulePlugin,
   maplibreCloudsPlugin,
@@ -140,13 +141,15 @@ manager.registerAll([
   maplibreGeoEditorPlugin,
   maplibreAnnotationsPlugin,
   maplibreBasemapControlPlugin,
-  // The four web service plugins are grouped into the "Web Services"
-  // submenu, rendered where the first of them appears in this order.
+  // The web service plugins (WEB_SERVICE_PLUGIN_IDS) are grouped into the
+  // "Web Services" submenu, rendered where the first of them appears in this
+  // order.
   maplibreFemaWmsPlugin,
   maplibreNasaEarthdataPlugin,
   maplibreEnviroAtlasPlugin,
   maplibreNationalMapPlugin,
   maplibreOpenAerialMapPlugin,
+  maplibreSourceCoopPlugin,
   maplibreEsriWaybackPlugin,
   maplibreTimeSliderPlugin,
   maplibreTimelapsePlugin,

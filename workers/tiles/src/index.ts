@@ -84,6 +84,34 @@ const OAM_CACHE_CONTROL = "public, max-age=120";
 // Upper bound on the forwarded `limit` (OAM's own page-size ceiling).
 const OAM_MAX_LIMIT = 100;
 
+// Source Cooperative metadata proxy. `source.coop/api/v1` sends no CORS headers
+// at all, so a browser cannot read it; this route fetches it server-side and
+// re-emits the JSON with `Access-Control-Allow-Origin: *`, exactly as the OAM
+// route above does. Only product *metadata* passes through here — the data
+// itself lives on `data.source.coop`, which is already CORS- and range-enabled,
+// so GeoLibre reads PMTiles/GeoParquet bytes direct and they never touch the
+// Worker.
+//
+// Two upstreams are exposed under one prefix, both fixed:
+//   /source-coop/products/...  → https://source.coop/api/v1/products/...
+//   /source-coop/feed          → https://source.coop/feed.xml  (50 newest)
+//
+// The product path is constrained to `{account}` or `{account}/{product}` (or
+// the literal `featured`), so this stays a named proxy for the two public,
+// unauthenticated read endpoints and can never be pointed at an arbitrary
+// source.coop path — notably not at `/api/v1/whoami` or `/api/v1/accounts/*`,
+// which are API-key routes.
+const SOURCE_COOP_PREFIX = "/source-coop/";
+const SOURCE_COOP_API_UPSTREAM = "https://source.coop/api/v1";
+const SOURCE_COOP_FEED_UPSTREAM = "https://source.coop/feed.xml";
+// `products/featured`, `products/<account>`, or `products/<account>/<product>`.
+// Source Cooperative ids are slugs; anything else (`..`, `%2f`, a query) fails
+// this and 404s rather than being forwarded.
+const SOURCE_COOP_PRODUCTS_PATH =
+  /^products\/([a-zA-Z0-9][a-zA-Z0-9-_.]{0,63})(?:\/([a-zA-Z0-9][a-zA-Z0-9-_.]{0,63}))?$/;
+// The catalog changes when products are published, so cache briefly at the edge.
+const SOURCE_COOP_CACHE_CONTROL = "public, max-age=300";
+
 // A USGS Astrogeology WMS layer to reproject. `map` and `layer` are the only
 // caller-influenced parts of the upstream request, and both come from this
 // allowlist — the Worker never forwards a client-supplied WMS parameter.
@@ -311,6 +339,72 @@ function isAllowedOamOrigin(origin: string | null): boolean {
   return false;
 }
 
+/**
+ * Resolves a `/source-coop/...` path to its fixed upstream, or null when the
+ * path is not one of the two allowlisted reads (see SOURCE_COOP_PREFIX above).
+ */
+function sourceCoopUpstream(pathname: string): string | null {
+  const rest = pathname.slice(SOURCE_COOP_PREFIX.length);
+  if (rest === "feed") return SOURCE_COOP_FEED_UPSTREAM;
+  const match = SOURCE_COOP_PRODUCTS_PATH.exec(rest);
+  if (!match) return null;
+  const [, account, product] = match;
+  return product
+    ? `${SOURCE_COOP_API_UPSTREAM}/products/${account}/${product}`
+    : `${SOURCE_COOP_API_UPSTREAM}/products/${account}`;
+}
+
+/**
+ * Proxies one Source Cooperative metadata read with CORS added.
+ *
+ * Origin-gated like `/oam/meta`: it is a wildcard-CORS proxy to a fixed
+ * upstream, so restricting it to GeoLibre's own origins stops a third-party
+ * site driving Source Cooperative traffic through the Worker. The desktop app
+ * fetches source.coop over native HTTP and never reaches this route.
+ *
+ * No client query parameters are forwarded — the upstream reads take none, and
+ * dropping them keeps the cache key stable.
+ */
+async function handleSourceCoop(
+  request: Request,
+  pathname: string,
+): Promise<Response> {
+  if (!isAllowedOamOrigin(request.headers.get("origin"))) {
+    return new Response("Forbidden", { status: 403, headers: CORS_HEADERS });
+  }
+  const upstream = sourceCoopUpstream(pathname);
+  if (!upstream) {
+    return new Response("Not Found", { status: 404, headers: CORS_HEADERS });
+  }
+  let originResponse: Response;
+  try {
+    originResponse = await fetch(upstream, {
+      // cacheEverything is required for Cloudflare to edge-cache a URL with no
+      // static file extension (cacheTtl alone does not).
+      cf: { cacheEverything: true, cacheTtl: 300 },
+    });
+  } catch {
+    return new Response("Bad Gateway", { status: 502, headers: CORS_HEADERS });
+  }
+  const headers = new Headers(CORS_HEADERS);
+  headers.set(
+    "content-type",
+    originResponse.headers.get("content-type") ?? "application/json",
+  );
+  // An unknown /api/v1 path returns the site's HTML 404 page with status 200,
+  // so `ok` alone would happily cache a miss. Only cache a response whose
+  // content type is what the client can actually parse.
+  const contentType = headers.get("content-type") ?? "";
+  const cacheable =
+    originResponse.ok &&
+    (contentType.includes("json") || contentType.includes("xml"));
+  headers.set("cache-control", cacheable ? SOURCE_COOP_CACHE_CONTROL : "no-store");
+  return new Response(originResponse.body, {
+    status: originResponse.status,
+    headers,
+  });
+}
+
 interface Env {}
 
 /**
@@ -432,6 +526,7 @@ export default {
           "  Reprojected WMS: /wms/<dataset>/<z>/<x>/<y>.png\n" +
           `    Datasets: ${Object.keys(WMS_DATASETS).join(", ")}\n` +
           "  OpenAerialMap search: /oam/meta?bbox=...&limit=...\n" +
+          "  Source Cooperative metadata: /source-coop/products/... , /source-coop/feed\n" +
           "  PMTiles range proxy: /pmtiles/<name>.pmtiles (Range header required)\n",
         { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } },
       );
@@ -497,6 +592,12 @@ export default {
         status: originResponse.status,
         headers,
       });
+    }
+
+    // Source Cooperative metadata: source.coop sends no CORS headers, so the
+    // web build reads it through here (see SOURCE_COOP_PREFIX above).
+    if (url.pathname.startsWith(SOURCE_COOP_PREFIX)) {
+      return handleSourceCoop(request, url.pathname);
     }
 
     const pmtilesMatch = PMTILES_PATH.exec(url.pathname);

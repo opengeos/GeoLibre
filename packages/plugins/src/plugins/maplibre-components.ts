@@ -1775,6 +1775,51 @@ export function openPMTilesLayerPanel(app: GeoLibreAppAPI): void {
   void openStandalonePMTilesControl(app);
 }
 
+/**
+ * Adds a remote PMTiles archive through the PMTiles control, without opening
+ * its panel.
+ *
+ * The programmatic door onto the panel's own load path: the control reads the
+ * archive header to tell vector from raster, discovers the vector source
+ * layers, assigns per-source-layer colors, and emits `layeradd` — which the
+ * store sync in {@link createPMTilesControl} turns into a Layers-panel entry
+ * that persists with the project. Callers that discover a `.pmtiles` URL
+ * elsewhere in the UI (the Source Cooperative browser, say) should come through
+ * here rather than hand-building a MapLibre source.
+ *
+ * When this mounts the control it leaves it hidden, so adding a layer does not
+ * surface a map button the user never asked for; a panel the user already has
+ * open is left alone.
+ *
+ * @param app - The GeoLibre app API.
+ * @param url - An http(s) URL to a `.pmtiles` archive.
+ * @returns True when the archive was added.
+ */
+export async function addPMTilesLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+): Promise<boolean> {
+  const { PMTilesLayerControl: PMTilesLayerControlClass } =
+    await getComponentsConstructors();
+
+  pmtilesControl ??= createPMTilesControl(PMTilesLayerControlClass);
+
+  if (!pmtilesControlMounted) {
+    const added = app.addMapControl(pmtilesControl, pmtilesControlPosition);
+    if (!added) {
+      pmtilesControl = null;
+      return false;
+    }
+    pmtilesControlMounted = true;
+    // Mounted only to borrow its load path — keep it out of sight. A control
+    // the user had already opened is untouched.
+    pmtilesControl.hide();
+  }
+
+  await pmtilesControl.addLayer(url);
+  return true;
+}
+
 // The standalone Search panel is intentionally independent from the
 // ControlGrid search sub-control so it can be used from the Controls menu.
 export function openSearchPlacesPanel(app: GeoLibreAppAPI): void {

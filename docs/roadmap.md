@@ -326,6 +326,7 @@
 - [x] Wikipedia knowledge cards: click a place on the map to pull up its Wikipedia summary and info card
 - [x] USGS planetary basemaps for nine more celestial bodies, extending the planetary mapping catalog
 - [x] New OpenAerialMap plugin for searching open aerial imagery, plus a GEBCO ocean-bathymetry WMS sample with proper attribution
+- [x] New Source Cooperative plugin for browsing [source.coop](https://source.coop) open data: search the catalog, walk a product's files, and add GeoParquet, PMTiles, COG, GeoJSON, and FlatGeobuf straight to the map (streamed from the source) or download them
 - [x] The Whitebox toolbox is now a floating panel, and Processing subset tools can populate their bounding box from the current map view
 - [x] Scale bar switches between metric, imperial, and nautical units
 - [x] Bundled plugin drop-ins can set `activeByDefault` in their manifest, deployments can opt out of the welcome dialog, and the app now defaults to the Advanced interface and skips the welcome dialog on first run

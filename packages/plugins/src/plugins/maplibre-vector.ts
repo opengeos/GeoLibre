@@ -8,6 +8,7 @@ import type {
   VectorControl,
   VectorControlEventHandler,
   VectorLayerInfo,
+  VectorLayerOptions,
   VectorSampleDataset,
 } from "maplibre-gl-vector";
 import type {
@@ -490,6 +491,37 @@ async function ensureVectorControl(
   }
 
   return vectorControl;
+}
+
+/**
+ * Loads a remote vector dataset through the Add Vector Layer control, without
+ * opening its panel.
+ *
+ * This is the programmatic door onto everything the panel can already read —
+ * GeoParquet, GeoJSON, FlatGeobuf, GeoPackage, CSV, and the other GDAL-readable
+ * formats — including the DuckDB-WASM conversion, the dynamic-tile render path
+ * for large datasets, and the existing store sync that puts the result in the
+ * Layers panel and the project file. Callers that discover a vector URL
+ * elsewhere in the UI (the Source Cooperative browser, say) should come through
+ * here rather than re-implementing any of that.
+ *
+ * The control mounts hidden (see {@link ensureVectorControl}), so this adds a
+ * layer without surfacing a map button the user did not ask for.
+ *
+ * @param app - The GeoLibre app API.
+ * @param url - An http(s) URL to a vector dataset.
+ * @param options - Display name, fitBounds, explicit format, ...
+ * @returns True when the layer was added.
+ */
+export async function addVectorLayerFromUrl(
+  app: GeoLibreAppAPI,
+  url: string,
+  options: VectorLayerOptions = {},
+): Promise<boolean> {
+  const control = await ensureVectorControl(app);
+  if (!control) return false;
+  await control.addData(url, options);
+  return true;
 }
 
 function getVectorControlClass(): Promise<VectorControlConstructor> {
