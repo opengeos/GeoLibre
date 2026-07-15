@@ -221,6 +221,14 @@ const extraProducts = new Map<string, SourceCoopProduct>();
  * back to the fallback and re-request the metadata each time — the same reason
  * `catalog` is cached above. Kept separate from `extraProducts` so a pinned
  * panel never quietly changes what the browse panel's search turns up.
+ *
+ * Deliberately kept for the life of the module, with no expiry: a hit only ever
+ * supplies the header's title and description, and a product is not renamed
+ * mid-session in practice. The file listing — the part that is actually data —
+ * is never cached and re-lists on every mount, so nothing the user acts on can
+ * go stale here. Only a successful fetch is cached (see `enrichPinnedProduct`),
+ * so a failed enrichment is retried on the next mount rather than being pinned
+ * to the fallback title.
  */
 const pinnedProducts = new Map<string, SourceCoopProduct>();
 
