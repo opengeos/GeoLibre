@@ -72,7 +72,7 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
     // (v0.11.0+), which renders a plain COG mosaic in the browser without GDAL.
     label: "NAIP mosaic (VRT)",
     url: "https://data.source.coop/giswqs/opengeos/naip_water_train.vrt",
-    attribution: "USDA Farm Service Agency (NAIP)",
+    attribution: "USDA Farm Service Agency (FSA)",
   },
 ];
 
