@@ -349,7 +349,13 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 const hasTiles =
                   Array.isArray(layer.source.tiles) &&
                   layer.source.tiles.length > 0;
-                if (hasTiles || typeof layer.source.url === "string") {
+                // Match buildRasterTileSource's embeddable-URL filter: a
+                // non-http url (blob:, geolibre://) cannot load standalone, so
+                // still try to recover a live source for it.
+                const hasEmbeddableUrl =
+                  typeof layer.source.url === "string" &&
+                  /^https?:\/\//i.test(layer.source.url);
+                if (hasTiles || hasEmbeddableUrl) {
                   return layer;
                 }
                 const liveSource = controller.getLayerRasterSource(layer.id);
