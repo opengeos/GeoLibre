@@ -153,6 +153,12 @@ function splitBrowserSelection(files: File[]): {
 interface ConversionToolConfig {
   title: string;
   description: string;
+  /** Translation keys for {@link title}/{@link description}. TOOL_CONFIGS is
+   * module-level, so it cannot call `t()` itself without freezing the language
+   * at import; the dialog resolves these at render and falls back to the
+   * literals above. The older tools have not been migrated yet. */
+  titleKey?: ParseKeys;
+  descriptionKey?: ParseKeys;
   inputLabel: string;
   inputFilters: FileDialogFilter[];
   outputLabel: string;
@@ -167,9 +173,9 @@ interface ConversionToolConfig {
   /** Compression choices when running in-browser, for tools whose WASM encoder
    * supports fewer codecs than the sidecar's. Falls back to `compressions`. */
   browserCompressions?: string[];
-  /** Extra note shown only when the in-browser engine is in use, calling out
-   * where it diverges from the sidecar. */
-  browserNote?: string;
+  /** Translation key for an extra note shown only when the in-browser engine is
+   * in use, calling out where it diverges from the sidecar. */
+  browserNoteKey?: ParseKeys;
 }
 
 const VECTOR_INPUT_EXTENSIONS = [
@@ -437,8 +443,10 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
   },
   "raster-to-pmtiles": {
     title: "Raster to PMTiles",
+    titleKey: "toolbar.conversion.rasterToPmtiles",
     description:
       "Render a raster into a single PMTiles archive of Web Mercator PNG tiles, ready for cloud-native serving. Runs entirely in WebAssembly, so it needs no sidecar on either the web or desktop app.",
+    descriptionKey: "toolbar.conversion.rasterToPmtilesDesc",
     inputLabel: "Input raster file",
     inputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     outputLabel: "Output PMTiles file",
@@ -465,8 +473,7 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     compressions: ["deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"],
     browserCompressions: [...COG_WASM_COMPRESSIONS],
     defaultCompression: "deflate",
-    browserNote:
-      "In the browser, 8-bit rasters keep their type and everything else (Int16 DEMs, Float64, …) is written as Float32. The desktop app preserves the original type.",
+    browserNoteKey: "toolbar.conversion.cogBrowserNote",
   },
 };
 
@@ -774,7 +781,7 @@ export function ConversionDialog() {
       );
     } catch (err) {
       const detail =
-        err instanceof Error ? err.message : "Could not convert this file.";
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -829,7 +836,7 @@ export function ConversionDialog() {
       );
     } catch (err) {
       const detail =
-        err instanceof Error ? err.message : "Could not convert this file.";
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -912,7 +919,7 @@ export function ConversionDialog() {
       );
     } catch (err) {
       const detail =
-        err instanceof Error ? err.message : "Could not convert this file.";
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -979,7 +986,7 @@ export function ConversionDialog() {
       );
     } catch (err) {
       const detail =
-        err instanceof Error ? err.message : "Could not convert this file.";
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -1101,7 +1108,7 @@ export function ConversionDialog() {
       );
     } catch (err) {
       const detail =
-        err instanceof Error ? err.message : "Could not convert this file.";
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
       setJob(browserConversionJob(toolId, "failed", [detail], detail));
     }
   };
@@ -1211,7 +1218,7 @@ export function ConversionDialog() {
         // raster-to-pmtiles is the only remaining kind and has no sidecar
         // endpoint; conversionUsesBrowserRuntime always routes it to the WASM
         // path above, so reaching here means those two have drifted apart.
-        setError(`${kind} has no sidecar conversion.`);
+        setError(i18n.t("toolbar.conversion.noSidecarConversion", { kind }));
       }
     } catch (err) {
       setError(
@@ -1231,13 +1238,21 @@ export function ConversionDialog() {
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{config?.title ?? "Conversion"}</DialogTitle>
-          <DialogDescription>{config?.description ?? ""}</DialogDescription>
+          <DialogTitle>
+            {config?.titleKey ? t(config.titleKey) : (config?.title ?? "Conversion")}
+          </DialogTitle>
+          <DialogDescription>
+            {config?.descriptionKey
+              ? t(config.descriptionKey)
+              : (config?.description ?? "")}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
-          {usesBrowserRuntime && config?.browserNote && (
-            <p className="text-xs text-muted-foreground">{config.browserNote}</p>
+          {usesBrowserRuntime && config?.browserNoteKey && (
+            <p className="text-xs text-muted-foreground">
+              {t(config.browserNoteKey)}
+            </p>
           )}
           {runtimeAvailable === false && (
             <div className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
@@ -1428,7 +1443,7 @@ export function ConversionDialog() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-min-zoom">Min zoom</Label>
+                <Label htmlFor="conversion-min-zoom">{t("toolbar.conversion.minZoom")}</Label>
                 <Input
                   id="conversion-min-zoom"
                   inputMode="numeric"
@@ -1437,7 +1452,7 @@ export function ConversionDialog() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-max-zoom">Max zoom</Label>
+                <Label htmlFor="conversion-max-zoom">{t("toolbar.conversion.maxZoom")}</Label>
                 <Input
                   id="conversion-max-zoom"
                   inputMode="numeric"
@@ -1490,7 +1505,7 @@ export function ConversionDialog() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-raster-min-zoom">Min zoom</Label>
+                <Label htmlFor="conversion-raster-min-zoom">{t("toolbar.conversion.minZoom")}</Label>
                 <Input
                   id="conversion-raster-min-zoom"
                   inputMode="numeric"
@@ -1500,7 +1515,7 @@ export function ConversionDialog() {
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="conversion-raster-max-zoom">Max zoom</Label>
+                <Label htmlFor="conversion-raster-max-zoom">{t("toolbar.conversion.maxZoom")}</Label>
                 <Input
                   id="conversion-raster-max-zoom"
                   inputMode="numeric"

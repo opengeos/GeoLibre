@@ -1751,7 +1751,13 @@
       "colormap": "Colormap",
       "resampling": "Resampling",
       "colormapDefault": "Default (viridis)",
-      "zoomNative": "native"
+      "zoomNative": "native",
+      "rasterToPmtilesDesc": "Render a raster into a single PMTiles archive of Web Mercator PNG tiles, ready for cloud-native serving. Runs entirely in WebAssembly, so it needs no sidecar on either the web or desktop app.",
+      "cogBrowserNote": "In the browser, 8-bit rasters keep their type and everything else (Int16 DEMs, Float64, …) is written as Float32. The desktop app preserves the original type.",
+      "noSidecarConversion": "{{kind}} has no sidecar conversion.",
+      "minZoom": "Min zoom",
+      "maxZoom": "Max zoom",
+      "convertFailed": "Could not convert this file."
     },
     "vectorTool": {
       "buffer": "Buffer",
