@@ -323,8 +323,10 @@ function buildInlineLayer(
  * the live app's external raster tile sync so basemaps and tile services
  * render in the export. A TileJSON `url` covers service-backed rasters such as
  * Planetary Computer scenes, whose tiler resolves and signs the actual tile
- * URLs server-side at load time — so the export never embeds an expiring
- * token (#1272).
+ * URLs server-side at load time, so for such resolver-backed services the
+ * export embeds a stable endpoint instead of an expiring token (#1272). A
+ * provider whose url or tile template is itself pre-signed still expires with
+ * its credential — the export can only embed what the source exposes.
  */
 function buildRasterTileSource(
   layer: GeoLibreLayer,

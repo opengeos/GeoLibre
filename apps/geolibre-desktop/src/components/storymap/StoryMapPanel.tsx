@@ -346,9 +346,11 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 layer.type === "wms" ||
                 layer.type === "wmts"
               ) {
+                // Match buildRasterTileSource's string filter so a malformed
+                // tiles array still falls through to the live-source recovery.
                 const hasTiles =
                   Array.isArray(layer.source.tiles) &&
-                  layer.source.tiles.length > 0;
+                  layer.source.tiles.some((tile) => typeof tile === "string");
                 // Match buildRasterTileSource's embeddable-URL filter: a
                 // non-http url (blob:, geolibre://) cannot load standalone, so
                 // still try to recover a live source for it.
