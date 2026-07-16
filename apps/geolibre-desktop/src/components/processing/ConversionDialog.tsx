@@ -327,8 +327,10 @@ function parseZoomRange(
   const parse = (raw: string): number | null | undefined => {
     const text = raw.trim();
     if (!text) return undefined;
-    const value = Number.parseInt(text, 10);
-    if (!Number.isFinite(value) || value < 0 || value > MAX_PMTILES_ZOOM) {
+    // Number, not parseInt: parseInt truncates, so "3.5"/"3abc" would silently
+    // become zoom 3 rather than being rejected.
+    const value = Number(text);
+    if (!Number.isInteger(value) || value < 0 || value > MAX_PMTILES_ZOOM) {
       return null;
     }
     return value;
