@@ -225,6 +225,11 @@ export function ProcessingMenu({
               {t("toolbar.conversion.vectorToPmtiles")}
             </DropdownMenuItem>
             <DropdownMenuItem
+              onSelect={() => setConversionOpen("raster-to-pmtiles")}
+            >
+              {t("toolbar.conversion.rasterToPmtiles")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onSelect={() => setConversionOpen("raster-to-cog")}
             >
               {t("toolbar.conversion.rasterToCog")}

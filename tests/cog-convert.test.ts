@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { before, describe, it } from "node:test";
 import { GeoTiffReader } from "geolibre-wasm";
 import {
+  COG_WASM_COMPRESSIONS,
   convertGeoTiffToCog,
   initCogWasm,
   isTiledGeoTiff,
@@ -73,5 +74,38 @@ describe("convertGeoTiffToCog", () => {
     } finally {
       reader.free();
     }
+  });
+
+  // Raster to COG lets the user pick a codec on the web, so every advertised
+  // choice has to survive an Int16 source — webp/jpeg/jpegxl do not (they reject
+  // anything but 8-bit samples) and zstd/raw are not implemented at all, which
+  // is why COG_WASM_COMPRESSIONS is narrower than the sidecar's rio-cogeo list.
+  for (const compression of COG_WASM_COMPRESSIONS) {
+    it(`encodes a valid tiled COG with ${compression} compression`, async () => {
+      const cog = await convertGeoTiffToCog(stripedTiff, { compression });
+      const out = await readGeoTiffInfo(cog);
+      assert.equal(out.ok, true);
+      assert.equal(out.tiled, true);
+      assert.equal(out.width, 32);
+      assert.equal(out.height, 32);
+
+      const reader = new GeoTiffReader(cog);
+      try {
+        assert.equal(reader.read_band_f32(0)[0], -11);
+      } finally {
+        reader.free();
+      }
+    });
+  }
+
+  it("defaults to deflate, which compresses better than storing raw", async () => {
+    const [deflate, none] = await Promise.all([
+      convertGeoTiffToCog(stripedTiff),
+      convertGeoTiffToCog(stripedTiff, { compression: "none" }),
+    ]);
+    assert.ok(
+      deflate.byteLength < none.byteLength,
+      `deflate (${deflate.byteLength}) should be smaller than none (${none.byteLength})`,
+    );
   });
 });

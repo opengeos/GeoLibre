@@ -68,6 +68,7 @@ export type ConversionToolKind =
   | "vector-to-geopackage"
   | "csv-to-geoparquet"
   | "vector-to-pmtiles"
+  | "raster-to-pmtiles"
   | "raster-to-cog";
 
 /**

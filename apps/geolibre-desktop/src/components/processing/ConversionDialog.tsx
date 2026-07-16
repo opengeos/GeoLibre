@@ -1,5 +1,8 @@
 import { useAppStore, type ConversionToolKind } from "@geolibre/core";
 import {
+  COG_WASM_COMPRESSIONS,
+  PMTILES_COLORMAPS,
+  PMTILES_RESAMPLING_METHODS,
   fetchConversionJob,
   fetchConversionStatus,
   runCsvToGeoParquet,
@@ -10,7 +13,10 @@ import {
   runVectorToPmtiles,
   runVectorToShapefile,
   runVectorToVector,
+  type CogWasmCompression,
   type ConversionJob,
+  type PmtilesColormap,
+  type PmtilesResamplingMethod,
 } from "@geolibre/processing";
 import {
   Button,
@@ -34,6 +40,7 @@ import {
   Save,
   Server,
 } from "lucide-react";
+import type { ParseKeys } from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -57,6 +64,10 @@ const BROWSER_JOB_ID = "browser-duckdb-wasm";
 const SHAPEFILE_SIDECAR_EXTENSIONS = new Set(["dbf", "shx", "prj", "cpg"]);
 
 const GEOPARQUET_MIME_TYPE = "application/vnd.apache.parquet";
+
+const GEOTIFF_MIME_TYPE = "image/tiff";
+
+const PMTILES_MIME_TYPE = "application/vnd.pmtiles";
 
 function fileExtension(name: string): string {
   const index = name.lastIndexOf(".");
@@ -149,6 +160,16 @@ interface ConversionToolConfig {
   defaultOutputName: string;
   compressions?: string[];
   defaultCompression?: string;
+  /** Input filters when running in-browser, for tools whose WASM engine reads a
+   * narrower set of formats than the sidecar's GDAL. Falls back to
+   * `inputFilters`. */
+  browserInputFilters?: FileDialogFilter[];
+  /** Compression choices when running in-browser, for tools whose WASM encoder
+   * supports fewer codecs than the sidecar's. Falls back to `compressions`. */
+  browserCompressions?: string[];
+  /** Extra note shown only when the in-browser engine is in use, calling out
+   * where it diverges from the sidecar. */
+  browserNote?: string;
 }
 
 const VECTOR_INPUT_EXTENSIONS = [
@@ -226,6 +247,69 @@ const VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS = [
 /** The in-browser writer for an output extension, or null when unsupported. */
 function browserExportFormatForExtension(extension: string) {
   return BROWSER_OUTPUT_FORMATS[extension] ?? null;
+}
+
+// Conversions with a client-side engine (DuckDB-WASM, the pure-JS writers, or
+// geolibre-wasm). On desktop these still prefer the sidecar, whose GDAL/rio-cogeo
+// stack reads more input formats and preserves dtypes and codecs the WASM
+// writers cannot — so this set only takes effect in the browser build.
+//
+// Vector to PMTiles is absent deliberately: geolibre-wasm's `write_pmtiles`
+// renders *rasters*, and `PmtilesExtractor` only subsets an existing archive, so
+// there is no client-side vector tiler to replace the sidecar's freestiler.
+const WEB_RUNTIME_KINDS: ReadonlySet<ConversionToolKind> = new Set([
+  "vector-to-vector",
+  "vector-to-geoparquet",
+  "csv-to-geoparquet",
+  "vector-to-flatgeobuf",
+  "vector-to-shapefile",
+  "vector-to-geopackage",
+  "raster-to-cog",
+]);
+
+// Raster to PMTiles has no sidecar endpoint at all — geolibre-wasm is its only
+// engine — so it runs client-side on desktop too.
+const WASM_ONLY_KINDS: ReadonlySet<ConversionToolKind> = new Set([
+  "raster-to-pmtiles",
+]);
+
+/** Whether a tool runs client-side rather than through the Python sidecar. */
+function conversionUsesBrowserRuntime(
+  kind: ConversionToolKind,
+  desktop: boolean,
+): boolean {
+  if (WASM_ONLY_KINDS.has(kind)) return true;
+  return !desktop && WEB_RUNTIME_KINDS.has(kind);
+}
+
+// Vector output extensions no JS writer covers but geolibre-wasm's
+// `vector_convert` does, so in-browser Vector to Vector can offer them too.
+// FlatGeobuf has no registered IANA media type; octet-stream is what the
+// browser save picker needs to offer a plain binary download.
+const WASM_VECTOR_OUTPUT_FORMATS: Record<
+  string,
+  { description: string; mimeType: string }
+> = {
+  fgb: { description: "FlatGeobuf", mimeType: "application/octet-stream" },
+};
+
+const WASM_VECTOR_OUTPUT_EXTENSIONS = new Set(
+  Object.keys(WASM_VECTOR_OUTPUT_FORMATS),
+);
+
+/** Names the engine backing a tool's client-side path, for the status line. */
+function browserRuntimeMessageKey(kind: ConversionToolKind): ParseKeys {
+  switch (kind) {
+    case "raster-to-cog":
+    case "raster-to-pmtiles":
+    case "vector-to-flatgeobuf":
+      return "toolbar.conversion.runsInBrowserWasm";
+    case "vector-to-shapefile":
+    case "vector-to-geopackage":
+      return "toolbar.conversion.runsInBrowserWriters";
+    default:
+      return "toolbar.conversion.runsInBrowserDuckDb";
+  }
 }
 
 const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
@@ -312,6 +396,16 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
     outputFilters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
     defaultOutputName: "tiles.pmtiles",
   },
+  "raster-to-pmtiles": {
+    title: "Raster to PMTiles",
+    description:
+      "Render a raster into a single PMTiles archive of Web Mercator PNG tiles, ready for cloud-native serving. Runs entirely in WebAssembly, so it needs no sidecar on either the web or desktop app.",
+    inputLabel: "Input raster file",
+    inputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
+    outputLabel: "Output PMTiles file",
+    outputFilters: [{ name: "PMTiles", extensions: ["pmtiles"] }],
+    defaultOutputName: "raster.pmtiles",
+  },
   "raster-to-cog": {
     title: "Raster to COG",
     description:
@@ -323,11 +417,17 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
         extensions: ["tif", "tiff", "img", "vrt", "asc", "nc", "jp2", "hgt"],
       },
     ],
+    // The in-browser encoder is geolibre-wasm's GeoTiffReader, which reads
+    // GeoTIFF only; the other formats above need the sidecar's GDAL.
+    browserInputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     outputLabel: "Output COG file",
     outputFilters: [{ name: "GeoTIFF", extensions: ["tif", "tiff"] }],
     defaultOutputName: "output_cog.tif",
     compressions: ["deflate", "zstd", "lzw", "webp", "jpeg", "packbits", "raw"],
+    browserCompressions: [...COG_WASM_COMPRESSIONS],
     defaultCompression: "deflate",
+    browserNote:
+      "In the browser, 8-bit rasters keep their type and everything else (Int16 DEMs, Float64, …) is written as Float32. The desktop app preserves the original type.",
   },
 };
 
@@ -356,6 +456,9 @@ export function ConversionDialog() {
   const [layerName, setLayerName] = useState("data");
   const [minZoom, setMinZoom] = useState("0");
   const [maxZoom, setMaxZoom] = useState("14");
+  const [colormap, setColormap] = useState<PmtilesColormap>("viridis");
+  const [resampling, setResampling] =
+    useState<PmtilesResamplingMethod>("bilinear");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
   const [runtimeMessage, setRuntimeMessage] = useState("");
   const [startingServer, setStartingServer] = useState(false);
@@ -365,18 +468,20 @@ export function ConversionDialog() {
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
   const desktop = isTauri();
-  // These conversions run entirely in-browser with DuckDB-WASM (plus the
-  // bundled JS writers) and never need the Python sidecar. On desktop the same
-  // tools prefer the sidecar, which covers every format. FlatGeobuf and PMTiles
-  // have no WASM writer, so they stay sidecar-only.
-  const usesBrowserRuntime =
-    !desktop &&
-    (kind === "vector-to-vector" ||
-      kind === "vector-to-geoparquet" ||
-      kind === "csv-to-geoparquet");
+  const usesBrowserRuntime = kind ? conversionUsesBrowserRuntime(kind, desktop) : false;
   const isCsv = kind === "csv-to-geoparquet";
   const isPmtiles = kind === "vector-to-pmtiles";
-  const showCompression = Boolean(config?.compressions);
+  const isRasterPmtiles = kind === "raster-to-pmtiles";
+  const isRasterInput = kind === "raster-to-cog" || kind === "raster-to-pmtiles";
+  // The WASM encoder supports fewer codecs and reads fewer formats than the
+  // sidecar's GDAL, so both lists resolve per runtime.
+  const compressionOptions = usesBrowserRuntime
+    ? (config?.browserCompressions ?? config?.compressions)
+    : config?.compressions;
+  const showCompression = Boolean(compressionOptions?.length);
+  const inputFilters = usesBrowserRuntime
+    ? (config?.browserInputFilters ?? config?.inputFilters ?? [])
+    : (config?.inputFilters ?? []);
   // Row group size is a Parquet concept, so it is shown only for the
   // GeoParquet writers — not for Raster to COG, which also has a compression
   // option.
@@ -384,18 +489,17 @@ export function ConversionDialog() {
     kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet";
 
   const checkRuntime = useCallback(async () => {
-    if (usesBrowserRuntime) {
+    if (usesBrowserRuntime && kind) {
       setRuntimeAvailable(true);
-      setRuntimeMessage("Conversion runs in your browser with DuckDB-WASM.");
+      setRuntimeMessage(i18n.t(browserRuntimeMessageKey(kind)));
       return;
     }
     if (!desktop) {
-      // FlatGeobuf / PMTiles have no in-browser writer and need the sidecar,
-      // which a pure web build cannot start.
+      // Only Vector to PMTiles reaches this: it is the one conversion with no
+      // client-side engine (see WEB_RUNTIME_KINDS), and a pure web build cannot
+      // start the sidecar it needs.
       setRuntimeAvailable(false);
-      setRuntimeMessage(
-        "This conversion needs the GeoLibre desktop app or a running sidecar.",
-      );
+      setRuntimeMessage(i18n.t("toolbar.conversion.needsDesktop"));
       return;
     }
     setRuntimeAvailable(null);
@@ -426,6 +530,8 @@ export function ConversionDialog() {
     setLayerName("data");
     setMinZoom("0");
     setMaxZoom("14");
+    setColormap("viridis");
+    setResampling("bilinear");
     setError(null);
     setJob(null);
     void checkRuntime();
@@ -484,7 +590,7 @@ export function ConversionDialog() {
     // Allow multi-select so Shapefile sidecars (.dbf/.shx/.prj/.cpg) can be
     // provided alongside the .shp file.
     input.multiple = true;
-    input.accept = config.inputFilters
+    input.accept = inputFilters
       .flatMap((filter) => filter.extensions)
       .concat([...SHAPEFILE_SIDECAR_EXTENSIONS])
       .map((extension) => `.${extension}`)
@@ -528,34 +634,36 @@ export function ConversionDialog() {
     if (path) setOutputPath(path);
   };
 
-  // In-browser path for the generic Vector to Vector tool: read any format with
-  // DuckDB-WASM (ST_Read), then write the subset the browser can produce by
-  // dispatching on the output extension. Arbitrary GDAL formats need the desktop
-  // sidecar; this is only reached on the web build.
-  const runBrowserVectorToVector = async (mainFile: File, siblings: File[]) => {
-    if (!kind) return;
-    const toolId = kind;
-    // The in-browser DuckDB reader cannot open a zipped Shapefile (ST_Read needs
-    // GDAL's /vsizip/, which only the sidecar uses); guide the user instead of
-    // failing deep in the loader. The desktop app reads .zip inputs directly.
-    if (fileExtension(mainFile.name) === "zip") {
-      setError(i18n.t("toolbar.conversion.zipInputBrowserError"));
-      return;
-    }
-    const outputName =
-      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
-    const outputExtension = fileExtension(outputName);
-    const format = browserExportFormatForExtension(outputExtension);
-    if (!format) {
-      setError(
-        outputExtension
-          ? i18n.t("toolbar.conversion.browserOutputUnsupported", {
-              extension: outputExtension,
-            })
-          : i18n.t("toolbar.conversion.outputExtensionRequired"),
-      );
-      return;
-    }
+  /** Read a browser-selected file into the {name, data} shape the WASM tools take. */
+  const toWasmFile = async (file: File) => ({
+    name: file.name,
+    data: new Uint8Array(await file.arrayBuffer()),
+  });
+
+  // The in-browser DuckDB reader cannot open a zipped Shapefile (ST_Read needs
+  // GDAL's /vsizip/, which only the sidecar uses); guide the user instead of
+  // failing deep in the loader. The desktop app reads .zip inputs directly.
+  const rejectZipInput = (mainFile: File): boolean => {
+    if (fileExtension(mainFile.name) !== "zip") return false;
+    setError(i18n.t("toolbar.conversion.zipInputBrowserError"));
+    return true;
+  };
+
+  /**
+   * Read any vector input to GeoJSON with DuckDB-WASM, then hand it to one of the
+   * bundled JS writers. Backs in-browser Vector to Vector as well as the
+   * fixed-format Shapefile/GeoPackage writers.
+   *
+   * Returns once the job state has been set; `null` from the loader means the
+   * user declined the large-dataset prompt.
+   */
+  const runBrowserVectorExport = async (
+    toolId: ConversionToolKind,
+    mainFile: File,
+    siblings: File[],
+    format: NonNullable<ReturnType<typeof browserExportFormatForExtension>>,
+    outputName: string,
+  ) => {
     setError(null);
     setJob(
       browserConversionJob(toolId, "running", [
@@ -625,6 +733,207 @@ export function ConversionDialog() {
     }
   };
 
+  /**
+   * In-browser vector conversion through geolibre-wasm's `vector_convert`, for
+   * the formats the JS writers do not cover (FlatGeobuf). Unlike the DuckDB
+   * path this streams the file straight into the WASI tool, so it never
+   * materializes a GeoJSON copy.
+   */
+  const runBrowserVectorViaWasm = async (
+    toolId: ConversionToolKind,
+    mainFile: File,
+    siblings: File[],
+    outputName: string,
+  ) => {
+    setError(null);
+    setJob(
+      browserConversionJob(toolId, "running", [
+        i18n.t("toolbar.conversion.convertingWithWasm", { name: mainFile.name }),
+      ]),
+    );
+    try {
+      const { convertVectorWithWasm } = await import("@geolibre/processing");
+      const result = await convertVectorWithWasm(
+        await toWasmFile(mainFile),
+        outputName,
+        await Promise.all(siblings.map(toWasmFile)),
+      );
+      const extension = fileExtension(outputName);
+      const format = WASM_VECTOR_OUTPUT_FORMATS[extension];
+      const savedName = await saveBinaryFileWithFallback(result.data, {
+        defaultName: outputName,
+        filters: config?.outputFilters ?? [],
+        mimeType: format?.mimeType ?? "application/octet-stream",
+        browserTypes: format
+          ? [
+              {
+                description: format.description,
+                accept: { [format.mimeType]: [`.${extension}`] },
+              },
+            ]
+          : [],
+      });
+      setJob(
+        browserConversionJob(toolId, "succeeded", [
+          ...result.messages,
+          savedName
+            ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
+            : i18n.t("toolbar.conversion.saveCanceled"),
+        ]),
+      );
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message : "Could not convert this file.";
+      setJob(browserConversionJob(toolId, "failed", [detail], detail));
+    }
+  };
+
+  // In-browser path for the generic Vector to Vector tool: dispatch on the
+  // output extension to whichever client-side engine can write it. Arbitrary
+  // GDAL formats (KML, GML, …) still need the desktop sidecar.
+  const runBrowserVectorToVector = async (mainFile: File, siblings: File[]) => {
+    if (!kind || rejectZipInput(mainFile)) return;
+    const outputName =
+      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    const outputExtension = fileExtension(outputName);
+    if (WASM_VECTOR_OUTPUT_EXTENSIONS.has(outputExtension)) {
+      await runBrowserVectorViaWasm(kind, mainFile, siblings, outputName);
+      return;
+    }
+    const format = browserExportFormatForExtension(outputExtension);
+    if (!format) {
+      setError(
+        outputExtension
+          ? i18n.t("toolbar.conversion.browserOutputUnsupported", {
+              extension: outputExtension,
+            })
+          : i18n.t("toolbar.conversion.outputExtensionRequired"),
+      );
+      return;
+    }
+    await runBrowserVectorExport(kind, mainFile, siblings, format, outputName);
+  };
+
+  /** In-browser Raster to COG via geolibre-wasm's CogBuilder. */
+  const runBrowserRasterToCog = async (mainFile: File) => {
+    if (!kind) return;
+    const toolId = kind;
+    const outputName =
+      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    setError(null);
+    setJob(
+      browserConversionJob(toolId, "running", [
+        i18n.t("toolbar.conversion.convertingWithWasm", { name: mainFile.name }),
+      ]),
+    );
+    try {
+      const { convertGeoTiffToCog, readGeoTiffInfo } = await import(
+        "@geolibre/processing"
+      );
+      const bytes = new Uint8Array(await mainFile.arrayBuffer());
+      // Header-only read: cheap, and it lets us report the shape and warn about
+      // an already-tiled input before decoding any pixels.
+      const info = await readGeoTiffInfo(bytes);
+      if (!info.ok) {
+        throw new Error(i18n.t("toolbar.conversion.notAGeoTiff"));
+      }
+      const data = await convertGeoTiffToCog(bytes, {
+        compression: compression as CogWasmCompression,
+      });
+      const savedName = await saveBinaryFileWithFallback(data, {
+        defaultName: outputName,
+        filters: config?.outputFilters ?? [],
+        mimeType: GEOTIFF_MIME_TYPE,
+        browserTypes: [
+          {
+            description: "GeoTIFF",
+            accept: { [GEOTIFF_MIME_TYPE]: [".tif", ".tiff"] },
+          },
+        ],
+      });
+      setJob(
+        browserConversionJob(toolId, "succeeded", [
+          i18n.t("toolbar.conversion.rasterShape", {
+            width: info.width,
+            height: info.height,
+            bands: info.bands,
+          }),
+          i18n.t("toolbar.conversion.wroteCog", { compression }),
+          savedName
+            ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
+            : i18n.t("toolbar.conversion.saveCanceled"),
+        ]),
+      );
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message : "Could not convert this file.";
+      setJob(browserConversionJob(toolId, "failed", [detail], detail));
+    }
+  };
+
+  /** Raster to PMTiles via geolibre-wasm's `write_pmtiles`, on web and desktop. */
+  const runBrowserRasterToPmtiles = async (mainFile: File) => {
+    if (!kind) return;
+    const toolId = kind;
+    const parsedMin = Number.parseInt(minZoom, 10);
+    const parsedMax = Number.parseInt(maxZoom, 10);
+    if (
+      !Number.isFinite(parsedMin) ||
+      !Number.isFinite(parsedMax) ||
+      parsedMin < 0 ||
+      parsedMin > parsedMax ||
+      parsedMax > 24
+    ) {
+      setError(i18n.t("toolbar.conversion.zoomRangeError"));
+      return;
+    }
+    const outputName =
+      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    setError(null);
+    setJob(
+      browserConversionJob(toolId, "running", [
+        i18n.t("toolbar.conversion.convertingWithWasm", { name: mainFile.name }),
+      ]),
+    );
+    try {
+      const { renderRasterToPmtiles } = await import("@geolibre/processing");
+      const result = await renderRasterToPmtiles(
+        await toWasmFile(mainFile),
+        outputName,
+        {
+          minZoom: parsedMin,
+          maxZoom: parsedMax,
+          band: 1,
+          colormap,
+          method: resampling,
+        },
+      );
+      const savedName = await saveBinaryFileWithFallback(result.data, {
+        defaultName: outputName,
+        filters: config?.outputFilters ?? [],
+        mimeType: PMTILES_MIME_TYPE,
+        browserTypes: [
+          {
+            description: "PMTiles",
+            accept: { [PMTILES_MIME_TYPE]: [".pmtiles"] },
+          },
+        ],
+      });
+      setJob(
+        browserConversionJob(toolId, "succeeded", [
+          ...result.messages,
+          savedName
+            ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
+            : i18n.t("toolbar.conversion.saveCanceled"),
+        ]),
+      );
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message : "Could not convert this file.";
+      setJob(browserConversionJob(toolId, "failed", [detail], detail));
+    }
+  };
+
   const runBrowserConversion = async () => {
     // Only reached when usesBrowserRuntime is true, which requires a kind.
     if (!kind) return;
@@ -636,6 +945,35 @@ export function ConversionDialog() {
     }
     if (kind === "vector-to-vector") {
       await runBrowserVectorToVector(mainFile, siblings);
+      return;
+    }
+    if (kind === "raster-to-cog") {
+      await runBrowserRasterToCog(mainFile);
+      return;
+    }
+    if (kind === "raster-to-pmtiles") {
+      await runBrowserRasterToPmtiles(mainFile);
+      return;
+    }
+    if (kind === "vector-to-flatgeobuf") {
+      if (rejectZipInput(mainFile)) return;
+      await runBrowserVectorViaWasm(
+        kind,
+        mainFile,
+        siblings,
+        outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name),
+      );
+      return;
+    }
+    if (kind === "vector-to-shapefile" || kind === "vector-to-geopackage") {
+      if (rejectZipInput(mainFile)) return;
+      await runBrowserVectorExport(
+        kind,
+        mainFile,
+        siblings,
+        kind === "vector-to-shapefile" ? "shapefile" : "geopackage",
+        outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name),
+      );
       return;
     }
     const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
@@ -811,8 +1149,13 @@ export function ConversionDialog() {
             max_zoom: parsedMax,
           }),
         );
-      } else {
+      } else if (kind === "raster-to-cog") {
         setJob(await runRasterToCog({ input_path, output_path, compression }));
+      } else {
+        // raster-to-pmtiles is the only remaining kind and has no sidecar
+        // endpoint; conversionUsesBrowserRuntime always routes it to the WASM
+        // path above, so reaching here means those two have drifted apart.
+        setError(`${kind} has no sidecar conversion.`);
       }
     } catch (err) {
       setError(
@@ -837,6 +1180,9 @@ export function ConversionDialog() {
         </DialogHeader>
 
         <div className="grid gap-4">
+          {usesBrowserRuntime && config?.browserNote && (
+            <p className="text-xs text-muted-foreground">{config.browserNote}</p>
+          )}
           {runtimeAvailable === false && (
             <div className="grid gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
               <p className="flex items-start gap-2 text-sm text-destructive">
@@ -889,7 +1235,7 @@ export function ConversionDialog() {
                 <FolderOpen className="h-4 w-4" />
               </Button>
             </div>
-            {usesBrowserRuntime && !isCsv && (
+            {usesBrowserRuntime && !isCsv && !isRasterInput && (
               <p className="text-xs text-muted-foreground">
                 For Shapefiles, select the .shp together with its .dbf, .shx,
                 and .prj files.
@@ -991,7 +1337,7 @@ export function ConversionDialog() {
                   value={compression}
                   onChange={(event) => setCompression(event.target.value)}
                 >
-                  {(config?.compressions ?? []).map((option) => (
+                  {(compressionOptions ?? []).map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
@@ -1038,6 +1384,65 @@ export function ConversionDialog() {
                 <Label htmlFor="conversion-max-zoom">Max zoom</Label>
                 <Input
                   id="conversion-max-zoom"
+                  inputMode="numeric"
+                  value={maxZoom}
+                  onChange={(event) => setMaxZoom(event.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
+          {isRasterPmtiles && (
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5rem_5rem] gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-colormap">
+                  {t("toolbar.conversion.colormap")}
+                </Label>
+                <Select
+                  id="conversion-colormap"
+                  value={colormap}
+                  onChange={(event) =>
+                    setColormap(event.target.value as PmtilesColormap)
+                  }
+                >
+                  {PMTILES_COLORMAPS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-resampling">
+                  {t("toolbar.conversion.resampling")}
+                </Label>
+                <Select
+                  id="conversion-resampling"
+                  value={resampling}
+                  onChange={(event) =>
+                    setResampling(event.target.value as PmtilesResamplingMethod)
+                  }
+                >
+                  {PMTILES_RESAMPLING_METHODS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-raster-min-zoom">Min zoom</Label>
+                <Input
+                  id="conversion-raster-min-zoom"
+                  inputMode="numeric"
+                  value={minZoom}
+                  onChange={(event) => setMinZoom(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-raster-max-zoom">Max zoom</Label>
+                <Input
+                  id="conversion-raster-max-zoom"
                   inputMode="numeric"
                   value={maxZoom}
                   onChange={(event) => setMaxZoom(event.target.value)}

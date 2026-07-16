@@ -137,6 +137,10 @@ export const CONVERSION_COMMANDS: Array<{
   },
   { kind: "csv-to-geoparquet", titleKey: "toolbar.conversion.csvToGeoparquet" },
   { kind: "vector-to-pmtiles", titleKey: "toolbar.conversion.vectorToPmtiles" },
+  {
+    kind: "raster-to-pmtiles",
+    titleKey: "toolbar.conversion.rasterToPmtiles",
+  },
   { kind: "raster-to-cog", titleKey: "toolbar.conversion.rasterToCog" },
 ];
 

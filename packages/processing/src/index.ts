@@ -170,8 +170,23 @@ export {
   readGeoTiffInfo,
   isTiledGeoTiff,
   convertGeoTiffToCog,
+  COG_WASM_COMPRESSIONS,
+  type CogWasmCompression,
+  type ConvertGeoTiffToCogOptions,
   type GeoTiffInfo,
 } from "./cog-convert";
+export {
+  convertVectorWithWasm,
+  initConvertTools,
+  renderRasterToPmtiles,
+  PMTILES_COLORMAPS,
+  PMTILES_RESAMPLING_METHODS,
+  type PmtilesColormap,
+  type PmtilesResamplingMethod,
+  type RasterToPmtilesOptions,
+  type WasmConvertFile,
+  type WasmConvertResult,
+} from "./wasm-convert";
 export {
   extractPmtiles,
   pmtilesTileTypeKind,

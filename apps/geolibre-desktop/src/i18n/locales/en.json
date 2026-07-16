@@ -1725,7 +1725,7 @@
     "conversion": {
       "vectorToVector": "Vector to Vector",
       "zipInputBrowserError": "Zipped Shapefiles can only be converted in the GeoLibre desktop app. In the browser, select the unzipped .shp together with its .dbf, .shx, and .prj files.",
-      "browserOutputUnsupported": "In the browser, the output can be GeoJSON, CSV, GeoParquet, GeoPackage, or Shapefile (.zip). \".{{extension}}\" output needs the GeoLibre desktop app.",
+      "browserOutputUnsupported": "In the browser, the output can be GeoJSON, CSV, GeoParquet, GeoPackage, FlatGeobuf, or Shapefile (.zip). \".{{extension}}\" output needs the GeoLibre desktop app.",
       "outputExtensionRequired": "Add a file extension to the output name to choose the format.",
       "readingWithDuckDb": "Reading {{name}} with DuckDB-WASM",
       "readFeatures": "Read {{features}} features from {{name}}",
@@ -1737,7 +1737,19 @@
       "vectorToGeopackage": "Vector to GeoPackage",
       "csvToGeoparquet": "CSV to GeoParquet",
       "vectorToPmtiles": "Vector to PMTiles",
-      "rasterToCog": "Raster to COG"
+      "rasterToCog": "Raster to COG",
+      "rasterToPmtiles": "Raster to PMTiles",
+      "needsDesktop": "This conversion needs the GeoLibre desktop app or a running sidecar.",
+      "runsInBrowserDuckDb": "Conversion runs in your browser with DuckDB-WASM.",
+      "runsInBrowserWriters": "Conversion runs in your browser with DuckDB-WASM and the bundled writers.",
+      "runsInBrowserWasm": "Conversion runs in your browser with geolibre-wasm. No sidecar needed.",
+      "convertingWithWasm": "Converting {{name}} with geolibre-wasm",
+      "rasterShape": "Read {{width}}×{{height}} raster with {{bands}} band(s)",
+      "wroteCog": "Wrote a tiled COG with overviews ({{compression}})",
+      "notAGeoTiff": "This file is not a readable GeoTIFF. In the browser, Raster to COG reads GeoTIFF only; other formats need the desktop app.",
+      "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ 24.",
+      "colormap": "Colormap",
+      "resampling": "Resampling"
     },
     "vectorTool": {
       "buffer": "Buffer",
