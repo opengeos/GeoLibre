@@ -91,6 +91,21 @@ describe("wasm-convert", () => {
       );
     });
 
+    // The driver comes purely from the output extension, which is why the
+    // fixed-format Vector to FlatGeobuf tool forces .fgb on the name it passes
+    // rather than trusting whatever the user typed.
+    it("picks the driver from the output extension, not the input", async () => {
+      const result = await convertVectorWithWasm(
+        { name: "points.geojson", data: pointsGeoJson },
+        "points.gpkg",
+      );
+      assert.equal(
+        new TextDecoder().decode(result.data.subarray(0, 15)),
+        "SQLite format 3",
+        "a .gpkg output name should yield a GeoPackage",
+      );
+    });
+
     // The tools report failures via exit code + a trailing stdout line rather
     // than by throwing, so the wrapper has to turn that into a real Error.
     it("surfaces the tool's own message when the output format is unsupported", async () => {
@@ -157,6 +172,28 @@ describe("wasm-convert", () => {
         viridis.data,
         magma.data,
         "a different colormap should change the rendered tiles",
+      );
+    });
+
+    // Raster to PMTiles leaves the zoom inputs blank by default so the tool
+    // renders a single native zoom for the raster's resolution, instead of the
+    // dialog forcing the 0-14 pyramid Vector to PMTiles uses.
+    it("renders the native zoom when the range is omitted", async () => {
+      const native = await renderRasterToPmtiles(
+        { name: "dem.tif", data: stripedTiff },
+        "native.pmtiles",
+        {},
+      );
+      assert.ok(hasMagic(native.data, PMTILES_MAGIC));
+
+      const pyramid = await renderRasterToPmtiles(
+        { name: "dem.tif", data: stripedTiff },
+        "pyramid.pmtiles",
+        { minZoom: 0, maxZoom: 14 },
+      );
+      assert.ok(
+        native.data.byteLength < pyramid.data.byteLength,
+        `native (${native.data.byteLength}) should be smaller than a forced 0-14 pyramid (${pyramid.data.byteLength})`,
       );
     });
 

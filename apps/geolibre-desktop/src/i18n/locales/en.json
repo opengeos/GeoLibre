@@ -1750,7 +1750,8 @@
       "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ 24.",
       "colormap": "Colormap",
       "resampling": "Resampling",
-      "colormapDefault": "Default (viridis)"
+      "colormapDefault": "Default (viridis)",
+      "zoomNative": "native"
     },
     "vectorTool": {
       "buffer": "Buffer",

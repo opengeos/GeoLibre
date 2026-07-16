@@ -297,6 +297,45 @@ const WASM_VECTOR_OUTPUT_EXTENSIONS = new Set(
   Object.keys(WASM_VECTOR_OUTPUT_FORMATS),
 );
 
+/** Deepest zoom either PMTiles tool accepts. */
+const MAX_PMTILES_ZOOM = 24;
+
+/** A parsed zoom range; an undefined bound was left blank by the user. */
+interface PmtilesZoomRange {
+  minZoom?: number;
+  maxZoom?: number;
+}
+
+/**
+ * Parse the shared min/max zoom inputs, enforcing `0 ≤ min ≤ max ≤ 24`. Blank
+ * means "unset" and is returned as undefined — Vector to PMTiles rejects that
+ * (the sidecar requires both), while Raster to PMTiles passes it through so
+ * `write_pmtiles` applies its own native-resolution default.
+ *
+ * @returns The parsed bounds, or null when the input is out of range.
+ */
+function parseZoomRange(
+  rawMin: string,
+  rawMax: string,
+): PmtilesZoomRange | null {
+  const parse = (raw: string): number | null | undefined => {
+    const text = raw.trim();
+    if (!text) return undefined;
+    const value = Number.parseInt(text, 10);
+    if (!Number.isFinite(value) || value < 0 || value > MAX_PMTILES_ZOOM) {
+      return null;
+    }
+    return value;
+  };
+  const minZoom = parse(rawMin);
+  const maxZoom = parse(rawMax);
+  if (minZoom === null || maxZoom === null) return null;
+  if (minZoom !== undefined && maxZoom !== undefined && minZoom > maxZoom) {
+    return null;
+  }
+  return { minZoom, maxZoom };
+}
+
 /** Names the engine backing a tool's client-side path, for the status line. */
 function browserRuntimeMessageKey(kind: ConversionToolKind): ParseKeys {
   switch (kind) {
@@ -517,7 +556,7 @@ export function ConversionDialog() {
         err instanceof Error ? err.message : "Could not connect to sidecar.",
       );
     }
-  }, [desktop, usesBrowserRuntime]);
+  }, [desktop, kind, usesBrowserRuntime]);
 
   // Reset per-tool state when the dialog opens or the tool changes.
   useEffect(() => {
@@ -531,8 +570,12 @@ export function ConversionDialog() {
     setLatColumn("latitude");
     setCsvColumns([]);
     setLayerName("data");
-    setMinZoom("0");
-    setMaxZoom("14");
+    // Vector to PMTiles tiles the whole pyramid and its sidecar needs explicit
+    // bounds; Raster to PMTiles starts blank so write_pmtiles picks the zoom
+    // matching the raster's own resolution.
+    const rasterPmtiles = kind === "raster-to-pmtiles";
+    setMinZoom(rasterPmtiles ? "" : "0");
+    setMaxZoom(rasterPmtiles ? "" : "14");
     setColormap("");
     setResampling("bilinear");
     setError(null);
@@ -878,15 +921,8 @@ export function ConversionDialog() {
   const runBrowserRasterToPmtiles = async (mainFile: File) => {
     if (!kind) return;
     const toolId = kind;
-    const parsedMin = Number.parseInt(minZoom, 10);
-    const parsedMax = Number.parseInt(maxZoom, 10);
-    if (
-      !Number.isFinite(parsedMin) ||
-      !Number.isFinite(parsedMax) ||
-      parsedMin < 0 ||
-      parsedMin > parsedMax ||
-      parsedMax > 24
-    ) {
+    const zooms = parseZoomRange(minZoom, maxZoom);
+    if (!zooms) {
       setError(i18n.t("toolbar.conversion.zoomRangeError"));
       return;
     }
@@ -899,13 +935,23 @@ export function ConversionDialog() {
       ]),
     );
     try {
-      const { renderRasterToPmtiles } = await import("@geolibre/processing");
+      const { readGeoTiffInfo, renderRasterToPmtiles } = await import(
+        "@geolibre/processing"
+      );
+      const bytes = new Uint8Array(await mainFile.arrayBuffer());
+      // Header-only check, matching runBrowserRasterToCog: a non-TIFF would
+      // otherwise surface write_pmtiles' raw "unknown raster format" text.
+      if (!(await readGeoTiffInfo(bytes)).ok) {
+        throw new Error(i18n.t("toolbar.conversion.notAGeoTiff"));
+      }
       const result = await renderRasterToPmtiles(
-        await toWasmFile(mainFile),
+        { name: mainFile.name, data: bytes },
         outputName,
         {
-          minZoom: parsedMin,
-          maxZoom: parsedMax,
+          // Blank bounds are omitted so write_pmtiles picks the native zoom for
+          // the raster's resolution, rather than this dialog forcing a 0-14
+          // pyramid that a wide-extent raster would take a long time to render.
+          ...zooms,
           band: 1,
           // Omitted when unset, so the tool applies its own default.
           colormap: colormap || undefined,
@@ -961,11 +1007,18 @@ export function ConversionDialog() {
     }
     if (kind === "vector-to-flatgeobuf") {
       if (rejectZipInput(mainFile)) return;
+      // vector_convert picks its driver from the output extension, but this tool
+      // is fixed-format: force .fgb so a typed name like "data.gpkg" cannot
+      // silently produce a GeoPackage under the "Vector to FlatGeobuf" title.
+      // The sidecar forces output_format="flatgeobuf" for the same reason, and
+      // the Shapefile/GeoPackage branches below hard-code their format too.
+      const requested =
+        outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
       await runBrowserVectorViaWasm(
         kind,
         mainFile,
         siblings,
-        outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name),
+        `${stripExtension(requested) || "output"}.fgb`,
       );
       return;
     }
@@ -1132,16 +1185,15 @@ export function ConversionDialog() {
           }),
         );
       } else if (kind === "vector-to-pmtiles") {
-        const parsedMin = Number.parseInt(minZoom, 10);
-        const parsedMax = Number.parseInt(maxZoom, 10);
+        // Unlike Raster to PMTiles, the sidecar requires both bounds, so a blank
+        // (undefined) one is an error rather than a "let the engine decide".
+        const zooms = parseZoomRange(minZoom, maxZoom);
         if (
-          !Number.isFinite(parsedMin) ||
-          !Number.isFinite(parsedMax) ||
-          parsedMin < 0 ||
-          parsedMin > parsedMax ||
-          parsedMax > 24
+          !zooms ||
+          zooms.minZoom === undefined ||
+          zooms.maxZoom === undefined
         ) {
-          setError("Zoom levels must satisfy 0 ≤ min ≤ max ≤ 24.");
+          setError(i18n.t("toolbar.conversion.zoomRangeError"));
           return;
         }
         setJob(
@@ -1149,8 +1201,8 @@ export function ConversionDialog() {
             input_path,
             output_path,
             layer_name: layerName.trim() || "data",
-            min_zoom: parsedMin,
-            max_zoom: parsedMax,
+            min_zoom: zooms.minZoom,
+            max_zoom: zooms.maxZoom,
           }),
         );
       } else if (kind === "raster-to-cog") {
@@ -1443,6 +1495,7 @@ export function ConversionDialog() {
                   id="conversion-raster-min-zoom"
                   inputMode="numeric"
                   value={minZoom}
+                  placeholder={t("toolbar.conversion.zoomNative")}
                   onChange={(event) => setMinZoom(event.target.value)}
                 />
               </div>
@@ -1452,6 +1505,7 @@ export function ConversionDialog() {
                   id="conversion-raster-max-zoom"
                   inputMode="numeric"
                   value={maxZoom}
+                  placeholder={t("toolbar.conversion.zoomNative")}
                   onChange={(event) => setMaxZoom(event.target.value)}
                 />
               </div>
