@@ -163,7 +163,7 @@ function assertToolSucceeded(tool: string, result: ToolResult): void {
  */
 function appendFlags(
   args: string[],
-  flags: Array<[string, number | string | boolean | undefined]>,
+  flags: Array<[string, number | string | undefined]>,
 ): void {
   for (const [name, value] of flags) {
     if (value !== undefined) args.push(`--${name}=${value}`);
@@ -304,6 +304,11 @@ export async function renderRasterToPmtiles(
  */
 export const MAX_VECTOR_PMTILES_ZOOM = 18;
 
+// `vector_to_pmtiles` also takes --simplify and --drop_rate. They are left out
+// until something asks for them: the tool ignores an unrecognized flag or value
+// silently (--simplify=0 and --simplify=banana both produce the byte-identical
+// default output), so an option here can only be trusted once a caller and a
+// test pin its effect down.
 export interface VectorToPmtilesOptions {
   /** Minimum zoom. Defaults to 0. */
   minZoom?: number;
@@ -311,10 +316,6 @@ export interface VectorToPmtilesOptions {
   maxZoom?: number;
   /** Layer name inside the tiles, used when styling. Defaults to the input layer's name. */
   layerName?: string;
-  /** Simplify geometries per zoom level. Defaults to true. */
-  simplify?: boolean;
-  /** Tippecanoe-style rate at which features are dropped at low zooms. Defaults to no dropping. */
-  dropRate?: number;
 }
 
 /**
@@ -335,7 +336,7 @@ export interface VectorToPmtilesOptions {
  *
  * @param input - The main input file (name + bytes).
  * @param outputName - Output archive name, e.g. `roads.pmtiles`.
- * @param options - Zoom range, layer name, simplification, and drop rate.
+ * @param options - Zoom range and layer name.
  * @param siblings - Companion files for multi-file formats.
  * @returns The PMTiles bytes and the tool's log lines.
  */
@@ -350,8 +351,6 @@ export async function tileVectorToPmtiles(
     ["min_zoom", options.minZoom],
     ["max_zoom", options.maxZoom],
     ["layer_name", options.layerName],
-    ["simplify", options.simplify],
-    ["drop_rate", options.dropRate],
   ]);
   const files: Record<string, Uint8Array> = { [input.name]: input.data };
   for (const sibling of siblings) files[sibling.name] = sibling.data;
