@@ -346,17 +346,17 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
                 layer.type === "wms" ||
                 layer.type === "wmts"
               ) {
-                // Match buildRasterTileSource's string filter so a malformed
-                // tiles array still falls through to the live-source recovery.
+                // Match buildRasterTileSource's embeddable-source filters so a
+                // record it would drop (app-protocol tiles, non-http url, a
+                // wms/wmts service endpoint in url) still falls through to the
+                // live-source recovery instead of short-circuiting here.
+                const isHttpUrl = (value: unknown): value is string =>
+                  typeof value === "string" && /^https?:\/\//i.test(value);
                 const hasTiles =
                   Array.isArray(layer.source.tiles) &&
-                  layer.source.tiles.some((tile) => typeof tile === "string");
-                // Match buildRasterTileSource's embeddable-URL filter: a
-                // non-http url (blob:, geolibre://) cannot load standalone, so
-                // still try to recover a live source for it.
+                  layer.source.tiles.some(isHttpUrl);
                 const hasEmbeddableUrl =
-                  typeof layer.source.url === "string" &&
-                  /^https?:\/\//i.test(layer.source.url);
+                  layer.type === "raster" && isHttpUrl(layer.source.url);
                 if (hasTiles || hasEmbeddableUrl) {
                   return layer;
                 }

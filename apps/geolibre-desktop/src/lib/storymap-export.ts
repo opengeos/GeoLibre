@@ -339,17 +339,20 @@ function buildRasterTileSource(
   ) {
     return null;
   }
+  // Only http(s) tile templates and TileJSON URLs can load in a standalone
+  // page; app-internal protocols (blob:, pmtiles:, geolibre:, …) have no
+  // handler there.
+  const isHttpUrl = (value: unknown): value is string =>
+    typeof value === "string" && /^https?:\/\//i.test(value);
   const tiles = Array.isArray(layer.source.tiles)
-    ? layer.source.tiles.filter((tile): tile is string => typeof tile === "string")
+    ? layer.source.tiles.filter(isHttpUrl)
     : [];
-  // Only an http(s) TileJSON URL can load in a standalone page; app-internal
-  // protocols (blob:, pmtiles:, geolibre:, …) have no handler there. Tiles win
-  // over the URL below because store records are not MapLibre source specs:
-  // WMS layers carry the raw service endpoint in `url` (not a TileJSON)
-  // alongside their GetMap tile template.
+  // The TileJSON `url` fallback is scoped to plain raster layers: wms/wmts
+  // records keep the raw service endpoint (not a TileJSON) in `url` — their
+  // loadable template lives in `tiles` — so embedding it would produce a
+  // source MapLibre cannot parse instead of just omitting the layer.
   const url =
-    typeof layer.source.url === "string" &&
-    /^https?:\/\//i.test(layer.source.url)
+    layer.type === "raster" && isHttpUrl(layer.source.url)
       ? layer.source.url
       : null;
   if (tiles.length === 0 && !url) return null;

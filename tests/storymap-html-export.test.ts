@@ -136,6 +136,47 @@ describe("buildStoryMapHtml raster sources", () => {
     }
   });
 
+  it("drops tile templates that are not http(s)", () => {
+    for (const tile of [
+      "blob:https://app.example/1234",
+      "pmtiles://https://example.com/a.pmtiles/{z}/{x}/{y}",
+      "geolibre://local/{z}/{x}/{y}.png",
+    ]) {
+      const html = buildStoryMapHtml({
+        storymap: story(),
+        basemapStyleUrl: "https://tiles.example.com/style.json",
+        layers: [rasterLayer("scene-a", { type: "raster", tiles: [tile] })],
+      });
+      assert.ok(
+        !html.includes("scene-a-source"),
+        `does not inline a source for ${tile}`,
+      );
+      assert.ok(
+        !html.includes('"layer": "scene-a"'),
+        `filters the chapter effects for ${tile}`,
+      );
+    }
+  });
+
+  it("does not embed a wms/wmts service endpoint as a TileJSON url", () => {
+    // WMS/WMTS records carry the raw service endpoint in `url` (not a
+    // TileJSON); with no usable tiles the layer must be omitted, not exported
+    // as a source MapLibre cannot parse.
+    const html = buildStoryMapHtml({
+      storymap: story(),
+      basemapStyleUrl: "https://tiles.example.com/style.json",
+      layers: [
+        rasterLayer(
+          "scene-a",
+          { type: "raster", url: "https://example.com/wms", tiles: [] },
+          { type: "wms" },
+        ),
+      ],
+    });
+    assert.ok(!html.includes("scene-a-source"));
+    assert.ok(!html.includes("https://example.com/wms"));
+  });
+
   it("drops raster layers with neither tiles nor url", () => {
     const html = buildStoryMapHtml({
       storymap: story(),

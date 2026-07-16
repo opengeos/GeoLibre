@@ -355,11 +355,17 @@ export function StoryMapHandoutDialog({
     // chapter being left, enter+exit each skipped chapter, then enter the
     // target. Duration 0 makes each change instant so the capture never grabs
     // a mid-fade frame.
-    let effectsApplied = false;
+    const effectsApplied = chapters.some(
+      (chapter) =>
+        chapter.onChapterEnter.length > 0 || chapter.onChapterExit.length > 0,
+    );
+    // Reset to the store-backed layer styles first so the replay starts from
+    // the same baseline as a fresh presentation, not whatever opacities a
+    // prior preview or presentation left on the live map.
+    if (effectsApplied) controller.restoreLayerStyles();
     const applyEffects = (changes: StoryChapter["onChapterEnter"]) => {
       for (const change of changes) {
         controller.setStoryLayerOpacity(change.layerId, change.opacity, 0);
-        effectsApplied = true;
       }
     };
     let lastChapterIndex = -1;
