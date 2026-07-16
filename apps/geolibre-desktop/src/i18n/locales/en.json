@@ -187,7 +187,7 @@
         "description": "Add a WMTS tile URL template as a raster layer."
       },
       "ogcVectorTiles": {
-        "label": "Add OGC Vector Tiles Layer",
+        "label": "Add OGC Vector Tiles",
         "description": "Add an OGC API - Tiles (vector) service from a TileJSON or tile template, optionally reading its source layers from a style URL."
       },
       "gpx": {
@@ -1658,7 +1658,7 @@
       "addZarrLayer": "Add Zarr Layer",
       "addNetcdfLayer": "Add NetCDF / HDF Layer",
       "addLidarLayer": "Add LiDAR Layer",
-      "addSplattingLayer": "Add Splatting Layer",
+      "addSplattingLayer": "Add Gaussian Splatting",
       "add3dTilesLayer": "Add 3D Tiles Layer",
       "addDuckdbLayer": "Add DuckDB Layer",
       "whiteboxTools": "Whitebox Tools",
@@ -1714,7 +1714,7 @@
       "wms": "WMS Layer",
       "wfs": "WFS Layer",
       "wmts": "WMTS Layer",
-      "ogcVectorTiles": "OGC Vector Tiles Layer",
+      "ogcVectorTiles": "OGC Vector Tiles",
       "arcgis": "ArcGIS Layer",
       "georss": "GeoRSS Layer",
       "video": "Video Layer",
@@ -1877,7 +1877,7 @@
       "clearRecentProjects": "Clear Recent Projects",
       "saveAsEllipsis": "Save As...",
       "shareEllipsis": "Share...",
-      "exportHtmlEllipsis": "Export as Interactive HTML...",
+      "exportHtmlEllipsis": "Export as HTML...",
       "htmlFile": "HTML",
       "collaborateEllipsis": "Collaborate...",
       "printEllipsis": "Print...",
@@ -1922,7 +1922,7 @@
       "zarrLayer": "Zarr Layer",
       "netcdfHdf": "NetCDF / HDF",
       "lidarLayer": "LiDAR Layer",
-      "splattingLayer": "Splatting Layer",
+      "splattingLayer": "Gaussian Splatting",
       "threeDTilesLayer": "3D Tiles Layer",
       "duckdbLayer": "DuckDB Layer",
       "whitebox": "Whitebox",
