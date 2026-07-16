@@ -326,14 +326,38 @@ export function StoryMapPanel({ mapControllerRef }: StoryMapPanelProps) {
       // URL-backed GeoJSON layers (remote GeoJSON, in-browser Parquet/Shapefile
       // conversion) keep their features only in the live MapLibre source, not in
       // the store record, so read them back so the export inlines the same data
-      // the map shows instead of dropping the layer (#936).
+      // the map shows instead of dropping the layer (#936). Service-backed
+      // raster layers (e.g. Planetary Computer scenes) likewise carry no tile
+      // or TileJSON URL in the store — their plugin registers the source on the
+      // map directly — so read the live raster source back too, or the export
+      // drops the imagery a chapter fades between (#1272).
       const controller = mapControllerRef.current;
       const layersForExport = controller
         ? await Promise.all(
             layers.map(async (layer) => {
-              if (layer.type !== "geojson" || layer.geojson) return layer;
-              const geojson = await controller.getLayerGeoJson(layer.id);
-              return geojson ? { ...layer, geojson } : layer;
+              if (layer.type === "geojson") {
+                if (layer.geojson) return layer;
+                const geojson = await controller.getLayerGeoJson(layer.id);
+                return geojson ? { ...layer, geojson } : layer;
+              }
+              if (
+                layer.type === "raster" ||
+                layer.type === "xyz" ||
+                layer.type === "wms" ||
+                layer.type === "wmts"
+              ) {
+                const hasTiles =
+                  Array.isArray(layer.source.tiles) &&
+                  layer.source.tiles.length > 0;
+                if (hasTiles || typeof layer.source.url === "string") {
+                  return layer;
+                }
+                const liveSource = controller.getLayerRasterSource(layer.id);
+                return liveSource
+                  ? { ...layer, source: { ...layer.source, ...liveSource } }
+                  : layer;
+              }
+              return layer;
             }),
           )
         : layers;

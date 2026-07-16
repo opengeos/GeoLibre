@@ -556,6 +556,51 @@ export class MapController {
   }
 
   /**
+   * Read the live MapLibre raster source spec backing a project layer.
+   *
+   * Service-backed raster layers registered by plugins (e.g. Planetary
+   * Computer scenes) carry no tile or TileJSON URL in their store record — the
+   * plugin builds the source directly on the map. Reading the live source back
+   * lets the story-map HTML export inline those layers instead of silently
+   * dropping them (#1272). Only http(s) URLs are returned; a source backed by
+   * an app-internal protocol (blob:, pmtiles:, geolibre:, …) cannot load in a
+   * standalone page.
+   *
+   * @param layerId GeoLibre store layer id.
+   * @returns The serialized raster source spec, or null when the layer has no
+   *   embeddable raster source.
+   */
+  getLayerRasterSource(layerId: string): Record<string, unknown> | null {
+    if (!this.map) return null;
+    const map = this.map;
+    for (const nativeId of this.getNativeLayerIdsByLayerId(layerId)) {
+      const styleLayer = map.getLayer(nativeId);
+      const sourceId =
+        styleLayer && "source" in styleLayer
+          ? (styleLayer as { source?: unknown }).source
+          : undefined;
+      if (typeof sourceId !== "string") continue;
+      const source = map.getSource(sourceId);
+      if (source?.type !== "raster") continue;
+      const spec = (source as maplibregl.RasterTileSource).serialize() as
+        | Record<string, unknown>
+        | undefined;
+      if (!spec || typeof spec !== "object") continue;
+      const httpUrl = (value: unknown): value is string =>
+        typeof value === "string" && /^https?:\/\//i.test(value);
+      const tiles = Array.isArray(spec.tiles)
+        ? spec.tiles.filter(httpUrl)
+        : [];
+      if (tiles.length > 0) return { ...spec, tiles };
+      if (httpUrl(spec.url)) {
+        const { tiles: _tiles, ...rest } = spec;
+        return rest;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Fade a project layer in or out for story-map playback.
    *
    * Story chapters change layer opacity as the reader scrolls. This writes the
@@ -565,7 +610,9 @@ export class MapController {
    *
    * @param layerId GeoLibre store layer id to fade.
    * @param opacity Target opacity, clamped to the 0-1 range.
-   * @param durationMs Optional transition duration in milliseconds.
+   * @param durationMs Optional transition duration in milliseconds. Pass 0 for
+   *   an instant change (overriding MapLibre's default 300 ms paint
+   *   transition); leave undefined to keep the default fade.
    */
   setStoryLayerOpacity(
     layerId: string,
@@ -579,7 +626,7 @@ export class MapController {
       if (!styleLayer) continue;
       const props = OPACITY_PAINT_PROPERTIES[styleLayer.type] ?? [];
       for (const prop of props) {
-        if (durationMs && durationMs > 0) {
+        if (typeof durationMs === "number" && durationMs >= 0) {
           this.map.setPaintProperty(nativeId, `${prop}-transition`, {
             duration: durationMs,
           });

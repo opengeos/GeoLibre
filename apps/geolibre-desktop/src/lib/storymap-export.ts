@@ -319,8 +319,12 @@ function buildInlineLayer(
 
 /**
  * Build a MapLibre raster tile source from a raster/XYZ/WMS/WMTS layer, or
- * `null` when the layer carries no tile URL template. Mirrors the live app's
- * external raster tile sync so basemaps and tile services render in the export.
+ * `null` when the layer carries no tile URL template or TileJSON URL. Mirrors
+ * the live app's external raster tile sync so basemaps and tile services
+ * render in the export. A TileJSON `url` covers service-backed rasters such as
+ * Planetary Computer scenes, whose tiler resolves and signs the actual tile
+ * URLs server-side at load time — so the export never embeds an expiring
+ * token (#1272).
  */
 function buildRasterTileSource(
   layer: GeoLibreLayer,
@@ -336,10 +340,17 @@ function buildRasterTileSource(
   const tiles = Array.isArray(layer.source.tiles)
     ? layer.source.tiles.filter((tile): tile is string => typeof tile === "string")
     : [];
-  if (tiles.length === 0) return null;
+  // Only an http(s) TileJSON URL can load in a standalone page; app-internal
+  // protocols (blob:, pmtiles:, geolibre:, …) have no handler there.
+  const url =
+    typeof layer.source.url === "string" &&
+    /^https?:\/\//i.test(layer.source.url)
+      ? layer.source.url
+      : null;
+  if (tiles.length === 0 && !url) return null;
   const source: Record<string, unknown> = {
     type: "raster",
-    tiles,
+    ...(tiles.length > 0 ? { tiles } : { url }),
     tileSize:
       typeof layer.source.tileSize === "number" ? layer.source.tileSize : 256,
   };

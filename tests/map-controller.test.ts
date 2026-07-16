@@ -76,6 +76,9 @@ function makeFakeMap(initialBasemapLayers: string[] = ["basemap-bg"]): {
         ? {
             type: (sources.get(id)?.type as string) ?? "geojson",
             bounds: sources.get(id)?.bounds,
+            // Mirrors RasterTileSource.serialize(): a copy of the original
+            // source spec, used by getLayerRasterSource.
+            serialize: () => ({ ...sources.get(id) }),
             setData: (data: unknown) => {
               const spec = sources.get(id);
               if (spec) spec.data = data;
@@ -931,5 +934,106 @@ describe("MapController base-layer label", () => {
       controller.destroy();
       assert.deepEqual(win.__GEOLIBRE_LAYER_LABELS__, {});
     });
+  });
+});
+
+describe("MapController story-map layer helpers", () => {
+  /**
+   * Register a plugin-owned native raster layer + source on the fake map, the
+   * way the Planetary Computer control does (outside syncLayers), and inject
+   * the matching store layer so getNativeLayerIdsByLayerId resolves it.
+   */
+  function externalRasterSetup(sourceSpec: Record<string, unknown>) {
+    const { map, fake } = makeFakeMap();
+    const controller = controllerWith(map);
+    fake.sources.set("pc-1-source", sourceSpec);
+    fake.layers.set("pc-1", {
+      id: "pc-1",
+      type: "raster",
+      source: "pc-1-source",
+      paint: {},
+    });
+    fake.order.push("pc-1");
+    const layer = rasterLayer("pc-1", {
+      // Planetary Computer store records carry no tiles/url; the live source
+      // is the only place the TileJSON URL exists.
+      source: { type: "raster" },
+      metadata: {
+        externalNativeLayer: true,
+        nativeLayerIds: ["pc-1"],
+        sourceId: "pc-1-source",
+      },
+    });
+    internals(controller).syncedLayers = [layer];
+    return { controller, fake };
+  }
+
+  it("reads a live TileJSON raster source back for the HTML export (#1272)", () => {
+    const tilejson =
+      "https://planetarycomputer.microsoft.com/api/data/v1/item/tilejson.json?collection=sentinel-2-l2a&item=S2A&assets=visual";
+    const { controller } = externalRasterSetup({
+      type: "raster",
+      url: tilejson,
+      tileSize: 256,
+      bounds: [76.8, 12.5, 77.9, 13.6],
+      attribution: "Microsoft Planetary Computer",
+    });
+
+    const spec = controller.getLayerRasterSource("pc-1");
+    assert.ok(spec, "returns the live source spec");
+    assert.equal(spec.url, tilejson);
+    assert.equal(spec.tileSize, 256);
+    assert.deepEqual(spec.bounds, [76.8, 12.5, 77.9, 13.6]);
+  });
+
+  it("keeps only http(s) tile templates and drops non-embeddable urls", () => {
+    const { controller } = externalRasterSetup({
+      type: "raster",
+      tiles: [
+        "https://tiles.example.com/{z}/{x}/{y}.png",
+        "geolibre://local/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+    });
+    const spec = controller.getLayerRasterSource("pc-1");
+    assert.ok(spec);
+    assert.deepEqual(spec.tiles, ["https://tiles.example.com/{z}/{x}/{y}.png"]);
+
+    const blobBacked = externalRasterSetup({
+      type: "raster",
+      url: "blob:https://app.example/1234",
+    });
+    assert.equal(blobBacked.controller.getLayerRasterSource("pc-1"), null);
+  });
+
+  it("returns null for layers without a live raster source", () => {
+    const { map } = makeFakeMap();
+    const controller = controllerWith(map);
+    const layer = pointLayer("a");
+    internals(controller).syncedLayers = [layer];
+    assert.equal(controller.getLayerRasterSource("a"), null);
+    assert.equal(controller.getLayerRasterSource("missing"), null);
+  });
+
+  it("setStoryLayerOpacity applies an explicit 0 duration as an instant change", () => {
+    const { controller, fake } = externalRasterSetup({ type: "raster" });
+
+    controller.setStoryLayerOpacity("pc-1", 0.4, 0);
+
+    const paint = fake.layers.get("pc-1")?.paint as Record<string, unknown>;
+    assert.equal(paint["raster-opacity"], 0.4);
+    // The explicit 0 must override MapLibre's default 300 ms paint transition,
+    // or the handout capture grabs a mid-fade frame.
+    assert.deepEqual(paint["raster-opacity-transition"], { duration: 0 });
+  });
+
+  it("setStoryLayerOpacity leaves the default transition when no duration is given", () => {
+    const { controller, fake } = externalRasterSetup({ type: "raster" });
+
+    controller.setStoryLayerOpacity("pc-1", 0.4);
+
+    const paint = fake.layers.get("pc-1")?.paint as Record<string, unknown>;
+    assert.equal(paint["raster-opacity"], 0.4);
+    assert.equal(paint["raster-opacity-transition"], undefined);
   });
 });
