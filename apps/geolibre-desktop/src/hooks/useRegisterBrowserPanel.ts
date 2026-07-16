@@ -35,16 +35,29 @@ export function useRegisterBrowserPanel(): void {
   useEffect(() => {
     // i18n.t (not the useTranslation hook) so registration carries no
     // render-time dependency; the body still localizes live via useTranslation.
-    const dispose = registerRightPanel({
-      id: BROWSER_PANEL_ID,
-      title: i18n.t("browser.title"),
-      dock: "replace-layers",
-      render: () => {},
-    });
+    const register = () =>
+      registerRightPanel({
+        id: BROWSER_PANEL_ID,
+        title: i18n.t("browser.title"),
+        dock: "replace-layers",
+        render: () => {},
+      });
+    let dispose = register();
     // Default on, but docked collapsed to the Layers rail (open then collapse),
     // so it is present without burying the map on first load.
     openRightPanel(BROWSER_PANEL_ID);
     collapseRightPanel(BROWSER_PANEL_ID);
-    return dispose;
+    // Re-register with the localized title when the language changes, so the
+    // header/rail label updates live instead of only after a page reload.
+    // Re-registration replaces the registry entry in place, keeping the panel's
+    // open/collapsed/dock state, so we neither re-open nor re-collapse here.
+    const onLanguageChanged = () => {
+      dispose = register();
+    };
+    i18n.on("languageChanged", onLanguageChanged);
+    return () => {
+      i18n.off("languageChanged", onLanguageChanged);
+      dispose();
+    };
   }, []);
 }
