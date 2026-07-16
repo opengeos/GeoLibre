@@ -974,6 +974,11 @@ describe("MapController story-map layer helpers", () => {
     const { controller } = externalRasterSetup({
       type: "raster",
       url: tilejson,
+      // A resolved tile template alongside the TileJSON url (the shape a
+      // loaded source would have if serialize() ever returned merged state).
+      // The url must win so the export embeds the stable TileJSON endpoint,
+      // never a resolved template that could carry a time-limited token.
+      tiles: ["https://example.com/signed/{z}/{x}/{y}.png?token=abc"],
       tileSize: 256,
       bounds: [76.8, 12.5, 77.9, 13.6],
       attribution: "Microsoft Planetary Computer",
@@ -982,6 +987,7 @@ describe("MapController story-map layer helpers", () => {
     const spec = controller.getLayerRasterSource("pc-1");
     assert.ok(spec, "returns the live source spec");
     assert.equal(spec.url, tilejson);
+    assert.equal(spec.tiles, undefined, "resolved tiles are not embedded");
     assert.equal(spec.tileSize, 256);
     assert.deepEqual(spec.bounds, [76.8, 12.5, 77.9, 13.6]);
   });

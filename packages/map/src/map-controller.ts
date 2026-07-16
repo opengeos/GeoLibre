@@ -588,13 +588,22 @@ export class MapController {
       if (!spec || typeof spec !== "object") continue;
       const httpUrl = (value: unknown): value is string =>
         typeof value === "string" && /^https?:\/\//i.test(value);
-      const tiles = Array.isArray(spec.tiles)
-        ? spec.tiles.filter(httpUrl)
-        : [];
-      if (tiles.length > 0) return { ...spec, tiles };
+      // Prefer the TileJSON `url` over `tiles`, mirroring MapLibre's own
+      // precedence when a raster source carries both. serialize() returns the
+      // constructor options (load() extends the instance, not _options), but
+      // if that ever changes, url-first also keeps the export pointing at the
+      // stable TileJSON endpoint rather than a resolved tile template that
+      // could embed a time-limited token.
       if (httpUrl(spec.url)) {
         const { tiles: _tiles, ...rest } = spec;
         return rest;
+      }
+      const tiles = Array.isArray(spec.tiles)
+        ? spec.tiles.filter(httpUrl)
+        : [];
+      if (tiles.length > 0) {
+        const { url: _url, ...rest } = spec;
+        return { ...rest, tiles };
       }
     }
     return null;

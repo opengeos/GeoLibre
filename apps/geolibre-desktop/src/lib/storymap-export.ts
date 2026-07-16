@@ -341,7 +341,10 @@ function buildRasterTileSource(
     ? layer.source.tiles.filter((tile): tile is string => typeof tile === "string")
     : [];
   // Only an http(s) TileJSON URL can load in a standalone page; app-internal
-  // protocols (blob:, pmtiles:, geolibre:, …) have no handler there.
+  // protocols (blob:, pmtiles:, geolibre:, …) have no handler there. Tiles win
+  // over the URL below because store records are not MapLibre source specs:
+  // WMS layers carry the raw service endpoint in `url` (not a TileJSON)
+  // alongside their GetMap tile template.
   const url =
     typeof layer.source.url === "string" &&
     /^https?:\/\//i.test(layer.source.url)
