@@ -101,7 +101,14 @@ function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
     // The input files are structured-cloned rather than transferred: these
     // wrappers do not otherwise take ownership of the caller's bytes, and a
     // neutered input array would be a trap the sibling converters don't set.
-    worker.postMessage(request);
+    try {
+      worker.postMessage(request);
+    } catch (error) {
+      // A throw here (e.g. DataCloneError) rejects the promise on its own, but
+      // the worker is already spawned and would leak without this.
+      worker.terminate();
+      reject(error instanceof Error ? error : new Error(String(error)));
+    }
   });
 }
 

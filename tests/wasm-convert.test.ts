@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { before, describe, it } from "node:test";
+import { afterEach, before, beforeEach, describe, it } from "node:test";
 import {
   MAX_VECTOR_PMTILES_ZOOM,
   convertVectorWithWasm,
@@ -371,6 +371,152 @@ describe("wasm-convert", () => {
         tileVectorToPmtiles({ name: "dem.tif", data: stripedTiff }, "dem.pmtiles"),
         /vector|unsupported|unknown/i,
       );
+    });
+  });
+
+  // Every test above runs the tool inline, because node has no global `Worker`
+  // and runToolInBackground falls back to the in-process path. In the browser it
+  // takes the worker instead, so the message/error wiring that path depends on
+  // is only covered here, by standing a fake Worker up in that global.
+  // The timeout matters: these tests assert that a promise settles, so a
+  // regression that drops a listener would hang forever on node's default
+  // (infinite) timeout rather than failing. Every test here settles in under a
+  // millisecond, so seconds is a generous ceiling.
+  describe("tileVectorToPmtiles on a worker", { timeout: 5_000 }, () => {
+    /** The listener/postMessage surface runToolOnWorker actually uses. */
+    class FakeWorker {
+      static instances: FakeWorker[] = [];
+      /** When set, postMessage throws it, standing in for a DataCloneError. */
+      static postMessageError: Error | null = null;
+      readonly listeners = new Map<string, Array<(event: unknown) => void>>();
+      readonly posted: unknown[] = [];
+      terminated = false;
+
+      constructor(
+        readonly url: URL,
+        readonly options: unknown,
+      ) {
+        FakeWorker.instances.push(this);
+      }
+
+      addEventListener(type: string, fn: (event: unknown) => void): void {
+        this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn]);
+      }
+
+      postMessage(message: unknown): void {
+        if (FakeWorker.postMessageError) throw FakeWorker.postMessageError;
+        this.posted.push(message);
+      }
+
+      terminate(): void {
+        this.terminated = true;
+      }
+
+      emit(type: string, event: unknown): void {
+        for (const fn of this.listeners.get(type) ?? []) fn(event);
+      }
+    }
+
+    const hadWorker = "Worker" in globalThis;
+
+    beforeEach(() => {
+      FakeWorker.instances = [];
+      FakeWorker.postMessageError = null;
+      (globalThis as { Worker?: unknown }).Worker = FakeWorker;
+    });
+
+    afterEach(() => {
+      // Leaving the stub installed would push the inline tests above onto the
+      // worker path, where `new URL("./wasm-convert.worker.ts")` cannot load.
+      if (!hadWorker) delete (globalThis as { Worker?: unknown }).Worker;
+    });
+
+    /**
+     * Start a tiling run and hand back the worker it spawned. The worker is
+     * constructed synchronously inside runToolOnWorker's promise executor, so it
+     * exists before the returned promise is awaited.
+     */
+    function startRun(options = { minZoom: 0, maxZoom: 4, layerName: "roads" }) {
+      const promise = tileVectorToPmtiles(
+        { name: "points.geojson", data: pointsGeoJson },
+        "points.pmtiles",
+        options,
+      );
+      // Keep the rejection paths from tripping node's unhandled-rejection guard
+      // before each test gets to assert on them.
+      promise.catch(() => {});
+      const worker = FakeWorker.instances[0];
+      assert.ok(worker, "a worker should have been spawned");
+      return { promise, worker };
+    }
+
+    const okResult = {
+      exitCode: 0,
+      stdout: ["packing PMTiles archive"],
+      files: { "points.pmtiles": Uint8Array.from(PMTILES_MAGIC) },
+    };
+
+    it("hands the tool, its args and its files to the worker", () => {
+      const { worker } = startRun();
+      assert.deepEqual(worker.posted, [
+        {
+          tool: "vector_to_pmtiles",
+          args: [
+            "--input=/work/points.geojson",
+            "--output=/work/points.pmtiles",
+            "--min_zoom=0",
+            "--max_zoom=4",
+            "--layer_name=roads",
+          ],
+          input: { "points.geojson": pointsGeoJson },
+        },
+      ]);
+    });
+
+    // Vite only bundles the worker when it can statically see this exact shape.
+    it("loads the worker as an ES module", () => {
+      const { worker } = startRun();
+      assert.match(worker.url.href, /wasm-convert\.worker\.ts$/);
+      assert.deepEqual(worker.options, { type: "module" });
+    });
+
+    it("resolves with the worker's result and terminates it", async () => {
+      const { promise, worker } = startRun();
+      worker.emit("message", { data: { ok: true, result: okResult } });
+      const result = await promise;
+      assert.deepEqual(result.data, Uint8Array.from(PMTILES_MAGIC));
+      assert.deepEqual(result.messages, ["packing PMTiles archive"]);
+      assert.equal(worker.terminated, true, "the worker should not leak");
+    });
+
+    it("rejects with the error the worker reports", async () => {
+      const { promise, worker } = startRun();
+      worker.emit("message", { data: { ok: false, error: "runner exploded" } });
+      await assert.rejects(promise, /runner exploded/);
+      assert.equal(worker.terminated, true);
+    });
+
+    it("rejects when the worker itself fails", async () => {
+      const { promise, worker } = startRun();
+      worker.emit("error", { message: "worker boom" });
+      await assert.rejects(promise, /worker boom/);
+      assert.equal(worker.terminated, true);
+    });
+
+    // `error` does not fire for an undeserializable message, so without its own
+    // listener this promise would stay pending forever.
+    it("rejects when the worker's message cannot be deserialized", async () => {
+      const { promise, worker } = startRun();
+      worker.emit("messageerror", {});
+      await assert.rejects(promise, /undeserializable/i);
+      assert.equal(worker.terminated, true);
+    });
+
+    it("terminates the worker when the message cannot be posted", async () => {
+      FakeWorker.postMessageError = new Error("DataCloneError");
+      const { promise, worker } = startRun();
+      await assert.rejects(promise, /DataCloneError/);
+      assert.equal(worker.terminated, true, "the worker should not leak");
     });
   });
 });

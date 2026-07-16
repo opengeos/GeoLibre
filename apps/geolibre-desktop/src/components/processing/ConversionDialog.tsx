@@ -353,7 +353,7 @@ interface PmtilesZoomRange {
 /**
  * Parse the shared min/max zoom inputs, enforcing `0 ≤ min ≤ max ≤ maxAllowed`.
  * Blank means "unset" and is returned as undefined — Vector to PMTiles rejects
- * that (the sidecar requires both), while Raster to PMTiles passes it through so
+ * that on both of its engines, while Raster to PMTiles passes it through so
  * `write_pmtiles` applies its own native-resolution default.
  *
  * @param maxAllowed - The cap of the engine about to run, since the browser's
@@ -1089,8 +1089,12 @@ export function ConversionDialog() {
     // The WASM tiler stops shallower than the sidecar's freestiler, so the same
     // zoom the desktop app accepts can be too deep here. Check it up front
     // rather than letting the user wait for the tool's own validation error.
+    // A blank bound is rejected as well, matching the sidecar branch: the tool's
+    // own defaults happen to equal this dialog's (0/14), so letting blanks
+    // through would silently succeed here and error on desktop for the same
+    // input.
     const zooms = parseZoomRange(minZoom, maxZoom, MAX_VECTOR_PMTILES_ZOOM);
-    if (!zooms) {
+    if (!zooms || zooms.minZoom === undefined || zooms.maxZoom === undefined) {
       setError(
         i18n.t("toolbar.conversion.zoomRangeError", {
           max: MAX_VECTOR_PMTILES_ZOOM,
