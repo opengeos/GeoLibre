@@ -669,7 +669,7 @@
     "saveVideo": "Videoyu kaydet…",
     "discard": "At",
     "saved": "{{name}} kaydedildi",
-    "saveCancelled": "Kayıt iptal edildi.",
+    "saveCancelled": "Kaydetme iptal edildi.",
     "recordError": "Tur kaydedilemedi. Lütfen tekrar deneyin.",
     "saveError": "Video kaydedilemedi. Lütfen tekrar deneyin."
   },
