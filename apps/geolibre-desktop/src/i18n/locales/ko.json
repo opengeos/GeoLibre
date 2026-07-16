@@ -2,7 +2,7 @@
   "browser": {
     "title": "브라우저",
     "services": "서비스",
-    "recent": "최근 항목",
+    "recent": "최근 프로젝트",
     "databases": "데이터베이스",
     "newDatabaseConnection": "새 데이터베이스 연결",
     "searchPlaceholder": "데이터 소스 검색",
