@@ -1082,12 +1082,29 @@ export function ProcessingDialog({
     if (!selectedTool) return;
     const fields = subsetUrlFieldValues(selectedTool.id, layer);
     if (!fields) return;
+    // Reset every companion field this populate can set back to the tool
+    // default first, so a previously picked layer's optional values (a WMS
+    // `styles`, an XYZ `subdomains`/`tile_size`) don't linger when the new layer
+    // omits them and skew the extraction. `fields` is spread after, so the new
+    // layer's present values win.
+    const defaults = createDefaultValues(selectedTool);
+    const kind = subsetUrlToolKind(selectedTool.id);
+    const companionReset: ParameterValues =
+      kind === "wms"
+        ? { styles: defaults.styles }
+        : kind === "xyz"
+          ? { tile_size: defaults.tile_size, subdomains: defaults.subdomains }
+          : {};
     const hasInput = selectedTool.params?.some((param) => param.name === "input");
     setValues((prev) => ({
       ...prev,
       ...(hasInput ? { input: "" } : {}),
+      ...companionReset,
       ...fields,
     }));
+    for (const name of Object.keys(companionReset)) {
+      browsedInputsRef.current.delete(name);
+    }
     for (const name of Object.keys(fields)) browsedInputsRef.current.delete(name);
     if (hasInput) browsedInputsRef.current.delete("input");
     setError(null);
@@ -2050,6 +2067,41 @@ function ParameterField({
             </p>
           ) : null}
         </div>
+      ) : onPopulateFromLayer && subsetUrlLayers.length > 0 ? (
+        // A subset extractor's `url`, with loaded layers that can supply it: a
+        // "From layer" picker fills the url (and companion fields) from a
+        // COG/WMS/XYZ layer, while the field stays freely typeable. Placed
+        // before the path/data-input branches (like the "Use map extent" one
+        // above) so a `url` description that happens to contain a word
+        // isPathParameter matches (path/file/…) can't shadow this picker into a
+        // local file-browse control.
+        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+          <Select
+            aria-label={t("processing.whitebox.fromLayer")}
+            value=""
+            onChange={(event) => {
+              const layer = subsetUrlLayers.find(
+                (item) => item.id === event.target.value,
+              );
+              if (layer) onPopulateFromLayer(layer);
+            }}
+          >
+            <option value="">{t("processing.whitebox.fromLayer")}</option>
+            {subsetUrlLayers.map((layer) => (
+              <option key={layer.id} value={layer.id}>
+                {layer.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              onChange(event.target.value)
+            }
+          />
+        </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
           id={`whitebox-${param.name}`}
@@ -2105,37 +2157,6 @@ function ParameterField({
           value={valueText}
           onChange={onChange}
         />
-      ) : onPopulateFromLayer && subsetUrlLayers.length > 0 ? (
-        // A subset extractor's `url`, with loaded layers that can supply it: a
-        // "From layer" picker fills the url (and companion fields) from a
-        // COG/WMS/XYZ layer, while the field stays freely typeable.
-        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
-          <Select
-            aria-label={t("processing.whitebox.fromLayer")}
-            value=""
-            onChange={(event) => {
-              const layer = subsetUrlLayers.find(
-                (item) => item.id === event.target.value,
-              );
-              if (layer) onPopulateFromLayer(layer);
-            }}
-          >
-            <option value="">{t("processing.whitebox.fromLayer")}</option>
-            {subsetUrlLayers.map((layer) => (
-              <option key={layer.id} value={layer.id}>
-                {layer.name}
-              </option>
-            ))}
-          </Select>
-          <Input
-            id={`whitebox-${param.name}`}
-            type="text"
-            value={valueText}
-            onChange={(event: ChangeEvent<HTMLInputElement>) =>
-              onChange(event.target.value)
-            }
-          />
-        </div>
       ) : (
         <Input
           id={`whitebox-${param.name}`}

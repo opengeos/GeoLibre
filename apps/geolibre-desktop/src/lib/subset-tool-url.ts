@@ -48,9 +48,11 @@ function httpUrl(value: unknown): string | null {
 
 /**
  * Loaded layers that can populate the given subset tool's `url` field, matched
- * by raster family. The COG tool additionally requires a remote (http) source so
- * the populated url is byte-range readable; WMS/XYZ layers always carry a
- * usable url/template once {@link rasterSubsetKind} has classified them.
+ * by raster family. A layer qualifies only when {@link subsetUrlFieldValues}
+ * can actually derive field values for it, so the "From layer" list and the
+ * click handler share one source of truth: a layer never appears in the list
+ * yet silently no-op when picked. The family gate (`rasterSubsetKind`) also
+ * keeps, say, a plain remote raster tile layer out of the COG tool.
  *
  * @param toolId - The subset tool id.
  * @param layers - The store's current layers.
@@ -62,13 +64,11 @@ export function layersForSubsetUrl(
 ): GeoLibreLayer[] {
   const kind = subsetUrlToolKind(toolId);
   if (!kind) return [];
-  return layers.filter((layer) => {
-    if (rasterSubsetKind(layer) !== kind) return false;
-    if (kind === "cog") {
-      return httpUrl((layer.source as Record<string, unknown>).url) != null;
-    }
-    return true;
-  });
+  return layers.filter(
+    (layer) =>
+      rasterSubsetKind(layer) === kind &&
+      subsetUrlFieldValues(toolId, layer) !== null,
+  );
 }
 
 /**
