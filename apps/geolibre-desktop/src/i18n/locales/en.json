@@ -1749,7 +1749,8 @@
       "notAGeoTiff": "This file is not a readable GeoTIFF. In the browser, Raster to COG reads GeoTIFF only; other formats need the desktop app.",
       "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ 24.",
       "colormap": "Colormap",
-      "resampling": "Resampling"
+      "resampling": "Resampling",
+      "colormapDefault": "Default (viridis)"
     },
     "vectorTool": {
       "buffer": "Buffer",

@@ -118,6 +118,48 @@ describe("wasm-convert", () => {
       assert.ok(result.messages.length > 0);
     });
 
+    // Colormap is optional in the dialog: leaving it unset omits the flag so the
+    // tool applies its own default, rather than the UI pinning one of its own.
+    it("omits optional flags, matching the tool's own defaults", async () => {
+      const [omitted, explicit] = await Promise.all([
+        renderRasterToPmtiles({ name: "dem.tif", data: stripedTiff }, "a.pmtiles", {
+          minZoom: 0,
+          maxZoom: 3,
+        }),
+        renderRasterToPmtiles({ name: "dem.tif", data: stripedTiff }, "b.pmtiles", {
+          minZoom: 0,
+          maxZoom: 3,
+          colormap: "viridis",
+          method: "bilinear",
+        }),
+      ]);
+      assert.deepEqual(
+        omitted.data,
+        explicit.data,
+        "omitting colormap/method should equal the tool's documented defaults",
+      );
+    });
+
+    it("honours an explicit colormap", async () => {
+      const [viridis, magma] = await Promise.all([
+        renderRasterToPmtiles({ name: "dem.tif", data: stripedTiff }, "v.pmtiles", {
+          minZoom: 0,
+          maxZoom: 3,
+          colormap: "viridis",
+        }),
+        renderRasterToPmtiles({ name: "dem.tif", data: stripedTiff }, "m.pmtiles", {
+          minZoom: 0,
+          maxZoom: 3,
+          colormap: "magma",
+        }),
+      ]);
+      assert.notDeepEqual(
+        viridis.data,
+        magma.data,
+        "a different colormap should change the rendered tiles",
+      );
+    });
+
     it("rejects a vector input, which write_pmtiles cannot render", async () => {
       await assert.rejects(
         renderRasterToPmtiles(

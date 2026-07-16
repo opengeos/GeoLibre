@@ -456,7 +456,10 @@ export function ConversionDialog() {
   const [layerName, setLayerName] = useState("data");
   const [minZoom, setMinZoom] = useState("0");
   const [maxZoom, setMaxZoom] = useState("14");
-  const [colormap, setColormap] = useState<PmtilesColormap>("viridis");
+  // Empty means "leave it to the tool", which is what makes colormap optional:
+  // write_pmtiles marks it optional and picks viridis itself, so the dialog
+  // omits the flag rather than pinning a default of its own.
+  const [colormap, setColormap] = useState<PmtilesColormap | "">("");
   const [resampling, setResampling] =
     useState<PmtilesResamplingMethod>("bilinear");
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean | null>(null);
@@ -530,7 +533,7 @@ export function ConversionDialog() {
     setLayerName("data");
     setMinZoom("0");
     setMaxZoom("14");
-    setColormap("viridis");
+    setColormap("");
     setResampling("bilinear");
     setError(null);
     setJob(null);
@@ -904,7 +907,8 @@ export function ConversionDialog() {
           minZoom: parsedMin,
           maxZoom: parsedMax,
           band: 1,
-          colormap,
+          // Omitted when unset, so the tool applies its own default.
+          colormap: colormap || undefined,
           method: resampling,
         },
       );
@@ -1402,9 +1406,12 @@ export function ConversionDialog() {
                   id="conversion-colormap"
                   value={colormap}
                   onChange={(event) =>
-                    setColormap(event.target.value as PmtilesColormap)
+                    setColormap(event.target.value as PmtilesColormap | "")
                   }
                 >
+                  <option value="">
+                    {t("toolbar.conversion.colormapDefault")}
+                  </option>
                   {PMTILES_COLORMAPS.map((option) => (
                     <option key={option} value={option}>
                       {option}
