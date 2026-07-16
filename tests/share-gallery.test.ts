@@ -4,6 +4,7 @@ import {
   fetchMyProjects,
   fetchSharedProjects,
   GalleryError,
+  projectOpenToken,
   resolveThumbnailUrl,
   shareAuthorizedFetch,
 } from "../apps/geolibre-desktop/src/lib/share-gallery";
@@ -303,5 +304,31 @@ describe("shareAuthorizedFetch", () => {
     } finally {
       globalThis.fetch = original;
     }
+  });
+});
+
+describe("projectOpenToken", () => {
+  // Attaching Authorization to a public or unlisted raw .geolibre.json is not a
+  // harmless extra: it makes the request CORS-preflighted, and the share host
+  // 404s OPTIONS on raw project paths, so the browser blocks the open. Every
+  // gallery card failed to open this way.
+  for (const visibility of ["public", "unlisted"]) {
+    it(`sends no token for ${visibility} projects, which need no auth`, () => {
+      assert.equal(
+        projectOpenToken({ visibility }, "glb_tok"),
+        undefined,
+      );
+    });
+  }
+
+  it("sends the token for private projects, which are owner-only", () => {
+    assert.equal(
+      projectOpenToken({ visibility: "private" }, "glb_tok"),
+      "glb_tok",
+    );
+  });
+
+  it("sends nothing when there is no token to send", () => {
+    assert.equal(projectOpenToken({ visibility: "private" }, ""), undefined);
   });
 });

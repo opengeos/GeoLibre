@@ -256,6 +256,24 @@ export interface FetchMyProjectsOptions {
 }
 
 /**
+ * The token to open `project`'s raw JSON with, or undefined to fetch it
+ * anonymously.
+ *
+ * Only private projects need auth — public and unlisted raw `.geolibre.json` is
+ * served to anonymous callers with `Access-Control-Allow-Origin: *`. Attaching
+ * `Authorization` when it is not needed is actively harmful: it makes the
+ * request CORS-preflighted, and the share host answers `OPTIONS` on `/api/*`
+ * but 404s it on raw project paths, so the browser blocks the open outright.
+ */
+export function projectOpenToken(
+  project: Pick<SharedProject, "visibility">,
+  token: string,
+): string | undefined {
+  if (!token) return undefined;
+  return project.visibility === "private" ? token : undefined;
+}
+
+/**
  * Wrap a fetch so requests to the share host carry the personal API token. The
  * `Authorization` header is attached only for same-origin-as-`base` URLs so the
  * token is never leaked to a third-party host (e.g. an external tile server

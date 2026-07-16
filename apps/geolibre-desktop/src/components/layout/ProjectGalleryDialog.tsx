@@ -35,6 +35,7 @@ import {
   fetchMyProjects,
   fetchSharedProjects,
   GalleryError,
+  projectOpenToken,
   type SharedProject,
 } from "../../lib/share-gallery";
 import type { TFunction } from "i18next";
@@ -272,11 +273,11 @@ export function ProjectGalleryDialog({
     setOpeningId(project.id);
     setOpenError(null);
     try {
-      // Send the token for the user's own scope so unlisted/private content is
-      // authorized; public-scope opens need no auth.
       await onOpenProject(
         project.rawJsonUrl,
-        effectiveScope === "mine" ? trimmedToken : undefined,
+        effectiveScope === "mine"
+          ? projectOpenToken(project, trimmedToken)
+          : undefined,
       );
       onOpenChange(false);
     } catch (err) {

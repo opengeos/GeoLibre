@@ -27,6 +27,7 @@ import { buildProjectHtml } from "../lib/html-export";
 import { ensureHtmlFileName, ensureProjectFileName } from "../lib/file-names";
 import { mergeStringLists } from "../lib/string-lists";
 import { fetchProjectFromUrl } from "../lib/project-url";
+import { getShareFetch } from "../lib/share-fetch";
 import { resolveShareBaseUrl } from "../lib/share-geolibre";
 import { shareAuthorizedFetch } from "../lib/share-gallery";
 import { normalizeProjectUrl } from "../lib/urls";
@@ -234,6 +235,12 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
           fetchImpl: shareAuthorizedFetch(
             options.authToken,
             resolveShareBaseUrl(),
+            // Matches fetchMyProjects: on desktop this routes the share host
+            // through Tauri's native HTTP, which is exempt from the WebView's
+            // CORS enforcement. Omitting it falls back to browser `fetch`,
+            // which is why listing a private project worked but opening it did
+            // not.
+            getShareFetch(),
           ),
         });
         const project = await resolveProjectXyzLayers(
