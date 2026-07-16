@@ -5,7 +5,10 @@ import DOMPurify from "dompurify";
 // add `rel`, so enforce it ourselves. The flag lives on the DOMPurify singleton
 // so a re-evaluated module (HMR, dynamic import) cannot register it twice.
 const purify = DOMPurify as typeof DOMPurify & { __glRelHook?: boolean };
-if (!purify.__glRelHook) {
+// Without a DOM (Node tests), DOMPurify exports a bare factory with no
+// addHook/sanitize; skip the hook there and let sanitizeStoryHtml fall back to
+// escaping below.
+if (!purify.__glRelHook && typeof purify.addHook === "function") {
   purify.addHook("afterSanitizeAttributes", (node) => {
     if (node.tagName === "A" && node.getAttribute("target") === "_blank") {
       node.setAttribute("rel", "noopener noreferrer");
@@ -32,6 +35,15 @@ if (!purify.__glRelHook) {
  * @returns A sanitized HTML string safe for `dangerouslySetInnerHTML`.
  */
 export function sanitizeStoryHtml(html: string): string {
+  // DOMPurify needs a live DOM; in environments without one (Node tests) it is
+  // not supported. Fall back to escaping the markup wholesale — strictly more
+  // conservative than sanitizing, and those environments never render it.
+  if (!DOMPurify.isSupported) {
+    return html
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
   // Story text is prose with links and light formatting, so allow only that set
   // of tags rather than the full HTML profile. This excludes forms, tables,
   // media, and other structural elements by construction.

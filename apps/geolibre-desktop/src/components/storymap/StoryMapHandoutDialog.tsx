@@ -324,8 +324,9 @@ export function StoryMapHandoutDialog({
   const handleGenerate = useCallback(async () => {
     setError(null);
     setNotice(null);
-    const map = mapControllerRef.current?.getMap();
-    if (!map) {
+    const controller = mapControllerRef.current;
+    const map = controller?.getMap();
+    if (!controller || !map) {
       setError(t("storymap.handout.noMap"));
       return;
     }
@@ -347,6 +348,27 @@ export function StoryMapHandoutDialog({
     const original = mapControllerRef.current?.readView();
     abortRef.current = false;
     setGenerating(true);
+    // Replay chapter layer-opacity effects so each captured page shows the
+    // same "change view" (e.g. a before/after imagery fade) the reader sees at
+    // that chapter, instead of freezing every page at the live map's current
+    // opacities (#1272). Mirrors the presenter's enterChapter replay: exit the
+    // chapter being left, enter+exit each skipped chapter, then enter the
+    // target. Duration 0 makes each change instant so the capture never grabs
+    // a mid-fade frame.
+    const effectsApplied = chapters.some(
+      (chapter) =>
+        chapter.onChapterEnter.length > 0 || chapter.onChapterExit.length > 0,
+    );
+    // Reset to the store-backed layer styles first so the replay starts from
+    // the same baseline as a fresh presentation, not whatever opacities a
+    // prior preview or presentation left on the live map.
+    if (effectsApplied) controller.restoreLayerStyles();
+    const applyEffects = (changes: StoryChapter["onChapterEnter"]) => {
+      for (const change of changes) {
+        controller.setStoryLayerOpacity(change.layerId, change.opacity, 0);
+      }
+    };
+    let lastChapterIndex = -1;
     try {
       const captures: HandoutChapter[] = [];
       for (let i = 0; i < chosen.length; i++) {
@@ -388,6 +410,17 @@ export function StoryMapHandoutDialog({
         }
 
         const chapter = screen.chapter;
+        if (lastChapterIndex !== screen.index) {
+          if (lastChapterIndex >= 0) {
+            applyEffects(chapters[lastChapterIndex]?.onChapterExit ?? []);
+          }
+          for (let k = lastChapterIndex + 1; k < screen.index; k++) {
+            applyEffects(chapters[k]?.onChapterEnter ?? []);
+            applyEffects(chapters[k]?.onChapterExit ?? []);
+          }
+          applyEffects(chapter.onChapterEnter);
+          lastChapterIndex = screen.index;
+        }
         await jumpAndWaitIdle(map, chapter.location, () => abortRef.current);
         if (abortRef.current) break;
         const shot = captureMapImage(map);
@@ -432,7 +465,9 @@ export function StoryMapHandoutDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      // Always return the map to where the user left it, even on failure.
+      // Undo the replayed opacity effects (like the presenter does on exit) and
+      // return the map to where the user left it, even on failure.
+      if (effectsApplied) controller.restoreLayerStyles();
       if (original) {
         map.jumpTo({
           center: original.center,

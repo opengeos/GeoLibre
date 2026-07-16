@@ -319,8 +319,14 @@ function buildInlineLayer(
 
 /**
  * Build a MapLibre raster tile source from a raster/XYZ/WMS/WMTS layer, or
- * `null` when the layer carries no tile URL template. Mirrors the live app's
- * external raster tile sync so basemaps and tile services render in the export.
+ * `null` when the layer carries no tile URL template or TileJSON URL. Mirrors
+ * the live app's external raster tile sync so basemaps and tile services
+ * render in the export. A TileJSON `url` covers service-backed rasters such as
+ * Planetary Computer scenes, whose tiler resolves and signs the actual tile
+ * URLs server-side at load time, so for such resolver-backed services the
+ * export embeds a stable endpoint instead of an expiring token (#1272). A
+ * provider whose url or tile template is itself pre-signed still expires with
+ * its credential — the export can only embed what the source exposes.
  */
 function buildRasterTileSource(
   layer: GeoLibreLayer,
@@ -333,13 +339,26 @@ function buildRasterTileSource(
   ) {
     return null;
   }
+  // Only http(s) tile templates and TileJSON URLs can load in a standalone
+  // page; app-internal protocols (blob:, pmtiles:, geolibre:, …) have no
+  // handler there.
+  const isHttpUrl = (value: unknown): value is string =>
+    typeof value === "string" && /^https?:\/\//i.test(value);
   const tiles = Array.isArray(layer.source.tiles)
-    ? layer.source.tiles.filter((tile): tile is string => typeof tile === "string")
+    ? layer.source.tiles.filter(isHttpUrl)
     : [];
-  if (tiles.length === 0) return null;
+  // The TileJSON `url` fallback is scoped to plain raster layers: wms/wmts
+  // records keep the raw service endpoint (not a TileJSON) in `url` — their
+  // loadable template lives in `tiles` — so embedding it would produce a
+  // source MapLibre cannot parse instead of just omitting the layer.
+  const url =
+    layer.type === "raster" && isHttpUrl(layer.source.url)
+      ? layer.source.url
+      : null;
+  if (tiles.length === 0 && !url) return null;
   const source: Record<string, unknown> = {
     type: "raster",
-    tiles,
+    ...(tiles.length > 0 ? { tiles } : { url }),
     tileSize:
       typeof layer.source.tileSize === "number" ? layer.source.tileSize : 256,
   };
