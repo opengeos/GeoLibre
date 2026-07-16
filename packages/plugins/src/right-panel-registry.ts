@@ -132,7 +132,12 @@ export function registerRightPanel(
   if (!panel || typeof panel.id !== "string" || panel.id.length === 0) {
     throw new Error("registerRightPanel requires a panel with a non-empty id.");
   }
-  if (typeof panel.title !== "string" || panel.title.length === 0) {
+  if (typeof panel.title !== "string" && typeof panel.title !== "function") {
+    throw new Error(
+      `Right panel "${panel.id}" must have a non-empty title string or a title getter function.`,
+    );
+  }
+  if (typeof panel.title === "string" && panel.title.length === 0) {
     throw new Error(`Right panel "${panel.id}" must have a non-empty title.`);
   }
   if (typeof panel.render !== "function") {
@@ -140,6 +145,12 @@ export function registerRightPanel(
       `Right panel "${panel.id}" must provide a render(container) function.`,
     );
   }
+  // Normalize title to a resolver so both strings and getters update live.
+  const resolveTitle =
+    typeof panel.title === "function"
+      ? (panel.title as () => string)
+      : () => panel.title as string;
+  (panel as { _resolveTitle?: () => string })._resolveTitle = resolveTitle;
   // Re-registering an id replaces it (a plugin may rebuild its panel). The
   // returned disposer only removes the panel while this exact registration is
   // still the current one, so a stale disposer cannot evict a newer panel that
@@ -147,7 +158,9 @@ export function registerRightPanel(
   registry.set(panel.id, panel);
   emit();
   return () => {
-    if (registry.get(panel.id) === panel) unregisterRightPanel(panel.id);
+    if (registry.get(panel.id) === panel) {
+      unregisterRightPanel(panel.id);
+    }
   };
 }
 
@@ -277,11 +290,17 @@ export function isRightPanelCollapsed(): boolean {
   return collapsed;
 }
 
-/** Look up a registered right panel by id. */
+/** Look up a registered right panel by id. Title is always resolved to a string. */
 export function getRightPanel(
   id: string,
-): GeoLibreRightPanelRegistration | undefined {
-  return registry.get(id);
+): (GeoLibreRightPanelRegistration & { title: string }) | undefined {
+  const panel = registry.get(id);
+  if (!panel) return undefined;
+  const resolve = (panel as { _resolveTitle?: () => string })._resolveTitle;
+  if (resolve) {
+    return { ...panel, title: resolve() };
+  }
+  return panel as GeoLibreRightPanelRegistration & { title: string };
 }
 
 /** All registered right panels, in registration order. */

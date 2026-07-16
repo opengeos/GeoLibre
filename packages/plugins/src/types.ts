@@ -521,7 +521,7 @@ export interface GeoLibreFloatingPanelRegistration {
   /** Stable unique id used to open/close the panel. */
   id: string;
   /** Title shown in the card's title bar. */
-  title: string;
+  title: string | (() => string);
   /** Optional icon: a URL or `data:` URI rendered in the title bar. */
   icon?: string;
   /** Preferred card width in px (the host clamps it to a sensible range). */
@@ -590,8 +590,13 @@ export type GeoLibreRightPanelDock =
 export interface GeoLibreRightPanelRegistration {
   /** Stable unique id used to open/collapse/close the panel. */
   id: string;
-  /** Human-readable title shown in the panel header and collapsed rail. */
-  title: string;
+  /**
+   * Human-readable title shown in the panel header and collapsed rail.
+   * Pass a getter function to make the title reactive (re-evaluated on every
+   * `getRightPanel` call), so it updates live on language changes without
+   * re-registering the panel. A plain string is frozen at registration time.
+   */
+  title: string | (() => string);
   /**
    * Where the panel docks initially: one of the four positional docks
    * (`left-of-layers`, `right-of-layers`, `left-of-style`, or `right-of-style`,

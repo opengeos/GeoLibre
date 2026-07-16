@@ -63,6 +63,8 @@ const COVERAGE_TILE_BASE =
 
 export interface MapillaryLabels {
   title: string;
+  /** Title getter pushed by the host so the panel header re-localizes live. */
+  getTitle?: () => string;
   hint: string;
   noToken: string;
   tokenPlaceholder: string;
@@ -91,7 +93,7 @@ let labels: MapillaryLabels = {
 };
 
 export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
-  labels = { ...labels, ...next };
+    labels = { ...labels, ...next };
   if (!panelContainer) return;
   // With a live viewer, only refresh the static text nodes — rebuilding would
   // tear down the mapillary-js WebGL viewer and lose the user's current photo
@@ -100,6 +102,8 @@ export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
   if (viewer) updatePanelText();
   else buildPanel(panelContainer);
 }
+
+
 
 function updatePanelText(): void {
   if (hintEl) hintEl.textContent = labels.hint;
@@ -741,7 +745,7 @@ function ensureCoverageWhenReady(activeMap: MapLibreMap): void {
 // and does not tear down the live viewer. See setMapControlPosition.
 const floatingPanelRegistration: GeoLibreFloatingPanelRegistration = {
   id: PANEL_ID,
-  title: labels.title,
+  title: () => labels.getTitle?.() ?? labels.title,
   defaultWidth: 460,
   defaultHeight: 460,
   position: panelPosition,
@@ -785,7 +789,6 @@ export const maplibreMapillaryPlugin: GeoLibrePlugin = {
       });
     });
 
-    floatingPanelRegistration.title = labels.title;
     floatingPanelRegistration.position = panelPosition;
     unregisterPanel =
       app.registerFloatingPanel?.(floatingPanelRegistration) ?? null;

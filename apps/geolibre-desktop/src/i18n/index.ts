@@ -95,24 +95,27 @@ function applyDocumentDirection(code: string) {
 
 i18n.on("languageChanged", applyDocumentDirection);
 
-i18n.use(initReactI18next).init({
-  resources,
-  lng: getInitialLanguage(),
-  fallbackLng: DEFAULT_LANGUAGE,
-  defaultNS: "translation",
-  interpolation: {
-    // React already escapes rendered values, so i18next double-escaping would
-    // mangle any text that legitimately contains `<`, `&`, etc.
-    escapeValue: false,
-  },
-  // Catalogs are bundled eagerly (synchronous), so there is nothing to wait on
-  // — skip Suspense and render immediately rather than requiring a boundary.
-  react: { useSuspense: false },
-  returnNull: false,
-  // Eager catalogs make init resolve synchronously today, but surface any error
-  // (e.g. if loading ever becomes async) instead of silently swallowing it.
-}).catch((error: unknown) => {
-  console.error("[GeoLibre] i18n initialization failed", error);
-});
+i18n
+  .use(initReactI18next)
+  .init({
+    resources,
+    lng: getInitialLanguage(),
+    fallbackLng: DEFAULT_LANGUAGE,
+    defaultNS: "translation",
+    interpolation: {
+      // React already escapes rendered values, so i18next double-escaping would
+      // mangle any text that legitimately contains `<`, `&`, etc.
+      escapeValue: false,
+    },
+    // Catalogs are bundled eagerly (synchronous), so there is nothing to wait on
+    // — skip Suspense and render immediately rather than requiring a boundary.
+    react: { useSuspense: false },
+    returnNull: false,
+    // Eager catalogs make init resolve synchronously today, but surface any error
+    // (e.g. if loading ever becomes async) instead of silently swallowing it.
+  })
+  .catch((error: unknown) => {
+    console.error("[GeoLibre] i18n initialization failed", error);
+  });
 
 export default i18n;

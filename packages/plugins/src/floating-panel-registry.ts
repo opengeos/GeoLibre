@@ -62,7 +62,12 @@ export function registerFloatingPanel(
       "registerFloatingPanel requires a panel with a non-empty id.",
     );
   }
-  if (typeof panel.title !== "string" || panel.title.length === 0) {
+  if (typeof panel.title !== "string" && typeof panel.title !== "function") {
+      throw new Error(
+        `Floating panel "${panel.id}" must have a non-empty title string or a title getter function.`,
+      );
+    }
+    if (typeof panel.title === "string" && panel.title.length === 0) {
     throw new Error(`Floating panel "${panel.id}" must have a non-empty title.`);
   }
   if (typeof panel.render !== "function") {
@@ -70,7 +75,13 @@ export function registerFloatingPanel(
       `Floating panel "${panel.id}" must provide a render(container) function.`,
     );
   }
-  registry.set(panel.id, panel);
+  // Normalize title to a resolver so both strings and getters update live.
+    const resolveTitle =
+      typeof panel.title === "function"
+        ? panel.title
+        : () => panel.title as string;
+    (panel as { _resolveTitle?: () => string })._resolveTitle = resolveTitle;
+    registry.set(panel.id, panel);
   emit();
   return () => {
     if (registry.get(panel.id) === panel) unregisterFloatingPanel(panel.id);
@@ -85,7 +96,7 @@ export function unregisterFloatingPanel(id: string): void {
   // removal notifies subscribers exactly once.
   const wasOpen = openIds.includes(id);
   if (wasOpen) openIds = openIds.filter((openId) => openId !== id);
-  registry.delete(id);
+    registry.delete(id);
   emit();
   if (wasOpen) runHook(id, "onClose", panel.onClose);
 }
@@ -138,11 +149,17 @@ export function getOpenFloatingPanels(): string[] {
   return [...openIds];
 }
 
-/** Look up a registered floating panel by id. */
+/** Look up a registered floating panel by id. Title is always resolved to a string. */
 export function getFloatingPanel(
   id: string,
-): GeoLibreFloatingPanelRegistration | undefined {
-  return registry.get(id);
+): (GeoLibreFloatingPanelRegistration & { title: string }) | undefined {
+  const panel = registry.get(id);
+  if (!panel) return undefined;
+  const resolve = (panel as { _resolveTitle?: () => string })._resolveTitle;
+  if (resolve) {
+    return { ...panel, title: resolve() };
+  }
+  return panel as GeoLibreFloatingPanelRegistration & { title: string };
 }
 
 /** Current reactive snapshot for `useSyncExternalStore`. */
@@ -163,9 +180,9 @@ export function subscribeFloatingPanels(listener: () => void): () => void {
  * public plugin API.
  */
 export function __resetFloatingPanelRegistryForTests(): void {
-  registry.clear();
-  listeners.clear();
-  openIds = [];
-  version = 0;
-  snapshot = { openIds: [], version: 0 };
-}
+    registry.clear();
+    listeners.clear();
+    openIds = [];
+    version = 0;
+    snapshot = { openIds: [], version: 0 };
+  }

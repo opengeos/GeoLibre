@@ -46,6 +46,8 @@ const PANEL_ID = "geolibre-graticule-panel";
  */
 export interface GraticuleLabels {
   title: string;
+  /** Title getter pushed by the host so the panel header re-localizes live. */
+  getTitle?: () => string;
   controlTitle: string;
   gridType: string;
   typeGeographic: string;
@@ -1270,7 +1272,7 @@ export const maplibreGraticulePlugin: GeoLibrePlugin = {
     unregisterPanel =
       app.registerRightPanel?.({
         id: PANEL_ID,
-        title: labels.title,
+        title: () => labels.getTitle?.() ?? labels.title,
         dock: "right-of-style",
         render: (container) => renderPanel(container),
       }) ?? null;

@@ -185,7 +185,7 @@ export function TopToolbar({
   onToggleThemeMode,
   onOpenBasemapExtract,
 }: TopToolbarProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // The reverse-geocode plugin lives in the framework-agnostic plugins package
   // and cannot call t() itself, so push the translated popup strings into it
   // here and refresh them whenever the active language changes.
@@ -223,6 +223,7 @@ export function TopToolbar({
     });
     setMapillaryLabels({
       title: t("mapillary.title"),
+      getTitle: () => i18n.t("mapillary.title"),
       hint: t("mapillary.hint"),
       noToken: t("mapillary.noToken"),
       tokenPlaceholder: t("mapillary.tokenPlaceholder"),
@@ -323,6 +324,7 @@ export function TopToolbar({
     });
     setGraticuleLabels({
       title: t("graticule.title"),
+      getTitle: () => i18n.t("graticule.title"),
       controlTitle: t("graticule.controlTitle"),
       gridType: t("graticule.gridType"),
       typeGeographic: t("graticule.typeGeographic"),

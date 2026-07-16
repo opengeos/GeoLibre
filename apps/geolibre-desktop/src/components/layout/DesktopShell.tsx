@@ -644,7 +644,6 @@ export function DesktopShell({
     return el;
   });
   const activePanelId = useRightPanelState().activeId;
-  const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
   // The dock slots adopt whichever host owns the active panel's content: the
   // Browser's dedicated portal host, or the shared imperative plugin host.
   const dockContentEl =
@@ -654,10 +653,11 @@ export function DesktopShell({
   // changes.
   useEffect(() => {
     const host = pluginContentEl;
-    if (!activePanelId || !activePanel) return;
+    const panel = activePanelId ? getRightPanel(activePanelId) : undefined;
+    if (!activePanelId || !panel) return;
     let cleanup: void | (() => void);
     try {
-      cleanup = activePanel.render(host);
+      cleanup = panel.render(host);
     } catch (error) {
       console.error(`Right panel "${activePanelId}" render() threw.`, error);
     }
@@ -669,13 +669,14 @@ export function DesktopShell({
       }
       host.replaceChildren();
     };
-  }, [activePanelId, activePanel, pluginContentEl]);
+  }, [activePanelId, pluginContentEl]);
   // Reset the shared width to the panel's default when a new panel activates
   // (keyed on activePanelId only, so a user resize survives re-registration).
   useEffect(() => {
-    if (!activePanel) return;
+    const panel = activePanelId ? getRightPanel(activePanelId) : undefined;
+    if (!panel) return;
     setPluginPanelWidth(
-      clampPluginPanelWidth(activePanel.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH),
+      clampPluginPanelWidth(panel.defaultWidth ?? PLUGIN_PANEL_DEFAULT_WIDTH),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePanelId]);
