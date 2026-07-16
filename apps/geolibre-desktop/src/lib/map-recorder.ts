@@ -21,6 +21,12 @@ import { isFullViewportMapCanvas } from "./print-capture";
  * offscreen canvas via `captureStream`. Compositing into an intermediate canvas
  * is what makes the crop and the overlay possible: `captureStream` on the raw
  * WebGL canvas can neither crop nor pick up the deck.gl layer.
+ *
+ * An optional title/source **caption** ({@link CaptionOptions}) is drawn on top
+ * of the composited map with the 2D text API. DOM overlays (the HTML control,
+ * legends, the record panel) cannot be captured because they live outside the
+ * canvas, but a caption drawn straight onto the offscreen canvas records fine
+ * and keeps it origin-clean — letting the user annotate the video itself.
  */
 
 /**
@@ -188,10 +194,218 @@ export function computeCaptureRect(
   };
 }
 
+/**
+ * A text overlay ("title card") burned into every recorded frame.
+ *
+ * DOM overlays — the HTML control, legends, the record panel itself — live
+ * outside the canvas and so can never be captured (see the module doc). A
+ * caption sidesteps that: it is drawn straight onto the offscreen recording
+ * canvas with the 2D text API, so it needs no DOM-to-image rasterization and
+ * keeps the canvas origin-clean for `captureStream` (a tainted canvas cannot be
+ * recorded). This is how a user annotates the video itself — a title and a
+ * source line that are not tied to any map coordinate.
+ */
+
+/** Where the caption box is anchored within the recorded frame. */
+export type CaptionPosition =
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
+/** The selectable caption positions, in menu order (top row then bottom row). */
+export const CAPTION_POSITIONS: readonly CaptionPosition[] = [
+  "top-left",
+  "top-center",
+  "top-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+] as const;
+
+/** Default caption placement — a classic lower-left title card. */
+export const DEFAULT_CAPTION_POSITION: CaptionPosition = "bottom-left";
+
+/** Text to burn into the recording, plus where to place it. */
+export interface CaptionOptions {
+  /** Bold primary line (e.g. a video title). Blank/whitespace hides the line. */
+  title?: string;
+  /** Smaller secondary line (e.g. a data source). Blank hides the line. */
+  caption?: string;
+  /** Corner/edge the caption box is anchored to. */
+  position: CaptionPosition;
+}
+
+/** True when a caption has at least one non-blank line to draw. */
+export function hasCaptionText(
+  options: CaptionOptions | null | undefined,
+): boolean {
+  return Boolean(options && (options.title?.trim() || options.caption?.trim()));
+}
+
+/**
+ * Font sizes and paddings for a caption, in device pixels, scaled to the frame
+ * height so the overlay reads the same at any recording resolution. Pure, so the
+ * scaling can be unit tested without a canvas.
+ */
+export interface CaptionMetrics {
+  titlePx: number;
+  captionPx: number;
+  padX: number;
+  padY: number;
+  lineGap: number;
+  margin: number;
+  radius: number;
+}
+
+/** Derive caption {@link CaptionMetrics} from the output frame height. */
+export function captionMetrics(outputHeight: number): CaptionMetrics {
+  // Anchor the title height to a fraction of the frame, clamped so tiny frames
+  // stay legible and huge frames don't get a comically large title card.
+  const titlePx = Math.round(Math.min(48, Math.max(14, outputHeight * 0.034)));
+  return {
+    titlePx,
+    captionPx: Math.round(titlePx * 0.66),
+    padX: Math.round(titlePx * 0.6),
+    padY: Math.round(titlePx * 0.45),
+    lineGap: Math.round(titlePx * 0.28),
+    margin: Math.round(titlePx * 0.7),
+    radius: Math.round(titlePx * 0.3),
+  };
+}
+
+/**
+ * Top-left corner (device px) of a caption box of the given size, placed at
+ * `position` within a `canvasW`x`canvasH` frame with `margin` breathing room.
+ * The origin is clamped so the box never leaves the frame on the near edge (a
+ * very wide caption pins to the margin and overflows the far edge instead of
+ * floating off-canvas). Pure, so the placement math is unit tested without a
+ * canvas.
+ */
+export function captionBoxOrigin(
+  position: CaptionPosition,
+  boxW: number,
+  boxH: number,
+  canvasW: number,
+  canvasH: number,
+  margin: number,
+): { x: number; y: number } {
+  const [vert, horiz] = position.split("-") as [
+    "top" | "bottom",
+    "left" | "center" | "right",
+  ];
+  let x: number;
+  if (horiz === "left") x = margin;
+  else if (horiz === "right") x = canvasW - margin - boxW;
+  else x = (canvasW - boxW) / 2;
+  let y = vert === "top" ? margin : canvasH - margin - boxH;
+  // Clamp so the box stays on-canvas; the near-edge margin wins when the box is
+  // wider/taller than the frame allows.
+  x = Math.max(margin, Math.min(x, Math.max(margin, canvasW - margin - boxW)));
+  y = Math.max(margin, Math.min(y, Math.max(margin, canvasH - margin - boxH)));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+/** Trace a rounded-rectangle path (fallback for contexts without `roundRect`). */
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+const CAPTION_FONT_FAMILY =
+  'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+
+/**
+ * Draw the caption overlay onto the recording context, sized to the frame. A
+ * no-op when there is no text or the frame is degenerate. Called once per frame
+ * from the compositor loop; it only measures and draws, so it stays cheap.
+ */
+export function drawCaptionOverlay(
+  ctx: CanvasRenderingContext2D,
+  options: CaptionOptions | null | undefined,
+  outW: number,
+  outH: number,
+): void {
+  if (!hasCaptionText(options) || outW < 2 || outH < 2) return;
+  const title = options?.title?.trim() ?? "";
+  const caption = options?.caption?.trim() ?? "";
+  const m = captionMetrics(outH);
+  const titleFont = `600 ${m.titlePx}px ${CAPTION_FONT_FAMILY}`;
+  const captionFont = `400 ${m.captionPx}px ${CAPTION_FONT_FAMILY}`;
+
+  // Measure both lines to size the background box around the widest one.
+  let textW = 0;
+  if (title) {
+    ctx.font = titleFont;
+    textW = Math.max(textW, ctx.measureText(title).width);
+  }
+  if (caption) {
+    ctx.font = captionFont;
+    textW = Math.max(textW, ctx.measureText(caption).width);
+  }
+  const lineH = (px: number) => Math.round(px * 1.2);
+  const titleLineH = title ? lineH(m.titlePx) : 0;
+  const captionLineH = caption ? lineH(m.captionPx) : 0;
+  const innerGap = title && caption ? m.lineGap : 0;
+  const boxW = Math.round(textW) + m.padX * 2;
+  const boxH = titleLineH + innerGap + captionLineH + m.padY * 2;
+  const { x, y } = captionBoxOrigin(
+    options?.position ?? DEFAULT_CAPTION_POSITION,
+    boxW,
+    boxH,
+    outW,
+    outH,
+    m.margin,
+  );
+
+  ctx.save();
+  // Semi-opaque rounded backing so the text stays legible over any basemap.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+  roundRectPath(ctx, x, y, boxW, boxH, m.radius);
+  ctx.fill();
+
+  ctx.textBaseline = "top";
+  ctx.textAlign = "left";
+  const tx = x + m.padX;
+  let ty = y + m.padY;
+  if (title) {
+    ctx.font = titleFont;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(title, tx, ty);
+    ty += titleLineH + innerGap;
+  }
+  if (caption) {
+    ctx.font = captionFont;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.fillText(caption, tx, ty);
+  }
+  ctx.restore();
+}
+
 export interface RecordMapOptions {
   map: MapLibreMap;
   /** Screen rectangle to capture, or null/omitted for the whole viewport. */
   region?: RecordRegion | null;
+  /**
+   * A title/source caption burned into every frame, or null/omitted for none.
+   * Snapshotted at the start of the recording (see {@link recordMapCanvas}).
+   */
+  caption?: CaptionOptions | null;
   /** Frames per second sampled from the canvas. */
   fps: number;
   /**
@@ -226,6 +440,7 @@ export interface MapRecording {
 export async function recordMapCanvas({
   map,
   region,
+  caption,
   fps,
   signal,
   onElapsed,
@@ -355,6 +570,10 @@ export async function recordMapCanvas({
           }
         }
       });
+      // Draw the title/source caption on top of the composited map, in output
+      // space. Text drawn with the 2D API keeps the canvas origin-clean, so the
+      // caption records fine where a rasterized DOM overlay would taint it.
+      drawCaptionOverlay(ctx, caption, out.width, out.height);
     }
     // Stop scheduling frames once the recording has failed; the finally below
     // cancels the last pending frame and stops the recorder.

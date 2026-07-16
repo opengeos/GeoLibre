@@ -714,6 +714,18 @@
     "noRegion": "Draw a rectangle on the map to choose the recording area.",
     "needRegion": "Select an area on the map first.",
     "fps": "Frames per second",
+    "caption": "Caption (burned into video)",
+    "captionTitlePlaceholder": "Title (optional)",
+    "captionTextPlaceholder": "Subtitle or data source (optional)",
+    "captionPosition": "Caption position",
+    "captionPos": {
+      "top-left": "Top left",
+      "top-center": "Top center",
+      "top-right": "Top right",
+      "bottom-left": "Bottom left",
+      "bottom-center": "Bottom center",
+      "bottom-right": "Bottom right"
+    },
     "record": "Record",
     "stop": "Stop",
     "savingStatus": "Saving video…",

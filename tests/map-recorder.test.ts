@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  CAPTION_POSITIONS,
+  captionBoxOrigin,
+  captionMetrics,
   computeCaptureRect,
+  hasCaptionText,
   MAP_RECORD_MIME_CANDIDATES,
   pickSupportedMimeType,
   videoExtensionForMime,
@@ -133,5 +137,98 @@ describe("computeCaptureRect", () => {
     assert.equal(rect.sy, 20);
     assert.equal(rect.sw, 40);
     assert.equal(rect.sh, 30);
+  });
+});
+
+describe("hasCaptionText", () => {
+  it("is false for no options, blank, or whitespace-only text", () => {
+    assert.equal(hasCaptionText(null), false);
+    assert.equal(hasCaptionText(undefined), false);
+    assert.equal(
+      hasCaptionText({ title: "", caption: "", position: "bottom-left" }),
+      false,
+    );
+    assert.equal(
+      hasCaptionText({ title: "  ", caption: "\t", position: "bottom-left" }),
+      false,
+    );
+  });
+
+  it("is true when either the title or the caption has non-blank text", () => {
+    assert.equal(
+      hasCaptionText({ title: "Hello", caption: "", position: "top-left" }),
+      true,
+    );
+    assert.equal(
+      hasCaptionText({ title: " ", caption: "Source", position: "top-left" }),
+      true,
+    );
+  });
+});
+
+describe("captionMetrics", () => {
+  it("scales the title with the frame height", () => {
+    // ~1080p and ~2160p frames get proportionally larger, capped title text.
+    assert.ok(captionMetrics(2160).titlePx > captionMetrics(1080).titlePx);
+  });
+
+  it("clamps the title size for tiny and huge frames", () => {
+    assert.equal(captionMetrics(100).titlePx, 14); // floor
+    assert.equal(captionMetrics(100_000).titlePx, 48); // ceiling
+  });
+
+  it("derives paddings and the caption line from the title size", () => {
+    const m = captionMetrics(1000);
+    assert.ok(m.captionPx > 0 && m.captionPx < m.titlePx);
+    assert.ok(m.padX > 0 && m.padY > 0 && m.margin > 0);
+  });
+});
+
+describe("captionBoxOrigin", () => {
+  const W = 1920;
+  const H = 1080;
+  const box = { w: 400, h: 120 };
+  const margin = 24;
+
+  it("anchors each corner with the margin inset", () => {
+    assert.deepEqual(
+      captionBoxOrigin("top-left", box.w, box.h, W, H, margin),
+      { x: 24, y: 24 },
+    );
+    assert.deepEqual(
+      captionBoxOrigin("bottom-right", box.w, box.h, W, H, margin),
+      { x: W - margin - box.w, y: H - margin - box.h },
+    );
+  });
+
+  it("centers horizontally for the center positions", () => {
+    const top = captionBoxOrigin("top-center", box.w, box.h, W, H, margin);
+    assert.equal(top.x, Math.round((W - box.w) / 2));
+    assert.equal(top.y, margin);
+    const bottom = captionBoxOrigin(
+      "bottom-center",
+      box.w,
+      box.h,
+      W,
+      H,
+      margin,
+    );
+    assert.equal(bottom.x, Math.round((W - box.w) / 2));
+    assert.equal(bottom.y, H - margin - box.h);
+  });
+
+  it("pins an over-wide box to the near margin instead of off-canvas", () => {
+    // A box wider than the frame can't fit; it stays at the left margin rather
+    // than getting a negative x that would float it off-screen.
+    const origin = captionBoxOrigin("top-right", 5000, box.h, W, H, margin);
+    assert.equal(origin.x, margin);
+  });
+
+  it("covers every selectable position without going off-canvas", () => {
+    for (const position of CAPTION_POSITIONS) {
+      const { x, y } = captionBoxOrigin(position, box.w, box.h, W, H, margin);
+      assert.ok(x >= 0 && x + box.w <= W, `${position} x in bounds`);
+      assert.ok(y >= 0 && y + box.h <= H, `${position} y in bounds`);
+    }
   });
 });
