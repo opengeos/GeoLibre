@@ -716,6 +716,7 @@
     "fps": "Frames per second",
     "caption": "Caption (burned into video)",
     "captionTitlePlaceholder": "Title (optional)",
+    "captionTextLabel": "Caption subtitle or data source",
     "captionTextPlaceholder": "Subtitle or data source (optional)",
     "captionPosition": "Caption position",
     "captionPos": {

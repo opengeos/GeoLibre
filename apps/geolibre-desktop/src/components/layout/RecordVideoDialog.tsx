@@ -455,6 +455,7 @@ export function RecordVideoDialog({
             />
             <Input
               id="record-video-caption-text"
+              aria-label={t("recordVideo.captionTextLabel")}
               disabled={editingFrozen}
               value={captionText}
               onChange={(e) => setCaptionText(e.target.value)}

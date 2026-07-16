@@ -308,7 +308,10 @@ export function captionBoxOrigin(
   return { x: Math.round(x), y: Math.round(y) };
 }
 
-/** Trace a rounded-rectangle path (fallback for contexts without `roundRect`). */
+/**
+ * Trace a rounded-rectangle path, preferring the native `roundRect` and falling
+ * back to `arcTo` for contexts that lack it (older Safari/Firefox).
+ */
 function roundRectPath(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -319,6 +322,10 @@ function roundRectPath(
 ): void {
   const rr = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();
+  if (typeof ctx.roundRect === "function") {
+    ctx.roundRect(x, y, w, h, rr);
+    return;
+  }
   ctx.moveTo(x + rr, y);
   ctx.arcTo(x + w, y, x + w, y + h, rr);
   ctx.arcTo(x + w, y + h, x, y + h, rr);
@@ -362,7 +369,12 @@ export function drawCaptionOverlay(
   const titleLineH = title ? lineH(m.titlePx) : 0;
   const captionLineH = caption ? lineH(m.captionPx) : 0;
   const innerGap = title && caption ? m.lineGap : 0;
-  const boxW = Math.round(textW) + m.padX * 2;
+  // Cap the box to the frame (minus margins) so a very long caption can't run
+  // off the canvas with a hard mid-glyph cut-off; the text is then drawn with
+  // fillText's maxWidth so the browser compresses it to fit, matching how
+  // print-layout.ts burns a user-supplied title/subtitle onto a canvas.
+  const maxBoxW = Math.max(m.padX * 2 + 8, outW - m.margin * 2);
+  const boxW = Math.min(Math.round(textW) + m.padX * 2, maxBoxW);
   const boxH = titleLineH + innerGap + captionLineH + m.padY * 2;
   const { x, y } = captionBoxOrigin(
     options?.position ?? DEFAULT_CAPTION_POSITION,
@@ -383,16 +395,17 @@ export function drawCaptionOverlay(
   ctx.textAlign = "left";
   const tx = x + m.padX;
   let ty = y + m.padY;
+  const maxTextW = boxW - m.padX * 2;
   if (title) {
     ctx.font = titleFont;
     ctx.fillStyle = "#ffffff";
-    ctx.fillText(title, tx, ty);
+    ctx.fillText(title, tx, ty, maxTextW);
     ty += titleLineH + innerGap;
   }
   if (caption) {
     ctx.font = captionFont;
     ctx.fillStyle = "rgba(255, 255, 255, 0.85)";
-    ctx.fillText(caption, tx, ty);
+    ctx.fillText(caption, tx, ty, maxTextW);
   }
   ctx.restore();
 }
