@@ -2712,6 +2712,7 @@
       "toolsAvailable_other": "{{count}} tools available.",
       "runtimeUnavailable": "Whitebox runtime is unavailable.",
       "useMapExtent": "Use map extent",
+      "fromLayer": "From layer",
       "drawBbox": "Draw on map",
       "drawingBbox": "Drawing…",
       "drawBboxHint": "Drag a box on the map to set the bounding box. Press Esc to cancel.",
