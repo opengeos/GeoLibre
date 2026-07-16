@@ -1,6 +1,7 @@
 import { useAppStore, type ConversionToolKind } from "@geolibre/core";
 import {
   COG_WASM_COMPRESSIONS,
+  MAX_VECTOR_PMTILES_ZOOM,
   PMTILES_COLORMAPS,
   PMTILES_RESAMPLING_METHODS,
   fetchConversionJob,
@@ -167,8 +168,9 @@ interface ConversionToolConfig {
   compressions?: string[];
   defaultCompression?: string;
   /** Input filters when running in-browser, for tools whose WASM engine reads a
-   * narrower set of formats than the sidecar's GDAL. Falls back to
-   * `inputFilters`. */
+   * different set of formats than the sidecar's — usually narrower (Raster to
+   * COG reads GeoTIFF only), occasionally wider (the WASM vector tiler reads a
+   * Shapefile, which freestiler does not). Falls back to `inputFilters`. */
   browserInputFilters?: FileDialogFilter[];
   /** Compression choices when running in-browser, for tools whose WASM encoder
    * supports fewer codecs than the sidecar's. Falls back to `compressions`. */
@@ -262,9 +264,10 @@ function browserExportFormatForExtension(extension: string) {
 // stack reads more input formats and preserves dtypes and codecs the WASM
 // writers cannot — so this set only takes effect in the browser build.
 //
-// Vector to PMTiles is absent deliberately: geolibre-wasm's `write_pmtiles`
-// renders *rasters*, and `PmtilesExtractor` only subsets an existing archive, so
-// there is no client-side vector tiler to replace the sidecar's freestiler.
+// Vector to PMTiles is here as of geolibre-wasm 0.8.0, whose `vector_to_pmtiles`
+// is the client-side counterpart to the sidecar's freestiler. Desktop keeps
+// freestiler: it reads more input formats and tiles as deep as zoom 24, where
+// the WASM tiler stops at MAX_VECTOR_PMTILES_ZOOM.
 const WEB_RUNTIME_KINDS: ReadonlySet<ConversionToolKind> = new Set([
   "vector-to-vector",
   "vector-to-geoparquet",
@@ -272,6 +275,7 @@ const WEB_RUNTIME_KINDS: ReadonlySet<ConversionToolKind> = new Set([
   "vector-to-flatgeobuf",
   "vector-to-shapefile",
   "vector-to-geopackage",
+  "vector-to-pmtiles",
   "raster-to-cog",
 ]);
 
@@ -305,7 +309,9 @@ const WASM_VECTOR_OUTPUT_EXTENSIONS = new Set(
   Object.keys(WASM_VECTOR_OUTPUT_FORMATS),
 );
 
-/** Deepest zoom either PMTiles tool accepts. */
+// Deepest zoom the sidecar's engines accept — freestiler's Vector to PMTiles cap
+// and, since write_pmtiles imposes none of its own, what Raster to PMTiles uses
+// too. The in-browser vector tiler stops lower, at MAX_VECTOR_PMTILES_ZOOM.
 const MAX_PMTILES_ZOOM = 24;
 
 // Plain decimal digits only. `Number` alone would accept JS numeric-literal
@@ -345,23 +351,26 @@ interface PmtilesZoomRange {
 }
 
 /**
- * Parse the shared min/max zoom inputs, enforcing `0 ≤ min ≤ max ≤ 24`. Blank
- * means "unset" and is returned as undefined — Vector to PMTiles rejects that
- * (the sidecar requires both), while Raster to PMTiles passes it through so
+ * Parse the shared min/max zoom inputs, enforcing `0 ≤ min ≤ max ≤ maxAllowed`.
+ * Blank means "unset" and is returned as undefined — Vector to PMTiles rejects
+ * that (the sidecar requires both), while Raster to PMTiles passes it through so
  * `write_pmtiles` applies its own native-resolution default.
  *
+ * @param maxAllowed - The cap of the engine about to run, since the browser's
+ * vector tiler stops shallower than the sidecar's.
  * @returns The parsed bounds, or null when the input is out of range.
  */
 function parseZoomRange(
   rawMin: string,
   rawMax: string,
+  maxAllowed: number,
 ): PmtilesZoomRange | null {
   const parse = (raw: string): number | null | undefined => {
     // parsePlainInteger, not parseInt: parseInt truncates, so "3.5"/"3abc"
     // would silently become zoom 3 rather than being rejected.
     const value = parsePlainInteger(raw);
     if (value === null || value === undefined) return value;
-    return value > MAX_PMTILES_ZOOM ? null : value;
+    return value > maxAllowed ? null : value;
   };
   const minZoom = parse(rawMin);
   const maxZoom = parse(rawMax);
@@ -377,6 +386,7 @@ function browserRuntimeMessageKey(kind: ConversionToolKind): ParseKeys {
   switch (kind) {
     case "raster-to-cog":
     case "raster-to-pmtiles":
+    case "vector-to-pmtiles":
     case "vector-to-flatgeobuf":
       return "toolbar.conversion.runsInBrowserWasm";
     case "vector-to-shapefile":
@@ -471,6 +481,23 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
       {
         name: "Vector",
         extensions: ["parquet", "geoparquet", "geojson", "json", "gpkg", "fgb"],
+      },
+    ],
+    // `vector_to_pmtiles` reads everything freestiler does plus a Shapefile, as
+    // long as the .dbf/.shx/.prj come with it — the picker already offers those
+    // sidecars, so the .shp only needs to be selectable.
+    browserInputFilters: [
+      {
+        name: "Vector",
+        extensions: [
+          "parquet",
+          "geoparquet",
+          "geojson",
+          "json",
+          "shp",
+          "gpkg",
+          "fgb",
+        ],
       },
     ],
     outputLabel: "Output PMTiles file",
@@ -582,9 +609,11 @@ export function ConversionDialog() {
       return;
     }
     if (!desktop) {
-      // Only Vector to PMTiles reaches this: it is the one conversion with no
-      // client-side engine (see WEB_RUNTIME_KINDS), and a pure web build cannot
-      // start the sidecar it needs.
+      // No kind reaches this today — every ConversionToolKind now has a
+      // client-side engine (see WEB_RUNTIME_KINDS/WASM_ONLY_KINDS), Vector to
+      // PMTiles being the last to get one. It stays as the guard for any future
+      // sidecar-only conversion, so a pure web build says so outright instead of
+      // trying to reach a sidecar it cannot start.
       setRuntimeAvailable(false);
       setRuntimeMessage(i18n.t("toolbar.conversion.needsDesktop"));
       return;
@@ -967,9 +996,11 @@ export function ConversionDialog() {
   const runBrowserRasterToPmtiles = async (mainFile: File) => {
     if (!kind) return;
     const toolId = kind;
-    const zooms = parseZoomRange(minZoom, maxZoom);
+    const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
     if (!zooms) {
-      setError(i18n.t("toolbar.conversion.zoomRangeError"));
+      setError(
+        i18n.t("toolbar.conversion.zoomRangeError", { max: MAX_PMTILES_ZOOM }),
+      );
       return;
     }
     const parsedBand = parseBand(band);
@@ -1048,6 +1079,82 @@ export function ConversionDialog() {
     }
   };
 
+  /** Vector to PMTiles via geolibre-wasm's `vector_to_pmtiles`, in the browser. */
+  const runBrowserVectorToPmtiles = async (
+    mainFile: File,
+    siblings: File[],
+  ) => {
+    if (!kind) return;
+    const toolId = kind;
+    // The WASM tiler stops shallower than the sidecar's freestiler, so the same
+    // zoom the desktop app accepts can be too deep here. Check it up front
+    // rather than letting the user wait for the tool's own validation error.
+    const zooms = parseZoomRange(minZoom, maxZoom, MAX_VECTOR_PMTILES_ZOOM);
+    if (!zooms) {
+      setError(
+        i18n.t("toolbar.conversion.zoomRangeError", {
+          max: MAX_VECTOR_PMTILES_ZOOM,
+        }),
+      );
+      return;
+    }
+    const outputName =
+      outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
+    setError(null);
+    setJob(
+      browserConversionJob(toolId, "running", [
+        i18n.t("toolbar.conversion.convertingWithWasm", { name: mainFile.name }),
+      ]),
+    );
+    try {
+      const { tileVectorToPmtiles } = await import("@geolibre/processing");
+      const [data, siblingFiles] = await Promise.all([
+        mainFile.arrayBuffer().then((buffer) => new Uint8Array(buffer)),
+        Promise.all(
+          siblings.map(async (file) => ({
+            name: file.name,
+            data: new Uint8Array(await file.arrayBuffer()),
+          })),
+        ),
+      ]);
+      const result = await tileVectorToPmtiles(
+        { name: mainFile.name, data },
+        outputName,
+        {
+          ...zooms,
+          // Same fallback as the sidecar branch, so an archive tiled in the
+          // browser and one tiled on desktop carry the same layer name and a
+          // style written against either keeps working.
+          layerName: layerName.trim() || "data",
+        },
+        siblingFiles,
+      );
+      const savedName = await saveBinaryFileWithFallback(result.data, {
+        defaultName: outputName,
+        filters: config?.outputFilters ?? [],
+        mimeType: PMTILES_MIME_TYPE,
+        browserTypes: [
+          {
+            description: "PMTiles",
+            accept: { [PMTILES_MIME_TYPE]: [".pmtiles"] },
+          },
+        ],
+      });
+      setJob(
+        browserConversionJob(toolId, "succeeded", [
+          ...result.messages,
+          savedName
+            ? i18n.t("toolbar.conversion.savedFile", { name: savedName })
+            : i18n.t("toolbar.conversion.saveCanceled"),
+        ]),
+      );
+    } catch (err) {
+      const detail =
+        err instanceof Error ? err.message : i18n.t("toolbar.conversion.convertFailed");
+      setJob(browserConversionJob(toolId, "failed", [detail], detail));
+    }
+  };
+
   const runBrowserConversion = async () => {
     // Only reached when usesBrowserRuntime is true, which requires a kind.
     if (!kind) return;
@@ -1067,6 +1174,13 @@ export function ConversionDialog() {
     }
     if (kind === "raster-to-pmtiles") {
       await runBrowserRasterToPmtiles(mainFile);
+      return;
+    }
+    if (kind === "vector-to-pmtiles") {
+      // vector_to_pmtiles reads a bare .shp with its siblings, not a .zip — the
+      // same limit rejectZipInput covers for the other WASM vector tools.
+      if (rejectZipInput(mainFile)) return;
+      await runBrowserVectorToPmtiles(mainFile, siblings);
       return;
     }
     if (kind === "vector-to-flatgeobuf") {
@@ -1251,13 +1365,17 @@ export function ConversionDialog() {
       } else if (kind === "vector-to-pmtiles") {
         // Unlike Raster to PMTiles, the sidecar requires both bounds, so a blank
         // (undefined) one is an error rather than a "let the engine decide".
-        const zooms = parseZoomRange(minZoom, maxZoom);
+        const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
         if (
           !zooms ||
           zooms.minZoom === undefined ||
           zooms.maxZoom === undefined
         ) {
-          setError(i18n.t("toolbar.conversion.zoomRangeError"));
+          setError(
+            i18n.t("toolbar.conversion.zoomRangeError", {
+              max: MAX_PMTILES_ZOOM,
+            }),
+          );
           return;
         }
         setJob(

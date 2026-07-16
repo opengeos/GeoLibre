@@ -31,7 +31,7 @@ export interface WhiteboxMenuCategory {
   subcategories: WhiteboxMenuSubcategory[];
 }
 
-/** 754 tools across 9 categories. */
+/** 755 tools across 9 categories. */
 export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
   {
     key: "conversion",
@@ -49,6 +49,7 @@ export const WHITEBOX_MENU_CATALOG: WhiteboxMenuCategory[] = [
           { id: "read_geoparquet", name: "Read GeoParquet" },
           { id: "vector_convert", name: "Vector Convert" },
           { id: "vector_to_h3", name: "Vector to H3 Bins" },
+          { id: "vector_to_pmtiles", name: "Vector to PMTiles" },
           { id: "write_geoparquet", name: "Write GeoParquet" },
         ],
       },

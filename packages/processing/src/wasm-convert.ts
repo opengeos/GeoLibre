@@ -1,19 +1,23 @@
 // In-browser format conversion backed by the `geolibre-wasm/tools` WASI runner
 // (the same ~18 MB binary wasm-client.ts and raster-subset.ts use, loaded
-// lazily and shared once downloaded). These wrap two GeoLibre-authored tools:
+// lazily and shared once downloaded). These wrap three GeoLibre-authored tools:
 //
-//   - `vector_convert`  — any vector format -> any vector format (driver picked
-//                         from the output extension). Used for the formats the
-//                         pure-JS writers in vector-exporter.ts cannot produce,
-//                         notably FlatGeobuf.
-//   - `write_pmtiles`   — render a *raster* into a Web Mercator PNG tile pyramid
-//                         packed as a single PMTiles archive.
+//   - `vector_convert`    — any vector format -> any vector format (driver picked
+//                           from the output extension). Used for the formats the
+//                           pure-JS writers in vector-exporter.ts cannot produce,
+//                           notably FlatGeobuf.
+//   - `write_pmtiles`     — render a *raster* into a Web Mercator PNG tile
+//                           pyramid packed as a single PMTiles archive.
+//   - `vector_to_pmtiles` — pack a *vector* layer into a single PMTiles archive
+//                           of Mapbox Vector Tiles (geolibre-wasm 0.8.0+).
 //
-// Both run entirely client-side, so the web build no longer needs the Python
-// sidecar for them. Note `write_pmtiles` is raster-only: there is no vector
-// tiler in geolibre-wasm, so Vector to PMTiles remains sidecar-backed
-// (freestiler) and desktop-only.
+// All three run entirely client-side, so the web build needs no Python sidecar
+// for them.
 import type { RunToolOptions, ToolResult } from "geolibre-wasm/tools";
+import type {
+  WasmToolRequest,
+  WasmToolResponse,
+} from "./wasm-convert.worker";
 
 /** The subset of `geolibre-wasm/tools` these converters use. */
 interface ConvertToolsModule {
@@ -60,6 +64,62 @@ export async function initConvertTools(
   await initTools(source);
 }
 
+/**
+ * Run a tool on a one-shot Web Worker and resolve with its result.
+ *
+ * No timeout: how long a tool runs is bounded by the data, not the clock (a
+ * country-scale tile pyramid is minutes), and cutting off work that would have
+ * finished is worse than waiting. `error`/`messageerror` still reject, so the
+ * promise settles on every failure the worker can report.
+ */
+function runToolOnWorker(request: WasmToolRequest): Promise<ToolResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL("./wasm-convert.worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    worker.addEventListener(
+      "message",
+      (event: MessageEvent<WasmToolResponse>) => {
+        worker.terminate();
+        if (event.data.ok) resolve(event.data.result);
+        else reject(new Error(event.data.error || `${request.tool} failed.`));
+      },
+    );
+    worker.addEventListener("error", (event) => {
+      worker.terminate();
+      reject(new Error(event.message || `The ${request.tool} worker failed.`));
+    });
+    // `error` does not fire when a posted message cannot be deserialized, which
+    // would otherwise leave this promise pending forever.
+    worker.addEventListener("messageerror", () => {
+      worker.terminate();
+      reject(
+        new Error(`The ${request.tool} worker posted an undeserializable message.`),
+      );
+    });
+    // The input files are structured-cloned rather than transferred: these
+    // wrappers do not otherwise take ownership of the caller's bytes, and a
+    // neutered input array would be a trap the sibling converters don't set.
+    worker.postMessage(request);
+  });
+}
+
+/**
+ * Run a tool off the main thread where Workers exist, inline where they do not
+ * (node, tests). The inline path is why {@link initConvertTools} still takes an
+ * explicit wasm source: a worker resolves its own bundled copy instead.
+ */
+async function runToolInBackground(
+  request: WasmToolRequest,
+): Promise<ToolResult> {
+  if (typeof Worker === "undefined") {
+    const { runTool } = await loadToolsModule();
+    return runTool(request.tool, { args: request.args, input: request.input });
+  }
+  return runToolOnWorker(request);
+}
+
 /** An input file for a WASM conversion: its name (the extension drives format
  * detection) and its raw bytes. */
 export interface WasmConvertFile {
@@ -87,6 +147,20 @@ function assertToolSucceeded(tool: string, result: ToolResult): void {
   throw new Error(
     detail?.trim() || `${tool} failed with exit code ${result.exitCode}.`,
   );
+}
+
+/**
+ * Append a `--name=value` argument for every flag that is set. An `undefined`
+ * value is left off entirely, which is what lets callers say "leave it to the
+ * tool" rather than having this module restate the tool's own defaults.
+ */
+function appendFlags(
+  args: string[],
+  flags: Array<[string, number | string | boolean | undefined]>,
+): void {
+  for (const [name, value] of flags) {
+    if (value !== undefined) args.push(`--${name}=${value}`);
+  }
 }
 
 /** Pull the single expected output out of a tool's virtual /work filesystem. */
@@ -193,7 +267,7 @@ export async function renderRasterToPmtiles(
 ): Promise<WasmConvertResult> {
   const { runTool } = await loadToolsModule();
   const args = [`--input=/work/${input.name}`, `--output=/work/${outputName}`];
-  const flags: Array<[string, number | string | undefined]> = [
+  appendFlags(args, [
     ["min_zoom", options.minZoom],
     ["max_zoom", options.maxZoom],
     ["band", options.band],
@@ -201,10 +275,7 @@ export async function renderRasterToPmtiles(
     ["method", options.method],
     ["min", options.min],
     ["max", options.max],
-  ];
-  for (const [name, value] of flags) {
-    if (value !== undefined) args.push(`--${name}=${value}`);
-  }
+  ]);
   const result = await runTool("write_pmtiles", {
     args,
     input: { [input.name]: input.data },
@@ -212,6 +283,79 @@ export async function renderRasterToPmtiles(
   assertToolSucceeded("write_pmtiles", result);
   return {
     data: requireOutput("write_pmtiles", result, outputName),
+    messages: result.stdout,
+  };
+}
+
+/**
+ * The deepest zoom `vector_to_pmtiles` accepts; past it the tool exits with
+ * `validation error: max_zoom must be <= 18`.
+ *
+ * This is *lower* than the 24 the sidecar's freestiler allows, so the two
+ * engines behind Vector to PMTiles do not share a cap and callers have to
+ * validate against whichever one they are about to run.
+ */
+export const MAX_VECTOR_PMTILES_ZOOM = 18;
+
+export interface VectorToPmtilesOptions {
+  /** Minimum zoom. Defaults to 0. */
+  minZoom?: number;
+  /** Maximum zoom. Defaults to 14; {@link MAX_VECTOR_PMTILES_ZOOM} is the ceiling. */
+  maxZoom?: number;
+  /** Layer name inside the tiles, used when styling. Defaults to the input layer's name. */
+  layerName?: string;
+  /** Simplify geometries per zoom level. Defaults to true. */
+  simplify?: boolean;
+  /** Tippecanoe-style rate at which features are dropped at low zooms. Defaults to no dropping. */
+  dropRate?: number;
+}
+
+/**
+ * Pack a vector dataset into a single PMTiles archive of Mapbox Vector Tiles in
+ * the browser — the client-side counterpart to the sidecar's freestiler.
+ *
+ * Reads whatever `vector_convert` reads (GeoJSON, Shapefile, GeoPackage,
+ * FlatGeobuf, GeoParquet, ...), so multi-file datasets pass their companions as
+ * `siblings`, exactly as in {@link convertVectorWithWasm}.
+ *
+ * Unlike its siblings here this runs on a Web Worker (see
+ * {@link runToolInBackground}). Tiling is by far the heaviest of these tools —
+ * a US-wide layer to the default zoom 14 is millions of tiles and minutes of
+ * uninterrupted WASM — so running it on the main thread would freeze the UI for
+ * the whole conversion. The others finish quickly enough not to warrant the
+ * worker's separate ~18 MB wasm compile, but they can adopt this if that
+ * changes.
+ *
+ * @param input - The main input file (name + bytes).
+ * @param outputName - Output archive name, e.g. `roads.pmtiles`.
+ * @param options - Zoom range, layer name, simplification, and drop rate.
+ * @param siblings - Companion files for multi-file formats.
+ * @returns The PMTiles bytes and the tool's log lines.
+ */
+export async function tileVectorToPmtiles(
+  input: WasmConvertFile,
+  outputName: string,
+  options: VectorToPmtilesOptions = {},
+  siblings: WasmConvertFile[] = [],
+): Promise<WasmConvertResult> {
+  const args = [`--input=/work/${input.name}`, `--output=/work/${outputName}`];
+  appendFlags(args, [
+    ["min_zoom", options.minZoom],
+    ["max_zoom", options.maxZoom],
+    ["layer_name", options.layerName],
+    ["simplify", options.simplify],
+    ["drop_rate", options.dropRate],
+  ]);
+  const files: Record<string, Uint8Array> = { [input.name]: input.data };
+  for (const sibling of siblings) files[sibling.name] = sibling.data;
+  const result = await runToolInBackground({
+    tool: "vector_to_pmtiles",
+    args,
+    input: files,
+  });
+  assertToolSucceeded("vector_to_pmtiles", result);
+  return {
+    data: requireOutput("vector_to_pmtiles", result, outputName),
     messages: result.stdout,
   };
 }

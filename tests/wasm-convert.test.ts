@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { before, describe, it } from "node:test";
 import {
+  MAX_VECTOR_PMTILES_ZOOM,
   convertVectorWithWasm,
   initConvertTools,
   renderRasterToPmtiles,
+  tileVectorToPmtiles,
 } from "../packages/processing/src/wasm-convert";
 
 const fixture = (name: string) =>
@@ -273,6 +275,101 @@ describe("wasm-convert", () => {
           "points.pmtiles",
         ),
         /unknown raster format/i,
+      );
+    });
+  });
+
+  describe("tileVectorToPmtiles", () => {
+    it("tiles a vector layer into a PMTiles archive", async () => {
+      const result = await tileVectorToPmtiles(
+        { name: "points.geojson", data: pointsGeoJson },
+        "points.pmtiles",
+        { minZoom: 0, maxZoom: 6 },
+      );
+      assert.ok(
+        hasMagic(result.data, PMTILES_MAGIC),
+        "output should carry the PMTiles magic bytes",
+      );
+      assert.ok(result.messages.length > 0, "tool log lines should be surfaced");
+    });
+
+    // The dialog sends layerName on both runtimes so a style written against a
+    // browser-tiled archive still matches a desktop-tiled one. The name is
+    // inside the tiles, so it has to reach the tool rather than be dropped.
+    it("names the tile layer", async () => {
+      const result = await tileVectorToPmtiles(
+        { name: "points.geojson", data: pointsGeoJson },
+        "points.pmtiles",
+        { minZoom: 0, maxZoom: 4, layerName: "roads" },
+      );
+      assert.ok(
+        result.messages.some((line) => line.includes('"layer_name":"roads"')),
+        `the tool should report the requested layer name, got: ${result.messages.join(" | ")}`,
+      );
+    });
+
+    // A bare .shp has no geometry without its companions, so the dialog passes
+    // the .dbf/.shx/.prj the user selected alongside it.
+    it("reads a Shapefile from its siblings", async () => {
+      // convertVectorWithWasm returns only the single output it was asked for,
+      // so the multi-file fixture comes from the raw runner instead.
+      const { runTool } = await import("geolibre-wasm/tools");
+      const written = await runTool("vector_convert", {
+        args: ["--input=/work/points.geojson", "--output=/work/points.shp"],
+        input: { "points.geojson": pointsGeoJson },
+      });
+      const parts = Object.entries(written.files).map(([name, data]) => ({
+        name,
+        data,
+      }));
+      assert.ok(
+        parts.length > 1,
+        `the driver should write sidecars, got: ${parts.map((p) => p.name).join(", ")}`,
+      );
+      const main = parts.find((part) => part.name === "points.shp");
+      assert.ok(main);
+      const siblings = parts.filter((part) => part.name !== "points.shp");
+
+      const result = await tileVectorToPmtiles(
+        main,
+        "points.pmtiles",
+        { minZoom: 0, maxZoom: 4 },
+        siblings,
+      );
+      assert.ok(hasMagic(result.data, PMTILES_MAGIC));
+
+      // Without the sidecars the same .shp cannot be read, which is why the
+      // dialog forwards the companion files the user selected.
+      await assert.rejects(
+        tileVectorToPmtiles(main, "alone.pmtiles", { minZoom: 0, maxZoom: 4 }),
+        /failed reading input vector|No such file/i,
+      );
+    });
+
+    // MAX_VECTOR_PMTILES_ZOOM is the cap the dialog validates against before it
+    // runs; if the tool's own limit ever moved, that check would be wrong.
+    it("accepts the documented maximum zoom and rejects one deeper", async () => {
+      const atCap = await tileVectorToPmtiles(
+        { name: "points.geojson", data: pointsGeoJson },
+        "cap.pmtiles",
+        { minZoom: MAX_VECTOR_PMTILES_ZOOM, maxZoom: MAX_VECTOR_PMTILES_ZOOM },
+      );
+      assert.ok(hasMagic(atCap.data, PMTILES_MAGIC));
+
+      await assert.rejects(
+        tileVectorToPmtiles(
+          { name: "points.geojson", data: pointsGeoJson },
+          "over.pmtiles",
+          { maxZoom: MAX_VECTOR_PMTILES_ZOOM + 1 },
+        ),
+        /max_zoom must be <= 18/i,
+      );
+    });
+
+    it("rejects a raster input, which the vector tiler cannot read", async () => {
+      await assert.rejects(
+        tileVectorToPmtiles({ name: "dem.tif", data: stripedTiff }, "dem.pmtiles"),
+        /vector|unsupported|unknown/i,
       );
     });
   });

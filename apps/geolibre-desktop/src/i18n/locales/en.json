@@ -1747,7 +1747,7 @@
       "rasterShape": "Read {{width}}×{{height}} raster with {{bands}} band(s)",
       "wroteCog": "Wrote a tiled COG with overviews ({{compression}})",
       "notAGeoTiff": "This file is not a readable GeoTIFF. In the browser, Raster to COG reads GeoTIFF only; other formats need the desktop app.",
-      "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ 24.",
+      "zoomRangeError": "Zoom levels must satisfy 0 ≤ min ≤ max ≤ {{max}}.",
       "colormap": "Colormap",
       "resampling": "Resampling",
       "colormapDefault": "Default (viridis)",
