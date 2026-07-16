@@ -66,6 +66,14 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
     url: "https://data.source.coop/opengeos/geoai/S2C-MSIL2A-20250920T162001-subset.tif",
     attribution: "Copernicus Sentinel data (ESA)",
   },
+  {
+    // A gdalbuildvrt mosaic of six NAIP COG tiles (4-band RGB+NIR), read
+    // straight from the .vrt: exercises maplibre-gl-raster's VRT support
+    // (v0.11.0+), which renders a plain COG mosaic in the browser without GDAL.
+    label: "NAIP mosaic (VRT)",
+    url: "https://data.source.coop/giswqs/opengeos/naip_water_train.vrt",
+    attribution: "USDA Farm Service Agency (NAIP)",
+  },
 ];
 
 // This type mirrors undocumented private members of RasterControl from
