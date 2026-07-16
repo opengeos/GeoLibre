@@ -16,6 +16,51 @@ const fixture = (name: string) =>
 // The same tiny 32x32 Int16 GeoTIFF cog-convert.test.ts uses.
 const stripedTiff = fixture("striped.tif");
 
+/**
+ * Build a small 3-band 8-bit RGB GeoTIFF in memory, so the band-selection test
+ * has a multi-band source without checking another binary fixture into the repo.
+ * Each band gets a distinct gradient, so rendering a different band must produce
+ * different tiles.
+ */
+async function makeRgbTiff(): Promise<Uint8Array> {
+  const initWasm = (await import("geolibre-wasm")).default;
+  const { CogBuilder } = await import("geolibre-wasm");
+  await initWasm({
+    module_or_path: readFileSync(
+      fileURLToPath(
+        new URL(
+          "../node_modules/geolibre-wasm/geolibre_wasm_bg.wasm",
+          import.meta.url,
+        ),
+      ),
+    ),
+  });
+  const width = 64;
+  const height = 64;
+  const bands = 3;
+  const pixels = new Uint8Array(width * height * bands);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = (y * width + x) * bands;
+      pixels[i] = x * 4;
+      pixels[i + 1] = y * 4;
+      pixels[i + 2] = 128;
+    }
+  }
+  const builder = new CogBuilder(width, height, bands);
+  try {
+    builder.set_epsg(4326);
+    builder.set_geo_transform(Float64Array.from([-83, 0.01, 0, 40, 0, -0.01]));
+    builder.set_tile_size(512);
+    builder.set_compression("deflate");
+    return builder.write_u8(pixels);
+  } finally {
+    builder.free();
+  }
+}
+
+let rgbTiff: Uint8Array;
+
 const pointsGeoJson = new TextEncoder().encode(
   JSON.stringify({
     type: "FeatureCollection",
@@ -58,6 +103,7 @@ describe("wasm-convert", () => {
         ),
       ),
     );
+    rgbTiff = await makeRgbTiff();
   });
 
   describe("convertVectorWithWasm", () => {
@@ -194,6 +240,29 @@ describe("wasm-convert", () => {
       assert.ok(
         native.data.byteLength < pyramid.data.byteLength,
         `native (${native.data.byteLength}) should be smaller than a forced 0-14 pyramid (${pyramid.data.byteLength})`,
+      );
+    });
+
+    // The dialog exposes a band selector, so band has to actually reach the tool
+    // rather than being pinned to 1.
+    it("renders the requested band of a multi-band raster", async () => {
+      const [first, second] = await Promise.all([
+        renderRasterToPmtiles({ name: "rgb.tif", data: rgbTiff }, "b1.pmtiles", {
+          minZoom: 0,
+          maxZoom: 3,
+          band: 1,
+        }),
+        renderRasterToPmtiles({ name: "rgb.tif", data: rgbTiff }, "b2.pmtiles", {
+          minZoom: 0,
+          maxZoom: 3,
+          band: 2,
+        }),
+      ]);
+      assert.ok(hasMagic(first.data, PMTILES_MAGIC));
+      assert.notDeepEqual(
+        first.data,
+        second.data,
+        "a different band should change the rendered tiles",
       );
     });
 

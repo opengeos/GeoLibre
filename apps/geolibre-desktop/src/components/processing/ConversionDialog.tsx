@@ -211,12 +211,13 @@ const VECTOR_TO_VECTOR_INPUT_EXTENSIONS = [
   "gpx",
 ];
 
-// In-browser writers, keyed by output extension. DuckDB-WASM cannot write GDAL
-// vector formats (its virtual filesystem lacks the random-access seek/write the
-// GDAL drivers need), so the web build is limited to GeoParquet (DuckDB) plus
-// the pure-JS GeoJSON/CSV/GeoPackage/Shapefile writers. The Shapefile writer
-// always emits a zip, so `.zip` (not bare `.shp`) is the browser Shapefile
-// option; a bare `.shp` is produced only by the desktop sidecar.
+// In-browser JS writers, keyed by output extension. DuckDB-WASM cannot write
+// GDAL vector formats (its virtual filesystem lacks the random-access
+// seek/write the GDAL drivers need), so these are GeoParquet (DuckDB) plus the
+// pure-JS GeoJSON/CSV/GeoPackage/Shapefile writers. Extensions no JS writer
+// covers are handled by geolibre-wasm — see WASM_VECTOR_OUTPUT_FORMATS. The
+// Shapefile writer always emits a zip, so `.zip` (not bare `.shp`) is the
+// browser Shapefile option; a bare `.shp` is produced only by the sidecar.
 const BROWSER_OUTPUT_FORMATS: Record<
   string,
   "geojson" | "csv" | "geoparquet" | "geopackage" | "shapefile"
@@ -232,7 +233,8 @@ const BROWSER_OUTPUT_FORMATS: Record<
 
 // Output extensions the generic Vector to Vector tool offers. The sidecar
 // (native DuckDB spatial) writes every one of these via a GDAL driver; the
-// in-browser runtime can only produce the BROWSER_OUTPUT_FORMATS subset.
+// in-browser runtime produces the BROWSER_OUTPUT_FORMATS subset plus
+// WASM_VECTOR_OUTPUT_EXTENSIONS.
 const VECTOR_TO_VECTOR_OUTPUT_EXTENSIONS = [
   "geojson",
   "geojsonl",
@@ -306,6 +308,36 @@ const WASM_VECTOR_OUTPUT_EXTENSIONS = new Set(
 /** Deepest zoom either PMTiles tool accepts. */
 const MAX_PMTILES_ZOOM = 24;
 
+// Plain decimal digits only. `Number` alone would accept JS numeric-literal
+// quirks that these small integer fields should not take: "0x10" reads as 16
+// and "1e1" as 10, both of which look like valid zooms.
+const PLAIN_INTEGER_PATTERN = /^\d+$/;
+
+/**
+ * Parse an optional plain-integer field.
+ *
+ * @returns The value, `undefined` when blank (leave it to the engine), or
+ * `null` when it is not a plain non-negative integer.
+ */
+function parsePlainInteger(raw: string): number | null | undefined {
+  const text = raw.trim();
+  if (!text) return undefined;
+  if (!PLAIN_INTEGER_PATTERN.test(text)) return null;
+  return Number(text);
+}
+
+/**
+ * Parse the 1-based band field. Blank leaves it to `write_pmtiles`, which
+ * defaults to band 1.
+ *
+ * @returns The band, `undefined` when blank, or `null` when not a positive integer.
+ */
+function parseBand(raw: string): number | null | undefined {
+  const value = parsePlainInteger(raw);
+  if (value === null || value === undefined) return value;
+  return value >= 1 ? value : null;
+}
+
 /** A parsed zoom range; an undefined bound was left blank by the user. */
 interface PmtilesZoomRange {
   minZoom?: number;
@@ -325,15 +357,11 @@ function parseZoomRange(
   rawMax: string,
 ): PmtilesZoomRange | null {
   const parse = (raw: string): number | null | undefined => {
-    const text = raw.trim();
-    if (!text) return undefined;
-    // Number, not parseInt: parseInt truncates, so "3.5"/"3abc" would silently
-    // become zoom 3 rather than being rejected.
-    const value = Number(text);
-    if (!Number.isInteger(value) || value < 0 || value > MAX_PMTILES_ZOOM) {
-      return null;
-    }
-    return value;
+    // parsePlainInteger, not parseInt: parseInt truncates, so "3.5"/"3abc"
+    // would silently become zoom 3 rather than being rejected.
+    const value = parsePlainInteger(raw);
+    if (value === null || value === undefined) return value;
+    return value > MAX_PMTILES_ZOOM ? null : value;
   };
   const minZoom = parse(rawMin);
   const maxZoom = parse(rawMax);
@@ -354,6 +382,12 @@ function browserRuntimeMessageKey(kind: ConversionToolKind): ParseKeys {
     case "vector-to-shapefile":
     case "vector-to-geopackage":
       return "toolbar.conversion.runsInBrowserWriters";
+    case "vector-to-vector":
+      // The banner is set when the dialog opens, before an output extension is
+      // typed, and this tool's engine depends on it (.fgb goes through
+      // vector_convert, everything else through DuckDB). Name both rather than
+      // claim one and be wrong for .fgb.
+      return "toolbar.conversion.runsInBrowserVectorEngines";
     default:
       return "toolbar.conversion.runsInBrowserDuckDb";
   }
@@ -363,7 +397,7 @@ const TOOL_CONFIGS: Record<ConversionToolKind, ConversionToolConfig> = {
   "vector-to-vector": {
     title: "Vector to Vector",
     description:
-      "Convert between any vector formats DuckDB's spatial extension supports. The input and output formats are detected from the file extensions. The desktop app writes any format (FlatGeobuf, GeoPackage, Shapefile, KML, GML, …); the browser writes GeoJSON, CSV, GeoParquet, GeoPackage, and Shapefile.",
+      "Convert between any vector formats DuckDB's spatial extension supports. The input and output formats are detected from the file extensions. The desktop app writes any format (FlatGeobuf, GeoPackage, Shapefile, KML, GML, …); the browser writes GeoJSON, CSV, GeoParquet, GeoPackage, FlatGeobuf, and Shapefile.",
     inputLabel: "Input vector file",
     inputFilters: [
       { name: "Vector", extensions: VECTOR_TO_VECTOR_INPUT_EXTENSIONS },
@@ -507,6 +541,8 @@ export function ConversionDialog() {
   // Empty means "leave it to the tool", which is what makes colormap optional:
   // write_pmtiles marks it optional and picks viridis itself, so the dialog
   // omits the flag rather than pinning a default of its own.
+  // Blank means "leave it to the tool", which renders band 1.
+  const [band, setBand] = useState("");
   const [colormap, setColormap] = useState<PmtilesColormap | "">("");
   const [resampling, setResampling] =
     useState<PmtilesResamplingMethod>("bilinear");
@@ -585,6 +621,7 @@ export function ConversionDialog() {
     const rasterPmtiles = kind === "raster-to-pmtiles";
     setMinZoom(rasterPmtiles ? "" : "0");
     setMaxZoom(rasterPmtiles ? "" : "14");
+    setBand("");
     setColormap("");
     setResampling("bilinear");
     setError(null);
@@ -935,6 +972,11 @@ export function ConversionDialog() {
       setError(i18n.t("toolbar.conversion.zoomRangeError"));
       return;
     }
+    const parsedBand = parseBand(band);
+    if (parsedBand === null) {
+      setError(i18n.t("toolbar.conversion.bandError"));
+      return;
+    }
     const outputName =
       outputPath.trim() || defaultOutputNameForKind(kind, mainFile.name);
     setError(null);
@@ -949,9 +991,22 @@ export function ConversionDialog() {
       );
       const bytes = new Uint8Array(await mainFile.arrayBuffer());
       // Header-only check, matching runBrowserRasterToCog: a non-TIFF would
-      // otherwise surface write_pmtiles' raw "unknown raster format" text.
-      if (!(await readGeoTiffInfo(bytes)).ok) {
-        throw new Error(i18n.t("toolbar.conversion.notAGeoTiff"));
+      // otherwise surface write_pmtiles' raw "unknown raster format" text. The
+      // message is this tool's own: unlike Raster to COG, there is no sidecar
+      // route, so pointing at the desktop app would be a dead end.
+      const info = await readGeoTiffInfo(bytes);
+      if (!info.ok) {
+        throw new Error(i18n.t("toolbar.conversion.notAGeoTiffRasterOnly"));
+      }
+      // The header already carries the band count, so an out-of-range band gets
+      // a real message instead of the tool's raw failure.
+      if (parsedBand !== undefined && parsedBand > info.bands) {
+        throw new Error(
+          i18n.t("toolbar.conversion.bandOutOfRange", {
+            band: parsedBand,
+            bands: info.bands,
+          }),
+        );
       }
       const result = await renderRasterToPmtiles(
         { name: mainFile.name, data: bytes },
@@ -961,7 +1016,7 @@ export function ConversionDialog() {
           // the raster's resolution, rather than this dialog forcing a 0-14
           // pyramid that a wide-extent raster would take a long time to render.
           ...zooms,
-          band: 1,
+          band: parsedBand,
           // Omitted when unset, so the tool applies its own default.
           colormap: colormap || undefined,
           method: resampling,
@@ -1466,7 +1521,19 @@ export function ConversionDialog() {
           )}
 
           {isRasterPmtiles && (
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_5rem_5rem] gap-4">
+            <div className="grid grid-cols-[5rem_minmax(0,1fr)_minmax(0,1fr)_5rem_5rem] gap-4">
+              <div className="grid gap-1.5">
+                <Label htmlFor="conversion-band">
+                  {t("toolbar.conversion.band")}
+                </Label>
+                <Input
+                  id="conversion-band"
+                  inputMode="numeric"
+                  value={band}
+                  placeholder="1"
+                  onChange={(event) => setBand(event.target.value)}
+                />
+              </div>
               <div className="grid gap-1.5">
                 <Label htmlFor="conversion-colormap">
                   {t("toolbar.conversion.colormap")}

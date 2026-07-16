@@ -1752,12 +1752,17 @@
       "resampling": "Resampling",
       "colormapDefault": "Default (viridis)",
       "zoomNative": "native",
-      "rasterToPmtilesDesc": "Render a raster into a single PMTiles archive of Web Mercator PNG tiles, ready for cloud-native serving. Runs entirely in WebAssembly, so it needs no sidecar on either the web or desktop app.",
+      "rasterToPmtilesDesc": "Render a raster into a single PMTiles archive of Web Mercator PNG tiles, ready for cloud-native serving. One band is rendered through a colormap, so multi-band imagery is not drawn in true colour. Runs entirely in WebAssembly, so it needs no sidecar on either the web or desktop app.",
       "cogBrowserNote": "In the browser, 8-bit rasters keep their type and everything else (Int16 DEMs, Float64, …) is written as Float32. The desktop app preserves the original type.",
       "noSidecarConversion": "{{kind}} has no sidecar conversion.",
       "minZoom": "Min zoom",
       "maxZoom": "Max zoom",
-      "convertFailed": "Could not convert this file."
+      "convertFailed": "Could not convert this file.",
+      "notAGeoTiffRasterOnly": "This file is not a readable GeoTIFF. Raster to PMTiles reads GeoTIFF only, on both the web and desktop app.",
+      "band": "Band",
+      "bandError": "Band must be a positive whole number.",
+      "bandOutOfRange": "Band {{band}} does not exist; this raster has {{bands}} band(s).",
+      "runsInBrowserVectorEngines": "Conversion runs in your browser with DuckDB-WASM, or geolibre-wasm for FlatGeobuf output."
     },
     "vectorTool": {
       "buffer": "Buffer",
