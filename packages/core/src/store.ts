@@ -102,7 +102,10 @@ export type VectorToolKind =
   | "h3-bin-points"
   | "trajectory-speed"
   | "detect-stops"
-  | "space-time-proximity";
+  | "space-time-proximity"
+  | "check-validity"
+  | "fix-geometries"
+  | "check-topology-rules";
 
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
 export type NetworkToolKind = "isochrone" | "od-matrix" | "sequential-route";

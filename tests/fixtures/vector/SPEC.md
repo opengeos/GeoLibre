@@ -11,8 +11,12 @@ and kept in sync by hand:
   auto-generated verbatim copy of this file, so it is the *same* engine — there
   are two implementations to keep aligned, not three.
 
-Both expose the same 19 tools and the **same canonical parameter names**, so a
-single set of language-neutral fixtures can drive both. These fixtures are the
+Both expose the same 21 tools and the **same canonical parameter names**, so a
+single set of language-neutral fixtures can drive both. (Exception: the two
+Data-quality tools, `check-validity` and `fix-geometries`, run on DuckDB-WASM
+Spatial client-side rather than Turf, so the TS golden harness cannot execute
+them; they are covered by `tests/topology-tools.test.ts` and
+`test_vector_ops.py` instead of golden cases.) These fixtures are the
 shared contract: each one is an `(input, parameters) → expected` case that both
 engines must satisfy. Drift between the two engines is then caught by CI instead
 of in the field. This directory is the "shared spec / golden fixtures" called

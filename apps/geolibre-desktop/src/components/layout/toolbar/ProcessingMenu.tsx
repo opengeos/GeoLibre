@@ -362,6 +362,25 @@ export function ProcessingMenu({
             >
               {t("toolbar.vectorTool.spaceTimeProximity")}
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">
+              {t("toolbar.item.subGroupDataQuality")}
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("check-validity")}
+            >
+              {t("toolbar.vectorTool.checkValidity")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("fix-geometries")}
+            >
+              {t("toolbar.vectorTool.fixGeometries")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("check-topology-rules")}
+            >
+              {t("toolbar.vectorTool.checkTopologyRules")}
+            </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}

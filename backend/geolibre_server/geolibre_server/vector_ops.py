@@ -998,6 +998,143 @@ def _voronoi(
     return _to_feature_collection(result), [message]
 
 
+def _first_coordinate(geom: Any) -> Optional[tuple[float, float]]:
+    """Return the first (x, y) coordinate of a geometry, or None if empty.
+
+    Used to anchor a validity-error marker when :func:`explain_validity` does
+    not include a problem location. Works on invalid geometry (no GEOS
+    operations that require validity).
+
+    Args:
+        geom: Any Shapely geometry.
+
+    Returns:
+        The first coordinate as ``(x, y)``, or ``None`` for empty geometry.
+    """
+    if geom is None or geom.is_empty:
+        return None
+    if geom.geom_type == "Point":
+        return (geom.x, geom.y)
+    if geom.geom_type in ("LineString", "LinearRing"):
+        x, y = geom.coords[0][:2]
+        return (x, y)
+    if geom.geom_type == "Polygon":
+        x, y = geom.exterior.coords[0][:2]
+        return (x, y)
+    for part in getattr(geom, "geoms", []):
+        found = _first_coordinate(part)
+        if found is not None:
+            return found
+    return None
+
+
+def _validity_anchor(reason: str, geom: Any) -> Optional[tuple[float, float]]:
+    """Choose a marker location for an invalid geometry.
+
+    Prefers the ``[x y]`` location embedded in a GEOS
+    :func:`~shapely.validation.explain_validity` message (e.g.
+    ``"Self-intersection[2 2]"``); falls back to the geometry's first
+    coordinate.
+
+    Args:
+        reason: The ``explain_validity`` message.
+        geom: The invalid Shapely geometry.
+
+    Returns:
+        The marker ``(x, y)``, or ``None`` when no coordinate exists at all.
+    """
+    import re  # noqa: PLC0415 - tiny stdlib import, keep local like the engines
+
+    match = re.search(r"\[(-?[\d.eE+]+)\s+(-?[\d.eE+]+)\]", reason)
+    if match:
+        try:
+            return (float(match.group(1)), float(match.group(2)))
+        except ValueError:
+            pass
+    return _first_coordinate(geom)
+
+
+def _check_validity(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Report features with invalid geometry as a marker point layer.
+
+    Mirrors the client tool: each invalid feature produces one point feature
+    with ``feature_index`` and a ``detail`` message. Unlike the DuckDB client
+    engine (a bare valid/invalid verdict), Shapely's ``explain_validity``
+    supplies the reason and, when GEOS embeds one, the problem location.
+    """
+    from shapely.validation import explain_validity  # noqa: PLC0415
+
+    gdf = _load_gdf(geojson, "Input layer")
+    markers: list[dict] = []
+    missing = 0
+    for index, geom in enumerate(gdf.geometry):
+        if geom is None or geom.is_empty:
+            missing += 1
+            continue
+        if geom.is_valid:
+            continue
+        reason = explain_validity(geom)
+        anchor = _validity_anchor(reason, geom)
+        if anchor is None:
+            continue
+        markers.append(
+            {
+                "type": "Feature",
+                "properties": {"feature_index": index, "detail": reason},
+                "geometry": {"type": "Point", "coordinates": list(anchor)},
+            }
+        )
+    checked = len(gdf) - missing
+    message = f"Checked {checked} feature(s): {len(markers)} invalid"
+    if missing:
+        message += f", {missing} without geometry"
+    messages = [message]
+    if not markers:
+        messages.append("No invalid geometries found")
+    return {"type": "FeatureCollection", "features": markers}, messages
+
+
+def _fix_geometries(
+    geojson: Optional[dict], overlay: Optional[dict], parameters: dict[str, Any]
+) -> tuple[dict, list[str]]:
+    """Repair invalid geometries with ``make_valid``; valid features pass through.
+
+    A repair that raises or produces empty geometry leaves the original
+    geometry unchanged (and is counted), matching the client tool's behavior.
+    """
+    from shapely.validation import make_valid  # noqa: PLC0415
+
+    gdf = _load_gdf(geojson, "Input layer")
+    fixed = 0
+    unfixable = 0
+
+    def _repair(geom: Any) -> Any:
+        nonlocal fixed, unfixable
+        if geom is None or geom.is_empty or geom.is_valid:
+            return geom
+        try:
+            repaired = make_valid(geom)
+        except Exception:  # noqa: BLE001 - keep the original geometry
+            unfixable += 1
+            return geom
+        if repaired is None or repaired.is_empty:
+            unfixable += 1
+            return geom
+        fixed += 1
+        return repaired
+
+    gdf["geometry"] = gdf.geometry.apply(_repair)
+    if fixed == 0 and unfixable == 0:
+        message = "All geometries are already valid — nothing to fix"
+    else:
+        message = f"Fixed {fixed} invalid geometr{'y' if fixed == 1 else 'ies'}"
+        if unfixable:
+            message += f"; {unfixable} could not be repaired and were left unchanged"
+    return _to_feature_collection(gdf), [message]
+
+
 # tool_id -> handler(geojson, overlay, parameters) -> (feature_collection, messages)
 _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "buffer": _buffer,
@@ -1019,6 +1156,8 @@ _DISPATCH: dict[str, Callable[..., tuple[dict, list[str]]]] = {
     "aggregate": _aggregate,
     "smooth": _smooth,
     "voronoi": _voronoi,
+    "check-validity": _check_validity,
+    "fix-geometries": _fix_geometries,
 }
 
 

@@ -1831,7 +1831,10 @@
       "h3BinPoints": "Bin points to H3",
       "trajectorySpeed": "Trajectory speed",
       "detectStops": "Detect stops",
-      "spaceTimeProximity": "Space-time proximity"
+      "spaceTimeProximity": "Space-time proximity",
+      "checkValidity": "Check validity",
+      "fixGeometries": "Fix geometries",
+      "checkTopologyRules": "Check topology rules"
     },
     "networkTool": {
       "isochrone": "Isochrone / service area",
@@ -1987,6 +1990,7 @@
       "subGroupSelect": "Select",
       "subGroupH3": "H3",
       "subGroupMovement": "Movement & time",
+      "subGroupDataQuality": "Data quality",
       "subGroupTerrain": "Terrain",
       "subGroupReproject": "Reproject",
       "subGroupClip": "Clip",

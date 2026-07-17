@@ -74,6 +74,8 @@ def test_dispatch_covers_all_tools() -> None:
         "aggregate",
         "smooth",
         "voronoi",
+        "check-validity",
+        "fix-geometries",
     }
     assert set(_DISPATCH) == expected
 
