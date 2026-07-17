@@ -59,6 +59,7 @@ import {
 import { startGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
+  MAX_TRACKED_HISTORY_JOBS,
   type ProcessingRunTracker,
 } from "../../lib/processing-history";
 import { createAppAPI } from "../../hooks/usePlugins";
@@ -84,9 +85,6 @@ function sidecarRasterUrl(layer: GeoLibreLayer): string | null {
 type RasterEngine = "sidecar" | "client";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
-
-/** Cap on retained per-job history trackers (#1292); oldest are evicted. */
-const MAX_TRACKED_HISTORY_JOBS = 50;
 
 /** Tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: RasterTool[] }[] {

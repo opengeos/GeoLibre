@@ -6,12 +6,7 @@ import {
   type StatisticsToolKind,
   type VectorToolKind,
 } from "@geolibre/core";
-import {
-  ALGORITHMS,
-  H3_TOOLS,
-  STATISTICS_TOOLS,
-  VECTOR_TOOLS,
-} from "@geolibre/processing";
+import { allAlgorithms } from "../../lib/scripting/scriptingApi";
 import {
   Button,
   Dialog,
@@ -34,13 +29,10 @@ import {
 import { useCallback, useMemo, useRef, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 
-/** Tool ids reachable from the Python API (`m.run_algorithm`), i.e. the client
- * registries the scripting bridge spans. Only these get "Copy as Python". */
-const PYTHON_TOOL_IDS = new Set(
-  [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS, ...STATISTICS_TOOLS].map(
-    (tool) => tool.id,
-  ),
-);
+/** Tool ids reachable from the Python API (`m.run_algorithm`): the scripting
+ * bridge's own registry list, so "Copy as Python" eligibility cannot drift
+ * from what `run_algorithm` actually resolves. */
+const PYTHON_TOOL_IDS = new Set(allAlgorithms().map((tool) => tool.id));
 /**
  * Run kinds whose tool ids resolve against those registries. Ids are not
  * disjoint across engines (e.g. Whitebox and raster both have "clip"/

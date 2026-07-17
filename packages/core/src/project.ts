@@ -486,9 +486,16 @@ export function normalizeProcessingHistory(
   value: unknown,
 ): ProcessingRun[] | null {
   if (!Array.isArray(value)) return null;
+  // Bound the work for a crafted or corrupted file (shared/collaboration
+  // projects reach this path too): only the newest entries can survive the
+  // cap anyway, so ignore all but a generous tail up front.
+  const source =
+    value.length > MAX_PROCESSING_HISTORY * 10
+      ? value.slice(-MAX_PROCESSING_HISTORY * 10)
+      : value;
   const runs: ProcessingRun[] = [];
   const seen = new Set<string>();
-  for (const entry of value) {
+  for (const entry of source) {
     if (!entry || typeof entry !== "object") continue;
     const candidate = entry as Partial<ProcessingRun>;
     const id = normalizeString(candidate.id).trim();

@@ -31,8 +31,13 @@ export interface ScriptingDeps {
   getController: () => MapController | null;
 }
 
-/** Combined client-side algorithm registry, matching the in-app dialogs. */
-function allAlgorithms(): ProcessingAlgorithm[] {
+/**
+ * Combined client-side algorithm registry, matching the in-app dialogs. This
+ * is the list `runAlgorithm` (and thus the Python API's `m.run_algorithm`)
+ * resolves tool ids against; the Processing History panel imports it so its
+ * "Copy as Python" eligibility can never drift from what actually runs.
+ */
+export function allAlgorithms(): ProcessingAlgorithm[] {
   return [...ALGORITHMS, ...VECTOR_TOOLS, ...H3_TOOLS, ...STATISTICS_TOOLS];
 }
 

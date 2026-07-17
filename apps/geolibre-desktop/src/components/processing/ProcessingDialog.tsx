@@ -75,6 +75,7 @@ import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import {
   beginProcessingRun,
+  MAX_TRACKED_HISTORY_JOBS,
   type ProcessingRunTracker,
 } from "../../lib/processing-history";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
@@ -95,9 +96,6 @@ type ParameterValues = Record<string, unknown>;
 
 const LAYER_TOKEN_PREFIX = "layer:";
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
-
-/** Cap on retained per-job history trackers (#1292); oldest are evicted. */
-const MAX_TRACKED_HISTORY_JOBS = 50;
 
 // Smallest the floating panel can be resized to, so the two-column tool browser
 // stays usable (left list + a readable parameter form).
@@ -1083,6 +1081,16 @@ export function ProcessingDialog({
     });
     setProcessingRerun(null);
   }, [open, rerun, selectedTool, loadingTools, tools, setProcessingRerun, t]);
+
+  // Drop an unconsumed whitebox re-run when the dialog closes (e.g. the
+  // catalog failed to load, so the effect above never matched), so a stale
+  // pre-fill cannot suddenly apply on a later open.
+  useEffect(() => {
+    if (open) return;
+    if (useAppStore.getState().ui.processingRerun?.kind === "whitebox") {
+      setProcessingRerun(null);
+    }
+  }, [open, setProcessingRerun]);
 
   useEffect(() => {
     if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;

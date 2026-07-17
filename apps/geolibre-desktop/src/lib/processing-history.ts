@@ -8,6 +8,13 @@ import {
 const LAYER_TOKEN_PREFIX = "layer:";
 
 /**
+ * Cap on per-job history trackers the job-based dialogs (Whitebox, Raster)
+ * retain; oldest entries are evicted once exceeded. Shared here so the two
+ * dialogs cannot drift apart.
+ */
+export const MAX_TRACKED_HISTORY_JOBS = 50;
+
+/**
  * Tracks one in-flight processing run for the Processing History panel
  * (issue #1292). Created by {@link beginProcessingRun} when a dialog dispatches
  * a tool; the dialog reports produced layers via `addOutputLayer` and seals the
