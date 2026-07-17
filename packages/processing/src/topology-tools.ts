@@ -450,8 +450,170 @@ export const checkTopologyRulesTool: ProcessingAlgorithm = {
   },
 };
 
+/**
+ * The subset of {@link TOPOLOGY_RULES} that `topology_rule_autofix` can
+ * actually repair (as of geolibre-wasm 0.9.0 / whitebox-wasm 0.5.0):
+ * cross-feature endpoint snapping, dangle snap/projection, and point-to-line
+ * projection. `polygon_must_not_have_gaps` is accepted by the engine but
+ * never produces changes, so it is not offered here.
+ */
+export const FIXABLE_TOPOLOGY_RULES = [
+  {
+    ruleId: "line_endpoints_must_snap_within_tolerance",
+    paramId: "ruleEndpointSnap",
+    label: "Snap nearly-connected line endpoints",
+    default: true,
+  },
+  {
+    ruleId: "line_must_not_have_dangles",
+    paramId: "ruleDangles",
+    label: "Repair dangles (snap or project onto nearby geometry)",
+    default: true,
+  },
+  {
+    ruleId: "point_must_be_covered_by_line",
+    paramId: "rulePointCovered",
+    label: "Project points onto the nearest line",
+    default: false,
+  },
+] as const;
+
+/** Change report emitted by `topology_rule_autofix` (--change_report). */
+interface TopologyChangeReport {
+  dry_run?: boolean;
+  total_changes?: number;
+  changes_by_rule?: Record<string, number>;
+  change_log?: { action_type?: string; target_fid?: number; detail?: string }[];
+}
+
+/** Fixable rule ids selected by the tool's boolean parameters. Exported for tests. */
+export function selectedFixableRuleIds(
+  parameters: Record<string, unknown>,
+): string[] {
+  return FIXABLE_TOPOLOGY_RULES.filter((rule) => {
+    const value = parameters[rule.paramId];
+    return value === undefined ? rule.default : Boolean(value);
+  }).map((rule) => rule.ruleId);
+}
+
+/** Longest change-log tail worth echoing into the dialog log. */
+const MAX_CHANGE_LOG_LINES = 20;
+
+export const fixTopologyTool: ProcessingAlgorithm = {
+  id: "fix-topology",
+  name: "Fix topology",
+  description:
+    "Automatically repair topology violations: snap nearly-connected line endpoints, fix dangles, and project points onto lines. Free ends with nothing nearby are left unchanged.",
+  group: "Data quality",
+  parameters: [
+    { id: "layer", label: "Input layer", type: "layer", required: true },
+    ...FIXABLE_TOPOLOGY_RULES.map((rule) => ({
+      id: rule.paramId,
+      label: rule.label,
+      type: "boolean" as const,
+      default: rule.default,
+    })),
+    {
+      id: "snapTolerance",
+      label: "Snap tolerance",
+      type: "number",
+      default: 0.0001,
+      min: 0,
+      step: 0.0001,
+      description:
+        "How far (in layer coordinate units — degrees for WGS84) geometry may move to connect.",
+    },
+    {
+      id: "dryRun",
+      label: "Preview only (dry run)",
+      type: "boolean",
+      default: false,
+      description:
+        "Report the fixes that would be applied without creating a repaired layer.",
+    },
+  ],
+  run: async (ctx) => {
+    const fc = requireFeatures(ctx);
+    if (!fc) return;
+    const rules = selectedFixableRuleIds(ctx.parameters);
+    if (rules.length === 0) {
+      ctx.log("Error: enable at least one fixable topology rule");
+      return;
+    }
+    const snapTolerance = Number(ctx.parameters.snapTolerance ?? 0.0001);
+    const dryRun = Boolean(ctx.parameters.dryRun ?? false);
+    const runTool = await getWasmRunner();
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    // dry_run is passed explicitly: the engine defaults it to true, and an
+    // accidental preview here would look like a run that fixed nothing.
+    const { exitCode, stdout, files } = await runTool("topology_rule_autofix", {
+      args: [
+        "--input=/work/input.geojson",
+        "--output=/work/fixed.geojson",
+        "--change_report=/work/changes.json",
+        `--rule_set=${rules.join(",")}`,
+        `--snap_tolerance=${snapTolerance}`,
+        `--dry_run=${dryRun}`,
+      ],
+      input: { "input.geojson": encoder.encode(JSON.stringify(fc)) },
+    });
+    if (exitCode !== 0) {
+      ctx.log(
+        `Error: topology fix failed — ${stdout.join(" ") || `exit code ${exitCode}`}`,
+      );
+      return;
+    }
+    let report: TopologyChangeReport = {};
+    try {
+      report = JSON.parse(decoder.decode(files["changes.json"]));
+    } catch {
+      // Missing/malformed change report: continue with zero-change messaging.
+    }
+    const total = report.total_changes ?? 0;
+    ctx.log(
+      `${dryRun ? "Would apply" : "Applied"} ${total} fix(es) across ${rules.length} rule(s)`,
+    );
+    for (const [rule, count] of Object.entries(report.changes_by_rule ?? {})) {
+      if (count > 0) ctx.log(`  ${rule}: ${count}`);
+    }
+    const log = report.change_log ?? [];
+    for (const change of log.slice(0, MAX_CHANGE_LOG_LINES)) {
+      if (change.detail) ctx.log(`  ${change.detail}`);
+    }
+    if (log.length > MAX_CHANGE_LOG_LINES) {
+      ctx.log(`  ... and ${log.length - MAX_CHANGE_LOG_LINES} more`);
+    }
+    if (total === 0) {
+      ctx.log(
+        "No fixable violations found — free ends and T-junctions are reported by Check topology rules but have no safe automatic fix",
+      );
+      return;
+    }
+    if (dryRun) return;
+    let fixed: FeatureCollection | null = null;
+    try {
+      const parsed: unknown = JSON.parse(decoder.decode(files["fixed.geojson"]));
+      if (
+        (parsed as FeatureCollection)?.type === "FeatureCollection" &&
+        Array.isArray((parsed as FeatureCollection).features)
+      ) {
+        fixed = parsed as FeatureCollection;
+      }
+    } catch {
+      // handled below
+    }
+    if (!fixed) {
+      ctx.log("Error: topology fix produced no readable output layer");
+      return;
+    }
+    ctx.addResultLayer?.("Fixed topology", fixed);
+  },
+};
+
 export const TOPOLOGY_TOOLS: ProcessingAlgorithm[] = [
   checkValidityTool,
   fixGeometriesTool,
   checkTopologyRulesTool,
+  fixTopologyTool,
 ];

@@ -105,7 +105,8 @@ export type VectorToolKind =
   | "space-time-proximity"
   | "check-validity"
   | "fix-geometries"
-  | "check-topology-rules";
+  | "check-topology-rules"
+  | "fix-topology";
 
 /** Identifiers of the network-analysis tools (`NETWORK_TOOLS` ids). */
 export type NetworkToolKind = "isochrone" | "od-matrix" | "sequential-route";

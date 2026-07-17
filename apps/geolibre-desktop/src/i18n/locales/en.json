@@ -1834,7 +1834,8 @@
       "spaceTimeProximity": "Space-time proximity",
       "checkValidity": "Check validity",
       "fixGeometries": "Fix geometries",
-      "checkTopologyRules": "Check topology rules"
+      "checkTopologyRules": "Check topology rules",
+      "fixTopology": "Fix topology"
     },
     "networkTool": {
       "isochrone": "Isochrone / service area",

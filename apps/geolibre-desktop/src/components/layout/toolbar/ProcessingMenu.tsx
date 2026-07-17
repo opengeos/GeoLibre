@@ -381,6 +381,11 @@ export function ProcessingMenu({
             >
               {t("toolbar.vectorTool.checkTopologyRules")}
             </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setVectorToolOpen("fix-topology")}
+            >
+              {t("toolbar.vectorTool.fixTopology")}
+            </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         )}

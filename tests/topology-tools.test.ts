@@ -19,6 +19,8 @@ import {
   fixGeometriesTool,
   isUsableGeometry,
   selectedRuleIds,
+  selectedFixableRuleIds,
+  fixTopologyTool,
   setTopologyWasmRunner,
   tagFeatureIndexes,
 } from "../packages/processing/src/topology-tools";
@@ -399,5 +401,142 @@ describe("check-topology-rules (real geolibre-wasm)", () => {
       };
       setTopologyWasmRunner(wasm.runTool);
     }
+  });
+});
+
+describe("fix-topology (real geolibre-wasm)", () => {
+  before(async () => {
+    const require = createRequire(import.meta.url);
+    const toolsPath = require.resolve("geolibre-wasm/tools");
+    const wasmPath = path.join(path.dirname(toolsPath), "geolibre-cli.wasm");
+    const wasm = (await import("geolibre-wasm/tools")) as unknown as {
+      initTools: (source: unknown) => Promise<unknown>;
+      runTool: Parameters<typeof setTopologyWasmRunner>[0];
+    };
+    await wasm.initTools(readFileSync(wasmPath));
+    setTopologyWasmRunner(wasm.runTool);
+  });
+
+  after(() => setTopologyWasmRunner(null));
+
+  const NEAR_MISS = fcOf(
+    {
+      type: "Feature",
+      properties: { name: "main" },
+      geometry: {
+        type: "LineString",
+        coordinates: [[12, 10], [15, 10], [15, 14]],
+      },
+    },
+    {
+      type: "Feature",
+      properties: { name: "nearmiss" },
+      geometry: {
+        type: "LineString",
+        coordinates: [[10, 10], [12, 10.0001]],
+      },
+    },
+  );
+
+  it("snaps a cross-feature endpoint near-miss and adds the fixed layer", async () => {
+    const { ctx, logs, added } = makeCtx(NEAR_MISS, {
+      snapTolerance: 0.001,
+      ruleDangles: false,
+    });
+    await fixTopologyTool.run(ctx);
+    assert.equal(added.length, 1);
+    assert.equal(added[0].name, "Fixed topology");
+    const fixedEnd = (added[0].fc.features[1].geometry as { coordinates: number[][] })
+      .coordinates[1];
+    assert.deepEqual(fixedEnd, [12, 10]);
+    assert.match(logs.join("\n"), /Applied 1 fix/);
+  });
+
+  it("previews without adding a layer when dry run is on", async () => {
+    const { ctx, logs, added } = makeCtx(NEAR_MISS, {
+      snapTolerance: 0.001,
+      ruleDangles: false,
+      dryRun: true,
+    });
+    await fixTopologyTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.match(logs.join("\n"), /Would apply 1 fix/);
+  });
+
+  it("projects a dangling spur end onto its line", async () => {
+    const spur = fcOf(
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: [[0, 0], [5, 0]] },
+      },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: [[5, 0], [5, 5]] },
+      },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: [[2, 0], [2.003, 0.003]],
+        },
+      },
+    );
+    const { ctx, added } = makeCtx(spur, {
+      snapTolerance: 0.01,
+      ruleEndpointSnap: false,
+    });
+    await fixTopologyTool.run(ctx);
+    assert.equal(added.length, 1);
+    const spurEnd = (added[0].fc.features[2].geometry as { coordinates: number[][] })
+      .coordinates[1];
+    assert.ok(Math.abs(spurEnd[1]) < 1e-9, `spur end not projected: ${spurEnd}`);
+  });
+
+  it("reports zero fixes without adding a layer on clean data", async () => {
+    const clean = fcOf(
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: [[0, 0], [5, 0]] },
+      },
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "LineString", coordinates: [[5, 0], [5, 5]] },
+      },
+    );
+    const { ctx, logs, added } = makeCtx(clean, { snapTolerance: 0.001 });
+    await fixTopologyTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.match(logs.join("\n"), /Applied 0 fix|No fixable violations/);
+  });
+
+  it("requires at least one fixable rule", async () => {
+    const { ctx, logs, added } = makeCtx(NEAR_MISS, {
+      ruleEndpointSnap: false,
+      ruleDangles: false,
+      rulePointCovered: false,
+    });
+    await fixTopologyTool.run(ctx);
+    assert.equal(added.length, 0);
+    assert.match(logs.join("\n"), /enable at least one fixable topology rule/);
+  });
+
+  it("selects fixable rules from params with sane defaults", () => {
+    assert.deepEqual(selectedFixableRuleIds({}), [
+      "line_endpoints_must_snap_within_tolerance",
+      "line_must_not_have_dangles",
+    ]);
+    assert.deepEqual(
+      selectedFixableRuleIds({
+        ruleEndpointSnap: false,
+        ruleDangles: false,
+        rulePointCovered: true,
+      }),
+      ["point_must_be_covered_by_line"],
+    );
   });
 });
