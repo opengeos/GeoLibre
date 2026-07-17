@@ -187,11 +187,20 @@ export const checkValidityTool: ProcessingAlgorithm = {
     const fc = requireFeatures(ctx);
     if (!fc) return;
     const rows = await queryValidity(ctx, fc, false);
-    const missingGeometry = fc.features.filter((f) => !f.geometry).length;
+    // Mirror the sidecar's definition of "without geometry" (null OR empty),
+    // so the two engines report the same counts for the same layer.
+    const missingGeometry = fc.features.filter(
+      (f) => !isUsableGeometry(f.geometry),
+    ).length;
     const markers: Feature[] = [];
+    let invalid = 0;
     for (const row of rows) {
       if (row.valid) continue;
       const feature = fc.features[row.idx];
+      if (!isUsableGeometry(feature.geometry)) continue;
+      // Counted even if no marker location resolves, so the summary never
+      // understates the problem (matches the sidecar).
+      invalid += 1;
       const anchor = firstCoordinate(feature.geometry);
       if (!anchor) continue;
       markers.push({
@@ -203,15 +212,16 @@ export const checkValidityTool: ProcessingAlgorithm = {
         geometry: { type: "Point", coordinates: anchor },
       });
     }
-    const checked = rows.length;
+    const checked = fc.features.length - missingGeometry;
     ctx.log(
-      `Checked ${checked} feature(s): ${markers.length} invalid` +
+      `Checked ${checked} feature(s): ${invalid} invalid` +
         (missingGeometry ? `, ${missingGeometry} without geometry` : ""),
     );
-    if (markers.length === 0) {
+    if (invalid === 0) {
       ctx.log("No invalid geometries found");
       return;
     }
+    if (markers.length === 0) return;
     ctx.addResultLayer?.("Validity errors", {
       type: "FeatureCollection",
       features: markers,

@@ -1045,7 +1045,7 @@ def _validity_anchor(reason: str, geom: Any) -> Optional[tuple[float, float]]:
     """
     import re  # noqa: PLC0415 - tiny stdlib import, keep local like the engines
 
-    match = re.search(r"\[(-?[\d.eE+]+)\s+(-?[\d.eE+]+)\]", reason)
+    match = re.search(r"\[([-+0-9.eE]+)\s+([-+0-9.eE]+)\]", reason)
     if match:
         try:
             return (float(match.group(1)), float(match.group(2)))
@@ -1069,12 +1069,16 @@ def _check_validity(
     gdf = _load_gdf(geojson, "Input layer")
     markers: list[dict] = []
     missing = 0
+    invalid = 0
     for index, geom in enumerate(gdf.geometry):
         if geom is None or geom.is_empty:
             missing += 1
             continue
         if geom.is_valid:
             continue
+        # Count the feature as invalid even when no marker location can be
+        # resolved, so the summary never understates the problem.
+        invalid += 1
         reason = explain_validity(geom)
         anchor = _validity_anchor(reason, geom)
         if anchor is None:
@@ -1087,11 +1091,11 @@ def _check_validity(
             }
         )
     checked = len(gdf) - missing
-    message = f"Checked {checked} feature(s): {len(markers)} invalid"
+    message = f"Checked {checked} feature(s): {invalid} invalid"
     if missing:
         message += f", {missing} without geometry"
     messages = [message]
-    if not markers:
+    if invalid == 0:
         messages.append("No invalid geometries found")
     return {"type": "FeatureCollection", "features": markers}, messages
 
