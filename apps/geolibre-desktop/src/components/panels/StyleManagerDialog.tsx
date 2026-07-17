@@ -13,10 +13,11 @@ import {
   DEFAULT_LAYER_STYLE,
   extractStyleLibraryStyle,
   interpolateRampColors,
+  isStyleLibraryTargetLayer,
   parseStyleLibrary,
   serializeStyleLibrary,
+  styleValue,
   useAppStore,
-  type GeoLibreLayer,
   type StyleLibraryEntry,
   type StyleLibraryEntryKind,
 } from "@geolibre/core";
@@ -46,16 +47,6 @@ import {
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
-
-/**
- * Layer types whose symbology is driven by the vector {@link LayerStyle}
- * fields, and can therefore receive a saved style. Mirrors the LayerPanel's
- * style-import gate.
- */
-const STYLABLE_LAYER_TYPES = new Set<GeoLibreLayer["type"]>([
-  "geojson",
-  "vector-tiles",
-]);
 
 type StatusNote = { type: "success" | "error"; text: string } | null;
 
@@ -154,7 +145,8 @@ export function StyleManagerDialog() {
   const [saveScope, setSaveScope] = useState<"app" | "project">("app");
 
   const layer = layers.find((l) => l.id === selectedLayerId);
-  const canUseLayer = layer !== undefined && STYLABLE_LAYER_TYPES.has(layer.type);
+  const canUseLayer =
+    layer !== undefined && isStyleLibraryTargetLayer(layer.type);
 
   const kindLabels: Record<StyleLibraryEntryKind, string> = {
     style: t("styleManager.kindStyle"),
@@ -224,9 +216,17 @@ export function StyleManagerDialog() {
     } else {
       setLayerStyle(layer.id, patch);
     }
+    // A ramp entry deliberately carries no renderer mode or attribute, so on a
+    // single-symbology layer it changes nothing visible yet; say so instead of
+    // implying the map just changed.
+    const rampPending =
+      entry.kind === "ramp" &&
+      styleValue(layer.style, "vectorStyleMode") === "single";
     setStatus({
       type: "success",
-      text: t("styleManager.applied", { name: entry.name, layer: layer.name }),
+      text: rampPending
+        ? t("styleManager.appliedRampHint", { name: entry.name })
+        : t("styleManager.applied", { name: entry.name, layer: layer.name }),
     });
   };
 

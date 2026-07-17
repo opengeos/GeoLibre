@@ -1018,9 +1018,17 @@ export const useAppStore = create<AppState>()(
               ? list.map((e) => (e.id === entry.id ? entry : e))
               : [...list, entry];
           if (scope === "project") {
+            // Only produce a new styleLibrary reference when the id really
+            // moved scopes: the persistence layer flushes the whole app-level
+            // library to IndexedDB on any reference change.
+            const movedOutOfLibrary = s.styleLibrary.some(
+              (e) => e.id === entry.id,
+            );
             return {
               projectStyleLibrary: upsert(s.projectStyleLibrary),
-              styleLibrary: s.styleLibrary.filter((e) => e.id !== entry.id),
+              styleLibrary: movedOutOfLibrary
+                ? s.styleLibrary.filter((e) => e.id !== entry.id)
+                : s.styleLibrary,
               isDirty: true,
             };
           }
@@ -1041,8 +1049,14 @@ export const useAppStore = create<AppState>()(
       deleteStyleLibraryEntry: (id) =>
         set((s) => {
           const inProject = s.projectStyleLibrary.some((e) => e.id === id);
+          const inLibrary = s.styleLibrary.some((e) => e.id === id);
+          // Keep untouched scopes reference-stable so the IndexedDB
+          // persistence (which watches the styleLibrary reference) does not
+          // rewrite an unchanged library.
           return {
-            styleLibrary: s.styleLibrary.filter((e) => e.id !== id),
+            styleLibrary: inLibrary
+              ? s.styleLibrary.filter((e) => e.id !== id)
+              : s.styleLibrary,
             projectStyleLibrary: inProject
               ? s.projectStyleLibrary.filter((e) => e.id !== id)
               : s.projectStyleLibrary,

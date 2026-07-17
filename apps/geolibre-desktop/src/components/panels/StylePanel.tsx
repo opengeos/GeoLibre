@@ -14,6 +14,7 @@ import {
   createQuantileBreaks,
   geojsonHasZCoordinates,
   interpolateRampColors,
+  isStyleLibraryTargetLayer,
   parseJsonExpression,
   styleValue,
   useAppStore,
@@ -3364,11 +3365,10 @@ export function StylePanel({
           {t("style.headingWithLayer", { name: layer.name })}
         </span>
         <div className="flex shrink-0 items-center gap-1">
-          {/* Only the layer types the Style Manager can apply to (matching its
-              STYLABLE_LAYER_TYPES and the LayerPanel's canImportStyle gate);
-              this vector panel also serves mbtiles/plugin/deck layers, where
-              the dialog would open with Apply/Save disabled. */}
-          {(layer.type === "geojson" || layer.type === "vector-tiles") && (
+          {/* Only the layer types the Style Manager can apply to; this vector
+              panel also serves mbtiles/plugin/deck layers, where the dialog
+              would open with Apply/Save disabled. */}
+          {isStyleLibraryTargetLayer(layer.type) && (
             <Button
               variant="ghost"
               size="icon"

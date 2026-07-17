@@ -18,6 +18,7 @@ import {
   getPlanetaryBasemapByStyleUrl,
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
+  isStyleLibraryTargetLayer,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -2316,9 +2317,8 @@ export function LayerPanel({
             // Importing a style (Mapbox GL or SLD) only writes the layer's
             // vector symbology, so it applies to any vector-styled layer (local
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
-            // layers.
-            const canImportStyle =
-              layer.type === "geojson" || layer.type === "vector-tiles";
+            // layers. Shares the Style Manager's gate so the two can't drift.
+            const canImportStyle = isStyleLibraryTargetLayer(layer.type);
             // Write-back commits edits to the layer's local source file in place
             // (desktop only, supported formats); Export writes a new file.
             const canWriteBack = canWriteEditsToSource(layer);

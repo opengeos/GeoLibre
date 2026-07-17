@@ -3033,6 +3033,7 @@
     "import": "Import…",
     "export": "Export…",
     "applied": "Applied \"{{name}}\" to {{layer}}.",
+    "appliedRampHint": "Applied \"{{name}}\". Switch the layer to graduated or categorized styling to see the ramp.",
     "saved": "Saved \"{{name}}\" to the library.",
     "deleted": "Deleted \"{{name}}\".",
     "importedCount_one": "Imported {{count}} style.",

@@ -6,9 +6,22 @@ import {
   DEFAULT_LAYER_STYLE,
   type LabelStyle,
   type LayerStyle,
+  type LayerType,
   type StyleLibraryEntry,
   type StyleLibraryEntryKind,
 } from "./types";
+
+/**
+ * Layer types whose symbology is driven by the vector {@link LayerStyle}
+ * fields and can therefore receive a Style Manager entry (or a style-file
+ * import). The single source of truth for every entry point — the Style
+ * Manager dialog, the Style panel header button, and the layer context menu —
+ * so a future vector-stylable type cannot be added to one gate and missed in
+ * another, leaving a dead-end entry point.
+ */
+export function isStyleLibraryTargetLayer(type: LayerType): boolean {
+  return type === "geojson" || type === "vector-tiles";
+}
 
 /** `type` discriminator of an exported Style Manager bundle file. */
 export const STYLE_LIBRARY_BUNDLE_TYPE = "geolibre-style-library";
