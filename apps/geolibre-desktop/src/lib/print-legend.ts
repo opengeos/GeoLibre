@@ -339,12 +339,19 @@ export function legendEditorRows(
 
 /**
  * Legend swatches for a layer's diagram symbology: one per charted attribute,
- * labeled with the attribute name. Empty when diagrams are off.
+ * labeled with the attribute name. Empty when diagrams are off — including
+ * when a point layer's renderer is heatmap/cluster, which suppresses diagram
+ * rendering (mirrors isDiagramLayer in the deck overlay).
  */
 function diagramSwatches(
   style: LayerStyle,
 ): { color: string; label: string }[] {
-  if (styleValue(style, "diagramType") === "none") return [];
+  if (
+    styleValue(style, "diagramType") === "none" ||
+    styleValue(style, "pointRenderer") !== "single"
+  ) {
+    return [];
+  }
   return styleValue(style, "diagramFields")
     .filter((field) => field.property !== "")
     .map((field) => ({ color: field.color, label: field.property }));

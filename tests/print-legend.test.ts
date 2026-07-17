@@ -127,6 +127,23 @@ describe("buildLegend", () => {
     });
   });
 
+  it("omits diagram swatches when the point renderer suppresses diagrams", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Stations",
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#ff0000",
+          pointRenderer: "cluster",
+          diagramType: "pie",
+          diagramFields: [{ property: "votes_a", color: "#111111" }],
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 1);
+    assert.equal(legend[0].swatches[0].color, "#ff0000");
+  });
+
   it("appends diagram swatches after graduated ramp swatches", () => {
     const legend = buildLegend([
       makeLayer({

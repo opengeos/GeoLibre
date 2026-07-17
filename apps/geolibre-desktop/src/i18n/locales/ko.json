@@ -2719,7 +2719,8 @@
       "sizeField": "크기 속성",
       "size": "크기 (px)",
       "minZoom": "최소 줌",
-      "declutter": "겹치는 다이어그램 숨기기"
+      "declutter": "겹치는 다이어그램 숨기기",
+      "truncated": "다이어그램은 처음 {{count}}개의 피처에 대해서만 그려집니다."
     },
     "symbology": {
       "colormap": "컬러맵",

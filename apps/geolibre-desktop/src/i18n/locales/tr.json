@@ -2763,7 +2763,8 @@
       "sizeField": "Boyut özniteliği",
       "size": "Boyut (px)",
       "minZoom": "En düşük yakınlaştırma",
-      "declutter": "Çakışan diyagramları gizle"
+      "declutter": "Çakışan diyagramları gizle",
+      "truncated": "Diyagramlar yalnızca ilk {{count}} obje için çizilir."
     },
     "symbology": {
       "colormap": "Renk haritası",

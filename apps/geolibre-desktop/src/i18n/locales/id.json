@@ -2719,7 +2719,8 @@
       "sizeField": "Atribut ukuran",
       "size": "Ukuran (px)",
       "minZoom": "Zoom minimum",
-      "declutter": "Sembunyikan diagram yang tumpang tindih"
+      "declutter": "Sembunyikan diagram yang tumpang tindih",
+      "truncated": "Diagram hanya digambar untuk {{count}} fitur pertama."
     },
     "symbology": {
       "colormap": "Peta warna",

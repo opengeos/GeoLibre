@@ -2763,7 +2763,8 @@
       "sizeField": "Attribut de taille",
       "size": "Taille (px)",
       "minZoom": "Zoom minimum",
-      "declutter": "Masquer les diagrammes qui se chevauchent"
+      "declutter": "Masquer les diagrammes qui se chevauchent",
+      "truncated": "Les diagrammes ne sont dessinés que pour les {{count}} premières entités."
     },
     "symbology": {
       "colormap": "Palette de couleurs",

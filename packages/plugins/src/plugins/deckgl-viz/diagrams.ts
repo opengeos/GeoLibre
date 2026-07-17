@@ -1,4 +1,5 @@
 import {
+  MAX_DIAGRAM_FEATURES,
   collectDiagramData,
   diagramPixelSize,
   isDiagramStyleEnabled,
@@ -273,6 +274,12 @@ function buildAtlas(
     }),
   );
   if (cells.length === 0) return null;
+  if (diagramData.truncated) {
+    console.info(
+      `[GeoLibre] diagrams: layer exceeds ${MAX_DIAGRAM_FEATURES} features; ` +
+        `only the first ${MAX_DIAGRAM_FEATURES} are charted`,
+    );
+  }
   if (dropped > 0) {
     console.info(
       `[GeoLibre] diagrams: atlas full, dropped ${dropped} of ` +
@@ -432,6 +439,27 @@ export function declutterEntries<
  *   screen-space projector (for optional decluttering); either may be missing
  *   when the map is not available, disabling that behavior.
  */
+// Declutter results cached per atlas entry list + view signature, so the
+// per-frame overlay rebuilds driven by an animated layer's rAF loop don't
+// redo the sort/overlap sweep while the view is unchanged; the overlay's
+// zoomend/moveend listeners produce a new signature once the view settles.
+const declutterCache = new WeakMap<
+  object,
+  { viewKey: string; result: AtlasEntry[] }
+>();
+
+/**
+ * A signature of the current view derived from two projected reference
+ * points, capturing pan, zoom, and rotation without needing the map object.
+ */
+function viewSignature(
+  project: (position: [number, number]) => { x: number; y: number },
+): string {
+  const a = project([0, 0]);
+  const b = project([90, 45]);
+  return `${a.x.toFixed(1)},${a.y.toFixed(1)},${b.x.toFixed(1)},${b.y.toFixed(1)}`;
+}
+
 export function buildDiagramLayers(
   deckGL: GeoLibreDeckGL,
   layer: GeoLibreLayer,
@@ -451,10 +479,17 @@ export function buildDiagramLayers(
   }
   const atlas = getAtlas(layer);
   if (!atlas) return [];
-  const entries =
-    styleValue(style, "diagramDeclutter") && options.project
-      ? declutterEntries(atlas.entries, options.project)
-      : atlas.entries;
+  let entries = atlas.entries;
+  if (styleValue(style, "diagramDeclutter") && options.project) {
+    const viewKey = viewSignature(options.project);
+    const cached = declutterCache.get(atlas.entries);
+    if (cached && cached.viewKey === viewKey) {
+      entries = cached.result;
+    } else {
+      entries = declutterEntries(atlas.entries, options.project);
+      declutterCache.set(atlas.entries, { viewKey, result: entries });
+    }
+  }
   if (entries.length === 0) return [];
   return [
     new deckGL.layers.IconLayer<AtlasEntry>({

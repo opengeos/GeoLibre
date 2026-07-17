@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  MAX_DIAGRAM_FEATURES,
   type DiagramField,
   type DiagramSizeMode,
   type DiagramType,
@@ -2648,6 +2649,14 @@ export function StylePanel({
                     {property}
                   </option>
                 ))}
+                {styleValue(style, "diagramSizeProperty") !== "" &&
+                !diagramNumericProperties.includes(
+                  styleValue(style, "diagramSizeProperty"),
+                ) ? (
+                  <option value={styleValue(style, "diagramSizeProperty")}>
+                    {styleValue(style, "diagramSizeProperty")}
+                  </option>
+                ) : null}
               </Select>
             </div>
           )}
@@ -2660,6 +2669,11 @@ export function StylePanel({
             value={styleValue(style, "diagramSize")}
             onChange={(diagramSize) => setLayerStyle(layer.id, { diagramSize })}
           />
+          {(layer.geojson?.features?.length ?? 0) > MAX_DIAGRAM_FEATURES && (
+            <p className="text-xs text-muted-foreground">
+              {t("style.diagrams.truncated", { count: MAX_DIAGRAM_FEATURES })}
+            </p>
+          )}
           <NumericStyleInput
             id="diagramMinZoom"
             label={t("style.diagrams.minZoom")}

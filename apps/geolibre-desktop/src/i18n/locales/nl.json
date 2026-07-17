@@ -2763,7 +2763,8 @@
       "sizeField": "Grootte-attribuut",
       "size": "Grootte (px)",
       "minZoom": "Minimale zoom",
-      "declutter": "Overlappende diagrammen verbergen"
+      "declutter": "Overlappende diagrammen verbergen",
+      "truncated": "Diagrammen worden alleen getekend voor de eerste {{count}} features."
     },
     "symbology": {
       "colormap": "Kleurenkaart",

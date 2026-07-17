@@ -2763,7 +2763,8 @@
       "sizeField": "Attributo di dimensione",
       "size": "Dimensione (px)",
       "minZoom": "Zoom minimo",
-      "declutter": "Nascondi i diagrammi sovrapposti"
+      "declutter": "Nascondi i diagrammi sovrapposti",
+      "truncated": "I diagrammi vengono disegnati solo per i primi {{count}} elementi."
     },
     "symbology": {
       "colormap": "Mappa colori",

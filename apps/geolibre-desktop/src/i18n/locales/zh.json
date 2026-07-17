@@ -2834,7 +2834,8 @@
       "sizeField": "大小属性",
       "size": "大小 (px)",
       "minZoom": "最小缩放级别",
-      "declutter": "隐藏重叠的图表"
+      "declutter": "隐藏重叠的图表",
+      "truncated": "仅为前 {{count}} 个要素绘制图表。"
     },
     "symbology": {
       "colormap": "色彩映射",
