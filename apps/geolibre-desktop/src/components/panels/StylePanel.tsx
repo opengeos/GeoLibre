@@ -383,7 +383,9 @@ const CATEGORIZED_CLASSIFICATION_SCHEMES: ReadonlyArray<{
   { value: "first-values", labelKey: "style.symbology.schemeFirstValues" },
 ];
 
-function createGraduatedStops(
+// Exported for the Style Manager, which regenerates a layer's stops when a
+// ramp preset is applied to an already-classified layer.
+export function createGraduatedStops(
   layer: Parameters<typeof getPropertyValues>[0],
   property: string,
   classCount: number,
@@ -423,7 +425,8 @@ function createGraduatedStops(
   }));
 }
 
-function createCategorizedStops(
+// Exported for the Style Manager (see createGraduatedStops above).
+export function createCategorizedStops(
   layer: Parameters<typeof getPropertyValues>[0],
   property: string,
   classCount: number,

@@ -59,10 +59,12 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { clamp } from "../../lib/clamp";
+import { isQmlStyleXml } from "../../lib/style-format";
 import {
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
+import { createCategorizedStops, createGraduatedStops } from "./StylePanel";
 
 /** Default panel geometry (px); the user can drag it around the map area. */
 const PANEL_DEFAULT_W = 384;
@@ -294,18 +296,42 @@ export function StyleManagerPanel() {
     // fields older entries never saved reset instead of lingering); subset
     // entries merge onto the current style.
     const patch = structuredClone(entry.style);
+    // A ramp entry deliberately excludes the classified attribute and the
+    // concrete stops, so on its own it changes nothing until the next
+    // classification. When the target layer is already classified, regenerate
+    // its stops from the entry's ramp/count/scheme (same generators as the
+    // Style panel) so the apply recolors the map immediately; otherwise show
+    // the "switch to graduated/categorized" hint instead of implying a change.
+    let rampPending = false;
+    if (entry.kind === "ramp") {
+      const mode = styleValue(layer.style, "vectorStyleMode");
+      const property = styleValue(layer.style, "vectorStyleProperty");
+      const classified =
+        (mode === "graduated" || mode === "categorized") && property !== "";
+      if (classified) {
+        const classCount =
+          patch.vectorStyleClassCount ??
+          styleValue(layer.style, "vectorStyleClassCount");
+        const ramp =
+          patch.vectorStyleColorRamp ??
+          styleValue(layer.style, "vectorStyleColorRamp");
+        const scheme =
+          patch.vectorStyleClassificationScheme ??
+          styleValue(layer.style, "vectorStyleClassificationScheme");
+        const stops =
+          mode === "graduated"
+            ? createGraduatedStops(layer, property, classCount, ramp, scheme)
+            : createCategorizedStops(layer, property, classCount, ramp, scheme);
+        if (stops.length > 0) patch.vectorStyleStops = stops;
+      } else {
+        rampPending = true;
+      }
+    }
     if (entry.kind === "style") {
       updateLayer(layer.id, { style: { ...DEFAULT_LAYER_STYLE, ...patch } });
     } else {
       setLayerStyle(layer.id, patch);
     }
-    // A ramp entry deliberately carries no renderer mode or attribute, and
-    // only the graduated/categorized renderers consume its fields, so in any
-    // other mode it changes nothing visible yet; say so instead of implying
-    // the map just changed.
-    const mode = styleValue(layer.style, "vectorStyleMode");
-    const rampPending =
-      entry.kind === "ramp" && mode !== "graduated" && mode !== "categorized";
     setStatus({
       type: "success",
       text: rampPending
@@ -346,7 +372,7 @@ export function StyleManagerPanel() {
       const picked = await openLocalDataFileWithFallback({
         filters: [
           {
-            name: "Style library / QML / SLD",
+            name: t("styleManager.importFilterName"),
             extensions: ["json", "qml", "sld", "xml"],
           },
         ],
@@ -361,7 +387,7 @@ export function StyleManagerPanel() {
       if (trimmed.startsWith("<")) {
         // A QGIS QML or OGC SLD file: convert it to a full-style entry via the
         // shared importers, same content sniff as the LayerPanel import.
-        const isQml = /<qgis[\s>]|<renderer-v2[\s>]/.test(picked.text);
+        const isQml = isQmlStyleXml(picked.text);
         let matched: number;
         let style: typeof DEFAULT_LAYER_STYLE;
         if (isQml) {
@@ -454,10 +480,12 @@ export function StyleManagerPanel() {
         serializeStyleLibrary(entries),
         {
           defaultName: "geolibre-styles.json",
-          filters: [{ name: "GeoLibre style library", extensions: ["json"] }],
+          filters: [
+            { name: t("styleManager.exportFilterName"), extensions: ["json"] },
+          ],
           browserTypes: [
             {
-              description: "GeoLibre style library",
+              description: t("styleManager.exportFilterName"),
               accept: { "application/json": [".json"] },
             },
           ],
@@ -490,9 +518,10 @@ export function StyleManagerPanel() {
       className={cn(
         "pointer-events-auto absolute z-20 flex resize flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
         "max-h-[calc(100%-1.5rem)] min-h-64 min-w-80 max-w-[calc(100%-1.5rem)]",
-        pos
-          ? "w-[min(24rem,calc(100vw-1.5rem))]"
-          : "left-3 top-3 w-[min(24rem,calc(100vw-1.5rem))]",
+        "w-[min(24rem,calc(100vw-1.5rem))]",
+        // Physical (not logical) anchor: the drag handler writes physical
+        // left/top inline, and RasterSubsetPanel sets the same precedent.
+        !pos && "left-3 top-3",
       )}
       style={pos ? { left: pos.x, top: pos.y } : undefined}
       role="region"

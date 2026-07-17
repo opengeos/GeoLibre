@@ -3056,6 +3056,8 @@
     "cancel": "Cancel",
     "import": "Import…",
     "export": "Export…",
+    "importFilterName": "Style library / QML / SLD",
+    "exportFilterName": "GeoLibre style library",
     "applied": "Applied \"{{name}}\" to {{layer}}.",
     "appliedRampHint": "Applied \"{{name}}\". Switch the layer to graduated or categorized styling to see the ramp.",
     "saved": "Saved \"{{name}}\" to the library.",

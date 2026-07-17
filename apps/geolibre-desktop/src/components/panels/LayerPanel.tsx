@@ -158,6 +158,7 @@ import {
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
+import { isQmlStyleXml } from "../../lib/style-format";
 import {
   readPostgisTable,
   writePostgisTable,
@@ -1238,7 +1239,7 @@ export function LayerPanel({
         // and everything else is parsed as a Mapbox GL style JSON.
         const trimmed = picked.text.trimStart();
         const isXml = trimmed.startsWith("<");
-        const isQml = isXml && /<qgis[\s>]|<renderer-v2[\s>]/.test(picked.text);
+        const isQml = isXml && isQmlStyleXml(picked.text);
         const isSld = isXml && !isQml;
 
         let result:
