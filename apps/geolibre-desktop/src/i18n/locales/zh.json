@@ -2341,7 +2341,7 @@
     "provider": "LLM 提供方",
     "model": "模型",
     "codeApprovalTitle": "批准代码运行？",
-    "codeApprovalBody": "助手想要执行代码来操作地图和访问应用数据。",
+    "codeApprovalBody": "助手想要在应用中运行 {{language}} 代码。请先仔细查看 — 它可以更改地图并访问应用数据。",
     "codeApprovalAlways": "本次会话允许助手运行代码",
     "codeApprovalRun": "运行",
     "codeApprovalDecline": "取消"
