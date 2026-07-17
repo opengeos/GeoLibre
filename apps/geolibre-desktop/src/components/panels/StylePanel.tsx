@@ -1313,9 +1313,17 @@ export function StylePanel({
     if (!diagramGeojson) return [];
     const probe = { geojson: diagramGeojson, metadata: diagramMetadata ?? {} };
     return getAttributePropertyNames(probe).filter((property) =>
-      getPropertyValues(probe, property).some((value) =>
-        Number.isFinite(Number(value)),
-      ),
+      getPropertyValues(probe, property).some((value) => {
+        // Blank strings coerce to 0 via Number(""), which would qualify a
+        // text column that merely has an empty cell somewhere; require an
+        // actual number or a non-blank numeric string.
+        if (typeof value === "number") return Number.isFinite(value);
+        return (
+          typeof value === "string" &&
+          value.trim() !== "" &&
+          Number.isFinite(Number(value))
+        );
+      }),
     );
   }, [diagramGeojson, diagramMetadata]);
   // Whether the layer's coordinates carry real Z values (e.g. GPX track

@@ -21,6 +21,15 @@ import { styleValue, type LayerStyle } from "./types";
  */
 export const MAX_DIAGRAM_FEATURES = 2000;
 
+/**
+ * Hard cap on how many raw features {@link collectDiagramData} visits while
+ * looking for drawable diagrams. Without it, a layer whose drawable ratio is
+ * low (sparse attributes, degenerate geometry) degenerates to a full scan of
+ * an arbitrarily large collection on every rebuild. Features past this bound
+ * are treated as truncation, which the Style Panel surfaces.
+ */
+export const MAX_DIAGRAM_SCAN_FEATURES = 100_000;
+
 /** Smallest rendered diagram size in pixels under scaled sizing. */
 export const MIN_DIAGRAM_SIZE = 8;
 
@@ -225,12 +234,17 @@ export function collectDiagramData(
   let maxFieldValue = 0;
   let maxTotal = 0;
   let truncated = false;
+  let visited = 0;
 
   for (const feature of geojson.features) {
-    if (data.length >= MAX_DIAGRAM_FEATURES) {
+    if (
+      data.length >= MAX_DIAGRAM_FEATURES ||
+      visited >= MAX_DIAGRAM_SCAN_FEATURES
+    ) {
       truncated = true;
       break;
     }
+    visited += 1;
     const position = diagramAnchor(feature.geometry);
     if (!position) continue;
     const values = properties.map((property) => readValue(feature, property));

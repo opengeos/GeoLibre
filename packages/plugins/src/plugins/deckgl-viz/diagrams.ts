@@ -416,9 +416,12 @@ function getAtlas(layer: GeoLibreLayer): DiagramAtlas | null {
 
   const diagramData = collectDiagramData(geojson, layer.style);
   const atlas = buildAtlas(layer, diagramData);
-  const dropped = atlas
-    ? diagramData.data.length - atlas.entries.length
-    : 0;
+  // Derived from the packing arithmetic (not the built atlas) so the count is
+  // right even when nothing fit and buildAtlas returned null.
+  const dropped = countAtlasDroppedDiagrams(
+    { geojson, style: layer.style },
+    diagramData,
+  );
   // Console notes are gated on a change in the loss counts, so per-keystroke
   // style edits (each of which rebuilds the atlas) don't spam the console.
   if (diagramData.truncated && !cached?.truncated) {
