@@ -291,23 +291,27 @@ export function VectorToolsDialog({
   // Shared tail for the two Python engines (sidecar and Pyodide): both take the
   // same {tool_id, geojson, overlay, parameters} request and return
   // {geojson, messages}. Resolve the layers, invoke, then validate and add the
-  // result. `label` describes where it ran, for the log line.
+  // result. `label` describes where it ran, for the log line. Returns the
+  // failure message when the run bailed out (so the caller records the run as
+  // failed in the Processing History), or null on success.
   const runRemoteEngine = useCallback(
     async (
       label: string,
       invoke: (request: VectorToolRequest) => Promise<VectorToolResult>,
-    ) => {
+    ): Promise<string | null> => {
       const inputLayer = layers.find((l) => l.id === params.layer);
       const overlayLayer = layers.find((l) => l.id === params.overlay);
       // A layer may have been removed from the project after the dialog opened;
       // bail out with a clear message instead of sending null GeoJSON.
       if (!inputLayer?.geojson) {
-        appendLog("Error: input layer no longer exists in the project");
-        return;
+        const message = "input layer no longer exists in the project";
+        appendLog(`Error: ${message}`);
+        return message;
       }
       if (params.overlay && !overlayLayer?.geojson) {
-        appendLog("Error: overlay layer no longer exists in the project");
-        return;
+        const message = "overlay layer no longer exists in the project";
+        appendLog(`Error: ${message}`);
+        return message;
       }
       appendLog(`Running "${tool.name}" ${label}...`);
       const result = await invoke({
@@ -327,9 +331,11 @@ export function VectorToolsDialog({
         Array.isArray(remoteResult.features)
       ) {
         addResultLayer(tool.name, remoteResult as unknown as FeatureCollection);
-      } else {
-        appendLog("Error: engine returned invalid GeoJSON");
+        return null;
       }
+      const message = "engine returned invalid GeoJSON";
+      appendLog(`Error: ${message}`);
+      return message;
     },
     [layers, params, tool, appendLog, addResultLayer],
   );
@@ -361,8 +367,12 @@ export function VectorToolsDialog({
     runTrackerRef.current = tracker;
     setRunning(true);
     try {
+      // A remote engine can bail out without throwing (missing layer, invalid
+      // response); its returned failure message keeps the run from being
+      // recorded as a green no-output success.
+      let failure: string | null = null;
       if (engine === "sidecar") {
-        await runRemoteEngine("on the Python sidecar", runVectorTool);
+        failure = await runRemoteEngine("on the Python sidecar", runVectorTool);
       } else if (engine === "pyodide") {
         // Progress phases (one-time runtime + GeoPandas download) stream into
         // the log; the subscription is dropped once the run finishes.
@@ -370,7 +380,7 @@ export function VectorToolsDialog({
           appendLog(`${phase}...`),
         );
         try {
-          await runRemoteEngine(
+          failure = await runRemoteEngine(
             "in your browser (Pyodide)",
             runVectorToolInPyodide,
           );
@@ -394,7 +404,8 @@ export function VectorToolsDialog({
         };
         await tool.run(ctx);
       }
-      tracker.finish("success");
+      if (failure) tracker.finish("error", failure);
+      else tracker.finish("success");
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);

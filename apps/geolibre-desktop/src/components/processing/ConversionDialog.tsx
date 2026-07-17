@@ -1341,45 +1341,57 @@ export function ConversionDialog() {
   const dispatchConversion = async () => {
     if (!kind) return;
     setError(null);
-    // Track the run for the Processing History panel (#1292). Only the
+    // History tracker for this run (#1292), built lazily so a submit that
+    // fails the validation checks below is never recorded (matching the other
+    // processing dialogs) and never occupies the pending slot. Only the
     // parameters that apply to the selected conversion kind are recorded.
-    const browserInputName = usesBrowserRuntime
-      ? (splitBrowserSelection(browserFiles).mainFile?.name ?? "")
-      : "";
-    pendingTrackerRef.current = beginProcessingRun(
-      {
-        kind: "conversion",
-        toolId: kind,
-        toolName: TOOL_CONFIGS[kind].titleKey
-          ? t(TOOL_CONFIGS[kind].titleKey)
-          : TOOL_CONFIGS[kind].title,
-        engine: usesBrowserRuntime ? "browser" : "sidecar",
-        parameters: {
-          ...(compression ? { compression } : {}),
-          ...(kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet"
-            ? { rowGroupSize }
-            : {}),
-          ...(kind === "csv-to-geoparquet" ? { lonColumn, latColumn } : {}),
-          ...(kind === "vector-to-pmtiles"
-            ? { layerName, minZoom, maxZoom }
-            : {}),
-          ...(kind === "raster-to-pmtiles"
-            ? {
-                ...(band ? { band } : {}),
-                ...(colormap ? { colormap } : {}),
-                resampling,
-                minZoom,
-                maxZoom,
-              }
-            : {}),
+    const makeTracker = () =>
+      beginProcessingRun(
+        {
+          kind: "conversion",
+          toolId: kind,
+          toolName: TOOL_CONFIGS[kind].titleKey
+            ? t(TOOL_CONFIGS[kind].titleKey)
+            : TOOL_CONFIGS[kind].title,
+          engine: usesBrowserRuntime ? "browser" : "sidecar",
+          parameters: {
+            ...(compression ? { compression } : {}),
+            ...(kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet"
+              ? { rowGroupSize }
+              : {}),
+            ...(kind === "csv-to-geoparquet" ? { lonColumn, latColumn } : {}),
+            ...(kind === "vector-to-pmtiles"
+              ? { layerName, minZoom, maxZoom }
+              : {}),
+            ...(kind === "raster-to-pmtiles"
+              ? {
+                  ...(band ? { band } : {}),
+                  ...(colormap ? { colormap } : {}),
+                  resampling,
+                  minZoom,
+                  maxZoom,
+                }
+              : {}),
+          },
         },
-      },
-      {
-        inputPath: usesBrowserRuntime ? browserInputName : inputPath.trim(),
-        outputPath: outputPath.trim(),
-      },
-    );
+        {
+          inputPath: usesBrowserRuntime
+            ? (splitBrowserSelection(browserFiles).mainFile?.name ?? "")
+            : inputPath.trim(),
+          outputPath: outputPath.trim(),
+        },
+      );
     if (usesBrowserRuntime) {
+      // Mirror runBrowserConversion's own input check before creating the
+      // tracker. Deeper per-kind validations inside the browser sub-runners
+      // return before any job is dispatched, so a tracker they strand is
+      // never finished nor misattributed (the terminal-status effect only
+      // fires on job transitions, and each dispatch overwrites the slot).
+      if (!splitBrowserSelection(browserFiles).mainFile) {
+        setError("Choose an input file.");
+        return;
+      }
+      pendingTrackerRef.current = makeTracker();
       await runBrowserConversion();
       return;
     }
@@ -1396,16 +1408,48 @@ export function ConversionDialog() {
     const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
     const rowGroupValid =
       Number.isFinite(parsedRowGroupSize) && parsedRowGroupSize > 0;
+    // Per-kind parameter validation, before the tracker exists so an invalid
+    // submit is not recorded and cannot strand a pending tracker.
+    if (
+      (kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet") &&
+      !rowGroupValid
+    ) {
+      setError("Row group size must be a positive integer.");
+      return;
+    }
+    if (
+      kind === "csv-to-geoparquet" &&
+      (!lonColumn.trim() || !latColumn.trim())
+    ) {
+      setError("Longitude and latitude column names are required.");
+      return;
+    }
+    // Unlike Raster to PMTiles, the sidecar requires both bounds, so a blank
+    // (undefined) one is an error rather than a "let the engine decide".
+    let pmtilesZoomRange: { minZoom: number; maxZoom: number } | null = null;
+    if (kind === "vector-to-pmtiles") {
+      const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
+      if (
+        !zooms ||
+        zooms.minZoom === undefined ||
+        zooms.maxZoom === undefined
+      ) {
+        setError(
+          i18n.t("toolbar.conversion.zoomRangeError", {
+            max: MAX_PMTILES_ZOOM,
+          }),
+        );
+        return;
+      }
+      pmtilesZoomRange = { minZoom: zooms.minZoom, maxZoom: zooms.maxZoom };
+    }
+    pendingTrackerRef.current = makeTracker();
     try {
       if (kind === "vector-to-vector") {
         // The backend resolves the output format from the output extension, so
         // the input/output paths are all it needs.
         setJob(await runVectorToVector({ input_path, output_path }));
       } else if (kind === "vector-to-geoparquet") {
-        if (!rowGroupValid) {
-          setError("Row group size must be a positive integer.");
-          return;
-        }
         setJob(
           await runVectorToGeoParquet({
             input_path,
@@ -1421,14 +1465,6 @@ export function ConversionDialog() {
       } else if (kind === "vector-to-geopackage") {
         setJob(await runVectorToGeoPackage({ input_path, output_path }));
       } else if (kind === "csv-to-geoparquet") {
-        if (!rowGroupValid) {
-          setError("Row group size must be a positive integer.");
-          return;
-        }
-        if (!lonColumn.trim() || !latColumn.trim()) {
-          setError("Longitude and latitude column names are required.");
-          return;
-        }
         setJob(
           await runCsvToGeoParquet({
             input_path,
@@ -1439,29 +1475,14 @@ export function ConversionDialog() {
             row_group_size: parsedRowGroupSize,
           }),
         );
-      } else if (kind === "vector-to-pmtiles") {
-        // Unlike Raster to PMTiles, the sidecar requires both bounds, so a blank
-        // (undefined) one is an error rather than a "let the engine decide".
-        const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
-        if (
-          !zooms ||
-          zooms.minZoom === undefined ||
-          zooms.maxZoom === undefined
-        ) {
-          setError(
-            i18n.t("toolbar.conversion.zoomRangeError", {
-              max: MAX_PMTILES_ZOOM,
-            }),
-          );
-          return;
-        }
+      } else if (kind === "vector-to-pmtiles" && pmtilesZoomRange) {
         setJob(
           await runVectorToPmtiles({
             input_path,
             output_path,
             layer_name: layerName.trim() || "data",
-            min_zoom: zooms.minZoom,
-            max_zoom: zooms.maxZoom,
+            min_zoom: pmtilesZoomRange.minZoom,
+            max_zoom: pmtilesZoomRange.maxZoom,
           }),
         );
       } else if (kind === "raster-to-cog") {
