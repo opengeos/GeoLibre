@@ -298,7 +298,11 @@ export function getRightPanel(
   if (!panel) return undefined;
   const resolve = (panel as { _resolveTitle?: () => string })._resolveTitle;
   if (resolve) {
-    return { ...panel, title: resolve() };
+    // Mutate in-place so the same panel object identity is preserved across
+    // calls — several callers use the panel as a React effect dependency to
+    // detect re-registration, and a new-object-every-time pattern would cause
+    // unnecessary teardown/rebuild on every render.
+    (panel as { title: string }).title = resolve();
   }
   return panel as GeoLibreRightPanelRegistration & { title: string };
 }

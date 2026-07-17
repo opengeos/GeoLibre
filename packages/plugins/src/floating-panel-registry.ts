@@ -157,7 +157,11 @@ export function getFloatingPanel(
   if (!panel) return undefined;
   const resolve = (panel as { _resolveTitle?: () => string })._resolveTitle;
   if (resolve) {
-    return { ...panel, title: resolve() };
+    // Mutate in-place so the same panel object identity is preserved across
+    // calls — FloatingPanelCard's useEffect uses the panel as a dependency to
+    // detect re-registration, and a new-object-every-time pattern would tear
+    // down and rebuild the panel's DOM on every render (drag/resize/focus).
+    (panel as { title: string }).title = resolve();
   }
   return panel as GeoLibreFloatingPanelRegistration & { title: string };
 }
