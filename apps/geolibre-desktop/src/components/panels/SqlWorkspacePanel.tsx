@@ -11,6 +11,7 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  DatabaseZap,
   Download,
   Eraser,
   Loader2,
@@ -40,6 +41,11 @@ import {
 } from "../../lib/sql-workspace";
 import { runPostgisQuery } from "../../lib/pglite-workspace";
 import { runSedonaQuery } from "../../lib/sedona-workspace";
+import { sqlQueryLayerMetadata } from "../../lib/sql-query-layer";
+import {
+  consumePendingSqlWorkspaceQuery,
+  SQL_WORKSPACE_PREFILL_EVENT,
+} from "../../lib/sql-workspace-prefill";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import { useSqlCompletion } from "../../lib/useSqlCompletion";
 import {
@@ -265,6 +271,7 @@ export function SqlWorkspacePanel() {
   const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const updateLayer = useAppStore((s) => s.updateLayer);
 
   const { t } = useTranslation();
 
@@ -293,6 +300,13 @@ export function SqlWorkspacePanel() {
   const [notice, setNotice] = useState<string | null>(null);
   const [history, setHistory] = useState<string[]>(loadQueryHistory);
   const [layerName, setLayerName] = useState("");
+  // The statement (and engine) that produced the current `result`, captured at
+  // run time so "Add as query layer" stores the SQL that was actually executed
+  // even if the editor has been modified since. Set together with setResult.
+  const [lastRun, setLastRun] = useState<{
+    sql: string;
+    engine: SqlEngine;
+  } | null>(null);
 
   // A single pass over the layers supplies both the columns (for autocomplete)
   // and the table names; deriving `tables` from it avoids walking the layers a
@@ -337,6 +351,27 @@ export function SqlWorkspacePanel() {
     editorRef.current?.focus();
   }, []);
 
+  // Load a query handed off by a SQL query layer's "Edit query in SQL
+  // Workspace" action: consume a parked query on mount (the panel was closed
+  // when it was requested) and apply later requests while mounted via the
+  // prefill event. Query layers are DuckDB-backed, so the engine follows.
+  useEffect(() => {
+    const applyPending = () => {
+      const pending = consumePendingSqlWorkspaceQuery();
+      if (pending === null) return;
+      setEngine("duckdb");
+      setSql(pending);
+      setResult(null);
+      setError(null);
+      setNotice(null);
+      editorRef.current?.focus();
+    };
+    applyPending();
+    window.addEventListener(SQL_WORKSPACE_PREFILL_EVENT, applyPending);
+    return () =>
+      window.removeEventListener(SQL_WORKSPACE_PREFILL_EVENT, applyPending);
+  }, []);
+
   // Surface the engine error, and when it is a missing-table error append the
   // names the workspace actually exposes so the user can pick a real one (the
   // common cause of issue #906: querying a table name that was never loaded).
@@ -375,6 +410,7 @@ export function SqlWorkspacePanel() {
             ? await runSedonaQuery(trimmed, layers)
             : await runSqlQuery(trimmed, layers);
       setResult(queryResult);
+      setLastRun({ sql: trimmed, engine });
     } catch (err) {
       setResult(null);
       setError(describeQueryError(err));
@@ -406,6 +442,29 @@ export function SqlWorkspacePanel() {
     addGeoJsonLayer(name, result.geojson);
     setNotice(
       t("toolbar.sqlWorkspace.addedAsLayer", { count: featureCount, name }),
+    );
+  };
+
+  // A live query layer only makes sense for a DuckDB result: refresh re-runs
+  // the stored SQL through the DuckDB engine (refreshSqlQueryLayer).
+  const canAddAsQueryLayer =
+    !!result?.geojson && lastRun?.engine === "duckdb";
+
+  // Like handleAddAsLayer, but the executed SQL is stored on the layer so it
+  // can be re-run later (Refresh / auto-refresh in the Layers panel).
+  const handleAddAsQueryLayer = () => {
+    if (!result?.geojson || lastRun?.engine !== "duckdb") return;
+    setError(null);
+    const featureCount = result.geojson.features.length;
+    const name =
+      layerName.trim() || `SQL query ${new Date().toLocaleTimeString()}`;
+    const id = addGeoJsonLayer(name, result.geojson);
+    updateLayer(id, { metadata: sqlQueryLayerMetadata(lastRun.sql) });
+    setNotice(
+      t("toolbar.sqlWorkspace.addedAsQueryLayer", {
+        count: featureCount,
+        name,
+      }),
     );
   };
 
@@ -883,6 +942,18 @@ export function SqlWorkspacePanel() {
               <MapPlus className="h-4 w-4" />
               {t("toolbar.sqlWorkspace.addAsLayer")}
             </Button>
+            {canAddAsQueryLayer ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddAsQueryLayer}
+                disabled={exporting}
+                title={t("toolbar.sqlWorkspace.addAsQueryLayerHint")}
+              >
+                <DatabaseZap className="h-4 w-4" />
+                {t("toolbar.sqlWorkspace.addAsQueryLayer")}
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               size="sm"

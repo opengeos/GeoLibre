@@ -1,6 +1,10 @@
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreLayer } from "@geolibre/core";
 import { parseGeoRssLayer } from "./georss";
+// Light import (types and metadata checks only); the DuckDB engine behind a
+// query-layer refresh is loaded dynamically inside sql-query-layer.ts, so this
+// module stays importable under the node test runner.
+import { isSqlQueryLayer } from "./sql-query-layer";
 
 // Keep in sync with WFS_PROXY_PATH / GPX_PROXY_PATH in vite.config.ts (the dev
 // proxy binds them there). The GPX path is a generic feed CORS proxy reused for
@@ -296,7 +300,13 @@ export function isVectorControlRefreshLayer(layer: GeoLibreLayer): boolean {
 }
 
 export function isRefreshableLayer(layer: GeoLibreLayer): boolean {
-  return Boolean(refreshSourceUrl(layer)) || isVectorControlRefreshLayer(layer);
+  return (
+    Boolean(refreshSourceUrl(layer)) ||
+    isVectorControlRefreshLayer(layer) ||
+    // SQL query layers refresh by re-executing their stored DuckDB statement
+    // (see refreshSqlQueryLayer) rather than fetching a URL.
+    isSqlQueryLayer(layer)
+  );
 }
 
 export function getLayerRefreshConfig(

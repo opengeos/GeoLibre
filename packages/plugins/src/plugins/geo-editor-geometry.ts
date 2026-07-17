@@ -10,6 +10,12 @@ import type { FeatureCollection } from "geojson";
 /** Metadata `sourceKind` marking the GeoEditor's own "Sketches" layer. */
 export const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
 
+// Live SQL query layers (SQL Workspace "Add as query layer"). Canonical source
+// is SQL_QUERY_SOURCE_KIND in apps/geolibre-desktop/src/lib/sql-query-layer.ts;
+// kept local (not imported) because this package cannot depend on app modules.
+// If the canonical value ever changes, update this copy too.
+const SQL_QUERY_SOURCE_KIND = "sql-query";
+
 /**
  * Transient feature-key tag written into a feature's `properties` while it is
  * loaded in the editor. Geoman reassigns `feature.id` on load, so the original
@@ -42,6 +48,10 @@ export function canEditLayerGeometry(
   if (layer.type !== "geojson") return false;
   if (isDuckDBQueryLayer(layer)) return false;
   if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) return false;
+  // A query result is derived, not writable: refresh re-runs the stored SQL
+  // and would overwrite any in-place edits. Load a copy into the editor (or
+  // export) to edit the features.
+  if (layer.metadata.sourceKind === SQL_QUERY_SOURCE_KIND) return false;
 
   if (layer.metadata.externalNativeLayer === true) {
     // Externally-rendered layers are only editable when they are Add-Vector-Layer
