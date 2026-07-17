@@ -41,6 +41,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  Palette,
   PanelRightClose,
   PanelRightOpen,
   Plus,
@@ -1042,6 +1043,7 @@ export function StylePanel({
   const layers = useAppStore((s) => s.layers);
   const setLayerOpacity = useAppStore((s) => s.setLayerOpacity);
   const setLayerStyle = useAppStore((s) => s.setLayerStyle);
+  const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
@@ -3361,16 +3363,28 @@ export function StylePanel({
         <span className="truncate text-sm font-semibold">
           {t("style.headingWithLayer", { name: layer.name })}
         </span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          title={t("style.collapse")}
-          aria-label={t("style.collapse")}
-          onClick={() => setIsCollapsed(true)}
-        >
-          <PanelRightClose className="h-4 w-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("style.openStyleManager")}
+            aria-label={t("style.openStyleManager")}
+            onClick={() => setStyleManagerOpen(true)}
+          >
+            <Palette className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            title={t("style.collapse")}
+            aria-label={t("style.collapse")}
+            onClick={() => setIsCollapsed(true)}
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       <ScrollArea className="flex-1">
         {/* Padding lives on the inner content (not the ScrollArea root) with

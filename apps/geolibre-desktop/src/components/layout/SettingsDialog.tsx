@@ -1463,6 +1463,14 @@ export function SettingsDialog({
               {t("settings.menu.managePlugins")}
             </DropdownMenuItem>
           )}
+          {showSettingsItem("settings.styleManager") && (
+            <DropdownMenuItem
+              onSelect={() => useAppStore.getState().setStyleManagerOpen(true)}
+            >
+              <Palette className="me-2 h-3.5 w-3.5" />
+              {t("settings.menu.styleManager")}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <Dialog open={open} onOpenChange={setOpen}>

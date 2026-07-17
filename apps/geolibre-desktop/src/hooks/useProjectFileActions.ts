@@ -353,6 +353,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       mapLayout: state.mapLayout,
       secondaryMapViews: state.secondaryMapViews,
       primaryMapLabel: state.primaryMapLabel,
+      styleLibrary: state.projectStyleLibrary,
       metadata: state.metadata,
     });
     return {

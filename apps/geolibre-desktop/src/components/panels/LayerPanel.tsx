@@ -535,6 +535,7 @@ export function LayerPanel({
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setLoadEditorFeaturesOpen = useAppStore(
     (s) => s.setLoadEditorFeaturesOpen,
@@ -2819,6 +2820,22 @@ export function LayerPanel({
                                 <Upload className="me-2 h-3.5 w-3.5" />
                                 {t("layers.importStyle")}
                               </DropdownMenuItem>
+                            )}
+                            {canImportStyle && (
+                              <>
+                                <DropdownMenuSeparator />
+                                {/* The Style Manager reads the selected layer,
+                                    so select this one before opening it. */}
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    selectLayer(layer.id);
+                                    setStyleManagerOpen(true);
+                                  }}
+                                >
+                                  <Palette className="me-2 h-3.5 w-3.5" />
+                                  {t("layers.openStyleManager")}
+                                </DropdownMenuItem>
+                              </>
                             )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>

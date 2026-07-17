@@ -1041,6 +1041,41 @@ export interface DashboardWidget {
   valueField?: string;
 }
 
+/**
+ * What slice of a layer's styling a Style Manager entry captures (issue #1294).
+ *
+ * - `"style"`: the layer's complete {@link LayerStyle} snapshot.
+ * - `"symbol"`: fill/stroke/marker/pattern symbology only, so it can restyle a
+ *   layer without touching its labels or renderer configuration.
+ * - `"labels"`: the {@link LabelStyle} block only.
+ * - `"ramp"`: the color ramp + classification settings only (ramp name, class
+ *   count, classification scheme), independent of the attribute the target
+ *   layer classifies on.
+ */
+export type StyleLibraryEntryKind = "style" | "symbol" | "labels" | "ramp";
+
+/**
+ * One saved, reusable style in the Style Manager library (issue #1294). The
+ * payload is a {@link LayerStyle} subset chosen by {@link kind}; applying an
+ * entry merges that subset onto the target layer's style. Entries live either
+ * in the app-level library (persisted across projects) or embedded in a
+ * project file's `styleLibrary` array.
+ */
+export interface StyleLibraryEntry {
+  /** Stable id, used as the IndexedDB/store key; upserts overwrite by id. */
+  id: string;
+  /** Display name shown in the Style Manager. */
+  name: string;
+  /** Which style subset {@link style} carries. */
+  kind: StyleLibraryEntryKind;
+  /** Free-form tags for filtering the library. */
+  tags: string[];
+  /** The saved {@link LayerStyle} subset (see {@link kind}). */
+  style: Partial<LayerStyle>;
+  /** ISO timestamp of the last save; empty for built-in presets. */
+  updatedAt: string;
+}
+
 export interface GeoLibreProject {
   version: string;
   name: string;
@@ -1076,6 +1111,12 @@ export interface GeoLibreProject {
   secondaryMapViews?: SecondaryMapView[];
   /** User-entered label for the primary pane; omitted when empty. */
   primaryMapLabel?: string;
+  /**
+   * Project-scoped Style Manager entries (issue #1294), so a project can carry
+   * its reusable styles to teammates. Omitted when empty; the app-level
+   * library is persisted outside the project file and never serialized here.
+   */
+  styleLibrary?: StyleLibraryEntry[];
   metadata: Record<string, unknown>;
 }
 

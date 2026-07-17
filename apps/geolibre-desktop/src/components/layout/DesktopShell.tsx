@@ -215,6 +215,20 @@ const ConversionDialog = lazy(() =>
     }),
 );
 
+const StyleManagerDialog = lazy(() =>
+  import("../panels/StyleManagerDialog")
+    .then((module) => ({
+      default: module.StyleManagerDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load StyleManagerDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../panels/StyleManagerDialog").StyleManagerDialog;
+      return { default: Fallback };
+    }),
+);
+
 const VectorToolsDialog = lazy(() =>
   import("../processing/VectorToolsDialog")
     .then((module) => ({
@@ -2278,6 +2292,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <ConversionDialog />
+      </Suspense>
+      <Suspense fallback={null}>
+        <StyleManagerDialog />
       </Suspense>
       <Suspense fallback={null}>
         <VectorToolsDialog mapControllerRef={mapControllerRef} />
