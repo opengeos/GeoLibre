@@ -3182,17 +3182,9 @@
     "drawBbox": "绘制边界框",
     "drawing": "绘制中…",
     "drawHint": "在地图上拖拽绘制边界框，按 Esc 取消。",
-    "layer": "图层",
-    "outputFormat": "输出格式",
-    "clipToBbox": "裁剪到边界框",
     "extract": "提取",
     "extracting": "提取中…",
     "success": "提取成功。",
-    "error": {
-      "noLayer": "请先选择一个栅格图层。",
-      "noBbox": "请先绘制边界框。",
-      "failed": "提取失败。"
-    },
     "useView": "使用视图",
     "north": "北",
     "south": "南",
@@ -3257,9 +3249,6 @@
     "downloadTitle": "下载此文件",
     "copyUrlTitle": "复制此文件的 URL",
     "addError": "无法添加此文件：{{message}}"
-  },
-  "sourceCopi": {
-    "addError": "添加失败：{{message}}"
   },
   "objectDetection": {
     "title": "目标检测",
