@@ -3639,11 +3639,17 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
  * would make them upside-down.  The :lang() pseudo-class handles regional
  * variants (zh-TW, zh-CN, etc.) natively.  The rule matches the same `md:`
  * breakpoint that Tailwind generates md:rotate-180 at.
+ *
+ * Upright CJK glyphs also stack tightly, so the small `tracking-wide`
+ * letter-spacing meant for rotated Latin text leaves them touching (e.g.
+ * 图层 reads as one block).  In vertical-rl, letter-spacing runs down the
+ * inline axis, so a larger value opens up the gap between stacked glyphs.
  * ------------------------------------------------------------------------- */
 @media (min-width: 768px) {
   :lang(zh) .md\:rotate-180,
   :lang(ja) .md\:rotate-180,
   :lang(ko) .md\:rotate-180 {
     rotate: 0deg;
+    letter-spacing: 0.15em;
   }
 }
