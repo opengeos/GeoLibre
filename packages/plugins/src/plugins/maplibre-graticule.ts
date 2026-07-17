@@ -105,10 +105,9 @@ let labels: GraticuleLabels = { ...DEFAULT_GRATICULE_LABELS };
  * every language change). Pushes the new strings into the live control tooltip
  * and, if the settings panel is open, rebuilds its body so labels stay current.
  *
- * Note: the panel's header title is passed once to `registerRightPanel` at
- * activation and the host exposes no API to update it afterward, so the title
- * (unlike the body and control tooltip) only re-localizes when the panel is
- * reopened.
+ * The panel header title is registered as a getter (`labels.getTitle?.() ??
+ * labels.title`), so it re-localizes live alongside the body and control
+ * tooltip whenever the host calls this function.
  */
 export function setGraticuleLabels(next: Partial<GraticuleLabels>): void {
   labels = { ...labels, ...next };

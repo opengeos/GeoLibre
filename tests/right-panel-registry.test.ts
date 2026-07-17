@@ -277,4 +277,35 @@ describe("right-panel registry", () => {
     assert.deepEqual(calls, ["close"]);
     unsubscribe();
   });
+
+  it("resolves a getter title live without mutating the registration object", () => {
+    // A getter title must re-localize on language change without the host
+    // clobbering the function on the caller's own registration object.
+    let current = "Workbench (en)";
+    const panel = testPanel({ title: () => current });
+    registerRightPanel(panel);
+
+    assert.equal(getRightPanel("workbench")?.title, "Workbench (en)");
+    assert.equal(typeof panel.title, "function");
+
+    current = "Workbench (zh)";
+    assert.equal(getRightPanel("workbench")?.title, "Workbench (zh)");
+    assert.equal(typeof panel.title, "function");
+  });
+
+  it("re-registering the same object keeps a getter title reactive", () => {
+    // Regression: an earlier build resolved panel.title in place, turning the
+    // function into a static string, so a re-registration of the same object
+    // (a supported pattern) froze the title on its first value.
+    let current = "First";
+    const panel = testPanel({ title: () => current });
+    registerRightPanel(panel);
+    assert.equal(getRightPanel("workbench")?.title, "First");
+
+    registerRightPanel(panel);
+    assert.equal(typeof panel.title, "function");
+
+    current = "Second";
+    assert.equal(getRightPanel("workbench")?.title, "Second");
+  });
 });
