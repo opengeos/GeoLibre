@@ -359,33 +359,66 @@ export interface BuildAtlasPagesOptions {
 }
 
 /**
- * Build the ordered page list for an atlas from a coverage layer's features:
- * drop features without a usable geometry, apply the filter, sort, and assign
- * final page indices.
+ * A coverage feature reduced to what atlas paging needs: stable identity,
+ * bounds, and attributes. Precomputing these once per layer (the geometry
+ * walk is the expensive part) keeps filter/sort edits cheap for large layers.
  */
-export function buildAtlasPages(
+export interface AtlasFeatureInfo {
+  /** 0-based position of the feature in the source collection. */
+  sourceIndex: number;
+  bounds: AtlasBounds;
+  properties: Record<string, unknown>;
+}
+
+/**
+ * Reduce a coverage layer's features to {@link AtlasFeatureInfo}s, dropping
+ * features without a usable geometry. This walks every vertex, so callers
+ * iterating settings should compute it once per layer and pass the result to
+ * {@link buildAtlasPages}.
+ */
+export function collectAtlasFeatures(
   collection: Pick<FeatureCollection, "features">,
-  options: BuildAtlasPagesOptions = {},
-): AtlasPage[] {
-  const { nameField, sortField, sortDescending, filter } = options;
-  const pages: Omit<AtlasPage, "index">[] = [];
+): AtlasFeatureInfo[] {
+  const infos: AtlasFeatureInfo[] = [];
   collection.features.forEach((feature, i) => {
     const bounds = geometryBounds(feature.geometry);
     if (!bounds) return;
-    const properties = (feature.properties ?? {}) as Record<string, unknown>;
-    if (filter && !filter(properties)) return;
+    infos.push({
+      sourceIndex: i,
+      bounds,
+      properties: (feature.properties ?? {}) as Record<string, unknown>,
+    });
+  });
+  return infos;
+}
+
+/**
+ * Build the ordered page list for an atlas from a coverage layer's features
+ * (or from precomputed {@link AtlasFeatureInfo}s): drop features without a
+ * usable geometry, apply the filter, sort, and assign final page indices.
+ */
+export function buildAtlasPages(
+  source: Pick<FeatureCollection, "features"> | AtlasFeatureInfo[],
+  options: BuildAtlasPagesOptions = {},
+): AtlasPage[] {
+  const { nameField, sortField, sortDescending, filter } = options;
+  const infos = Array.isArray(source) ? source : collectAtlasFeatures(source);
+  const pages: Omit<AtlasPage, "index">[] = [];
+  for (const info of infos) {
+    const { sourceIndex, bounds, properties } = info;
+    if (filter && !filter(properties)) continue;
     let name = "";
     if (nameField) {
       const v = properties[nameField];
       if (v !== null && v !== undefined) name = String(v).trim();
     }
     pages.push({
-      sourceIndex: i,
-      name: name || `Feature ${i + 1}`,
+      sourceIndex,
+      name: name || `Feature ${sourceIndex + 1}`,
       properties,
       bounds,
     });
-  });
+  }
   if (sortField) {
     const sign = sortDescending ? -1 : 1;
     pages.sort((a, b) => {

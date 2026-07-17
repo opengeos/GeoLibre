@@ -82,6 +82,7 @@ import {
 import {
   atlasEntryName,
   buildAtlasPages,
+  collectAtlasFeatures,
   expandBounds,
   listAtlasFields,
   parseAtlasFilter,
@@ -306,6 +307,9 @@ export function PrintLayoutDialog({
   // Set when the last atlas capture had to clamp a fixed scale to the map's
   // zoom limits, mirroring the manual scale flow's out-of-range notice.
   const [atlasScaleNotice, setAtlasScaleNotice] = useState<string | null>(null);
+  // Mirror of atlasActive (derived further down) for the dialog-open effect,
+  // which is declared before those derivations exist.
+  const atlasActiveRef = useRef(false);
   const [captured, setCaptured] = useState<CapturedMap | null>(null);
   // "contain" when a graticule is active, so its edge labels are not trimmed by
   // the default "cover" crop; "cover" (fill the frame) otherwise.
@@ -566,7 +570,11 @@ export function PrintLayoutDialog({
       setDateText((prev) => prev || new Date().toLocaleDateString());
       // Re-show a previously drawn extent box while composing.
       if (map && extentBbox) showPrintExtent(map, extentBbox);
-      recapture();
+      // With an active atlas persisting from a prior session, skip the plain
+      // viewport capture: the atlas auto-drive effect recaptures the current
+      // page on this same transition, and the extra capture would flash an
+      // incorrect preview first.
+      if (!atlasActiveRef.current) recapture();
     } else if (!open && wasOpenRef.current && !drawingRef.current) {
       // Closing for good (not to draw): take the extent box off the map.
       if (map) clearPrintExtent(map);
@@ -766,18 +774,23 @@ export function PrintLayoutDialog({
     () => parseAtlasFilter(deferredAtlasFilter),
     [deferredAtlasFilter],
   );
+  // The per-vertex geometry walk runs once per coverage layer; sort/filter
+  // edits below only re-iterate these lightweight per-feature records.
+  const atlasFeatureInfos = useMemo(
+    () =>
+      atlasLayer?.geojson ? collectAtlasFeatures(atlasLayer.geojson) : [],
+    [atlasLayer],
+  );
   const atlasPages = useMemo(
     () =>
-      atlasLayer?.geojson
-        ? buildAtlasPages(atlasLayer.geojson, {
-            nameField: atlasNameField || undefined,
-            sortField: atlasSortField || undefined,
-            sortDescending: atlasSortDescending,
-            filter: atlasFilterPredicate ?? undefined,
-          })
-        : [],
+      buildAtlasPages(atlasFeatureInfos, {
+        nameField: atlasNameField || undefined,
+        sortField: atlasSortField || undefined,
+        sortDescending: atlasSortDescending,
+        filter: atlasFilterPredicate ?? undefined,
+      }),
     [
-      atlasLayer,
+      atlasFeatureInfos,
       atlasNameField,
       atlasSortField,
       atlasSortDescending,
@@ -801,6 +814,7 @@ export function PrintLayoutDialog({
     ? (atlasPages[clampedAtlasIndex] ?? null)
     : null;
   const atlasActive = atlasEnabled && atlasPageCount > 0;
+  atlasActiveRef.current = atlasActive;
   const atlasFilterValid = atlasFilterPredicate !== null;
   const atlasScaleValid =
     atlasExtentMode !== "scale" || Number(atlasScale) > 0;
