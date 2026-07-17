@@ -9,13 +9,16 @@ from geolibre_server.app.conversion import (
     _PMTILES_SCRIPT,
     _RASTER_SCRIPT,
     _RESULT_MARKER,
+    _VECTOR_LAYERS_SCRIPT,
     _VECTOR_SCRIPT,
     _VECTOR_TO_VECTOR_SCRIPT,
     _evict_finished_jobs_locked,
     _output_extension,
+    _validate_input_path,
     _validate_paths,
     csv_to_geoparquet,
     raster_to_cog,
+    vector_layers,
     vector_to_geoparquet,
     vector_to_geopackage,
     vector_to_pmtiles,
@@ -23,6 +26,7 @@ from geolibre_server.app.conversion import (
     vector_to_vector,
     CsvToGeoParquetRequest,
     RasterToCogRequest,
+    VectorLayersRequest,
     VectorToGeoPackageRequest,
     VectorToGeoParquetRequest,
     VectorToPmtilesRequest,
@@ -37,6 +41,7 @@ def test_embedded_scripts_compile() -> None:
     for script in (
         _VECTOR_SCRIPT,
         _VECTOR_TO_VECTOR_SCRIPT,
+        _VECTOR_LAYERS_SCRIPT,
         _RASTER_SCRIPT,
         _PMTILES_SCRIPT,
     ):
@@ -54,6 +59,96 @@ def test_validate_paths_accepts_existing_input_and_folder(tmp_path: Path) -> Non
     )
     assert input_path == str(source)
     assert output_path == str(tmp_path / "out.parquet")
+
+
+def test_validate_input_path_accepts_gdb_directory(tmp_path: Path) -> None:
+    """A File Geodatabase directory is a valid input despite not being a file."""
+    gdb = tmp_path / "sample.gdb"
+    gdb.mkdir()
+    assert _validate_input_path(str(gdb)) == str(gdb.resolve())
+    # And it flows through the full input/output validation unchanged.
+    input_path, _ = _validate_paths(str(gdb), str(tmp_path / "out.geojson"))
+    assert input_path == str(gdb.resolve())
+
+
+def test_validate_input_path_rejects_plain_directory(tmp_path: Path) -> None:
+    """Directories without a .gdb suffix stay rejected — only FileGDB is a
+    directory-based input format."""
+    plain = tmp_path / "not-a-geodatabase"
+    plain.mkdir()
+    with pytest.raises(HTTPException) as excinfo:
+        _validate_input_path(str(plain))
+    assert excinfo.value.status_code == 400
+
+
+def test_validate_input_path_rejects_gdb_outside_allowed_roots(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The allowlist confinement applies to .gdb directory inputs too."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside.gdb"
+    outside.mkdir()
+    monkeypatch.setattr(conversion, "_CONVERSION_ROOTS", [str(allowed.resolve())])
+    with pytest.raises(HTTPException) as excinfo:
+        _validate_input_path(str(outside))
+    assert excinfo.value.status_code == 403
+
+
+def test_vector_layers_rejects_missing_input(tmp_path: Path) -> None:
+    """A missing dataset is rejected before a layer-listing job starts."""
+    with pytest.raises(HTTPException) as excinfo:
+        vector_layers(VectorLayersRequest(input_path=str(tmp_path / "missing.gdb")))
+    assert excinfo.value.status_code == 400
+
+
+def test_vector_layers_starts_job_for_gdb_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A .gdb directory input starts a layer-listing job with the resolved path."""
+    gdb = tmp_path / "sample.gdb"
+    gdb.mkdir()
+    captured: dict[str, object] = {}
+
+    def fake_start_job(tool_id, script, params, output_name):  # noqa: ANN001
+        captured["tool_id"] = tool_id
+        captured["script"] = script
+        captured["params"] = params
+        captured["output_name"] = output_name
+        return _job("job", "pending", "2026-01-01T00:00:00+00:00")
+
+    monkeypatch.setattr(conversion, "_start_job", fake_start_job)
+    vector_layers(VectorLayersRequest(input_path=str(gdb)))
+
+    assert captured["tool_id"] == "vector-layers"
+    assert captured["script"] is _VECTOR_LAYERS_SCRIPT
+    assert captured["params"] == {"input_path": str(gdb.resolve())}
+
+
+def test_vector_to_vector_passes_layer_and_target_srs(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """input_layer and target_srs flow through to the conversion job params."""
+    gdb = tmp_path / "sample.gdb"
+    gdb.mkdir()
+    captured: dict[str, object] = {}
+
+    def fake_start_job(tool_id, script, params, output_name):  # noqa: ANN001
+        captured["params"] = params
+        return _job("job", "pending", "2026-01-01T00:00:00+00:00")
+
+    monkeypatch.setattr(conversion, "_start_job", fake_start_job)
+    vector_to_vector(
+        VectorToVectorRequest(
+            input_path=str(gdb),
+            output_path=str(tmp_path / "out.geojson"),
+            input_layer="cities",
+            target_srs="EPSG:4326",
+        )
+    )
+    params = captured["params"]
+    assert params["input_layer"] == "cities"
+    assert params["target_srs"] == "EPSG:4326"
 
 
 def test_validate_paths_rejects_missing_input(tmp_path: Path) -> None:
