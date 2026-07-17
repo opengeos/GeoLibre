@@ -996,17 +996,19 @@ def _validate_paths(input_path: str, output_path: str) -> tuple[str, str]:
     if not output_path.strip():
         raise HTTPException(status_code=400, detail="output_path is required")
     target = Path(output_path).expanduser()
-    if not target.parent.is_dir():
-        raise HTTPException(
-            status_code=400,
-            detail=f"Output folder does not exist: {target.parent}",
-        )
     # The input was already confined by _validate_input_path; the output (and
     # the failure-cleanup unlink) must live under the same allowlisted roots.
+    # Checked BEFORE the existence test for the same reason as the input: a
+    # 400/403 split would leak whether a directory outside the sandbox exists.
     if not _is_within_roots(target):
         raise HTTPException(
             status_code=403,
             detail="Path is outside the allowed conversion directories",
+        )
+    if not target.parent.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Output folder does not exist: {target.parent}",
         )
     # Reading from and writing to the same file would truncate the input.
     if source.resolve() == target.resolve():
