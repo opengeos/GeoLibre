@@ -78,8 +78,9 @@ function FloatingPanelCard({
 
   // Populate the plugin content container once per card. The container persists
   // while the card is open, so render is not re-invoked on drag/focus.
-  // Keyed on the panel object too, so re-registering the same id (a new render
-  // function) while the card is open refreshes its content.
+  // Keyed on the render function identity so that re-registering the same id
+  // with a new render function refreshes the content, but title resolution
+  // (which returns a new object each call) does not cause spurious re-runs.
   useEffect(() => {
     const container = contentRef.current;
     if (!container || !panel) return;
@@ -97,7 +98,7 @@ function FloatingPanelCard({
       }
       container.replaceChildren();
     };
-  }, [id, panel]);
+  }, [id, panel?.render]);
 
   if (!panel) return null;
 

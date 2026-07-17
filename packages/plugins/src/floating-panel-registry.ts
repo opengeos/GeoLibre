@@ -162,14 +162,13 @@ export function getFloatingPanel(
   const panel = registry.get(id);
   if (!panel) return undefined;
   const resolve = titleResolvers.get(id);
-  if (resolve) {
-    // Mutate in-place so the same panel object identity is preserved across
-    // calls — FloatingPanelCard's useEffect uses the panel as a dependency to
-    // detect re-registration, and a new-object-every-time pattern would tear
-    // down and rebuild the panel's DOM on every render (drag/resize/focus).
-    panel.title = resolve();
-  }
-  return panel as GeoLibreFloatingPanelRegistration & { title: string };
+  // Return a shallow clone with the resolved title so the caller's original
+  // registration object is never mutated (its title may be a getter function
+  // that must survive re-registration for i18n reactivity). Consumers that
+  // need stable object identity for effect dependencies should key on
+  // panel.render rather than the panel object itself.
+  const resolved = resolve ? resolve() : String(panel.title);
+  return { ...panel, title: resolved } as GeoLibreFloatingPanelRegistration & { title: string };
 }
 
 /** Current reactive snapshot for `useSyncExternalStore`. */

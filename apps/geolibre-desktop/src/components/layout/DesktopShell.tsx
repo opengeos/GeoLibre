@@ -644,20 +644,23 @@ export function DesktopShell({
     return el;
   });
   const activePanelId = useRightPanelState().activeId;
+  const activePanel = activePanelId ? getRightPanel(activePanelId) : undefined;
   // The dock slots adopt whichever host owns the active panel's content: the
   // Browser's dedicated portal host, or the shared imperative plugin host.
   const dockContentEl =
     activePanelId === BROWSER_PANEL_ID ? browserContentEl : pluginContentEl;
   // Render the active panel into the shared host once; re-run when its
   // registration is replaced (re-registration refresh) but not on dock/collapse
-  // changes.
+  // changes. Keyed on the render function identity so that a plugin
+  // re-registering the same id with a new render function tears down the old
+  // render and calls the new one, but title resolution (which returns a new
+  // object each call) does not cause spurious re-runs.
   useEffect(() => {
     const host = pluginContentEl;
-    const panel = activePanelId ? getRightPanel(activePanelId) : undefined;
-    if (!activePanelId || !panel) return;
+    if (!activePanelId || !activePanel) return;
     let cleanup: void | (() => void);
     try {
-      cleanup = panel.render(host);
+      cleanup = activePanel.render(host);
     } catch (error) {
       console.error(`Right panel "${activePanelId}" render() threw.`, error);
     }
@@ -669,7 +672,7 @@ export function DesktopShell({
       }
       host.replaceChildren();
     };
-  }, [activePanelId, pluginContentEl]);
+  }, [activePanelId, activePanel?.render, pluginContentEl]);
   // Reset the shared width to the panel's default when a new panel activates
   // (keyed on activePanelId only, so a user resize survives re-registration).
   useEffect(() => {
