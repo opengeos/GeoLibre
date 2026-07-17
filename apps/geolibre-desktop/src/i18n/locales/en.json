@@ -3119,6 +3119,28 @@
       "offsetTooltip": "Constant height in meters added to every feature, e.g. to lift a track above 3D buildings or terrain.",
       "footer": "Rendered in 3D at coordinate Z values via deck.gl. Changes apply live. Identify and feature highlighting are not available in this mode."
     },
+    "diagrams": {
+      "heading": "Diagrams",
+      "chartType": "Chart type",
+      "typeNone": "None",
+      "typePie": "Pie chart",
+      "typeDonut": "Donut chart",
+      "typeBar": "Bar chart",
+      "typeStackedBar": "Stacked bar chart",
+      "fields": "Attributes",
+      "addField": "Add attribute",
+      "removeField": "Remove attribute",
+      "noFields": "Add numeric attributes to chart on each feature.",
+      "fieldAttribute": "Diagram attribute {{index}}",
+      "sizeMode": "Size",
+      "sizeFixed": "Fixed size",
+      "sizeSum": "Scaled by sum of attributes",
+      "sizeAttribute": "Scaled by attribute",
+      "sizeField": "Size attribute",
+      "size": "Size (px)",
+      "minZoom": "Minimum zoom",
+      "declutter": "Hide overlapping diagrams"
+    },
     "symbology": {
       "colormap": "Colormap",
       "modeSingle": "Single symbology",

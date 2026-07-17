@@ -149,6 +149,35 @@ export type PointRenderer = "single" | "heatmap" | "cluster";
  */
 export type StrokeWidthUnit = "pixels" | "meters";
 
+/**
+ * The chart drawn on top of each feature by the diagram renderer (QGIS-style
+ * diagram symbology), or `"none"` when diagrams are off. Diagrams visualize
+ * several numeric attributes per feature at once — e.g. election results by
+ * party per county — and render through the shared deck.gl overlay on the
+ * feature's point location or polygon centroid.
+ */
+export type DiagramType = "none" | "pie" | "donut" | "bar" | "stacked-bar";
+
+/**
+ * How the overall diagram size is determined.
+ *
+ * - `"fixed"`: every diagram renders at {@link LayerStyle.diagramSize} pixels.
+ * - `"sum"`: scaled by the sum of the mapped attribute values, so the largest
+ *   total renders at {@link LayerStyle.diagramSize} pixels (area-true square
+ *   root scaling).
+ * - `"attribute"`: scaled the same way by the single numeric attribute in
+ *   {@link LayerStyle.diagramSizeProperty}.
+ */
+export type DiagramSizeMode = "fixed" | "sum" | "attribute";
+
+/** One attribute rendered as a slice/bar of a feature diagram. */
+export interface DiagramField {
+  /** Numeric feature property visualized by this slice/bar. */
+  property: string;
+  /** Slice/bar color (6-digit hex). */
+  color: string;
+}
+
 export interface VectorStyleStop {
   value: string | number;
   color: string;
@@ -330,6 +359,32 @@ export interface LayerStyle {
    * symbology renders without manual configuration.
    */
   simpleStyleEnabled: boolean;
+  /**
+   * Per-feature chart symbology (QGIS-style diagrams). `"none"` disables it;
+   * any other value renders one {@link DiagramType} chart per feature over the
+   * layer's normal symbology, built from the numeric attributes in
+   * {@link diagramFields}. See `@geolibre/core`'s `diagram.ts` helpers.
+   */
+  diagramType: DiagramType;
+  /** Attributes (and their colors) charted by the diagram renderer, in order. */
+  diagramFields: DiagramField[];
+  /** How the per-feature diagram size is determined. */
+  diagramSizeMode: DiagramSizeMode;
+  /**
+   * Diagram size in pixels: the rendered diameter/height for `"fixed"` sizing,
+   * or the diameter/height of the largest feature for scaled sizing.
+   */
+  diagramSize: number;
+  /** Numeric attribute driving `"attribute"` sizing (see {@link DiagramSizeMode}). */
+  diagramSizeProperty: string;
+  /** Minimum zoom at which diagrams are drawn, to avoid clutter when zoomed out. */
+  diagramMinZoom: number;
+  /**
+   * When true, diagrams that would overlap an already-placed diagram on screen
+   * are skipped (largest first), decluttering dense areas. Recomputed as the
+   * view changes.
+   */
+  diagramDeclutter: boolean;
   pointRenderer: PointRenderer;
   heatmapRadius: number;
   heatmapIntensity: number;
@@ -413,6 +468,13 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   markerSize: 18,
   markerSvg: "",
   simpleStyleEnabled: false,
+  diagramType: "none",
+  diagramFields: [],
+  diagramSizeMode: "fixed",
+  diagramSize: 30,
+  diagramSizeProperty: "",
+  diagramMinZoom: 0,
+  diagramDeclutter: false,
   pointRenderer: "single",
   heatmapRadius: 30,
   heatmapIntensity: 1,

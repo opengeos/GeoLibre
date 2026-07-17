@@ -2699,6 +2699,28 @@
       "offsetTooltip": "Tinggi konstan dalam meter yang ditambahkan ke setiap fitur, misalnya untuk mengangkat trek di atas bangunan atau medan 3D.",
       "footer": "Dirender dalam 3D pada nilai Z koordinat melalui deck.gl. Perubahan berlaku langsung. Identifikasi dan penyorotan fitur tidak tersedia dalam mode ini."
     },
+    "diagrams": {
+      "heading": "Diagram",
+      "chartType": "Jenis grafik",
+      "typeNone": "Tidak ada",
+      "typePie": "Diagram lingkaran",
+      "typeDonut": "Diagram donat",
+      "typeBar": "Diagram batang",
+      "typeStackedBar": "Diagram batang bertumpuk",
+      "fields": "Atribut",
+      "addField": "Tambah atribut",
+      "removeField": "Hapus atribut",
+      "noFields": "Tambahkan atribut numerik untuk digambarkan pada setiap fitur.",
+      "fieldAttribute": "Atribut diagram {{index}}",
+      "sizeMode": "Ukuran",
+      "sizeFixed": "Ukuran tetap",
+      "sizeSum": "Diskalakan menurut jumlah atribut",
+      "sizeAttribute": "Diskalakan menurut atribut",
+      "sizeField": "Atribut ukuran",
+      "size": "Ukuran (px)",
+      "minZoom": "Zoom minimum",
+      "declutter": "Sembunyikan diagram yang tumpang tindih"
+    },
     "symbology": {
       "colormap": "Peta warna",
       "modeSingle": "Simbologi tunggal",

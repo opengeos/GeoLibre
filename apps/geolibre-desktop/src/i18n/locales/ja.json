@@ -2699,6 +2699,28 @@
       "offsetTooltip": "すべてのフィーチャに加算される一定の高さ(メートル)です。例えば3D建物や地形の上にトラックを持ち上げる場合に使用します。",
       "footer": "deck.glにより座標のZ値で3D表示されます。変更はリアルタイムに反映されます。このモードではフィーチャ情報の取得とハイライト表示は利用できません。"
     },
+    "diagrams": {
+      "heading": "ダイアグラム",
+      "chartType": "チャートの種類",
+      "typeNone": "なし",
+      "typePie": "円グラフ",
+      "typeDonut": "ドーナツグラフ",
+      "typeBar": "棒グラフ",
+      "typeStackedBar": "積み上げ棒グラフ",
+      "fields": "属性",
+      "addField": "属性を追加",
+      "removeField": "属性を削除",
+      "noFields": "各フィーチャに表示する数値属性を追加してください。",
+      "fieldAttribute": "ダイアグラム属性 {{index}}",
+      "sizeMode": "サイズ",
+      "sizeFixed": "固定サイズ",
+      "sizeSum": "属性の合計でスケール",
+      "sizeAttribute": "属性でスケール",
+      "sizeField": "サイズ属性",
+      "size": "サイズ (px)",
+      "minZoom": "最小ズーム",
+      "declutter": "重なるダイアグラムを非表示"
+    },
     "symbology": {
       "colormap": "カラーマップ",
       "modeSingle": "単一シンボロジー",

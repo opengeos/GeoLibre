@@ -2814,6 +2814,28 @@
       "offsetTooltip": "为每个要素添加的固定高度（米），例如可将轨迹抬升至 3D 建筑或地形之上。",
       "footer": "通过 deck.gl 依据坐标 Z 值以 3D 方式渲染。更改会实时生效。此模式下不支持要素识别和高亮显示。"
     },
+    "diagrams": {
+      "heading": "图表符号",
+      "chartType": "图表类型",
+      "typeNone": "无",
+      "typePie": "饼图",
+      "typeDonut": "环形图",
+      "typeBar": "柱状图",
+      "typeStackedBar": "堆叠柱状图",
+      "fields": "属性",
+      "addField": "添加属性",
+      "removeField": "移除属性",
+      "noFields": "添加要在每个要素上绘制的数值属性。",
+      "fieldAttribute": "图表属性 {{index}}",
+      "sizeMode": "大小",
+      "sizeFixed": "固定大小",
+      "sizeSum": "按属性总和缩放",
+      "sizeAttribute": "按属性缩放",
+      "sizeField": "大小属性",
+      "size": "大小 (px)",
+      "minZoom": "最小缩放级别",
+      "declutter": "隐藏重叠的图表"
+    },
     "symbology": {
       "colormap": "色彩映射",
       "modeSingle": "单一符号",

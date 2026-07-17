@@ -2743,6 +2743,28 @@
       "offsetTooltip": "Her öğeye eklenen, metre cinsinden sabit yükseklik; örn. bir izi 3B binaların veya arazinin üzerine kaldırmak için.",
       "footer": "deck.gl aracılığıyla koordinat Z değerlerinde 3B olarak işlenir. Değişiklikler anında uygulanır. Bu modda tanımlama ve öğe vurgulama kullanılamaz."
     },
+    "diagrams": {
+      "heading": "Diyagramlar",
+      "chartType": "Grafik türü",
+      "typeNone": "Yok",
+      "typePie": "Pasta grafik",
+      "typeDonut": "Halka grafik",
+      "typeBar": "Çubuk grafik",
+      "typeStackedBar": "Yığılmış çubuk grafik",
+      "fields": "Öznitelikler",
+      "addField": "Öznitelik ekle",
+      "removeField": "Özniteliği kaldır",
+      "noFields": "Her objede gösterilecek sayısal öznitelikler ekleyin.",
+      "fieldAttribute": "Diyagram özniteliği {{index}}",
+      "sizeMode": "Boyut",
+      "sizeFixed": "Sabit boyut",
+      "sizeSum": "Özniteliklerin toplamına göre ölçekli",
+      "sizeAttribute": "Özniteliğe göre ölçekli",
+      "sizeField": "Boyut özniteliği",
+      "size": "Boyut (px)",
+      "minZoom": "En düşük yakınlaştırma",
+      "declutter": "Çakışan diyagramları gizle"
+    },
     "symbology": {
       "colormap": "Renk haritası",
       "modeSingle": "Tekil simgeleme",

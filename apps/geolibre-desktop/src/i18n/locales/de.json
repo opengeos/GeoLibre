@@ -2743,6 +2743,28 @@
       "offsetTooltip": "Konstante Höhe in Metern, die zu jedem Objekt addiert wird, z. B. um eine Strecke über 3D-Gebäude oder Gelände anzuheben.",
       "footer": "Wird über deck.gl in 3D anhand der Koordinaten-Z-Werte gerendert. Änderungen werden sofort übernommen. Identifizieren und Objekt-Hervorhebung sind in diesem Modus nicht verfügbar."
     },
+    "diagrams": {
+      "heading": "Diagramme",
+      "chartType": "Diagrammtyp",
+      "typeNone": "Keine",
+      "typePie": "Kreisdiagramm",
+      "typeDonut": "Ringdiagramm",
+      "typeBar": "Balkendiagramm",
+      "typeStackedBar": "Gestapeltes Balkendiagramm",
+      "fields": "Attribute",
+      "addField": "Attribut hinzufügen",
+      "removeField": "Attribut entfernen",
+      "noFields": "Numerische Attribute hinzufügen, die pro Feature dargestellt werden.",
+      "fieldAttribute": "Diagrammattribut {{index}}",
+      "sizeMode": "Größe",
+      "sizeFixed": "Feste Größe",
+      "sizeSum": "Skaliert nach Attributsumme",
+      "sizeAttribute": "Skaliert nach Attribut",
+      "sizeField": "Größenattribut",
+      "size": "Größe (px)",
+      "minZoom": "Minimaler Zoom",
+      "declutter": "Überlappende Diagramme ausblenden"
+    },
     "symbology": {
       "colormap": "Farbtabelle",
       "modeSingle": "Einheitliche Symbolisierung",

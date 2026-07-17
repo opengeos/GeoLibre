@@ -2743,6 +2743,28 @@
       "offsetTooltip": "Altura constante en metros añadida a cada entidad, p. ej., para elevar un track sobre edificios o terreno 3D.",
       "footer": "Renderizado en 3D según los valores Z de las coordenadas mediante deck.gl. Los cambios se aplican en vivo. La identificación y el resaltado de entidades no están disponibles en este modo."
     },
+    "diagrams": {
+      "heading": "Diagramas",
+      "chartType": "Tipo de gráfico",
+      "typeNone": "Ninguno",
+      "typePie": "Gráfico circular",
+      "typeDonut": "Gráfico de anillo",
+      "typeBar": "Gráfico de barras",
+      "typeStackedBar": "Barras apiladas",
+      "fields": "Atributos",
+      "addField": "Añadir atributo",
+      "removeField": "Eliminar atributo",
+      "noFields": "Añade atributos numéricos para graficar en cada entidad.",
+      "fieldAttribute": "Atributo del diagrama {{index}}",
+      "sizeMode": "Tamaño",
+      "sizeFixed": "Tamaño fijo",
+      "sizeSum": "Escalado por suma de atributos",
+      "sizeAttribute": "Escalado por atributo",
+      "sizeField": "Atributo de tamaño",
+      "size": "Tamaño (px)",
+      "minZoom": "Zoom mínimo",
+      "declutter": "Ocultar diagramas superpuestos"
+    },
     "symbology": {
       "colormap": "Mapa de colores",
       "modeSingle": "Simbología única",

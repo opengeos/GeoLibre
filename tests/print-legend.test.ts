@@ -99,6 +99,56 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches[1].label, "≥ 100");
   });
 
+  it("appends a labeled swatch per diagram attribute after the base symbology", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Election",
+        style: {
+          vectorStyleMode: "single",
+          fillColor: "#ff0000",
+          diagramType: "pie",
+          diagramFields: [
+            { property: "votes_a", color: "#111111" },
+            { property: "votes_b", color: "#222222" },
+            { property: "", color: "#333333" },
+          ],
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 3);
+    assert.equal(legend[0].swatches[0].color, "#ff0000");
+    assert.deepEqual(legend[0].swatches[1], {
+      color: "#111111",
+      label: "votes_a",
+    });
+    assert.deepEqual(legend[0].swatches[2], {
+      color: "#222222",
+      label: "votes_b",
+    });
+  });
+
+  it("appends diagram swatches after graduated ramp swatches", () => {
+    const legend = buildLegend([
+      makeLayer({
+        name: "Population",
+        style: {
+          vectorStyleMode: "graduated",
+          vectorStyleStops: [
+            { value: 0, color: "#eef" },
+            { value: 100, color: "#88a" },
+          ],
+          diagramType: "bar",
+          diagramFields: [{ property: "youth", color: "#444444" }],
+        } as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend[0].swatches.length, 3);
+    assert.deepEqual(legend[0].swatches[2], {
+      color: "#444444",
+      label: "youth",
+    });
+  });
+
   it("caps ramp swatches at six samples", () => {
     const stops = Array.from({ length: 12 }, (_, i) => ({
       value: i,

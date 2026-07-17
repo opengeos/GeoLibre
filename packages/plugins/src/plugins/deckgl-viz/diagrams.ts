@@ -1,0 +1,422 @@
+import {
+  collectDiagramData,
+  diagramPixelSize,
+  isDiagramStyleEnabled,
+  styleValue,
+  type DiagramData,
+  type GeoLibreLayer,
+} from "@geolibre/core";
+import type { Layer } from "@deck.gl/core";
+import type { FeatureCollection } from "geojson";
+import type { GeoLibreDeckGL } from "../../types";
+import { isDeckVizLayer } from "./store-layer";
+
+/**
+ * Diagram symbology (per-feature pie/donut/bar charts) for ordinary vector
+ * layers, rendered through the shared deck.gl overlay on top of the layer's
+ * normal MapLibre symbology. Every configured feature's chart is rasterized
+ * once into a single icon atlas canvas (cached per FeatureCollection + style
+ * signature) and drawn with one IconLayer, so pan/zoom and the per-frame
+ * overlay rebuilds stay cheap. The pure data extraction lives in
+ * `@geolibre/core`'s diagram.ts; this module owns the canvas drawing and the
+ * deck.gl layer.
+ */
+
+// Draw at 2x for crisp icons on high-DPI displays.
+const DPR = 2;
+// Transparent gutter around each atlas cell so texture sampling never bleeds
+// between neighboring icons.
+const CELL_PAD = 2 * DPR;
+const ATLAS_WIDTH = 2048;
+// Donut hole radius as a fraction of the outer radius.
+const DONUT_INNER_RATIO = 0.5;
+// Stacked bars are columns: narrower than the square pie/bar box.
+const STACKED_BAR_WIDTH_RATIO = 0.45;
+
+/**
+ * Whether a store layer has diagrams to render: an in-memory GeoJSON vector
+ * layer (not a deck-viz dataset layer, which has its own renderer) whose style
+ * enables diagram symbology.
+ *
+ * @param layer - The store layer to test.
+ */
+export function isDiagramLayer(layer: GeoLibreLayer): boolean {
+  return (
+    !!layer.geojson &&
+    layer.type !== "deckgl-viz" &&
+    !isDeckVizLayer(layer) &&
+    isDiagramStyleEnabled(layer.style)
+  );
+}
+
+interface AtlasEntry {
+  /** Icon id in the atlas mapping. */
+  icon: string;
+  /** Rendered (CSS pixel) height deck should draw this icon at. */
+  height: number;
+  /** Rendered (CSS pixel) width, for declutter box tests. */
+  width: number;
+  position: [number, number];
+  sizeValue: number;
+}
+
+interface IconMappingEntry {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  anchorX: number;
+  anchorY: number;
+}
+
+interface DiagramAtlas {
+  /** The packed atlas as a PNG data URL (deck's iconAtlas accepts a string). */
+  atlasUrl: string;
+  mapping: Record<string, IconMappingEntry>;
+  entries: AtlasEntry[];
+}
+
+interface DiagramCacheValue {
+  signature: string;
+  atlas: DiagramAtlas | null;
+}
+
+// One cache entry per source FeatureCollection; rebuilt only when the diagram
+// style signature changes, not on unrelated overlay rebuilds (opacity toggles,
+// other layers, animation frames).
+const atlasCache = new WeakMap<FeatureCollection, DiagramCacheValue>();
+
+function diagramSignature(layer: GeoLibreLayer): string {
+  const style = layer.style;
+  return JSON.stringify([
+    styleValue(style, "diagramType"),
+    styleValue(style, "diagramFields"),
+    styleValue(style, "diagramSizeMode"),
+    styleValue(style, "diagramSize"),
+    styleValue(style, "diagramSizeProperty"),
+  ]);
+}
+
+function drawPie(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  radius: number,
+  values: number[],
+  total: number,
+  colors: string[],
+  donut: boolean,
+): void {
+  let angle = -Math.PI / 2;
+  for (let i = 0; i < values.length; i += 1) {
+    if (values[i] <= 0) continue;
+    const sweep = (values[i] / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, angle, angle + sweep);
+    ctx.closePath();
+    ctx.fillStyle = colors[i];
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.lineWidth = DPR;
+    ctx.stroke();
+    angle += sweep;
+  }
+  if (donut) {
+    ctx.save();
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius * DONUT_INNER_RATIO, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawBars(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  values: number[],
+  maxFieldValue: number,
+  colors: string[],
+): void {
+  if (maxFieldValue <= 0) return;
+  const gap = DPR;
+  const barWidth = Math.max(
+    DPR,
+    (width - gap * (values.length - 1)) / values.length,
+  );
+  ctx.lineWidth = Math.max(1, DPR / 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  for (let i = 0; i < values.length; i += 1) {
+    const barHeight = (values[i] / maxFieldValue) * height;
+    if (barHeight <= 0) continue;
+    const barX = x + i * (barWidth + gap);
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(barX, y + height - barHeight, barWidth, barHeight);
+    ctx.strokeRect(barX, y + height - barHeight, barWidth, barHeight);
+  }
+}
+
+function drawStackedBar(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  values: number[],
+  total: number,
+  colors: string[],
+): void {
+  let top = y + height;
+  ctx.lineWidth = Math.max(1, DPR / 2);
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  for (let i = 0; i < values.length; i += 1) {
+    if (values[i] <= 0) continue;
+    const segment = (values[i] / total) * height;
+    top -= segment;
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(x, top, width, segment);
+    ctx.strokeRect(x, top, width, segment);
+  }
+}
+
+/**
+ * Rasterize every feature diagram into one atlas canvas with shelf packing
+ * (cells laid out left-to-right in rows). Returns null when no feature has
+ * drawable data.
+ */
+function buildAtlas(
+  layer: GeoLibreLayer,
+  diagramData: DiagramData,
+): DiagramAtlas | null {
+  if (diagramData.data.length === 0) return null;
+  if (typeof document === "undefined") return null;
+  const style = layer.style;
+  const type = styleValue(style, "diagramType");
+  const colors = styleValue(style, "diagramFields")
+    .filter((field) => field.property !== "")
+    .map((field) => field.color);
+
+  // Lay out cells first so the canvas can be allocated at its final size.
+  const cells: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    datumIndex: number;
+  }> = [];
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+  for (let i = 0; i < diagramData.data.length; i += 1) {
+    const datum = diagramData.data[i];
+    const size = Math.round(
+      diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR,
+    );
+    const width =
+      type === "stacked-bar"
+        ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO))
+        : size;
+    const cellWidth = width + CELL_PAD * 2;
+    const cellHeight = size + CELL_PAD * 2;
+    if (cursorX + cellWidth > ATLAS_WIDTH && cursorX > 0) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+    cells.push({ x: cursorX, y: cursorY, width, height: size, datumIndex: i });
+    cursorX += cellWidth;
+    if (cellHeight > rowHeight) rowHeight = cellHeight;
+  }
+  const atlasHeight = cursorY + rowHeight;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = ATLAS_WIDTH;
+  canvas.height = atlasHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const mapping: Record<string, IconMappingEntry> = {};
+  const entries: AtlasEntry[] = [];
+  for (const cell of cells) {
+    const datum = diagramData.data[cell.datumIndex];
+    const x = cell.x + CELL_PAD;
+    const y = cell.y + CELL_PAD;
+    if (type === "bar") {
+      drawBars(
+        ctx,
+        x,
+        y,
+        cell.width,
+        cell.height,
+        datum.values,
+        diagramData.maxFieldValue,
+        colors,
+      );
+    } else if (type === "stacked-bar") {
+      drawStackedBar(
+        ctx,
+        x,
+        y,
+        cell.width,
+        cell.height,
+        datum.values,
+        datum.total,
+        colors,
+      );
+    } else {
+      drawPie(
+        ctx,
+        x + cell.width / 2,
+        y + cell.height / 2,
+        cell.width / 2 - DPR / 2,
+        datum.values,
+        datum.total,
+        colors,
+        type === "donut",
+      );
+    }
+    const icon = `d${cell.datumIndex}`;
+    mapping[icon] = {
+      x,
+      y,
+      width: cell.width,
+      height: cell.height,
+      anchorX: cell.width / 2,
+      anchorY: cell.height / 2,
+    };
+    entries.push({
+      icon,
+      height: cell.height / DPR,
+      width: cell.width / DPR,
+      position: datum.position,
+      sizeValue: datum.sizeValue,
+    });
+  }
+  return { atlasUrl: canvas.toDataURL("image/png"), mapping, entries };
+}
+
+function getAtlas(layer: GeoLibreLayer): DiagramAtlas | null {
+  const geojson = layer.geojson as FeatureCollection;
+  const signature = diagramSignature(layer);
+  const cached = atlasCache.get(geojson);
+  if (cached && cached.signature === signature) return cached.atlas;
+  const atlas = buildAtlas(layer, collectDiagramData(geojson, layer.style));
+  atlasCache.set(geojson, { signature, atlas });
+  return atlas;
+}
+
+/**
+ * Greedy screen-space decluttering: keep the largest diagrams and drop any
+ * whose screen box overlaps one already kept. A coarse spatial hash keeps the
+ * overlap test linear-ish for dense layers.
+ */
+function declutterEntries(
+  entries: AtlasEntry[],
+  project: (position: [number, number]) => { x: number; y: number },
+): AtlasEntry[] {
+  interface Placed {
+    x: number;
+    y: number;
+    halfW: number;
+    halfH: number;
+  }
+  const ordered = entries
+    .map((entry) => {
+      const point = project(entry.position);
+      return { entry, x: point.x, y: point.y };
+    })
+    .sort((a, b) => b.entry.height - a.entry.height);
+  const cellSize = 64;
+  const grid = new Map<string, Placed[]>();
+  const kept: AtlasEntry[] = [];
+  for (const candidate of ordered) {
+    const halfW = candidate.entry.width / 2;
+    const halfH = candidate.entry.height / 2;
+    const minCellX = Math.floor((candidate.x - halfW) / cellSize);
+    const maxCellX = Math.floor((candidate.x + halfW) / cellSize);
+    const minCellY = Math.floor((candidate.y - halfH) / cellSize);
+    const maxCellY = Math.floor((candidate.y + halfH) / cellSize);
+    let overlaps = false;
+    outer: for (let cx = minCellX; cx <= maxCellX; cx += 1) {
+      for (let cy = minCellY; cy <= maxCellY; cy += 1) {
+        for (const placed of grid.get(`${cx}:${cy}`) ?? []) {
+          if (
+            Math.abs(candidate.x - placed.x) < halfW + placed.halfW &&
+            Math.abs(candidate.y - placed.y) < halfH + placed.halfH
+          ) {
+            overlaps = true;
+            break outer;
+          }
+        }
+      }
+    }
+    if (overlaps) continue;
+    kept.push(candidate.entry);
+    const placed: Placed = { x: candidate.x, y: candidate.y, halfW, halfH };
+    for (let cx = minCellX; cx <= maxCellX; cx += 1) {
+      for (let cy = minCellY; cy <= maxCellY; cy += 1) {
+        const key = `${cx}:${cy}`;
+        const bucket = grid.get(key);
+        if (bucket) bucket.push(placed);
+        else grid.set(key, [placed]);
+      }
+    }
+  }
+  return kept;
+}
+
+/**
+ * Build the deck.gl IconLayer rendering a layer's feature diagrams, or an
+ * empty list below the configured minimum zoom / when nothing is drawable.
+ *
+ * @param deckGL - The host's deck.gl module bundle.
+ * @param layer - The store layer (must satisfy {@link isDiagramLayer}).
+ * @param options - The current map zoom (for the min-zoom gate) and a
+ *   screen-space projector (for optional decluttering); either may be missing
+ *   when the map is not available, disabling that behavior.
+ */
+export function buildDiagramLayers(
+  deckGL: GeoLibreDeckGL,
+  layer: GeoLibreLayer,
+  options: {
+    zoom?: number;
+    project?: ((position: [number, number]) => { x: number; y: number }) | null;
+  } = {},
+): Layer[] {
+  const style = layer.style;
+  const minZoom = styleValue(style, "diagramMinZoom");
+  if (
+    minZoom > 0 &&
+    typeof options.zoom === "number" &&
+    options.zoom < minZoom
+  ) {
+    return [];
+  }
+  const atlas = getAtlas(layer);
+  if (!atlas) return [];
+  const entries =
+    styleValue(style, "diagramDeclutter") && options.project
+      ? declutterEntries(atlas.entries, options.project)
+      : atlas.entries;
+  if (entries.length === 0) return [];
+  return [
+    new deckGL.layers.IconLayer<AtlasEntry>({
+      id: `${layer.id}-diagrams`,
+      data: entries,
+      iconAtlas: atlas.atlasUrl,
+      iconMapping: atlas.mapping,
+      getIcon: (entry: AtlasEntry) => entry.icon,
+      getPosition: (entry: AtlasEntry) => entry.position,
+      getSize: (entry: AtlasEntry) => entry.height,
+      sizeUnits: "pixels",
+      billboard: true,
+      opacity: layer.opacity,
+      // Clicks pass through to the underlying MapLibre feature (identify).
+      pickable: false,
+    }),
+  ];
+}

@@ -2743,6 +2743,28 @@
       "offsetTooltip": "Altura constante em metros adicionada a cada feição, por exemplo, para elevar uma trilha acima de edifícios 3D ou terreno.",
       "footer": "Renderizado em 3D nos valores Z das coordenadas via deck.gl. As alterações são aplicadas ao vivo. Identificar e destacar feições não estão disponíveis neste modo."
     },
+    "diagrams": {
+      "heading": "Diagramas",
+      "chartType": "Tipo de gráfico",
+      "typeNone": "Nenhum",
+      "typePie": "Gráfico de pizza",
+      "typeDonut": "Gráfico de rosca",
+      "typeBar": "Gráfico de barras",
+      "typeStackedBar": "Barras empilhadas",
+      "fields": "Atributos",
+      "addField": "Adicionar atributo",
+      "removeField": "Remover atributo",
+      "noFields": "Adicione atributos numéricos para representar em cada feição.",
+      "fieldAttribute": "Atributo do diagrama {{index}}",
+      "sizeMode": "Tamanho",
+      "sizeFixed": "Tamanho fixo",
+      "sizeSum": "Escalado pela soma dos atributos",
+      "sizeAttribute": "Escalado por atributo",
+      "sizeField": "Atributo de tamanho",
+      "size": "Tamanho (px)",
+      "minZoom": "Zoom mínimo",
+      "declutter": "Ocultar diagramas sobrepostos"
+    },
     "symbology": {
       "colormap": "Mapa de cores",
       "modeSingle": "Simbologia única",

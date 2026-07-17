@@ -2699,6 +2699,28 @@
       "offsetTooltip": "모든 피처에 미터 단위로 일정하게 더해지는 높이입니다. 예를 들어 궤적을 3D 건물이나 지형 위로 띄우는 데 사용합니다.",
       "footer": "deck.gl을 통해 좌표의 Z 값으로 3D 렌더링됩니다. 변경 사항은 즉시 적용됩니다. 이 모드에서는 식별 및 피처 강조 표시를 사용할 수 없습니다."
     },
+    "diagrams": {
+      "heading": "다이어그램",
+      "chartType": "차트 유형",
+      "typeNone": "없음",
+      "typePie": "원형 차트",
+      "typeDonut": "도넛 차트",
+      "typeBar": "막대 차트",
+      "typeStackedBar": "누적 막대 차트",
+      "fields": "속성",
+      "addField": "속성 추가",
+      "removeField": "속성 제거",
+      "noFields": "각 피처에 표시할 숫자 속성을 추가하세요.",
+      "fieldAttribute": "다이어그램 속성 {{index}}",
+      "sizeMode": "크기",
+      "sizeFixed": "고정 크기",
+      "sizeSum": "속성 합계로 크기 조정",
+      "sizeAttribute": "속성으로 크기 조정",
+      "sizeField": "크기 속성",
+      "size": "크기 (px)",
+      "minZoom": "최소 줌",
+      "declutter": "겹치는 다이어그램 숨기기"
+    },
     "symbology": {
       "colormap": "컬러맵",
       "modeSingle": "단일 심볼",

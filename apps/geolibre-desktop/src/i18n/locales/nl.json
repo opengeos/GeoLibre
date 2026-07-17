@@ -2743,6 +2743,28 @@
       "offsetTooltip": "Constante hoogte in meters die aan elk object wordt toegevoegd, bijvoorbeeld om een track boven 3D-gebouwen of terrein te tillen.",
       "footer": "Wordt in 3D weergegeven op de coördinaat-Z-waarden via deck.gl. Wijzigingen worden direct toegepast. Identificeren en het markeren van objecten zijn in deze modus niet beschikbaar."
     },
+    "diagrams": {
+      "heading": "Diagrammen",
+      "chartType": "Grafiektype",
+      "typeNone": "Geen",
+      "typePie": "Cirkeldiagram",
+      "typeDonut": "Ringdiagram",
+      "typeBar": "Staafdiagram",
+      "typeStackedBar": "Gestapeld staafdiagram",
+      "fields": "Attributen",
+      "addField": "Attribuut toevoegen",
+      "removeField": "Attribuut verwijderen",
+      "noFields": "Voeg numerieke attributen toe om per feature weer te geven.",
+      "fieldAttribute": "Diagramattribuut {{index}}",
+      "sizeMode": "Grootte",
+      "sizeFixed": "Vaste grootte",
+      "sizeSum": "Geschaald op som van attributen",
+      "sizeAttribute": "Geschaald op attribuut",
+      "sizeField": "Grootte-attribuut",
+      "size": "Grootte (px)",
+      "minZoom": "Minimale zoom",
+      "declutter": "Overlappende diagrammen verbergen"
+    },
     "symbology": {
       "colormap": "Kleurenkaart",
       "modeSingle": "Enkelvoudige symbologie",

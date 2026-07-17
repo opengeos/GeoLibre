@@ -5,6 +5,7 @@
 import {
   styleValue,
   type GeoLibreLayer,
+  type LayerStyle,
   type LayerType,
   type LegendConfig,
   type LegendItemOverride,
@@ -62,6 +63,9 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
     if (isVector) {
       const mode = styleValue(layer.style, "vectorStyleMode");
       const stops = styleValue(layer.style, "vectorStyleStops");
+      // Diagram symbology adds one labeled swatch per charted attribute after
+      // the base symbology's swatches, mirroring the QGIS legend.
+      const diagrams = diagramSwatches(layer.style);
       if (
         (mode === "graduated" || mode === "categorized") &&
         Array.isArray(stops) &&
@@ -70,14 +74,17 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
         entries.push({
           id: layer.id,
           name: layer.name,
-          swatches: rampSwatches(stops, mode),
+          swatches: [...rampSwatches(stops, mode), ...diagrams],
         });
         continue;
       }
       entries.push({
         id: layer.id,
         name: layer.name,
-        swatches: [{ color: styleValue(layer.style, "fillColor") }],
+        swatches: [
+          { color: styleValue(layer.style, "fillColor") },
+          ...diagrams,
+        ],
       });
       continue;
     }
@@ -328,6 +335,19 @@ export function legendEditorRows(
     });
   }
   return rows;
+}
+
+/**
+ * Legend swatches for a layer's diagram symbology: one per charted attribute,
+ * labeled with the attribute name. Empty when diagrams are off.
+ */
+function diagramSwatches(
+  style: LayerStyle,
+): { color: string; label: string }[] {
+  if (styleValue(style, "diagramType") === "none") return [];
+  return styleValue(style, "diagramFields")
+    .filter((field) => field.property !== "")
+    .map((field) => ({ color: field.color, label: field.property }));
 }
 
 function rampSwatches(

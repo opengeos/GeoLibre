@@ -2743,6 +2743,28 @@
       "offsetTooltip": "Hauteur constante en mètres ajoutée à chaque entité, p. ex. pour élever une trace au-dessus des bâtiments ou du relief 3D.",
       "footer": "Rendu en 3D aux valeurs Z des coordonnées via deck.gl. Les modifications s'appliquent en direct. L'identification et la mise en surbrillance des entités ne sont pas disponibles dans ce mode."
     },
+    "diagrams": {
+      "heading": "Diagrammes",
+      "chartType": "Type de graphique",
+      "typeNone": "Aucun",
+      "typePie": "Diagramme circulaire",
+      "typeDonut": "Diagramme en anneau",
+      "typeBar": "Diagramme en barres",
+      "typeStackedBar": "Barres empilées",
+      "fields": "Attributs",
+      "addField": "Ajouter un attribut",
+      "removeField": "Supprimer l'attribut",
+      "noFields": "Ajoutez des attributs numériques à représenter sur chaque entité.",
+      "fieldAttribute": "Attribut du diagramme {{index}}",
+      "sizeMode": "Taille",
+      "sizeFixed": "Taille fixe",
+      "sizeSum": "Proportionnelle à la somme des attributs",
+      "sizeAttribute": "Proportionnelle à un attribut",
+      "sizeField": "Attribut de taille",
+      "size": "Taille (px)",
+      "minZoom": "Zoom minimum",
+      "declutter": "Masquer les diagrammes qui se chevauchent"
+    },
     "symbology": {
       "colormap": "Palette de couleurs",
       "modeSingle": "Symbologie unique",
