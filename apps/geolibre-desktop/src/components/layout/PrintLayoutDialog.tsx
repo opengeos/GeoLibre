@@ -26,6 +26,8 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCopy,
   Crop,
   Eye,
@@ -60,6 +62,8 @@ import {
   buildLegend,
   captureMapImage,
   copyLayoutToClipboard,
+  exportAtlasPdf,
+  exportAtlasPngZip,
   exportLayoutPdf,
   exportLayoutPng,
   legendEditorRows,
@@ -68,6 +72,17 @@ import {
   toggleLegendItemHidden,
   type CapturedMap,
 } from "../../lib/print-layout-export";
+import {
+  atlasEntryName,
+  buildAtlasPages,
+  expandBounds,
+  listAtlasFields,
+  parseAtlasFilter,
+  stripAtlasTokens,
+  substituteAtlasTokens,
+  type AtlasPage,
+  type AtlasTokenContext,
+} from "../../lib/print-atlas";
 
 interface PrintLayoutDialogProps {
   open: boolean;
@@ -251,6 +266,29 @@ export function PrintLayoutDialog({
   );
   const [extentBbox, setExtentBbox] = useState<PrintExtent | null>(null);
   const [drawingExtent, setDrawingExtent] = useState(false);
+  // Atlas / map series: one page per coverage-layer feature (GH #1291).
+  const [atlasEnabled, setAtlasEnabled] = useState(false);
+  const [atlasLayerId, setAtlasLayerId] = useState("");
+  const [atlasNameField, setAtlasNameField] = useState("");
+  const [atlasExtentMode, setAtlasExtentMode] = useState<"margin" | "scale">(
+    "margin",
+  );
+  const [atlasMarginPct, setAtlasMarginPct] = useState(10);
+  const [atlasScale, setAtlasScale] = useState("50000");
+  const [atlasSortField, setAtlasSortField] = useState("");
+  const [atlasSortDescending, setAtlasSortDescending] = useState(false);
+  const [atlasFilter, setAtlasFilter] = useState("");
+  const [atlasFilenamePattern, setAtlasFilenamePattern] = useState(
+    "{atlas.pagenumber}-{atlas.name}",
+  );
+  const [atlasIndex, setAtlasIndex] = useState(0);
+  // True while the atlas is driving the live map (stepping or exporting), so
+  // the stepper and export buttons cannot start a second, overlapping drive.
+  const [atlasBusy, setAtlasBusy] = useState(false);
+  const [atlasProgress, setAtlasProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [captured, setCaptured] = useState<CapturedMap | null>(null);
   // "contain" when a graticule is active, so its edge labels are not trimmed by
   // the default "cover" crop; "cover" (fill the frame) otherwise.
@@ -685,6 +723,221 @@ export function PrintLayoutDialog({
   const isMmPage = resolvePageSize(options).unit === "mm";
   const currentRatio = useMemo(() => computeScaleRatio(options), [options]);
 
+  // ---- Atlas (map series) derivations (GH #1291) ----
+  // Only vector layers whose features are loaded in the store can drive an
+  // atlas; tile-backed layers have no per-feature geometry to iterate.
+  const atlasLayers = useMemo(
+    () => layers.filter((l) => (l.geojson?.features?.length ?? 0) > 0),
+    [layers],
+  );
+  const atlasLayer = useMemo(
+    () => atlasLayers.find((l) => l.id === atlasLayerId) ?? null,
+    [atlasLayers, atlasLayerId],
+  );
+  const atlasFields = useMemo(
+    () =>
+      atlasLayer?.geojson ? listAtlasFields(atlasLayer.geojson.features) : [],
+    [atlasLayer],
+  );
+  // null = malformed expression: surface the error and fall back to no filter,
+  // so a half-typed condition never blanks the whole page list.
+  const atlasFilterPredicate = useMemo(
+    () => parseAtlasFilter(atlasFilter),
+    [atlasFilter],
+  );
+  const atlasPages = useMemo(
+    () =>
+      atlasLayer?.geojson
+        ? buildAtlasPages(atlasLayer.geojson, {
+            nameField: atlasNameField || undefined,
+            sortField: atlasSortField || undefined,
+            sortDescending: atlasSortDescending,
+            filter: atlasFilterPredicate ?? undefined,
+          })
+        : [],
+    [
+      atlasLayer,
+      atlasNameField,
+      atlasSortField,
+      atlasSortDescending,
+      atlasFilterPredicate,
+    ],
+  );
+  const atlasPageCount = atlasPages.length;
+  // The stored index can go stale when a filter/sort change shrinks the list.
+  const clampedAtlasIndex = Math.min(
+    atlasIndex,
+    Math.max(0, atlasPageCount - 1),
+  );
+  const currentAtlasPage = atlasEnabled
+    ? (atlasPages[clampedAtlasIndex] ?? null)
+    : null;
+  const atlasActive = atlasEnabled && atlasPageCount > 0;
+  const atlasTokenCtx = useMemo<AtlasTokenContext | null>(
+    () =>
+      currentAtlasPage
+        ? {
+            name: currentAtlasPage.name,
+            pageNumber: clampedAtlasIndex + 1,
+            total: atlasPageCount,
+            properties: currentAtlasPage.properties,
+          }
+        : null,
+    [currentAtlasPage, clampedAtlasIndex, atlasPageCount],
+  );
+  // Options with this page's atlas tokens resolved, fed to the preview, the
+  // clipboard copy, and the single-page exports; the inputs keep the raw
+  // template so the tokens stay editable.
+  const displayOptions = useMemo<LayoutOptions>(
+    () =>
+      atlasTokenCtx
+        ? {
+            ...options,
+            title: substituteAtlasTokens(options.title, atlasTokenCtx),
+            subtitle: substituteAtlasTokens(options.subtitle, atlasTokenCtx),
+            footerText: substituteAtlasTokens(
+              options.footerText,
+              atlasTokenCtx,
+            ),
+          }
+        : options,
+    [options, atlasTokenCtx],
+  );
+
+  /** Resolve once the map goes idle after an atlas camera move, with a grace
+   * timeout because browsers may throttle the occluded canvas behind the
+   * dialog and delay "idle" indefinitely (same failure mode as GH #743);
+   * captureMapImage forces a redraw, so proceeding is safe. */
+  const waitForAtlasSettle = useCallback(
+    (map: NonNullable<ReturnType<MapController["getMap"]>>) =>
+      new Promise<void>((resolve) => {
+        let done = false;
+        let timer = 0;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          map.off("idle", finish);
+          window.clearTimeout(timer);
+          resolve();
+        };
+        map.on("idle", finish);
+        timer = window.setTimeout(finish, 2500);
+      }),
+    [],
+  );
+
+  // Drive the live map to one atlas page's extent and capture it. Margin mode
+  // grows the feature's box before fitting; fixed-scale mode fits first, then
+  // corrects the zoom by the log2 ratio difference (like applyScale) and
+  // recaptures.
+  const captureAtlasPage = useCallback(
+    async (page: AtlasPage): Promise<CapturedMap> => {
+      const map = mapControllerRef.current?.getMap();
+      if (!map) throw new Error("Map is not ready");
+      const [w, s, e, n] = expandBounds(
+        page.bounds,
+        atlasExtentMode === "margin" ? atlasMarginPct : 0,
+      );
+      map.fitBounds(
+        [
+          [w, s],
+          [e, n],
+        ],
+        { animate: false, padding: 0 },
+      );
+      await waitForAtlasSettle(map);
+      // Hide the drawn print-extent box while reading the buffer, as recapture
+      // does, so its outline is never baked into a page.
+      const capture = () => {
+        setPrintExtentVisible(map, false);
+        try {
+          return captureMapImage(map, null);
+        } finally {
+          setPrintExtentVisible(map, true);
+        }
+      };
+      let cap = capture();
+      if (atlasExtentMode === "scale") {
+        const target = Number(atlasScale);
+        const ratio = computeScaleRatio({
+          ...options,
+          metersPerPixel: cap.metersPerPixel,
+          bearingDeg: cap.bearingDeg,
+          mapImage: cap.image,
+          mapImageWidth: cap.width,
+          mapImageHeight: cap.height,
+        });
+        if (target > 0 && ratio > 0) {
+          const zoom = map.getZoom() + Math.log2(ratio / target);
+          const clamped = Math.max(
+            map.getMinZoom(),
+            Math.min(map.getMaxZoom(), zoom),
+          );
+          if (Math.abs(clamped - map.getZoom()) > 1e-3) {
+            map.setZoom(clamped);
+            await waitForAtlasSettle(map);
+            cap = capture();
+          }
+        }
+      }
+      return cap;
+    },
+    [
+      mapControllerRef,
+      atlasExtentMode,
+      atlasMarginPct,
+      atlasScale,
+      waitForAtlasSettle,
+      options,
+    ],
+  );
+
+  const goToAtlasPage = useCallback(
+    async (index: number) => {
+      const page = atlasPages[index];
+      if (!page || atlasBusy) return;
+      setAtlasBusy(true);
+      setError(null);
+      try {
+        const cap = await captureAtlasPage(page);
+        setCaptured(cap);
+        setAtlasIndex(index);
+      } catch {
+        setError(t("printLayout.errors.captureFailed"));
+      } finally {
+        setAtlasBusy(false);
+      }
+    },
+    [atlasPages, atlasBusy, captureAtlasPage, t],
+  );
+  // Latest goToAtlasPage for the auto-jump effect, so the effect does not
+  // re-run (and re-drive the map) every time a capture refreshes options.
+  const goToAtlasPageRef = useRef(goToAtlasPage);
+  goToAtlasPageRef.current = goToAtlasPage;
+
+  // Default the coverage layer to the first eligible layer when the atlas is
+  // switched on without one selected.
+  useEffect(() => {
+    if (atlasEnabled && !atlasLayerId && atlasLayers.length > 0) {
+      setAtlasLayerId(atlasLayers[0].id);
+    }
+  }, [atlasEnabled, atlasLayerId, atlasLayers]);
+
+  // Jump to the first page when the atlas is enabled or the coverage layer
+  // changes, so the preview immediately reflects the series.
+  useEffect(() => {
+    if (open && atlasEnabled && atlasLayerId) {
+      setAtlasIndex(0);
+      void goToAtlasPageRef.current(0);
+    }
+  }, [open, atlasEnabled, atlasLayerId]);
+
+  // Fixed scale is only meaningful on physical paper (like the manual scale
+  // input); fall back to margin mode when the page switches to pixel sizes.
+  useEffect(() => {
+    if (!isMmPage && atlasExtentMode === "scale") setAtlasExtentMode("margin");
+  }, [isMmPage, atlasExtentMode]);
+
   // Two-way scale sync: reflect the captured view's scale into the input unless
   // the user is actively editing it.
   useEffect(() => {
@@ -856,7 +1109,7 @@ export function PrintLayoutDialog({
         if (retries++ < 20) raf = requestAnimationFrame(render);
         return;
       }
-      const size = resolvePageSize(options);
+      const size = resolvePageSize(displayOptions);
       const aspect = size.width / size.height;
       // Available space inside the pane (p-3 padding = 12px each side).
       const availW = Math.max(1, box.clientWidth - 24);
@@ -872,7 +1125,7 @@ export function PrintLayoutDialog({
       canvas.height = Math.max(1, Math.round(dispH * dpr));
       canvas.style.width = `${Math.round(dispW)}px`;
       canvas.style.height = `${Math.round(dispH)}px`;
-      drawLayout(canvas, options);
+      drawLayout(canvas, displayOptions);
       if (!observer) {
         // Coalesce resize-driven re-renders to one drawLayout per frame so a
         // fast splitter/grip drag doesn't run the draw synchronously per event.
@@ -891,7 +1144,7 @@ export function PrintLayoutDialog({
       cancelAnimationFrame(raf);
       observer?.disconnect();
     };
-  }, [open, options]);
+  }, [open, displayOptions]);
 
   // Copy the composed layout to the clipboard as a PNG, so it can be pasted
   // straight into a document without saving a file first (GH #773).
@@ -903,7 +1156,7 @@ export function PrintLayoutDialog({
     setExporting(true);
     setError(null);
     try {
-      await copyLayoutToClipboard(options);
+      await copyLayoutToClipboard(displayOptions);
       setCopied(true);
       if (copiedTimeoutRef.current !== null) {
         window.clearTimeout(copiedTimeoutRef.current);
@@ -927,16 +1180,86 @@ export function PrintLayoutDialog({
     setExporting(true);
     setError(null);
     try {
-      const base = sanitizeFilename(title || projectName || "map-layout");
+      const base = sanitizeFilename(
+        displayOptions.title || projectName || "map-layout",
+      );
       if (kind === "png") {
-        await exportLayoutPng(options, `${base}.png`);
+        await exportLayoutPng(displayOptions, `${base}.png`);
       } else {
-        await exportLayoutPdf(options, `${base}.pdf`);
+        await exportLayoutPdf(displayOptions, `${base}.pdf`);
       }
     } catch {
       setError(t("printLayout.errors.exportFailed", { format: kind.toUpperCase() }));
     } finally {
       setExporting(false);
+    }
+  };
+
+  // Export the whole atlas: iterate the pages, drive the map to each feature,
+  // capture, resolve tokens, and hand the per-page layout options to the
+  // multi-page PDF or PNG-zip writer (GH #1291). The page list and the raw
+  // option templates are frozen at click time so edits made while the loop
+  // runs cannot produce a mixed document.
+  const handleAtlasExport = async (kind: "pdf" | "zip") => {
+    if (!atlasActive || atlasBusy) return;
+    const pages = atlasPages;
+    const total = pages.length;
+    setExporting(true);
+    setAtlasBusy(true);
+    setError(null);
+    try {
+      const ctxFor = (i: number): AtlasTokenContext => ({
+        name: pages[i].name,
+        pageNumber: i + 1,
+        total,
+        properties: pages[i].properties,
+      });
+      const source = {
+        total,
+        onProgress: (current: number, totalPages: number) =>
+          setAtlasProgress({ current, total: totalPages }),
+        optionsForPage: async (i: number): Promise<LayoutOptions> => {
+          const cap = await captureAtlasPage(pages[i]);
+          // Mirror progress into the dialog preview as pages are produced.
+          setCaptured(cap);
+          setAtlasIndex(i);
+          const ctx = ctxFor(i);
+          return {
+            ...options,
+            title: substituteAtlasTokens(options.title, ctx),
+            subtitle: substituteAtlasTokens(options.subtitle, ctx),
+            footerText: substituteAtlasTokens(options.footerText, ctx),
+            metersPerPixel: cap.metersPerPixel,
+            bearingDeg: cap.bearingDeg,
+            mapImage: cap.image,
+            mapImageWidth: cap.width,
+            mapImageHeight: cap.height,
+          };
+        },
+      };
+      // The combined file's name cannot carry any single page's tokens.
+      const base = sanitizeFilename(
+        stripAtlasTokens(title) || projectName || "atlas",
+      );
+      if (kind === "pdf") {
+        await exportAtlasPdf(source, `${base}-atlas.pdf`);
+      } else {
+        await exportAtlasPngZip(
+          source,
+          (i) => atlasEntryName(atlasFilenamePattern, ctxFor(i)),
+          `${base}-atlas.zip`,
+        );
+      }
+    } catch {
+      setError(
+        t("printLayout.errors.exportFailed", {
+          format: kind === "pdf" ? "PDF" : "ZIP",
+        }),
+      );
+    } finally {
+      setExporting(false);
+      setAtlasBusy(false);
+      setAtlasProgress(null);
     }
   };
 
@@ -1348,6 +1671,222 @@ export function PrintLayoutDialog({
               <p className="text-xs text-muted-foreground">
                 {t("printLayout.extent.hint")}
               </p>
+            </div>
+
+            <Separator />
+
+            {/* Atlas / map series: one page per coverage feature (GH #1291). */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">
+                {t("printLayout.atlas.section")}
+              </p>
+              <ToggleField
+                id="atlas-enabled"
+                label={t("printLayout.atlas.enable")}
+                checked={atlasEnabled}
+                onChange={setAtlasEnabled}
+              />
+              {atlasEnabled && (
+                <div className="space-y-3 rounded-md border p-3">
+                  {atlasLayers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {t("printLayout.atlas.noLayers")}
+                    </p>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="atlas-layer">
+                          {t("printLayout.atlas.coverageLayer")}
+                        </Label>
+                        <Select
+                          id="atlas-layer"
+                          value={atlasLayerId}
+                          disabled={atlasBusy}
+                          onChange={(e) => {
+                            setAtlasLayerId(e.target.value);
+                            // Field choices belong to the previous layer.
+                            setAtlasNameField("");
+                            setAtlasSortField("");
+                          }}
+                        >
+                          {atlasLayers.map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="atlas-name-field">
+                            {t("printLayout.atlas.nameField")}
+                          </Label>
+                          <Select
+                            id="atlas-name-field"
+                            value={atlasNameField}
+                            onChange={(e) => setAtlasNameField(e.target.value)}
+                          >
+                            <option value="">
+                              {t("printLayout.atlas.nameFieldNone")}
+                            </option>
+                            {atlasFields.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="atlas-extent-mode">
+                            {t("printLayout.atlas.extentMode")}
+                          </Label>
+                          <Select
+                            id="atlas-extent-mode"
+                            value={atlasExtentMode}
+                            onChange={(e) =>
+                              setAtlasExtentMode(
+                                e.target.value as "margin" | "scale",
+                              )
+                            }
+                          >
+                            <option value="margin">
+                              {t("printLayout.atlas.extentMargin")}
+                            </option>
+                            {isMmPage && (
+                              <option value="scale">
+                                {t("printLayout.atlas.extentScale")}
+                              </option>
+                            )}
+                          </Select>
+                        </div>
+                      </div>
+                      {atlasExtentMode === "margin" ? (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="atlas-margin">
+                            {t("printLayout.atlas.marginLabel")}
+                          </Label>
+                          <Input
+                            id="atlas-margin"
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={atlasMarginPct}
+                            onChange={(e) =>
+                              setAtlasMarginPct(
+                                Math.max(
+                                  0,
+                                  Math.min(100, Number(e.target.value) || 0),
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="atlas-scale">
+                            {t("printLayout.atlas.scaleLabel")}
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">
+                              1:
+                            </span>
+                            <Input
+                              id="atlas-scale"
+                              inputMode="numeric"
+                              className="flex-1"
+                              value={atlasScale}
+                              onChange={(e) =>
+                                setAtlasScale(
+                                  e.target.value.replace(/[^0-9]/g, ""),
+                                )
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="atlas-sort">
+                            {t("printLayout.atlas.sortField")}
+                          </Label>
+                          <Select
+                            id="atlas-sort"
+                            value={atlasSortField}
+                            onChange={(e) => setAtlasSortField(e.target.value)}
+                          >
+                            <option value="">
+                              {t("printLayout.atlas.sortNone")}
+                            </option>
+                            {atlasFields.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="atlas-sort-dir">
+                            {t("printLayout.atlas.sortOrder")}
+                          </Label>
+                          <Select
+                            id="atlas-sort-dir"
+                            value={atlasSortDescending ? "desc" : "asc"}
+                            disabled={!atlasSortField}
+                            onChange={(e) =>
+                              setAtlasSortDescending(e.target.value === "desc")
+                            }
+                          >
+                            <option value="asc">
+                              {t("printLayout.atlas.sortAsc")}
+                            </option>
+                            <option value="desc">
+                              {t("printLayout.atlas.sortDesc")}
+                            </option>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="atlas-filter">
+                          {t("printLayout.atlas.filterLabel")}
+                        </Label>
+                        <Input
+                          id="atlas-filter"
+                          value={atlasFilter}
+                          placeholder={t("printLayout.atlas.filterPlaceholder")}
+                          onChange={(e) => setAtlasFilter(e.target.value)}
+                        />
+                        {atlasFilter.trim() !== "" && !atlasFilterPredicate && (
+                          <p className="text-xs text-destructive">
+                            {t("printLayout.atlas.filterError")}
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="atlas-filename">
+                          {t("printLayout.atlas.filenamePattern")}
+                        </Label>
+                        <Input
+                          id="atlas-filename"
+                          value={atlasFilenamePattern}
+                          onChange={(e) =>
+                            setAtlasFilenamePattern(e.target.value)
+                          }
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {atlasPageCount > 0
+                          ? t("printLayout.atlas.pages", {
+                              count: atlasPageCount,
+                            })
+                          : t("printLayout.atlas.noPages")}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t("printLayout.atlas.tokensHint")}
+                      </p>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -1975,6 +2514,45 @@ export function PrintLayoutDialog({
                 {t("printLayout.recapture")}
               </Button>
             </div>
+            {/* Atlas page stepper: flip through the series before exporting. */}
+            {atlasActive && (
+              <div className="flex w-full min-w-0 items-center justify-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={t("printLayout.atlas.prevPage")}
+                  disabled={atlasBusy || clampedAtlasIndex <= 0}
+                  onClick={() => void goToAtlasPage(clampedAtlasIndex - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="shrink-0 text-sm tabular-nums">
+                  {t("printLayout.atlas.pageOf", {
+                    current: clampedAtlasIndex + 1,
+                    total: atlasPageCount,
+                  })}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={t("printLayout.atlas.nextPage")}
+                  disabled={
+                    atlasBusy || clampedAtlasIndex >= atlasPageCount - 1
+                  }
+                  onClick={() => void goToAtlasPage(clampedAtlasIndex + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                {currentAtlasPage && (
+                  <span
+                    className="min-w-0 truncate text-sm text-muted-foreground"
+                    title={currentAtlasPage.name}
+                  >
+                    {currentAtlasPage.name}
+                  </span>
+                )}
+              </div>
+            )}
             {/* Fit the whole page in view: the canvas scales down to honour both
                 max constraints without ever showing a scrollbar (GH #520). */}
             <div
@@ -1996,13 +2574,22 @@ export function PrintLayoutDialog({
         </div>
 
         <div className="flex items-center justify-end gap-2 pt-2">
+          {/* Atlas export progress, kept visible next to the buttons. */}
+          {atlasProgress && (
+            <span className="me-auto text-sm text-muted-foreground">
+              {t("printLayout.atlas.exporting", {
+                current: atlasProgress.current,
+                total: atlasProgress.total,
+              })}
+            </span>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t("common.close")}
           </Button>
           {/* Copy the composed layout straight to the clipboard (GH #773). */}
           <Button
             variant="outline"
-            disabled={exporting || !captured}
+            disabled={exporting || atlasBusy || !captured}
             onClick={() => void handleCopy()}
           >
             {copied ? (
@@ -2015,22 +2602,37 @@ export function PrintLayoutDialog({
               : t("printLayout.copyToClipboard")}
           </Button>
           {/* Equal-weight export buttons: neither format is the "primary" one
-              (GH #520). */}
+              (GH #520). In atlas mode they become the whole-series exports:
+              a zip of per-page PNGs and one multi-page PDF (GH #1291). */}
           <Button
             variant="outline"
-            disabled={exporting || !captured}
-            onClick={() => void handleExport("png")}
+            disabled={
+              exporting || atlasBusy || (atlasEnabled ? !atlasActive : !captured)
+            }
+            onClick={() =>
+              void (atlasActive ? handleAtlasExport("zip") : handleExport("png"))
+            }
           >
             <FileImage className="me-2 h-4 w-4" />
-            {t("printLayout.exportPng")}
+            {atlasActive
+              ? t("printLayout.atlas.exportZip")
+              : t("printLayout.exportPng")}
           </Button>
           <Button
             variant="outline"
-            disabled={exporting || !captured}
-            onClick={() => void handleExport("pdf")}
+            disabled={
+              exporting || atlasBusy || (atlasEnabled ? !atlasActive : !captured)
+            }
+            onClick={() =>
+              void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))
+            }
           >
             <FileText className="me-2 h-4 w-4" />
-            {t("printLayout.exportPdf")}
+            {atlasActive
+              ? t("printLayout.atlas.exportPdfPages", {
+                  count: atlasPageCount,
+                })
+              : t("printLayout.exportPdf")}
           </Button>
         </div>
       </DialogContent>

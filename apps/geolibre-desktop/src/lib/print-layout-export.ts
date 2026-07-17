@@ -5,6 +5,7 @@
  * unit tested. {@link captureMapImage} reads the live map's canvases, and the
  * export helpers rasterize {@link drawLayout} at print resolution.
  */
+import { zipSync } from "fflate";
 import jsPDF from "jspdf";
 import { isFullViewportMapCanvas } from "./print-capture";
 import {
@@ -353,5 +354,105 @@ export async function exportLayoutPdf(
       { description: "PDF Document", accept: { "application/pdf": [".pdf"] } },
     ],
     mimeType: "application/pdf",
+  });
+}
+
+/**
+ * Per-page hooks for an atlas export (GH #1291). The dialog owns the map
+ * driving (fit the coverage feature, wait for tiles, capture) and the token
+ * substitution, so the export loop here stays a pure page iterator.
+ */
+export interface AtlasExportSource {
+  /** Number of pages to export; must be at least 1. */
+  total: number;
+  /**
+   * Produce the fully-resolved layout options for one page (0-based). Called
+   * sequentially, one page at a time, so implementations may drive the live
+   * map between calls.
+   */
+  optionsForPage: (pageIndex: number) => Promise<LayoutOptions>;
+  /** Progress callback fired before each page renders (1-based `current`). */
+  onProgress?: (current: number, total: number) => void;
+}
+
+/**
+ * Export an atlas as one multi-page PDF: every coverage feature becomes a page
+ * rendered through the same layout pipeline as the single-page export.
+ *
+ * @returns The saved file name, or null if the user cancelled the save dialog.
+ */
+export async function exportAtlasPdf(
+  source: AtlasExportSource,
+  filename: string,
+  dpi = 150,
+): Promise<string | null> {
+  const { total, optionsForPage, onProgress } = source;
+  if (total < 1) throw new Error("Atlas export needs at least one page");
+  let pdf: jsPDF | null = null;
+  for (let i = 0; i < total; i++) {
+    onProgress?.(i + 1, total);
+    const opts = await optionsForPage(i);
+    const size = resolvePageSize(opts);
+    const { widthMm, heightMm } = pageMm(size);
+    const orientation = widthMm >= heightMm ? "landscape" : "portrait";
+    const canvas = renderToCanvas(opts, dpi);
+    if (!pdf) {
+      pdf = new jsPDF({ orientation, unit: "mm", format: [widthMm, heightMm] });
+    } else {
+      // The page size is fixed while the dialog iterates, but pass it per page
+      // anyway so a mid-export change can never mis-scale the remaining pages.
+      pdf.addPage([widthMm, heightMm], orientation);
+    }
+    pdf.addImage(canvas, "PNG", 0, 0, widthMm, heightMm, undefined, "FAST");
+  }
+  const bytes = new Uint8Array((pdf as jsPDF).output("arraybuffer"));
+  return saveBinaryFileWithFallback(bytes, {
+    defaultName: filename,
+    filters: [{ name: "PDF Document", extensions: ["pdf"] }],
+    browserTypes: [
+      { description: "PDF Document", accept: { "application/pdf": [".pdf"] } },
+    ],
+    mimeType: "application/pdf",
+  });
+}
+
+/**
+ * Export an atlas as a zip of per-page PNGs (one entry per coverage feature).
+ * Entry names come from `entryName` (already token-substituted and sanitized
+ * by the dialog); collisions are disambiguated with a `-2`, `-3`, ... suffix
+ * so no page silently overwrites another.
+ *
+ * @returns The saved file name, or null if the user cancelled the save dialog.
+ */
+export async function exportAtlasPngZip(
+  source: AtlasExportSource,
+  entryName: (pageIndex: number) => string,
+  filename: string,
+  dpi = 150,
+): Promise<string | null> {
+  const { total, optionsForPage, onProgress } = source;
+  if (total < 1) throw new Error("Atlas export needs at least one page");
+  const files: Record<string, Uint8Array> = {};
+  const used = new Set<string>();
+  for (let i = 0; i < total; i++) {
+    onProgress?.(i + 1, total);
+    const opts = await optionsForPage(i);
+    const canvas = renderToCanvas(opts, dpi);
+    const bytes = await canvasToPngBytes(canvas);
+    const base = entryName(i) || String(i + 1);
+    let name = base;
+    for (let suffix = 2; used.has(name); suffix++) name = `${base}-${suffix}`;
+    used.add(name);
+    files[`${name}.png`] = bytes;
+  }
+  // PNG payloads are already compressed; store them instead of re-deflating.
+  const zipped = zipSync(files, { level: 0 });
+  return saveBinaryFileWithFallback(zipped, {
+    defaultName: filename,
+    filters: [{ name: "ZIP Archive", extensions: ["zip"] }],
+    browserTypes: [
+      { description: "ZIP Archive", accept: { "application/zip": [".zip"] } },
+    ],
+    mimeType: "application/zip",
   });
 }

@@ -1,0 +1,361 @@
+/**
+ * Atlas (map series) generation for the Print Layout (GH #1291).
+ *
+ * Pure, framework-free helpers: token substitution, feature bounds, filtering,
+ * sorting, and page building. The dialog drives the live map from the pages
+ * produced here and composes each capture through the regular layout pipeline,
+ * so everything in this module is unit-testable without a map.
+ */
+import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
+
+/** Geographic bounds as `[west, south, east, north]` in WGS84 degrees. */
+export type AtlasBounds = [number, number, number, number];
+
+/** One page of an atlas: a coverage feature plus its resolved identity. */
+export interface AtlasPage {
+  /** 0-based position in the final (filtered + sorted) page order. */
+  index: number;
+  /** Display name resolved from the name field, or `Feature N` (1-based, from
+   * the feature's position in the source collection) when unset/blank. */
+  name: string;
+  /** The feature's attributes, for `{atlas.attr:FIELD}` tokens. */
+  properties: Record<string, unknown>;
+  /** Bounding box of the feature geometry (margin not yet applied). */
+  bounds: AtlasBounds;
+}
+
+/** Values substituted into `{atlas.*}` tokens for one page. */
+export interface AtlasTokenContext {
+  name: string;
+  /** 1-based page number in the final page order. */
+  pageNumber: number;
+  /** Total number of pages in the atlas. */
+  total: number;
+  properties: Record<string, unknown>;
+}
+
+const ATTR_TOKEN = /\{atlas\.attr:([^{}]+)\}/g;
+
+/**
+ * Replace `{atlas.name}`, `{atlas.pagenumber}`, `{atlas.total}`, and
+ * `{atlas.attr:FIELD}` tokens in a template string. Unknown attribute fields
+ * (and null/undefined values) resolve to an empty string; text without tokens
+ * passes through unchanged.
+ */
+export function substituteAtlasTokens(
+  text: string,
+  ctx: AtlasTokenContext,
+): string {
+  if (!text) return text;
+  return text
+    .replace(/\{atlas\.name\}/g, ctx.name)
+    .replace(/\{atlas\.pagenumber\}/g, String(ctx.pageNumber))
+    .replace(/\{atlas\.total\}/g, String(ctx.total))
+    .replace(ATTR_TOKEN, (_m, field: string) => {
+      const v = ctx.properties[field.trim()];
+      return v === null || v === undefined ? "" : String(v);
+    });
+}
+
+/**
+ * Remove all `{atlas.*}` tokens from a template (used to derive a token-free
+ * base filename for the combined PDF, where no single page's values apply).
+ */
+export function stripAtlasTokens(text: string): string {
+  return text
+    .replace(/\{atlas\.(?:name|pagenumber|total)\}/g, "")
+    .replace(ATTR_TOKEN, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function walkPositions(
+  coords: unknown,
+  visit: (pos: Position) => void,
+): void {
+  if (!Array.isArray(coords)) return;
+  if (typeof coords[0] === "number") {
+    visit(coords as Position);
+    return;
+  }
+  for (const c of coords) walkPositions(c, visit);
+}
+
+/**
+ * Compute the `[west, south, east, north]` bounding box of a GeoJSON geometry
+ * (GeometryCollections included). Returns `null` for empty or missing
+ * geometries so callers can skip features that cannot produce a page.
+ */
+export function geometryBounds(
+  geometry: Geometry | null | undefined,
+): AtlasBounds | null {
+  if (!geometry) return null;
+  let w = Infinity;
+  let s = Infinity;
+  let e = -Infinity;
+  let n = -Infinity;
+  const visit = (pos: Position) => {
+    const [x, y] = pos;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+    w = Math.min(w, x);
+    s = Math.min(s, y);
+    e = Math.max(e, x);
+    n = Math.max(n, y);
+  };
+  if (geometry.type === "GeometryCollection") {
+    for (const g of geometry.geometries) {
+      const b = geometryBounds(g);
+      if (!b) continue;
+      w = Math.min(w, b[0]);
+      s = Math.min(s, b[1]);
+      e = Math.max(e, b[2]);
+      n = Math.max(n, b[3]);
+    }
+  } else {
+    walkPositions(geometry.coordinates, visit);
+  }
+  if (!Number.isFinite(w) || !Number.isFinite(s)) return null;
+  return [w, s, e, n];
+}
+
+/**
+ * Expand a bounding box by a symmetric margin (a percentage of each span) and
+ * pad degenerate spans (points, vertical/horizontal lines) to a minimum span
+ * so `fitBounds` never receives a zero-area box.
+ *
+ * @param bounds - The box to expand.
+ * @param marginPct - Margin as a percentage of each side's span (10 = 10%).
+ * @param minSpanDeg - Minimum span, in degrees, either axis is padded to.
+ */
+export function expandBounds(
+  bounds: AtlasBounds,
+  marginPct: number,
+  minSpanDeg = 0.005,
+): AtlasBounds {
+  let [w, s, e, n] = bounds;
+  const padX = Math.max(((e - w) * marginPct) / 100, 0);
+  const padY = Math.max(((n - s) * marginPct) / 100, 0);
+  w -= padX;
+  e += padX;
+  s -= padY;
+  n += padY;
+  if (e - w < minSpanDeg) {
+    const cx = (w + e) / 2;
+    w = cx - minSpanDeg / 2;
+    e = cx + minSpanDeg / 2;
+  }
+  if (n - s < minSpanDeg) {
+    const cy = (s + n) / 2;
+    s = cy - minSpanDeg / 2;
+    n = cy + minSpanDeg / 2;
+  }
+  // Keep latitudes inside Web Mercator's renderable range.
+  return [w, Math.max(-85, s), e, Math.min(85, n)];
+}
+
+/**
+ * Collect the union of attribute names across (a sample of) the features, in
+ * first-seen order, for populating the name/sort field selectors.
+ */
+export function listAtlasFields(
+  features: readonly Feature[],
+  sampleLimit = 100,
+): string[] {
+  const fields: string[] = [];
+  const seen = new Set<string>();
+  for (const f of features.slice(0, sampleLimit)) {
+    for (const key of Object.keys(f.properties ?? {})) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      fields.push(key);
+    }
+  }
+  return fields;
+}
+
+export type AtlasFilterPredicate = (
+  properties: Record<string, unknown>,
+) => boolean;
+
+/** A single parsed `field op value` comparison. */
+interface FilterCondition {
+  field: string;
+  op: "=" | "!=" | ">" | ">=" | "<" | "<=" | "contains";
+  value: string;
+  numericValue: number | null;
+}
+
+const CONDITION_RE =
+  /^(.+?)\s*(!=|>=|<=|=|>|<)\s*(.+)$|^(.+?)\s+(contains)\s+(.+)$/i;
+
+function unquote(raw: string): string {
+  const v = raw.trim();
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    return v.slice(1, -1);
+  }
+  return v;
+}
+
+/**
+ * Parse a simple atlas filter expression into a predicate over feature
+ * attributes, or return `null` when the expression is malformed (so the dialog
+ * can show an inline error instead of silently matching nothing).
+ *
+ * Grammar: one or more `field op value` comparisons joined by `and`. Supported
+ * operators: `=` (or `==`), `!=`, `>`, `>=`, `<`, `<=`, and `contains`
+ * (case-insensitive substring). Values may be numbers, quoted strings, or bare
+ * words. Equality compares numerically when both sides are numbers, otherwise
+ * as strings; ordering comparisons require numbers on both sides.
+ */
+export function parseAtlasFilter(
+  expression: string,
+): AtlasFilterPredicate | null {
+  const expr = expression.trim();
+  if (!expr) return () => true;
+  const parts = expr.split(/\s+and\s+/i);
+  const conditions: FilterCondition[] = [];
+  for (const part of parts) {
+    const m = CONDITION_RE.exec(part.trim());
+    if (!m) return null;
+    const field = unquote((m[1] ?? m[4]).trim());
+    const opRaw = (m[2] ?? m[5]).toLowerCase();
+    const value = unquote((m[3] ?? m[6]).trim());
+    if (!field || !value) return null;
+    const op = (opRaw === "==" ? "=" : opRaw) as FilterCondition["op"];
+    const num = Number(value);
+    conditions.push({
+      field,
+      op,
+      value,
+      numericValue: value !== "" && Number.isFinite(num) ? num : null,
+    });
+  }
+  return (properties) =>
+    conditions.every((c) => matchCondition(c, properties[c.field]));
+}
+
+function matchCondition(c: FilterCondition, raw: unknown): boolean {
+  if (raw === null || raw === undefined) return false;
+  const asNum = typeof raw === "number" ? raw : Number(raw);
+  const bothNumeric =
+    c.numericValue !== null &&
+    Number.isFinite(asNum) &&
+    String(raw).trim() !== "";
+  switch (c.op) {
+    case "=":
+      return bothNumeric ? asNum === c.numericValue : String(raw) === c.value;
+    case "!=":
+      return bothNumeric ? asNum !== c.numericValue : String(raw) !== c.value;
+    case ">":
+      return bothNumeric && asNum > (c.numericValue as number);
+    case ">=":
+      return bothNumeric && asNum >= (c.numericValue as number);
+    case "<":
+      return bothNumeric && asNum < (c.numericValue as number);
+    case "<=":
+      return bothNumeric && asNum <= (c.numericValue as number);
+    case "contains":
+      return String(raw).toLowerCase().includes(c.value.toLowerCase());
+  }
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  // Missing values sort last regardless of direction... handled by caller sign;
+  // here: undefined/null compare greater than any present value.
+  const aMissing = a === null || a === undefined || a === "";
+  const bMissing = b === null || b === undefined || b === "";
+  if (aMissing && bMissing) return 0;
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  const an = typeof a === "number" ? a : Number(a);
+  const bn = typeof b === "number" ? b : Number(b);
+  if (Number.isFinite(an) && Number.isFinite(bn)) {
+    return an === bn ? 0 : an < bn ? -1 : 1;
+  }
+  return String(a).localeCompare(String(b), undefined, { numeric: true });
+}
+
+export interface BuildAtlasPagesOptions {
+  /** Attribute used for each page's display name; blank = `Feature N`. */
+  nameField?: string;
+  /** Attribute to order pages by; blank keeps the source feature order. */
+  sortField?: string;
+  /** Reverse the sort order (missing values always sort last). */
+  sortDescending?: boolean;
+  /** Predicate from {@link parseAtlasFilter}; features failing it are skipped. */
+  filter?: AtlasFilterPredicate | null;
+}
+
+/**
+ * Build the ordered page list for an atlas from a coverage layer's features:
+ * drop features without a usable geometry, apply the filter, sort, and assign
+ * final page indices.
+ */
+export function buildAtlasPages(
+  collection: Pick<FeatureCollection, "features">,
+  options: BuildAtlasPagesOptions = {},
+): AtlasPage[] {
+  const { nameField, sortField, sortDescending, filter } = options;
+  const pages: Omit<AtlasPage, "index">[] = [];
+  collection.features.forEach((feature, i) => {
+    const bounds = geometryBounds(feature.geometry);
+    if (!bounds) return;
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    if (filter && !filter(properties)) return;
+    let name = "";
+    if (nameField) {
+      const v = properties[nameField];
+      if (v !== null && v !== undefined) name = String(v).trim();
+    }
+    pages.push({
+      name: name || `Feature ${i + 1}`,
+      properties,
+      bounds,
+    });
+  });
+  if (sortField) {
+    const sign = sortDescending ? -1 : 1;
+    pages.sort((a, b) => {
+      const cmp = compareValues(
+        a.properties[sortField],
+        b.properties[sortField],
+      );
+      // Missing values stay last in both directions: compareValues already
+      // pushed them to the end, so only flip the sign for present-vs-present.
+      const aMissing =
+        a.properties[sortField] === null ||
+        a.properties[sortField] === undefined ||
+        a.properties[sortField] === "";
+      const bMissing =
+        b.properties[sortField] === null ||
+        b.properties[sortField] === undefined ||
+        b.properties[sortField] === "";
+      if (aMissing || bMissing) return cmp;
+      return cmp * sign;
+    });
+  }
+  return pages.map((p, index) => ({ ...p, index }));
+}
+
+/**
+ * Resolve a zip entry filename for one atlas page: substitute tokens in the
+ * pattern, sanitize the result for the filesystem, and fall back to the page
+ * number when everything sanitizes away.
+ */
+export function atlasEntryName(
+  pattern: string,
+  ctx: AtlasTokenContext,
+): string {
+  const substituted = substituteAtlasTokens(
+    pattern || "{atlas.pagenumber}-{atlas.name}",
+    ctx,
+  );
+  const cleaned = substituted
+    .trim()
+    .replace(/[^\p{L}\p{N} ._-]+/gu, "")
+    .replace(/\s+/g, "-");
+  return cleaned || String(ctx.pageNumber);
+}
