@@ -429,7 +429,7 @@
       "readingLayers": "Reading layers...",
       "layerOption": "{{name}} ({{type}}, {{count}} features)",
       "help": "Attribute-only tables are not listed. The selected feature class is loaded through the local GeoLibre server and reprojected to WGS84.",
-      "desktopOnly": "File Geodatabases can only be added from the desktop app, which can read local folders.",
+      "desktopOnly": "File Geodatabase layers are only available in GeoLibre Desktop. This feature reads a local .gdb folder through the local GeoLibre server, which the web app cannot access.",
       "readError": "Could not read this File Geodatabase.",
       "convertError": "Could not load this feature class.",
       "errorNotGdb": "Choose a folder ending in .gdb (an Esri File Geodatabase).",

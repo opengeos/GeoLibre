@@ -289,6 +289,12 @@ export function GdbSource() {
       }
     >
       <div className="space-y-3">
+        {!desktop ? (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            {t("addData.gdb.desktopOnly")}
+          </p>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -305,12 +311,6 @@ export function GdbSource() {
               : t("addData.gdb.noFolderSelected")}
           </span>
         </div>
-
-        {!desktop ? (
-          <p className="text-xs text-muted-foreground">
-            {t("addData.gdb.desktopOnly")}
-          </p>
-        ) : null}
 
         <div className="space-y-1.5">
           <Label htmlFor="gdb-layer">
