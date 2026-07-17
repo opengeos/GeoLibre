@@ -58,9 +58,12 @@ type StatusNote = { type: "success" | "error"; text: string } | null;
 function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
   const style = { ...DEFAULT_LAYER_STYLE, ...entry.style };
   if (entry.kind === "ramp") {
+    // Clamp to the Style panel's class-count range: sanitization only checks
+    // finiteness, so an absurd hand-edited count must not allocate a huge
+    // preview array.
     const colors = interpolateRampColors(
       style.vectorStyleColorRamp,
-      Math.max(style.vectorStyleClassCount, 2),
+      Math.min(Math.max(style.vectorStyleClassCount, 2), 12),
     );
     return (
       <div className="flex h-8 w-16 shrink-0 overflow-hidden rounded border border-border">
@@ -313,12 +316,12 @@ export function StyleManagerDialog() {
       }
       const entries = parseStyleLibrary(picked.text);
       // Ids that must not be claimed by an app-scope import: built-in preset
-      // ids, and ids of project-scoped entries (the app-scope upsert would
-      // silently pull those out of the project file). A collision with an
-      // existing app-library id is intentional upsert semantics, so
-      // re-importing an exported bundle updates entries instead of
-      // duplicating them. Merge into one setStyleLibrary call so the whole
-      // import costs a single store update and a single IndexedDB flush.
+      // ids, and ids of project-scoped entries (so one id never means two
+      // different entries across the sections). A collision with an existing
+      // app-library id is intentional upsert semantics, so re-importing an
+      // exported bundle updates entries instead of duplicating them. Merge
+      // into one setStyleLibrary call so the whole import costs a single
+      // store update and a single IndexedDB flush.
       const projectIds = new Set(projectStyleLibrary.map((e) => e.id));
       const next = [...useAppStore.getState().styleLibrary];
       for (const entry of entries) {

@@ -62,14 +62,31 @@ export async function loadStyleLibraryEntries(): Promise<StyleLibraryEntry[]> {
   }
 }
 
+// Chains writes so two rapid library changes can never interleave their
+// clear+put transactions out of order (each call opens its own connection, and
+// IndexedDB does not guarantee cross-connection transaction creation order
+// matches call order). The chain swallows failures so one failed write does
+// not poison every later one.
+let writeQueue: Promise<void> = Promise.resolve();
+
 /**
  * Replace the persisted app-level library with `entries` (clear + put in one
  * transaction). The library is small JSON, so a wholesale write per change is
- * simpler and safer than diffing puts/deletes against the store.
+ * simpler and safer than diffing puts/deletes against the store. Writes are
+ * queued so the last call always wins.
  *
  * @param entries - The complete app-level library to persist.
  */
-export async function persistStyleLibraryEntries(
+export function persistStyleLibraryEntries(
+  entries: StyleLibraryEntry[],
+): Promise<void> {
+  const run = () => writeStyleLibraryEntries(entries);
+  const result = writeQueue.then(run, run);
+  writeQueue = result.catch(() => {});
+  return result;
+}
+
+async function writeStyleLibraryEntries(
   entries: StyleLibraryEntry[],
 ): Promise<void> {
   if (!styleLibraryStorageAvailable()) return;

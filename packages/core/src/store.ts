@@ -365,8 +365,10 @@ export interface AppState {
   setStyleLibrary: (entries: StyleLibraryEntry[]) => void;
   /**
    * Insert or replace (matching by `id`) a Style Manager entry in the given
-   * scope. The same id is removed from the other scope so an entry lives in
-   * exactly one place; project-scope changes mark the project dirty.
+   * scope. Scope-local, like {@link deleteStyleLibraryEntry}: the other
+   * scope's list is never touched, since a same id there can belong to an
+   * unrelated entry after loading a project authored elsewhere. Project-scope
+   * saves mark the project dirty.
    */
   saveStyleLibraryEntry: (
     entry: StyleLibraryEntry,
@@ -1024,33 +1026,13 @@ export const useAppStore = create<AppState>()(
               ? list.map((e) => (e.id === entry.id ? entry : e))
               : [...list, entry];
           if (scope === "project") {
-            // Only produce a new styleLibrary reference when the id really
-            // moved scopes: the persistence layer flushes the whole app-level
-            // library to IndexedDB on any reference change.
-            const movedOutOfLibrary = s.styleLibrary.some(
-              (e) => e.id === entry.id,
-            );
             return {
               projectStyleLibrary: upsert(s.projectStyleLibrary),
-              styleLibrary: movedOutOfLibrary
-                ? s.styleLibrary.filter((e) => e.id !== entry.id)
-                : s.styleLibrary,
               isDirty: true,
             };
           }
-          // Moving an entry out of the project scope changes the project file,
-          // so that (and only that) marks the project dirty; app-level saves
-          // don't touch the project.
-          const movedOutOfProject = s.projectStyleLibrary.some(
-            (e) => e.id === entry.id,
-          );
-          return {
-            styleLibrary: upsert(s.styleLibrary),
-            projectStyleLibrary: movedOutOfProject
-              ? s.projectStyleLibrary.filter((e) => e.id !== entry.id)
-              : s.projectStyleLibrary,
-            isDirty: s.isDirty || movedOutOfProject,
-          };
+          // App-level saves don't touch the project file, so no dirty flag.
+          return { styleLibrary: upsert(s.styleLibrary) };
         }),
       deleteStyleLibraryEntry: (id, scope) =>
         set((s) => {

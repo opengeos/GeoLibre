@@ -269,19 +269,21 @@ describe("style library store actions", () => {
     assert.equal(state.styleLibrary[0].name, "Renamed");
   });
 
-  it("saves to the project scope, marks dirty, and moves the id between scopes", () => {
+  it("saves to the project scope, marks dirty, and stays scope-local", () => {
     useAppStore.getState().saveStyleLibraryEntry(entry(), "project");
     let state = useAppStore.getState();
     assert.equal(state.projectStyleLibrary.length, 1);
     assert.equal(state.isDirty, true);
 
+    // A same-id save into the other scope must not remove the project copy:
+    // after loading a project authored elsewhere the two scopes can hold the
+    // same id for unrelated entries.
     useAppStore.setState({ isDirty: false });
     useAppStore.getState().saveStyleLibraryEntry(entry(), "app");
     state = useAppStore.getState();
-    assert.equal(state.projectStyleLibrary.length, 0);
+    assert.equal(state.projectStyleLibrary.length, 1);
     assert.equal(state.styleLibrary.length, 1);
-    // Moving out of the project scope changes the project file, so dirty.
-    assert.equal(state.isDirty, true);
+    assert.equal(state.isDirty, false);
   });
 
   it("deletes from whichever scope holds the id and dirties only for project entries", () => {
