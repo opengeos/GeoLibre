@@ -519,6 +519,33 @@ describe("fix-topology (real geolibre-wasm)", () => {
     assert.match(logs.join("\n"), /Applied 0 fix|No fixable violations/);
   });
 
+  it("still adds the fixed layer when the change report is unreadable", async () => {
+    // exitCode 0 with a repaired output but no changes.json must not be
+    // mistaken for "no fixable violations".
+    const fixed = JSON.stringify(fcOf({
+      type: "Feature",
+      properties: {},
+      geometry: { type: "LineString", coordinates: [[0, 0], [1, 1]] },
+    }));
+    setTopologyWasmRunner(async () => ({
+      exitCode: 0,
+      stdout: [],
+      files: { "fixed.geojson": new TextEncoder().encode(fixed) },
+    }));
+    try {
+      const { ctx, logs, added } = makeCtx(NEAR_MISS, { snapTolerance: 0.001 });
+      await fixTopologyTool.run(ctx);
+      assert.equal(added.length, 1);
+      assert.equal(added[0].name, "Fixed topology");
+      assert.match(logs.join("\n"), /change report could not be read/);
+    } finally {
+      const wasm = (await import("geolibre-wasm/tools")) as unknown as {
+        runTool: Parameters<typeof setTopologyWasmRunner>[0];
+      };
+      setTopologyWasmRunner(wasm.runTool);
+    }
+  });
+
   it("requires at least one fixable rule", async () => {
     const { ctx, logs, added } = makeCtx(NEAR_MISS, {
       ruleEndpointSnap: false,

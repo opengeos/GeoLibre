@@ -7,12 +7,13 @@
 //   (`ST_IsValid` / `ST_MakeValid`, GEOS semantics) in the browser, and on
 //   GeoPandas/Shapely via the sidecar or Pyodide (`vector_ops.py` implements
 //   the same tool ids, with `explain_validity` reasons).
-// - `check-topology-rules` runs `topology_rule_validate` from the WASI tool
-//   runner (client-only): rule-set checks across features (overlaps, gaps,
-//   dangles, endpoint snapping) that SQL-per-row engines don't cover.
-//   `topology_rule_autofix` was evaluated and deliberately not exposed: of its
-//   four fixable rules only point-to-line projection demonstrably changed
-//   anything (dangle/gap/endpoint-snap probes all produced zero changes).
+// - `check-topology-rules` / `fix-topology` run `topology_rule_validate` /
+//   `topology_rule_autofix` from the WASI tool runner (client-only): rule-set
+//   checks across features (overlaps, gaps, dangles, endpoint snapping) that
+//   SQL-per-row engines don't cover. Autofix requires geolibre-wasm >= 0.9.0
+//   (whitebox-wasm#9/#10 made endpoint/dangle fixes real); the gaps rule still
+//   has no automatic fix, so `fix-topology` does not offer it (see
+//   FIXABLE_TOPOLOGY_RULES).
 import type {
   Feature,
   FeatureCollection,
@@ -574,31 +575,38 @@ export const fixTopologyTool: ProcessingAlgorithm = {
       );
       return;
     }
-    let report: TopologyChangeReport = {};
+    let report: TopologyChangeReport | null = null;
     try {
       report = JSON.parse(decoder.decode(files["changes.json"]));
     } catch {
-      // Missing/malformed change report: continue with zero-change messaging.
-    }
-    const total = report.total_changes ?? 0;
-    ctx.log(
-      `${dryRun ? "Would apply" : "Applied"} ${total} fix(es) across ${rules.length} rule(s)`,
-    );
-    for (const [rule, count] of Object.entries(report.changes_by_rule ?? {})) {
-      if (count > 0) ctx.log(`  ${rule}: ${count}`);
-    }
-    const log = report.change_log ?? [];
-    for (const change of log.slice(0, MAX_CHANGE_LOG_LINES)) {
-      if (change.detail) ctx.log(`  ${change.detail}`);
-    }
-    if (log.length > MAX_CHANGE_LOG_LINES) {
-      ctx.log(`  ... and ${log.length - MAX_CHANGE_LOG_LINES} more`);
-    }
-    if (total === 0) {
+      // Missing/malformed change report: the run itself succeeded, so fall
+      // through and still deliver the output layer rather than discarding a
+      // possibly real fix behind a "no violations" message.
       ctx.log(
-        "No fixable violations found — free ends and T-junctions are reported by Check topology rules but have no safe automatic fix",
+        "Warning: the change report could not be read; fix details are unavailable",
       );
-      return;
+    }
+    if (report) {
+      const total = report.total_changes ?? 0;
+      ctx.log(
+        `${dryRun ? "Would apply" : "Applied"} ${total} fix(es) across ${rules.length} rule(s)`,
+      );
+      for (const [rule, count] of Object.entries(report.changes_by_rule ?? {})) {
+        if (count > 0) ctx.log(`  ${rule}: ${count}`);
+      }
+      const log = report.change_log ?? [];
+      for (const change of log.slice(0, MAX_CHANGE_LOG_LINES)) {
+        if (change.detail) ctx.log(`  ${change.detail}`);
+      }
+      if (log.length > MAX_CHANGE_LOG_LINES) {
+        ctx.log(`  ... and ${log.length - MAX_CHANGE_LOG_LINES} more`);
+      }
+      if (total === 0) {
+        ctx.log(
+          "No fixable violations found — free ends and T-junctions are reported by Check topology rules but have no safe automatic fix",
+        );
+        return;
+      }
     }
     if (dryRun) return;
     let fixed: FeatureCollection | null = null;
