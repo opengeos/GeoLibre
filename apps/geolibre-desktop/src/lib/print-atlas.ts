@@ -232,17 +232,6 @@ function unquote(raw: string): string {
 }
 
 /**
- * Parse a simple atlas filter expression into a predicate over feature
- * attributes, or return `null` when the expression is malformed (so the dialog
- * can show an inline error instead of silently matching nothing).
- *
- * Grammar: one or more `field op value` comparisons joined by `and`. Supported
- * operators: `=` (or `==`), `!=`, `>`, `>=`, `<`, `<=`, and `contains`
- * (case-insensitive substring). Values may be numbers, quoted strings, or bare
- * words. Equality compares numerically when both sides are numbers, otherwise
- * as strings; ordering comparisons require numbers on both sides.
- */
-/**
  * Split a filter expression on the standalone keyword `and`, ignoring any
  * occurrence inside a single- or double-quoted value so expressions like
  * `NAME = "Sam and Max"` stay one condition.
@@ -282,6 +271,17 @@ function splitConditions(expr: string): string[] {
   return parts;
 }
 
+/**
+ * Parse a simple atlas filter expression into a predicate over feature
+ * attributes, or return `null` when the expression is malformed (so the dialog
+ * can show an inline error instead of silently matching nothing).
+ *
+ * Grammar: one or more `field op value` comparisons joined by `and`. Supported
+ * operators: `=` (or `==`), `!=`, `>`, `>=`, `<`, `<=`, and `contains`
+ * (case-insensitive substring). Values may be numbers, quoted strings, or bare
+ * words. Equality compares numerically when both sides are numbers, otherwise
+ * as strings; ordering comparisons require numbers on both sides.
+ */
 export function parseAtlasFilter(
   expression: string,
 ): AtlasFilterPredicate | null {

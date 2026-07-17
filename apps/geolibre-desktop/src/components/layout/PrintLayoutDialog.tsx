@@ -915,8 +915,21 @@ export function PrintLayoutDialog({
       let cap = capture();
       if (atlasExtentMode === "scale") {
         const target = Number(atlasScale);
+        // Measure against the page's substituted text, not the raw templates:
+        // a title/footer made purely of tokens can resolve to empty for a
+        // given feature, which collapses that row and changes the body height
+        // the scale is computed from.
+        const ctx: AtlasTokenContext = {
+          name: page.name,
+          pageNumber: page.index + 1,
+          total: atlasPageCount,
+          properties: page.properties,
+        };
         const ratio = computeScaleRatio({
           ...options,
+          title: substituteAtlasTokens(options.title, ctx),
+          subtitle: substituteAtlasTokens(options.subtitle, ctx),
+          footerText: substituteAtlasTokens(options.footerText, ctx),
           metersPerPixel: cap.metersPerPixel,
           bearingDeg: cap.bearingDeg,
           mapImage: cap.image,
@@ -953,6 +966,7 @@ export function PrintLayoutDialog({
       atlasExtentMode,
       atlasMarginPct,
       atlasScale,
+      atlasPageCount,
       waitForAtlasSettle,
       options,
       t,
