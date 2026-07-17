@@ -543,6 +543,18 @@ export async function rasterizeDomOverlays(
         logging: false,
         width: Math.max(1, Math.ceil(rect.width)),
         height: Math.max(1, Math.ceil(rect.height)),
+        onclone: (_doc, clone) => {
+          // The panels draw their outline with a spread `box-shadow` that sits
+          // OUTSIDE the measured footprint. html2canvas grows the render box to
+          // include it, which shifts the content down-and-right; cropping back to
+          // the footprint (from the top-left) then keeps the shadow on two sides
+          // and clips it on the other two, leaving a lopsided border in the frame.
+          // Drop shadows in the clone so the content fills the footprint squarely.
+          clone.style.boxShadow = "none";
+          for (const node of clone.querySelectorAll<HTMLElement>("*")) {
+            node.style.boxShadow = "none";
+          }
+        },
       });
       // The origin-clean guarantee this whole feature rests on lives here, so
       // fail closed: without a readable 2d context we cannot verify the raster,
