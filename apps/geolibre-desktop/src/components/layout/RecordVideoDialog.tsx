@@ -1,5 +1,5 @@
 import type { MapController } from "@geolibre/map";
-import { Button, cn, Input, Label } from "@geolibre/ui";
+import { Button, cn, Input, Label, Select } from "@geolibre/ui";
 import {
   Circle,
   Crop,
@@ -15,7 +15,11 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { saveBinaryFileWithFallback } from "../../lib/tauri-io";
 import {
+  CAPTION_POSITIONS,
+  type CaptionPosition,
+  DEFAULT_CAPTION_POSITION,
   DEFAULT_FPS,
+  hasCaptionText,
   isMapRecordingSupported,
   MapRecordingUnsupportedError,
   MAX_FPS,
@@ -73,7 +77,10 @@ function formatElapsed(totalSeconds: number): string {
  * Renders as a non-modal, draggable floating panel (mirroring
  * {@link RecordTourDialog}) so the map stays fully interactive while recording:
  * the user pans and zooms and the movement is captured. HTML overlays like this
- * panel and the selection frame are not part of the recorded canvas.
+ * panel and the selection frame are not part of the recorded canvas, but an
+ * optional title/source caption is burned into every frame (see the caption
+ * fields and {@link recordMapCanvas}), letting the user annotate the video
+ * itself the way the on-map HTML control cannot be.
  */
 export function RecordVideoDialog({
   open,
@@ -86,6 +93,12 @@ export function RecordVideoDialog({
   const [selecting, setSelecting] = useState(false);
   const [fps, setFps] = useState(DEFAULT_FPS);
   const [fpsText, setFpsText] = useState(String(DEFAULT_FPS));
+  // Optional title/source caption burned into every frame (see recordMapCanvas).
+  const [captionTitle, setCaptionTitle] = useState("");
+  const [captionText, setCaptionText] = useState("");
+  const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
+    DEFAULT_CAPTION_POSITION,
+  );
   const [status, setStatus] = useState<Status>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -191,10 +204,17 @@ export function RecordVideoDialog({
     setStatus("recording");
     const controller = new AbortController();
     abortRef.current = controller;
+    // Snapshot the caption text at record start; blank fields draw nothing.
+    const captionOptions = {
+      title: captionTitle,
+      caption: captionText,
+      position: captionPosition,
+    };
     try {
       const rec = await recordMapCanvas({
         map,
         region: mode === "region" ? region : null,
+        caption: hasCaptionText(captionOptions) ? captionOptions : null,
         fps,
         signal: controller.signal,
         onElapsed: setElapsed,
@@ -417,6 +437,50 @@ export function RecordVideoDialog({
                 setFpsText(String(next));
               }}
             />
+          </div>
+
+          {/* Caption burned into the video. DOM overlays (the HTML control, this
+              panel) can't be recorded, so this text is drawn onto the frames
+              directly, letting the user annotate the video itself. */}
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="record-video-caption-title">
+              {t("recordVideo.caption")}
+            </Label>
+            <Input
+              id="record-video-caption-title"
+              disabled={editingFrozen}
+              value={captionTitle}
+              onChange={(e) => setCaptionTitle(e.target.value)}
+              placeholder={t("recordVideo.captionTitlePlaceholder")}
+            />
+            <Input
+              id="record-video-caption-text"
+              aria-label={t("recordVideo.captionTextLabel")}
+              disabled={editingFrozen}
+              value={captionText}
+              onChange={(e) => setCaptionText(e.target.value)}
+              placeholder={t("recordVideo.captionTextPlaceholder")}
+            />
+            {hasCaptionText({
+              title: captionTitle,
+              caption: captionText,
+              position: captionPosition,
+            }) && (
+              <Select
+                aria-label={t("recordVideo.captionPosition")}
+                disabled={editingFrozen}
+                value={captionPosition}
+                onChange={(e) =>
+                  setCaptionPosition(e.target.value as CaptionPosition)
+                }
+              >
+                {CAPTION_POSITIONS.map((position) => (
+                  <option key={position} value={position}>
+                    {t(`recordVideo.captionPos.${position}`)}
+                  </option>
+                ))}
+              </Select>
+            )}
           </div>
 
           {/* Record / Stop, then the save step. */}

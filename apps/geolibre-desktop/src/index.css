@@ -3632,3 +3632,18 @@ html.dark .maplibregl-popup-anchor-right:has(.vector-control-popup) .maplibregl-
   padding: 4px 10px;
   font-size: 11px;
 }
+
+/* ---------------------------------------------------------------------------
+ * Vertical sidebar labels: CJK scripts (zh, ja, ko) read upright in
+ * writing-mode: vertical-rl, so the 180deg rotation used for Latin scripts
+ * would make them upside-down.  The :lang() pseudo-class handles regional
+ * variants (zh-TW, zh-CN, etc.) natively.  The rule matches the same `md:`
+ * breakpoint that Tailwind generates md:rotate-180 at.
+ * ------------------------------------------------------------------------- */
+@media (min-width: 768px) {
+  :lang(zh) .md\:rotate-180,
+  :lang(ja) .md\:rotate-180,
+  :lang(ko) .md\:rotate-180 {
+    rotate: 0deg;
+  }
+}

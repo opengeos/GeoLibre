@@ -66,10 +66,18 @@ const SAMPLE_RASTER_DATASETS: RasterSampleDataset[] = [
     url: "https://data.source.coop/opengeos/geoai/S2C-MSIL2A-20250920T162001-subset.tif",
     attribution: "Copernicus Sentinel data (ESA)",
   },
+  {
+    // A gdalbuildvrt mosaic of six NAIP COG tiles (4-band RGB+NIR), read
+    // straight from the .vrt: exercises maplibre-gl-raster's VRT support
+    // (v0.11.0+), which renders a plain COG mosaic in the browser without GDAL.
+    label: "NAIP mosaic (VRT)",
+    url: "https://data.source.coop/giswqs/opengeos/naip_water_train.vrt",
+    attribution: "USDA Farm Service Agency (FSA)",
+  },
 ];
 
 // This type mirrors undocumented private members of RasterControl from
-// maplibre-gl-raster (re-verified against v0.10.1). All access is optional (?.)
+// maplibre-gl-raster (re-verified against v0.11.0). All access is optional (?.)
 // so a rename in a future release degrades to a no-op rather than a crash --
 // re-verify these names AND the .mlr-control-close selector in
 // wireRasterCloseButton when bumping the dependency.
@@ -192,7 +200,7 @@ export function setNonTiledRasterHandler(
 }
 
 /** Whether a raster load error is the upstream "striped, not tiled" failure.
- * maplibre-gl-raster (re-verified against v0.10.1) rejects non-tiled GeoTIFFs with a message
+ * maplibre-gl-raster (re-verified against v0.11.0) rejects non-tiled GeoTIFFs with a message
  * containing "not tiled"; this is the only signal it exposes, so the match is
  * coupled to that wording. Re-verify it (and broaden if needed) when bumping the
  * dependency -- a reworded message degrades to the plain error, not a crash. */
@@ -621,7 +629,7 @@ function createRasterControl(
   });
   // syncRasterLayersToStore re-reads getState().collapsed when these fire.
   // Safe: expand()/collapse() delegate to toggle(), which flips
-  // _state.collapsed BEFORE emitting the event (re-verified against v0.10.1) --
+  // _state.collapsed BEFORE emitting the event (re-verified against v0.11.0) --
   // re-verify that ordering when bumping the dependency.
   const panelStateSyncHandler: RasterControlEventHandler = () =>
     syncRasterLayersToStoreForRuntime(control);
@@ -723,7 +731,7 @@ function patchWebRasterOverlayFactory(
     };
   };
 
-  // maplibre-gl-raster (re-verified against v0.10.1) calls `_deps.removeOverlay(this._map, this._overlay)`
+  // maplibre-gl-raster (re-verified against v0.11.0) calls `_deps.removeOverlay(this._map, this._overlay)`
   // from its LayerManager teardown (after the last raster is removed / the
   // control is destroyed); re-verify this hook exists when bumping the
   // dependency. Even if a future version stopped calling it, the control still

@@ -5,11 +5,23 @@ import {
   extractXyzTileSubset,
 } from "@geolibre/processing";
 
+import {
+  normalizeSubdomains,
+  rasterSubsetKind,
+  type RasterSubsetKind,
+} from "./raster-subset-kind";
 import { saveBinaryFileWithFallback } from "./tauri-io";
 import { fetchableUrl } from "./url-utils";
 
-/** Raster layer families that support in-browser bounding-box subset export. */
-export type RasterSubsetKind = "cog" | "wms" | "xyz";
+// Classification helpers live in the dependency-light `raster-subset-kind`
+// module (importable from Node tests); re-exported here so existing importers
+// of this module keep working.
+export {
+  canExtractRasterSubset,
+  normalizeSubdomains,
+  rasterSubsetKind,
+  type RasterSubsetKind,
+} from "./raster-subset-kind";
 
 /**
  * A user-confirmed extraction request. The bounding box is always in WGS84
@@ -42,40 +54,6 @@ export interface RasterSubsetRequest {
    * the UI stuck on "Extracting...".
    */
   signal?: AbortSignal;
-}
-
-/**
- * The subset-extraction family a layer belongs to, or `null` when the layer's
- * type or source can't be extracted. A COG needs a fetchable file (an HTTP COG
- * or a File-loaded one); a WMS needs its endpoint and layer names; an XYZ needs
- * a tile-URL template.
- *
- * @param layer - The store layer to classify.
- * @returns The subset kind, or `null` if the layer can't be subset-extracted.
- */
-export function rasterSubsetKind(layer: GeoLibreLayer): RasterSubsetKind | null {
-  const source = layer.source as Record<string, unknown>;
-  if (layer.type === "cog") {
-    const url =
-      fetchableUrl(layer.metadata.localBytesUrl) ?? fetchableUrl(source.url);
-    return url ? "cog" : null;
-  }
-  if (layer.type === "wms") {
-    const url = typeof source.url === "string" ? source.url.trim() : "";
-    const layers = typeof source.layers === "string" ? source.layers.trim() : "";
-    return url && layers ? "wms" : null;
-  }
-  if (layer.type === "xyz") {
-    const tiles = Array.isArray(source.tiles) ? source.tiles : [];
-    const template = typeof tiles[0] === "string" ? tiles[0] : "";
-    return template ? "xyz" : null;
-  }
-  return null;
-}
-
-/** Whether a layer can be exported as a bounding-box raster subset. */
-export function canExtractRasterSubset(layer: GeoLibreLayer): boolean {
-  return rasterSubsetKind(layer) !== null;
 }
 
 /**
@@ -147,32 +125,6 @@ async function resolveCogSource(
     offset += chunk.byteLength;
   }
   return bytes;
-}
-
-/**
- * Coerce a tile source's `subdomains` into the string of letters the WASM XYZ
- * extractor expects (it rotates `{s}` by indexing into the string per tile). A
- * plain string is passed through; a MapLibre/Leaflet-style `string[]` of single
- * letters (as offline-tiles.ts models it) is joined so the rotation is
- * preserved. Anything else yields `undefined` (no `{s}` rotation).
- *
- * @param value - The source's `subdomains` field, of unknown shape.
- * @returns The subdomain letters as a string, or `undefined`.
- */
-function normalizeSubdomains(value: unknown): string | undefined {
-  if (typeof value === "string") return value || undefined;
-  if (Array.isArray(value)) {
-    // Only single-letter entries map onto the extractor's per-letter string
-    // form. Concatenating multi-character subdomains (e.g. ["mt0","mt1"]) would
-    // produce a garbage rotation string, so in that case drop rotation instead.
-    const letters = value.filter(
-      (v): v is string => typeof v === "string" && v.length === 1,
-    );
-    return letters.length > 0 && letters.length === value.length
-      ? letters.join("")
-      : undefined;
-  }
-  return undefined;
 }
 
 /** WGS84 bounding box EPSG code; the panel always draws/edits in lng/lat. */

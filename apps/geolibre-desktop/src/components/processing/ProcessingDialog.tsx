@@ -66,6 +66,11 @@ import {
 } from "../../lib/tauri-io";
 import { clamp } from "../../lib/clamp";
 import { fetchableUrl } from "../../lib/url-utils";
+import {
+  layersForSubsetUrl,
+  subsetUrlFieldValues,
+  subsetUrlToolKind,
+} from "../../lib/subset-tool-url";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
@@ -199,6 +204,22 @@ function isMapExtentParameter(
     param.name === "bbox" &&
     parameterKind(param) === "string" &&
     Boolean(tool.params?.some((other) => other.name === "bbox_crs"))
+  );
+}
+
+// The `url` string param of a COG/WMS/XYZ subset extractor, whose value can be
+// filled from a compatible layer already loaded in the map (GeoLibre#1271). The
+// tool-kind lookup keeps this to the subset extractors without hard-coding each
+// id here; layer eligibility and the derived field values live in
+// `subset-tool-url.ts`.
+function isSubsetUrlParameter(
+  tool: WhiteboxTool,
+  param: WhiteboxToolParameter,
+): boolean {
+  return (
+    param.name === "url" &&
+    parameterKind(param) === "string" &&
+    subsetUrlToolKind(tool.id) !== null
   );
 }
 
@@ -1051,6 +1072,44 @@ export function ProcessingDialog({
     setValues((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Fill a subset extractor's `url` (and the companion fields it needs to run:
+  // WMS layers/styles, XYZ tile_size/subdomains) from a loaded raster layer
+  // (GeoLibre#1271), so a COG/WMS/XYZ added to the map can be subset without
+  // retyping its url. A COG's local `input` is cleared in the same gesture since
+  // the extractor takes exactly one source, and a url makes it a byte-range read
+  // instead of a full download.
+  const handlePopulateSubsetUrl = (layer: GeoLibreLayer) => {
+    if (!selectedTool) return;
+    const fields = subsetUrlFieldValues(selectedTool.id, layer);
+    if (!fields) return;
+    // Reset every companion field this populate can set back to the tool
+    // default first, so a previously picked layer's optional values (a WMS
+    // `styles`, an XYZ `subdomains`/`tile_size`) don't linger when the new layer
+    // omits them and skew the extraction. `fields` is spread after, so the new
+    // layer's present values win.
+    const defaults = createDefaultValues(selectedTool);
+    const kind = subsetUrlToolKind(selectedTool.id);
+    const companionReset: ParameterValues =
+      kind === "wms"
+        ? { styles: defaults.styles }
+        : kind === "xyz"
+          ? { tile_size: defaults.tile_size, subdomains: defaults.subdomains }
+          : {};
+    const hasInput = selectedTool.params?.some((param) => param.name === "input");
+    setValues((prev) => ({
+      ...prev,
+      ...(hasInput ? { input: "" } : {}),
+      ...companionReset,
+      ...fields,
+    }));
+    for (const name of Object.keys(companionReset)) {
+      browsedInputsRef.current.delete(name);
+    }
+    for (const name of Object.keys(fields)) browsedInputsRef.current.delete(name);
+    if (hasInput) browsedInputsRef.current.delete("input");
+    setError(null);
+  };
+
   // Fill a subset tool's `bbox` (and companion `bbox_crs`) from the current map
   // view (GeoLibre#1213). The map reads in EPSG:4326, so the bbox is written as
   // WGS84 `west,south,east,north` and the CRS is set to 4326 in the same gesture
@@ -1773,6 +1832,11 @@ export function ProcessingDialog({
                         : undefined
                     }
                     drawingMapExtent={drawing}
+                    onPopulateFromLayer={
+                      isSubsetUrlParameter(selectedTool, param)
+                        ? handlePopulateSubsetUrl
+                        : undefined
+                    }
                   />
                 ))
               )}
@@ -1890,6 +1954,9 @@ interface ParameterFieldProps {
   onDrawMapExtent?: () => void;
   /** Whether a draw is currently in progress (toggles the button's label/state). */
   drawingMapExtent?: boolean;
+  /** When set, renders a "From layer" picker on this (`url`) field that fills it
+   * (and any companion fields) from a compatible loaded raster layer. */
+  onPopulateFromLayer?: (layer: GeoLibreLayer) => void;
   toolId: string;
   runLocal: boolean;
   value: unknown;
@@ -1903,6 +1970,7 @@ function ParameterField({
   onUseMapExtent,
   onDrawMapExtent,
   drawingMapExtent,
+  onPopulateFromLayer,
   toolId,
   runLocal,
   value,
@@ -1912,6 +1980,11 @@ function ParameterField({
   const availableLayers = layers.filter((layer) =>
     canUseLayerForParameter(layer, param),
   );
+  // Loaded layers that can fill this subset `url` field, only computed for the
+  // url param the dialog wired `onPopulateFromLayer` to.
+  const subsetUrlLayers = onPopulateFromLayer
+    ? layersForSubsetUrl(toolId, layers)
+    : [];
   const label = parameterLabel(param);
   const valueText = value === undefined || value === null ? "" : String(value);
 
@@ -1993,6 +2066,41 @@ function ParameterField({
               {t("processing.whitebox.drawBboxHint")}
             </p>
           ) : null}
+        </div>
+      ) : onPopulateFromLayer && subsetUrlLayers.length > 0 ? (
+        // A subset extractor's `url`, with loaded layers that can supply it: a
+        // "From layer" picker fills the url (and companion fields) from a
+        // COG/WMS/XYZ layer, while the field stays freely typeable. Placed
+        // before the path/data-input branches (like the "Use map extent" one
+        // above) so a `url` description that happens to contain a word
+        // isPathParameter matches (path/file/…) can't shadow this picker into a
+        // local file-browse control.
+        <div className="grid grid-cols-[minmax(150px,200px)_minmax(0,1fr)] gap-2">
+          <Select
+            aria-label={t("processing.whitebox.fromLayer")}
+            value=""
+            onChange={(event) => {
+              const layer = subsetUrlLayers.find(
+                (item) => item.id === event.target.value,
+              );
+              if (layer) onPopulateFromLayer(layer);
+            }}
+          >
+            <option value="">{t("processing.whitebox.fromLayer")}</option>
+            {subsetUrlLayers.map((layer) => (
+              <option key={layer.id} value={layer.id}>
+                {layer.name}
+              </option>
+            ))}
+          </Select>
+          <Input
+            id={`whitebox-${param.name}`}
+            type="text"
+            value={valueText}
+            onChange={(event: ChangeEvent<HTMLInputElement>) =>
+              onChange(event.target.value)
+            }
+          />
         </div>
       ) : isDataInputParameter(param) && availableLayers.length > 0 ? (
         <LayerOrPathInput
