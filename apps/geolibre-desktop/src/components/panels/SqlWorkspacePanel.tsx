@@ -351,12 +351,17 @@ export function SqlWorkspacePanel() {
     editorRef.current?.focus();
   }, []);
 
+  // Mirror of `sql` for the mount-once prefill listener below, so it can read
+  // the in-progress editor text without re-registering on every keystroke.
+  const sqlRef = useRef(sql);
+  useEffect(() => {
+    sqlRef.current = sql;
+  }, [sql]);
+
   // Load a query handed off by a SQL query layer's "Edit query in SQL
   // Workspace" action: consume a parked query on mount (the panel was closed
   // when it was requested) and apply later requests while mounted via the
   // prefill event. Query layers are DuckDB-backed, so the engine follows.
-  // Depends on `sql` (re-registering the listener is cheap) so an in-progress
-  // statement can be preserved before it is overwritten.
   useEffect(() => {
     const applyPending = () => {
       const pending = consumePendingSqlWorkspaceQuery();
@@ -364,7 +369,7 @@ export function SqlWorkspacePanel() {
       // Loading the layer's query replaces the editor content, so park any
       // in-progress statement in History first — the user can recover it from
       // the History dropdown instead of losing it silently.
-      const inProgress = sql.trim();
+      const inProgress = sqlRef.current.trim();
       if (
         inProgress &&
         inProgress !== pending.trim() &&
@@ -383,7 +388,7 @@ export function SqlWorkspacePanel() {
     window.addEventListener(SQL_WORKSPACE_PREFILL_EVENT, applyPending);
     return () =>
       window.removeEventListener(SQL_WORKSPACE_PREFILL_EVENT, applyPending);
-  }, [sql]);
+  }, []);
 
   // Surface the engine error, and when it is a missing-table error append the
   // names the workspace actually exposes so the user can pick a real one (the
