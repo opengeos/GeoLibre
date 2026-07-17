@@ -128,20 +128,52 @@ describe("buildLegend", () => {
   });
 
   it("omits diagram swatches when the point renderer suppresses diagrams", () => {
+    const pointGeojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [0, 0] },
+          properties: { votes_a: 1 },
+        },
+      ],
+    } as GeoJSON.FeatureCollection;
+    const diagramStyle = {
+      vectorStyleMode: "single",
+      fillColor: "#ff0000",
+      pointRenderer: "cluster",
+      diagramType: "pie",
+      diagramFields: [{ property: "votes_a", color: "#111111" }],
+    } as LayerStyle;
     const legend = buildLegend([
-      makeLayer({
-        name: "Stations",
-        style: {
-          vectorStyleMode: "single",
-          fillColor: "#ff0000",
-          pointRenderer: "cluster",
-          diagramType: "pie",
-          diagramFields: [{ property: "votes_a", color: "#111111" }],
-        } as LayerStyle,
-      }),
+      makeLayer({ name: "Stations", geojson: pointGeojson, style: diagramStyle }),
     ]);
     assert.equal(legend[0].swatches.length, 1);
     assert.equal(legend[0].swatches[0].color, "#ff0000");
+
+    // A stale cluster renderer on a layer that is no longer point-only must
+    // not suppress the swatches (mirrors the render gate).
+    const mixedGeojson = {
+      type: "FeatureCollection",
+      features: [
+        ...pointGeojson.features,
+        {
+          type: "Feature",
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0],
+              [1, 1],
+            ],
+          },
+          properties: { votes_a: 2 },
+        },
+      ],
+    } as GeoJSON.FeatureCollection;
+    const mixed = buildLegend([
+      makeLayer({ name: "Mixed", geojson: mixedGeojson, style: diagramStyle }),
+    ]);
+    assert.equal(mixed[0].swatches.length, 2);
   });
 
   it("appends diagram swatches after graduated ramp swatches", () => {

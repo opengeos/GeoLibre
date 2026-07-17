@@ -3,9 +3,9 @@
  * PDF dependencies so it can be unit tested directly.
  */
 import {
+  diagramsSuppressedByPointRenderer,
   styleValue,
   type GeoLibreLayer,
-  type LayerStyle,
   type LayerType,
   type LegendConfig,
   type LegendItemOverride,
@@ -65,7 +65,7 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
       const stops = styleValue(layer.style, "vectorStyleStops");
       // Diagram symbology adds one labeled swatch per charted attribute after
       // the base symbology's swatches, mirroring the QGIS legend.
-      const diagrams = diagramSwatches(layer.style);
+      const diagrams = diagramSwatches(layer);
       if (
         (mode === "graduated" || mode === "categorized") &&
         Array.isArray(stops) &&
@@ -340,19 +340,20 @@ export function legendEditorRows(
 /**
  * Legend swatches for a layer's diagram symbology: one per charted attribute,
  * labeled with the attribute name. Empty when diagrams are off — including
- * when a point layer's renderer is heatmap/cluster, which suppresses diagram
- * rendering (mirrors isDiagramLayer in the deck overlay).
+ * when a point-only layer's heatmap/cluster renderer suppresses diagram
+ * rendering (the shared core helper mirrors isDiagramLayer in the deck
+ * overlay and the Style Panel's visibility gate).
  */
 function diagramSwatches(
-  style: LayerStyle,
+  layer: Pick<GeoLibreLayer, "geojson" | "style">,
 ): { color: string; label: string }[] {
   if (
-    styleValue(style, "diagramType") === "none" ||
-    styleValue(style, "pointRenderer") !== "single"
+    styleValue(layer.style, "diagramType") === "none" ||
+    diagramsSuppressedByPointRenderer(layer.geojson, layer.style)
   ) {
     return [];
   }
-  return styleValue(style, "diagramFields")
+  return styleValue(layer.style, "diagramFields")
     .filter((field) => field.property !== "")
     .map((field) => ({ color: field.color, label: field.property }));
 }

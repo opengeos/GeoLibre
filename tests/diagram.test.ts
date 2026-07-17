@@ -8,6 +8,7 @@ import {
   collectDiagramData,
   diagramAnchor,
   diagramPixelSize,
+  diagramsSuppressedByPointRenderer,
   isDiagramStyleEnabled,
   type LayerStyle,
 } from "../packages/core/src/index";
@@ -53,6 +54,44 @@ describe("isDiagramStyleEnabled", () => {
       isDiagramStyleEnabled(
         style({ diagramFields: [{ property: "", color: "#fff" }] }),
       ),
+      false,
+    );
+  });
+});
+
+describe("diagramsSuppressedByPointRenderer", () => {
+  const lineFeature: Feature = {
+    type: "Feature",
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
+    properties: {},
+  };
+
+  it("suppresses only point-only layers with a non-single renderer", () => {
+    const points = collection([pointFeature({ a: 1 })]);
+    assert.equal(
+      diagramsSuppressedByPointRenderer(points, style({ pointRenderer: "cluster" })),
+      true,
+    );
+    assert.equal(
+      diagramsSuppressedByPointRenderer(points, style({ pointRenderer: "single" })),
+      false,
+    );
+  });
+
+  it("ignores a stale renderer once the layer has non-point geometry", () => {
+    const mixed = collection([pointFeature({ a: 1 }), lineFeature]);
+    assert.equal(
+      diagramsSuppressedByPointRenderer(mixed, style({ pointRenderer: "heatmap" })),
+      false,
+    );
+    assert.equal(
+      diagramsSuppressedByPointRenderer(undefined, style({ pointRenderer: "cluster" })),
       false,
     );
   });
@@ -242,6 +281,17 @@ describe("packDiagramCells", () => {
         assert.equal(overlaps, false);
       }
     }
+  });
+
+  it("honors a lower height bound (device texture limit)", () => {
+    const sizes = Array.from({ length: 100 }, () => ({
+      width: 240,
+      height: 240,
+    }));
+    const { cells, atlasHeight, dropped } = packDiagramCells(sizes, 1024);
+    assert.ok(atlasHeight <= 1024);
+    assert.ok(dropped > 0);
+    assert.equal(cells.length + dropped, 100);
   });
 
   it("drops cells past the atlas height cap instead of growing unbounded", () => {

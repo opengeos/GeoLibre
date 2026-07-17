@@ -14,6 +14,7 @@ import {
   type VectorRule,
   type VectorStyleMode,
   type VectorStyleStop,
+  collectDiagramData,
   createEqualIntervalBreaks,
   createQuantileBreaks,
   geojsonHasZCoordinates,
@@ -1251,6 +1252,20 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
+  // Whether the diagram feature cap actually truncates this layer: derived
+  // from the real drawable-diagram scan (features without an anchor or a
+  // positive value don't consume the cap), not the raw feature count, so the
+  // notice never shows for a large layer whose drawable subset fits. The raw
+  // count pre-check keeps the scan off layers that cannot possibly truncate.
+  // Kept before the early returns below so the hook order stays stable.
+  const diagramTruncated = useMemo(() => {
+    if (!layer?.geojson) return false;
+    if (styleValue(layer.style, "diagramType") === "none") return false;
+    if ((layer.geojson.features?.length ?? 0) <= MAX_DIAGRAM_FEATURES) {
+      return false;
+    }
+    return collectDiagramData(layer.geojson, layer.style).truncated;
+  }, [layer]);
   // Whether the layer's coordinates carry real Z values (e.g. GPX track
   // elevations), which unlocks the "3D (Z values)" visualization mode.
   // Memoized on the geojson reference (not the layer object, which is
@@ -2669,7 +2684,7 @@ export function StylePanel({
             value={styleValue(style, "diagramSize")}
             onChange={(diagramSize) => setLayerStyle(layer.id, { diagramSize })}
           />
-          {(layer.geojson?.features?.length ?? 0) > MAX_DIAGRAM_FEATURES && (
+          {diagramTruncated && (
             <p className="text-xs text-muted-foreground">
               {t("style.diagrams.truncated", { count: MAX_DIAGRAM_FEATURES })}
             </p>

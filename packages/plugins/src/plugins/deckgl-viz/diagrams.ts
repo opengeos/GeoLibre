@@ -2,6 +2,7 @@ import {
   MAX_DIAGRAM_FEATURES,
   collectDiagramData,
   diagramPixelSize,
+  diagramsSuppressedByPointRenderer,
   isDiagramStyleEnabled,
   styleValue,
   type DiagramData,
@@ -55,7 +56,7 @@ export function isDiagramLayer(layer: GeoLibreLayer): boolean {
     !!layer.geojson &&
     layer.type !== "deckgl-viz" &&
     !isDeckVizLayer(layer) &&
-    styleValue(layer.style, "pointRenderer") === "single" &&
+    !diagramsSuppressedByPointRenderer(layer.geojson, layer.style) &&
     isDiagramStyleEnabled(layer.style)
   );
 }
@@ -217,6 +218,7 @@ export interface DiagramCell {
  */
 export function packDiagramCells(
   sizes: ReadonlyArray<{ width: number; height: number }>,
+  maxHeight: number = MAX_ATLAS_HEIGHT,
 ): { cells: DiagramCell[]; atlasHeight: number; dropped: number } {
   const cells: DiagramCell[] = [];
   let cursorX = 0;
@@ -232,7 +234,7 @@ export function packDiagramCells(
       cursorY += rowHeight;
       rowHeight = 0;
     }
-    if (cursorY + cellHeight > MAX_ATLAS_HEIGHT) {
+    if (cursorY + cellHeight > maxHeight) {
       dropped = sizes.length - i;
       break;
     }
@@ -241,6 +243,30 @@ export function packDiagramCells(
     if (cellHeight > rowHeight) rowHeight = cellHeight;
   }
   return { cells, atlasHeight: cursorY + rowHeight, dropped };
+}
+
+// The device's maximum texture dimension, probed once from a throwaway WebGL
+// context (the same GPU the shared deck overlay renders with). The atlas is
+// uploaded as a texture, so packing past this limit would silently fail to
+// render on lower-end devices where MAX_ATLAS_HEIGHT is not supported.
+let cachedMaxTextureSize: number | null = null;
+function deviceMaxTextureSize(): number {
+  if (cachedMaxTextureSize !== null) return cachedMaxTextureSize;
+  // Conservative floor supported by effectively every WebGL device.
+  let size = 4096;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2") ?? canvas.getContext("webgl");
+    if (gl) {
+      const reported = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+      if (typeof reported === "number" && reported > 0) size = reported;
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
+    }
+  } catch {
+    // Keep the floor.
+  }
+  cachedMaxTextureSize = size;
+  return size;
 }
 
 /**
@@ -272,6 +298,7 @@ function buildAtlas(
           : size;
       return { width, height: size };
     }),
+    Math.min(MAX_ATLAS_HEIGHT, deviceMaxTextureSize()),
   );
   if (cells.length === 0) return null;
   if (diagramData.truncated) {

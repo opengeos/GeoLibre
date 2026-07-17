@@ -62,6 +62,34 @@ export function isDiagramStyleEnabled(style: LayerStyle): boolean {
   );
 }
 
+/**
+ * Whether a heatmap/cluster point renderer suppresses the layer's diagrams.
+ * The point renderer only applies (and is only user-editable) on point-only
+ * layers, so a stale `pointRenderer` value on a layer that has since gained
+ * non-point geometry must not block diagrams — this mirrors the Style Panel's
+ * own `!supportsPointRenderer || pointRenderer === "single"` visibility gate,
+ * keeping the render and legend gates consistent with what the panel lets the
+ * user configure. The geometry scan samples up to 2000 features, matching the
+ * panel's other geometry probes.
+ *
+ * @param geojson - The layer's feature collection (undefined suppresses nothing).
+ * @param style - The layer style carrying `pointRenderer`.
+ */
+export function diagramsSuppressedByPointRenderer(
+  geojson: FeatureCollection | undefined,
+  style: LayerStyle,
+): boolean {
+  if (styleValue(style, "pointRenderer") === "single") return false;
+  const features = geojson?.features ?? [];
+  if (features.length === 0) return false;
+  const limit = Math.min(features.length, 2000);
+  for (let i = 0; i < limit; i += 1) {
+    const type = features[i]?.geometry?.type;
+    if (type !== "Point" && type !== "MultiPoint") return false;
+  }
+  return true;
+}
+
 /** Shoelace area of a linear ring (planar, in degree space; sign = winding). */
 function ringArea(ring: Position[]): number {
   let area = 0;
