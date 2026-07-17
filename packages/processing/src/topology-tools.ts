@@ -515,12 +515,15 @@ export const FIXABLE_TOPOLOGY_RULES = [
   },
 ] as const;
 
-/** Change report emitted by `topology_rule_autofix` (--change_report). */
+/**
+ * The subset of `topology_rule_autofix`'s change report (--change_report)
+ * this tool consumes; the wire shape carries more fields (dry_run,
+ * action_type, target_fid, state hashes) that the UI does not surface.
+ */
 interface TopologyChangeReport {
-  dry_run?: boolean;
   total_changes?: number;
   changes_by_rule?: Record<string, number>;
-  change_log?: { action_type?: string; target_fid?: number; detail?: string }[];
+  change_log?: { detail?: string }[];
 }
 
 /** Fixable rule ids selected by the tool's boolean parameters. Exported for tests. */
