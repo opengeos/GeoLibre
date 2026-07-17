@@ -308,4 +308,25 @@ describe("right-panel registry", () => {
     current = "Second";
     assert.equal(getRightPanel("workbench")?.title, "Second");
   });
+
+  it("listRightPanels resolves titles to strings and does not leak getters", () => {
+    // getRightPanel resolves titles; listRightPanels must mirror it so every
+    // `.title` in the returned list is a string, not a getter function.
+    let current = "Workbench (en)";
+    registerRightPanel(testPanel({ title: () => current }));
+
+    const listed = listRightPanels();
+    assert.equal(listed.length, 1);
+    assert.equal(typeof listed[0].title, "string");
+    assert.equal(listed[0].title, "Workbench (en)");
+
+    // Resolving must be live and must not mutate the original registration.
+    current = "Workbench (zh)";
+    assert.equal(listRightPanels()[0].title, "Workbench (zh)");
+
+    // Multiple panels all resolve, including plain-string titles.
+    registerRightPanel(testPanel({ id: "extra", title: "Extra" }));
+    const byId = Object.fromEntries(listRightPanels().map((p) => [p.id, p.title]));
+    assert.deepEqual(byId, { workbench: "Workbench (zh)", extra: "Extra" });
+  });
 });

@@ -296,25 +296,37 @@ export function isRightPanelCollapsed(): boolean {
   return collapsed;
 }
 
+/**
+ * Build a shallow clone of a panel with its title resolved to a string, so the
+ * caller's original registration object is never mutated (its title may be a
+ * getter function that must survive re-registration for i18n reactivity).
+ * Shared by both accessors below so `getRightPanel` and `listRightPanels` stay
+ * symmetric: every `.title` they expose is already a string, never a getter.
+ */
+function resolvePanelTitle(
+  panel: GeoLibreRightPanelRegistration,
+): GeoLibreRightPanelRegistration & { title: string } {
+  const resolve = titleResolvers.get(panel.id);
+  const resolved = resolve ? resolve() : String(panel.title);
+  return { ...panel, title: resolved } as GeoLibreRightPanelRegistration & { title: string };
+}
+
 /** Look up a registered right panel by id. Title is always resolved to a string. */
 export function getRightPanel(
   id: string,
 ): (GeoLibreRightPanelRegistration & { title: string }) | undefined {
   const panel = registry.get(id);
   if (!panel) return undefined;
-  const resolve = titleResolvers.get(id);
-  // Return a shallow clone with the resolved title so the caller's original
-  // registration object is never mutated (its title may be a getter function
-  // that must survive re-registration for i18n reactivity). Consumers that
-  // need stable object identity for effect dependencies should key on
-  // panel.render rather than the panel object itself.
-  const resolved = resolve ? resolve() : String(panel.title);
-  return { ...panel, title: resolved } as GeoLibreRightPanelRegistration & { title: string };
+  return resolvePanelTitle(panel);
 }
 
-/** All registered right panels, in registration order. */
-export function listRightPanels(): GeoLibreRightPanelRegistration[] {
-  return [...registry.values()];
+/**
+ * All registered right panels, in registration order. Each entry is a shallow
+ * clone with its title resolved to a string, mirroring {@link getRightPanel}
+ * so consumers can read `.title` directly without unwrapping a getter.
+ */
+export function listRightPanels(): (GeoLibreRightPanelRegistration & { title: string })[] {
+  return [...registry.values()].map(resolvePanelTitle);
 }
 
 /** Current reactive snapshot for `useSyncExternalStore`. */
