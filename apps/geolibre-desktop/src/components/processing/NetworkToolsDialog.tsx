@@ -105,7 +105,7 @@ export function NetworkToolsDialog({
     if (!getNetworkTool(rerun.toolId)) {
       setLog((prev) => [
         ...prev,
-        `Error: tool "${rerun.toolId}" is no longer available`,
+        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
       ]);
       setProcessingRerun(null);
       return;
@@ -114,17 +114,23 @@ export function NetworkToolsDialog({
     setParams({ ...rerun.parameters });
     setProcessingRerun(null);
     if (rerun.autoRun) setAutoRunPending(true);
-  }, [open, rerun, tool, setProcessingRerun]);
+  }, [open, rerun, tool, setProcessingRerun, t]);
 
   // Keep the newest log lines in view as they stream in.
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [log]);
 
-  const appendLog = useCallback(
-    (message: string) => setLog((prev) => [...prev, message]),
-    [],
-  );
+  // Client tools report validation failures via ctx.log("Error: ...") plus a
+  // plain return rather than throwing; capture the last such line so the run
+  // is recorded as failed in the Processing History (#1292). Reset per run.
+  const softErrorRef = useRef<string | null>(null);
+  const appendLog = useCallback((message: string) => {
+    if (message.startsWith("Error:")) {
+      softErrorRef.current = message.slice("Error:".length).trim();
+    }
+    setLog((prev) => [...prev, message]);
+  }, []);
 
   const layerOptions = useCallback(
     (filter?: GeometryFamily[]) =>
@@ -208,6 +214,7 @@ export function NetworkToolsDialog({
 
   const handleRun = useCallback(async () => {
     setLog([]);
+    softErrorRef.current = null;
     for (const param of tool.parameters) {
       if (!param.required) continue;
       const value = params[param.id];
@@ -246,7 +253,10 @@ export function NetworkToolsDialog({
         signal: controller.signal,
       };
       await tool.run(ctx);
-      tracker.finish("success");
+      // A logged "Error: ..." line marks a soft failure (the client tools
+      // bail out without throwing); don't record those as successes.
+      if (softErrorRef.current) tracker.finish("error", softErrorRef.current);
+      else tracker.finish("success");
     } catch (error) {
       // A user-initiated cancel (closing the dialog or starting a new run)
       // rejects with an AbortError; that is not a failed run, so don't log it

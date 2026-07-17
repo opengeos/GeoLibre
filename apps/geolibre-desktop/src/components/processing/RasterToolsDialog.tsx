@@ -232,14 +232,16 @@ export function RasterToolsDialog({
     // A saved-project history entry can reference a tool that was renamed or
     // removed since; drop the request instead of leaving it pending forever.
     if (!getRasterTool(rerun.toolId)) {
-      setError(`Tool "${rerun.toolId}" is no longer available.`);
+      setError(
+        t("processing.history.toolUnavailable", { toolId: rerun.toolId }),
+      );
       setProcessingRerun(null);
       return;
     }
     if (rerun.toolId !== tool.id) return;
     setParams({ ...toolDefaults(tool), ...rerun.parameters });
     setProcessingRerun(null);
-  }, [open, rerun, tool, setProcessingRerun]);
+  }, [open, rerun, tool, setProcessingRerun, t]);
 
   // Probe the runtime only when the dialog opens, not on every tool switch
   // (each probe spawns a sidecar subprocess import check).

@@ -44,6 +44,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 interface VectorToolsDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -69,6 +70,7 @@ function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
 export function VectorToolsDialog({
   mapControllerRef,
 }: VectorToolsDialogProps): ReactElement {
+  const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.vectorToolOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const layers = useAppStore((s) => s.layers);
@@ -129,7 +131,7 @@ export function VectorToolsDialog({
     if (!getVectorTool(rerun.toolId)) {
       setLog((prev) => [
         ...prev,
-        `Error: tool "${rerun.toolId}" is no longer available`,
+        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
       ]);
       setProcessingRerun(null);
       return;
@@ -145,7 +147,7 @@ export function VectorToolsDialog({
     }
     setProcessingRerun(null);
     if (rerun.autoRun) setAutoRunPending(true);
-  }, [open, rerun, tool, setProcessingRerun]);
+  }, [open, rerun, tool, setProcessingRerun, t]);
 
   // Prefill the H3 grid's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
@@ -197,10 +199,16 @@ export function VectorToolsDialog({
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [log]);
 
-  const appendLog = useCallback(
-    (message: string) => setLog((prev) => [...prev, message]),
-    [],
-  );
+  // Client tools report validation failures via ctx.log("Error: ...") plus a
+  // plain return rather than throwing; capture the last such line so the run
+  // is recorded as failed in the Processing History (#1292). Reset per run.
+  const softErrorRef = useRef<string | null>(null);
+  const appendLog = useCallback((message: string) => {
+    if (message.startsWith("Error:")) {
+      softErrorRef.current = message.slice("Error:".length).trim();
+    }
+    setLog((prev) => [...prev, message]);
+  }, []);
 
   const layerOptions = useCallback(
     (filter?: GeometryFamily[]) =>
@@ -352,6 +360,7 @@ export function VectorToolsDialog({
 
   const handleRun = useCallback(async () => {
     setLog([]);
+    softErrorRef.current = null;
     // Validate required parameters before doing any work.
     for (const param of tool.parameters) {
       if (!param.required || !isParamVisible(param)) continue;
@@ -414,7 +423,10 @@ export function VectorToolsDialog({
         };
         await tool.run(ctx);
       }
-      if (failure) tracker.finish("error", failure);
+      // A logged "Error: ..." line marks a soft failure (the client tools
+      // bail out without throwing); don't record those as successes.
+      const softError = failure ?? softErrorRef.current;
+      if (softError) tracker.finish("error", softError);
       else tracker.finish("success");
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);

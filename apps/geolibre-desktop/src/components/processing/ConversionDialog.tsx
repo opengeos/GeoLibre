@@ -1491,7 +1491,13 @@ export function ConversionDialog() {
         // raster-to-pmtiles is the only remaining kind and has no sidecar
         // endpoint; conversionUsesBrowserRuntime always routes it to the WASM
         // path above, so reaching here means those two have drifted apart.
-        setError(i18n.t("toolbar.conversion.noSidecarConversion", { kind }));
+        const message = i18n.t("toolbar.conversion.noSidecarConversion", {
+          kind,
+        });
+        // No job will ever settle this dispatch, so finish the tracker here
+        // rather than stranding it in the pending slot.
+        pendingTrackerRef.current?.finish("error", message);
+        setError(message);
       }
     } catch (err) {
       const message =

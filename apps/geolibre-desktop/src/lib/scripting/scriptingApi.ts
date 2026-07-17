@@ -213,6 +213,10 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         engine: "client",
         parameters: (params.params as Record<string, unknown>) ?? {},
       });
+      // Registry tools report validation failures via ctx.log("Error: ...")
+      // plus a plain return rather than throwing; capture the last such line
+      // so the run is recorded as failed in the Processing History.
+      let softError: string | null = null;
       // Everything after beginProcessingRun runs inside one try so setup
       // failures (the lazy import, DuckDB capability) are recorded too.
       try {
@@ -223,7 +227,12 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         const ctx: ProcessingContext = {
           layers: useAppStore.getState().layers,
           parameters: (params.params as Record<string, unknown>) ?? {},
-          log: (message) => logs.push(message),
+          log: (message) => {
+            if (message.startsWith("Error:")) {
+              softError = message.slice("Error:".length).trim();
+            }
+            logs.push(message);
+          },
           fitBounds: (bounds) => getController()?.fitBounds(bounds),
           addResultLayer: (name: string, fc: FeatureCollection) => {
             if (!fc.features.length) {
@@ -254,7 +263,8 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         );
         throw error;
       }
-      tracker.finish("success");
+      if (softError) tracker.finish("error", softError);
+      else tracker.finish("success");
       return { logs, resultLayerIds };
     },
 

@@ -1070,7 +1070,7 @@ export function ProcessingDialog({
           // Whitebox catalog no longer ships (e.g. after a geolibre-wasm
           // rename); drop the request instead of leaving it pending forever.
           setError(
-            `Tool "${rerun.toolId}" is no longer in the Whitebox catalog.`,
+            t("processing.history.toolUnavailable", { toolId: rerun.toolId }),
           );
           setProcessingRerun(null);
         }
@@ -1082,7 +1082,7 @@ export function ProcessingDialog({
       ...(rerun.parameters as ParameterValues),
     });
     setProcessingRerun(null);
-  }, [open, rerun, selectedTool, loadingTools, tools, setProcessingRerun]);
+  }, [open, rerun, selectedTool, loadingTools, tools, setProcessingRerun, t]);
 
   useEffect(() => {
     if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;
