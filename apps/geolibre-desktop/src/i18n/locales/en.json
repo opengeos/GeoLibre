@@ -727,6 +727,7 @@
       "bottom-center": "Bottom center",
       "bottom-right": "Bottom right"
     },
+    "includeHtmlPanel": "Include HTML panel in video",
     "record": "Record",
     "stop": "Stop",
     "savingStatus": "Saving video…",

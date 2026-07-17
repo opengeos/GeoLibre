@@ -23,10 +23,16 @@ import { isFullViewportMapCanvas } from "./print-capture";
  * WebGL canvas can neither crop nor pick up the deck.gl layer.
  *
  * An optional title/source **caption** ({@link CaptionOptions}) is drawn on top
- * of the composited map with the 2D text API. DOM overlays (the HTML control,
- * legends, the record panel) cannot be captured because they live outside the
- * canvas, but a caption drawn straight onto the offscreen canvas records fine
- * and keeps it origin-clean — letting the user annotate the video itself.
+ * of the composited map with the 2D text API — always origin-clean because it is
+ * painted straight onto the offscreen canvas, needing no DOM rasterization.
+ *
+ * On-map **DOM overlays** (the HTML control panel, {@link RecordMapOptions.htmlOverlays})
+ * live outside the WebGL canvas, so they are rasterized once at record start with
+ * html2canvas-pro ({@link rasterizeHtmlOverlays}) and the resulting canvas is
+ * composited into every frame at the overlay's live on-screen position
+ * ({@link overlayOutputRect}). Only origin-clean rasters are kept, so the
+ * recording canvas stays recordable; a panel tainted by a cross-origin image is
+ * dropped rather than failing the take.
  */
 
 /**
@@ -410,6 +416,106 @@ export function drawCaptionOverlay(
   ctx.restore();
 }
 
+/**
+ * A DOM overlay rasterized to an origin-clean canvas, kept alongside its live
+ * element so the compositor can re-measure its on-screen position every frame
+ * (the raster is captured once; the map may resize under it).
+ */
+export interface RasterOverlay {
+  /** The live overlay element, re-measured each frame for its current position. */
+  el: HTMLElement;
+  /** The element rasterized to a canvas at record start (content is static). */
+  raster: HTMLCanvasElement;
+}
+
+/** A DOM overlay's CSS-pixel rectangle, measured from the base canvas top-left. */
+export interface OverlayCssRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Map a DOM overlay's CSS-pixel rectangle (measured from the base canvas's
+ * top-left) into the recording's output space, given the frame's device-pixel
+ * source rect. The overlay's device rectangle is remapped from the captured crop
+ * (`frame.sx..frame.sx+frame.sw`) onto the output frame (`0..outW`), so it lands
+ * where it sits on screen in both whole-map and selected-area recordings.
+ *
+ * Returns null when the overlay is degenerate or falls entirely outside the
+ * captured region (e.g. a corner panel outside a selected area), so the
+ * compositor can skip it; a partial overlap is returned and the canvas clips the
+ * rest. Pure, so the placement math is unit tested without a canvas.
+ *
+ * @param overlay - Overlay rectangle in CSS pixels, relative to the base canvas.
+ * @param scale - Device pixels per CSS pixel (base drawing-buffer / layout width).
+ * @param frame - The frame's device-pixel source rect and even output size.
+ * @param outW - Output frame width in device pixels.
+ * @param outH - Output frame height in device pixels.
+ */
+export function overlayOutputRect(
+  overlay: OverlayCssRect,
+  scale: number,
+  frame: CaptureRect,
+  outW: number,
+  outH: number,
+): { dx: number; dy: number; dw: number; dh: number } | null {
+  if (overlay.width <= 0 || overlay.height <= 0) return null;
+  if (frame.sw <= 0 || frame.sh <= 0) return null;
+  const kx = outW / frame.sw;
+  const ky = outH / frame.sh;
+  const dx = (overlay.left * scale - frame.sx) * kx;
+  const dy = (overlay.top * scale - frame.sy) * ky;
+  const dw = overlay.width * scale * kx;
+  const dh = overlay.height * scale * ky;
+  if (dx + dw <= 0 || dy + dh <= 0 || dx >= outW || dy >= outH) return null;
+  return { dx, dy, dw, dh };
+}
+
+/**
+ * Rasterize on-map DOM overlays (the HTML control panel) to canvases with
+ * html2canvas-pro so they can be composited into the recording. The DOM lives
+ * outside the WebGL canvas, so this is the only way to get it into the video,
+ * and the library is loaded lazily so it only ships when the user opts in.
+ *
+ * Each raster is checked for origin-cleanness (`getImageData`): html2canvas-pro
+ * paints text and CSS onto a clean canvas, but a cross-origin image in the
+ * panel's HTML would taint it, and compositing a tainted source would break
+ * `captureStream` for the whole take. A tainted or un-rasterizable overlay is
+ * dropped (the recording proceeds without it) rather than failing the recording.
+ */
+export async function rasterizeHtmlOverlays(
+  elements: readonly HTMLElement[],
+  scale: number,
+): Promise<RasterOverlay[]> {
+  if (elements.length === 0) return [];
+  const { default: html2canvas } = await import("html2canvas-pro");
+  const overlays: RasterOverlay[] = [];
+  for (const el of elements) {
+    if (!el.isConnected || el.offsetWidth === 0 || el.offsetHeight === 0) {
+      continue;
+    }
+    try {
+      const raster = await html2canvas(el, {
+        backgroundColor: null,
+        scale,
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+      });
+      // A cross-origin image in the panel taints the raster; reading one pixel
+      // throws SecurityError, so we drop it here rather than poisoning the
+      // recording canvas (which would silently kill captureStream).
+      raster.getContext("2d")?.getImageData(0, 0, 1, 1);
+      overlays.push({ el, raster });
+    } catch (err) {
+      console.warn("Skipping an un-recordable HTML overlay", err);
+    }
+  }
+  return overlays;
+}
+
 export interface RecordMapOptions {
   map: MapLibreMap;
   /** Screen rectangle to capture, or null/omitted for the whole viewport. */
@@ -419,6 +525,14 @@ export interface RecordMapOptions {
    * Snapshotted at the start of the recording (see {@link recordMapCanvas}).
    */
   caption?: CaptionOptions | null;
+  /**
+   * On-map DOM overlays (the HTML control panel) to burn into the recording.
+   * They live outside the WebGL canvas, so each is rasterized to an origin-clean
+   * canvas with html2canvas-pro at record start and composited every frame at
+   * its live on-screen position (see {@link recordMapCanvas}). Null/omitted keeps
+   * the video canvas-only.
+   */
+  htmlOverlays?: HTMLElement[] | null;
   /** Frames per second sampled from the canvas. */
   fps: number;
   /**
@@ -454,6 +568,7 @@ export async function recordMapCanvas({
   map,
   region,
   caption,
+  htmlOverlays,
   fps,
   signal,
   onElapsed,
@@ -479,6 +594,15 @@ export async function recordMapCanvas({
   if (!rect) {
     throw new Error("The recording area is empty or the map is not ready.");
   }
+
+  // Rasterize any opted-in DOM overlays (the HTML panel) up front, before the
+  // recorder starts, so the async html2canvas-pro pass never stalls a frame. The
+  // rasters are origin-clean (checked inside), so compositing them each frame
+  // keeps the recording canvas recordable.
+  const deviceScale = cssWidth > 0 ? base.width / cssWidth : 1;
+  const overlays = htmlOverlays?.length
+    ? await rasterizeHtmlOverlays(htmlOverlays, deviceScale)
+    : [];
 
   // Fixed-size offscreen canvas: MediaRecorder does not tolerate a mid-stream
   // resize, so the output dimensions are locked here from the initial rect even
@@ -583,6 +707,38 @@ export async function recordMapCanvas({
           }
         }
       });
+      // Composite the rasterized DOM overlays (the HTML panel) on top of the
+      // map, re-measuring each one's live on-screen position so it tracks the
+      // map as the viewport resizes. The rasters were checked origin-clean at
+      // record start, so this keeps captureStream alive where compositing the
+      // live DOM never could.
+      if (overlays.length > 0) {
+        const baseRect = base.getBoundingClientRect();
+        const overlayScale = liveCssWidth > 0 ? base.width / liveCssWidth : 1;
+        for (const { el, raster } of overlays) {
+          if (!el.isConnected) continue;
+          const r = el.getBoundingClientRect();
+          const placed = overlayOutputRect(
+            {
+              left: r.left - baseRect.left,
+              top: r.top - baseRect.top,
+              width: r.width,
+              height: r.height,
+            },
+            overlayScale,
+            frameRect,
+            out.width,
+            out.height,
+          );
+          if (!placed) continue;
+          try {
+            ctx.drawImage(raster, placed.dx, placed.dy, placed.dw, placed.dh);
+          } catch {
+            // An overlay raster that somehow became unreadable is only cosmetic;
+            // keep the map frame rather than aborting the capture.
+          }
+        }
+      }
       // Draw the title/source caption on top of the composited map, in output
       // space. Text drawn with the 2D API keeps the canvas origin-clean, so the
       // caption records fine where a rasterized DOM overlay would taint it.

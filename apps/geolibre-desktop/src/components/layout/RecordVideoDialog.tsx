@@ -43,6 +43,12 @@ type Status = "idle" | "recording" | "ready" | "saving";
 type Mode = "whole" | "region";
 
 const DEFAULT_FILE_NAME = "map-recording";
+// The on-map HTML display panel(s) added via the Components plugin's HTML
+// control. This is the info box shown over the map (upstream class
+// `maplibre-gl-html-control`), NOT the `geolibre-html-control` authoring GUI —
+// we burn the rendered info in, not the editor chrome. Mirrors the class from
+// maplibre-gl-components; re-check it when that package is bumped.
+const HTML_PANEL_SELECTOR = ".maplibre-gl-html-control";
 // Hoisted so the save path doesn't recompile it on every call (and to satisfy
 // the e18e/prefer-static-regex lint rule).
 const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
@@ -99,6 +105,11 @@ export function RecordVideoDialog({
   const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
     DEFAULT_CAPTION_POSITION,
   );
+  // Burn the on-map HTML control panel into the video (it is DOM, so it is
+  // rasterized and composited rather than captured from the canvas). Offered
+  // only when such a panel is on the map (detected when the dialog opens).
+  const [includeHtmlPanel, setIncludeHtmlPanel] = useState(false);
+  const [htmlPanelAvailable, setHtmlPanelAvailable] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -210,11 +221,21 @@ export function RecordVideoDialog({
       caption: captionText,
       position: captionPosition,
     };
+    // Collect the on-map HTML panel(s) to burn in, if the user opted in.
+    const htmlOverlays =
+      includeHtmlPanel && htmlPanelAvailable
+        ? Array.from(
+            map
+              .getContainer()
+              .querySelectorAll<HTMLElement>(HTML_PANEL_SELECTOR),
+          )
+        : null;
     try {
       const rec = await recordMapCanvas({
         map,
         region: mode === "region" ? region : null,
         caption: hasCaptionText(captionOptions) ? captionOptions : null,
+        htmlOverlays,
         fps,
         signal: controller.signal,
         onElapsed: setElapsed,
@@ -252,6 +273,17 @@ export function RecordVideoDialog({
     if (!open) abortRef.current?.abort();
     return () => abortRef.current?.abort();
   }, [open]);
+
+  // Offer the "include HTML panel" option only when such a panel is actually on
+  // the map. Re-checked each time the dialog opens (the panel can be toggled on
+  // or off from the toolbar between recordings).
+  useEffect(() => {
+    if (!open) return;
+    const container = mapControllerRef.current?.getMap()?.getContainer();
+    const present = Boolean(container?.querySelector(HTML_PANEL_SELECTOR));
+    setHtmlPanelAvailable(present);
+    if (!present) setIncludeHtmlPanel(false);
+  }, [open, mapControllerRef]);
 
   const handleSave = async () => {
     if (!pendingRec || savingRef.current) return;
@@ -482,6 +514,21 @@ export function RecordVideoDialog({
               </Select>
             )}
           </div>
+
+          {/* Burn the on-map HTML control panel into the video. Shown only when
+              such a panel exists; unlike the map canvas, the panel is DOM, so it
+              is rasterized and composited into every frame. */}
+          {htmlPanelAvailable && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                disabled={editingFrozen}
+                checked={includeHtmlPanel}
+                onChange={(e) => setIncludeHtmlPanel(e.target.checked)}
+              />
+              {t("recordVideo.includeHtmlPanel")}
+            </label>
+          )}
 
           {/* Record / Stop, then the save step. */}
           {status === "recording" ? (
