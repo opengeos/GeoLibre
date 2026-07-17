@@ -213,39 +213,45 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
         engine: "client",
         parameters: (params.params as Record<string, unknown>) ?? {},
       });
-      // duckdb-wasm is browser-only and heavy; import it only when an algorithm
-      // actually runs (also keeps this module importable in plain Node tests).
-      const { createDuckDbCapability } = await import("../duckdb-processing");
-      const ctx: ProcessingContext = {
-        layers: useAppStore.getState().layers,
-        parameters: (params.params as Record<string, unknown>) ?? {},
-        log: (message) => logs.push(message),
-        fitBounds: (bounds) => getController()?.fitBounds(bounds),
-        addResultLayer: (name: string, fc: FeatureCollection) => {
-          if (!fc.features.length) {
-            logs.push(`No features produced for "${name}"`);
-            return;
-          }
-          const layerId = useAppStore.getState().addGeoJsonLayer(name, fc);
-          tracker.addOutputLayer(name);
-          resultLayerIds.push(layerId);
-          const layer = useAppStore
-            .getState()
-            .layers.find((item) => item.id === layerId);
-          if (layer) getController()?.fitLayer(layer);
-        },
-        duckdb: createDuckDbCapability(),
-        viewportBounds: () => {
-          const map = getController()?.getMap();
-          if (!map) return null;
-          const b = map.getBounds();
-          return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-        },
-      };
+      // Everything after beginProcessingRun runs inside one try so setup
+      // failures (the lazy import, DuckDB capability) are recorded too.
       try {
+        // duckdb-wasm is browser-only and heavy; import it only when an
+        // algorithm actually runs (also keeps this module importable in plain
+        // Node tests).
+        const { createDuckDbCapability } = await import("../duckdb-processing");
+        const ctx: ProcessingContext = {
+          layers: useAppStore.getState().layers,
+          parameters: (params.params as Record<string, unknown>) ?? {},
+          log: (message) => logs.push(message),
+          fitBounds: (bounds) => getController()?.fitBounds(bounds),
+          addResultLayer: (name: string, fc: FeatureCollection) => {
+            if (!fc.features.length) {
+              logs.push(`No features produced for "${name}"`);
+              return;
+            }
+            const layerId = useAppStore.getState().addGeoJsonLayer(name, fc);
+            tracker.addOutputLayer(name);
+            resultLayerIds.push(layerId);
+            const layer = useAppStore
+              .getState()
+              .layers.find((item) => item.id === layerId);
+            if (layer) getController()?.fitLayer(layer);
+          },
+          duckdb: createDuckDbCapability(),
+          viewportBounds: () => {
+            const map = getController()?.getMap();
+            if (!map) return null;
+            const b = map.getBounds();
+            return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+          },
+        };
         await algo.run(ctx);
       } catch (error) {
-        tracker.finish("error", (error as Error).message);
+        tracker.finish(
+          "error",
+          error instanceof Error ? error.message : String(error),
+        );
         throw error;
       }
       tracker.finish("success");

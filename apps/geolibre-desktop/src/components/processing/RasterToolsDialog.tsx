@@ -602,6 +602,9 @@ export function RasterToolsDialog({
           ...prev,
           t("toolbar.rasterTool.mapAddFailed", { message: mapMessage }),
         ]);
+        // The compute succeeded but the result never made it onto the map, so
+        // record the run as failed rather than a green no-output "success".
+        tracker.finish("error", mapMessage);
       }
       tracker.finish("success");
     } catch (err) {

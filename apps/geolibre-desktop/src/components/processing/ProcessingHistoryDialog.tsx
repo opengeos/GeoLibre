@@ -115,15 +115,34 @@ export function ProcessingHistoryDialog(): ReactElement {
   // Newest first for display; the store keeps runs oldest first.
   const entries = useMemo(() => [...history].reverse(), [history]);
 
-  // Transient "Copied" feedback per entry+action, reset shortly after.
+  // Transient "Copied" feedback per entry+action, reset shortly after. Only
+  // shown once a copy actually succeeded.
   const [copied, setCopied] = useState<string | null>(null);
   const copyTimerRef = useRef<number | null>(null);
-  const copyText = useCallback((key: string, text: string) => {
-    void navigator.clipboard?.writeText(text).then(() => {
-      setCopied(key);
-      if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
-      copyTimerRef.current = window.setTimeout(() => setCopied(null), 1500);
-    });
+  const copyText = useCallback(async (key: string, text: string) => {
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      // Clipboard access can be denied (insecure context, permissions). Fall
+      // back to a transient textarea + execCommand, like MapContextMenu.
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        ok = document.execCommand("copy");
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+    if (!ok) return;
+    setCopied(key);
+    if (copyTimerRef.current) window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => setCopied(null), 1500);
   }, []);
 
   // Route a re-run to the dialog family that recorded the run: queue the
@@ -274,7 +293,7 @@ export function ProcessingHistoryDialog(): ReactElement {
                         className="h-7 gap-1 px-2 text-xs"
                         title={t("processing.history.copyJson")}
                         onClick={() =>
-                          copyText(
+                          void copyText(
                             `${run.id}:json`,
                             JSON.stringify(
                               {
@@ -300,7 +319,7 @@ export function ProcessingHistoryDialog(): ReactElement {
                           className="h-7 gap-1 px-2 text-xs"
                           title={t("processing.history.copyPython")}
                           onClick={() =>
-                            copyText(`${run.id}:py`, pythonSnippet(run))
+                            void copyText(`${run.id}:py`, pythonSnippet(run))
                           }
                         >
                           <FileCode2 className="h-3.5 w-3.5" />

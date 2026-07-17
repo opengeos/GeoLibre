@@ -238,6 +238,10 @@ export function NetworkToolsDialog({
       await tool.run(ctx);
       tracker.finish("success");
     } catch (error) {
+      // A user-initiated cancel (closing the dialog or starting a new run)
+      // rejects with an AbortError; that is not a failed run, so don't log it
+      // or record it in the Processing History.
+      if (controller.signal.aborted) return;
       appendLog(`Error: ${(error as Error).message}`);
       tracker.finish("error", (error as Error).message);
     } finally {

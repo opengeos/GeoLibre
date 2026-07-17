@@ -176,7 +176,8 @@ describe("normalizeProcessingHistory", () => {
     const sparse = runs?.[1];
     assert.equal(sparse?.toolName, "centroids");
     assert.deepEqual(sparse?.parameters, {});
-    assert.equal(sparse?.status, "success");
+    // An unknown/missing status must not present as a green "success".
+    assert.equal(sparse?.status, "error");
     assert.equal(sparse?.durationMs, undefined);
   });
 

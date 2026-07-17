@@ -584,8 +584,10 @@ export function ConversionDialog() {
   const [job, setJob] = useState<ConversionJob | null>(null);
   // History tracker for the conversion dispatched last (#1292). Sidecar and
   // browser runs both settle through `job`, so one pending slot suffices;
-  // `finish` is idempotent.
+  // `finish` is idempotent. Overlapping dispatches (which would cross-wire
+  // trackers) are prevented by the synchronous guard in runConversion.
   const pendingTrackerRef = useRef<ProcessingRunTracker | null>(null);
+  const dispatchGuardRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
@@ -1323,6 +1325,20 @@ export function ConversionDialog() {
   };
 
   const runConversion = async () => {
+    // Serialize dispatches. `running` derives from job state, which is not yet
+    // set while the initial sidecar request is in flight, so rapid clicks
+    // could otherwise dispatch overlapping jobs and cross-wire their history
+    // trackers (#1292 review).
+    if (dispatchGuardRef.current) return;
+    dispatchGuardRef.current = true;
+    try {
+      await dispatchConversion();
+    } finally {
+      dispatchGuardRef.current = false;
+    }
+  };
+
+  const dispatchConversion = async () => {
     if (!kind) return;
     setError(null);
     // Track the run for the Processing History panel (#1292). Only the
@@ -1334,7 +1350,9 @@ export function ConversionDialog() {
       {
         kind: "conversion",
         toolId: kind,
-        toolName: TOOL_CONFIGS[kind].title,
+        toolName: TOOL_CONFIGS[kind].titleKey
+          ? t(TOOL_CONFIGS[kind].titleKey)
+          : TOOL_CONFIGS[kind].title,
         engine: usesBrowserRuntime ? "browser" : "sidecar",
         parameters: {
           ...(compression ? { compression } : {}),

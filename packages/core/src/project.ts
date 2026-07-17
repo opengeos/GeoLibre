@@ -534,7 +534,10 @@ export function normalizeProcessingHistory(
       ...(Number.isFinite(candidate.durationMs)
         ? { durationMs: Math.max(0, Number(candidate.durationMs)) }
         : {}),
-      status: candidate.status === "error" ? "error" : "success",
+      // Only an explicit "success" earns the green checkmark; a missing or
+      // corrupted status from hand-edited JSON degrades to "error" rather than
+      // presenting an indeterminate run as having succeeded.
+      status: candidate.status === "success" ? "success" : "error",
       ...(normalizeString(candidate.error)
         ? { error: normalizeString(candidate.error) }
         : {}),
