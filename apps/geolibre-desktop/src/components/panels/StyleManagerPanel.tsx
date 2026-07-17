@@ -6,6 +6,11 @@
 // empty. Import accepts GeoLibre style-library bundles plus QGIS QML and OGC
 // SLD (converted through the existing packages/map importers); export writes
 // a shareable JSON bundle.
+//
+// Rendered as a floating, draggable panel over the map (mirroring
+// RasterSubsetPanel) rather than a modal dialog, so the user can keep
+// interacting with the map and the Layers/Style panels — e.g. select another
+// layer and apply an entry to it — while browsing the library.
 
 import {
   BUILT_IN_STYLE_PRESETS,
@@ -30,23 +35,43 @@ import {
 import {
   Button,
   cn,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
   Input,
   Label,
   ScrollArea,
   Select,
 } from "@geolibre/ui";
-import { Check, Download, Save, Trash2, Upload } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  Check,
+  Download,
+  GripVertical,
+  Palette,
+  Save,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
+import { clamp } from "../../lib/clamp";
 import {
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
+
+/** Default panel geometry (px); the user can drag it around the map area. */
+const PANEL_DEFAULT_W = 384;
+const PANEL_MARGIN = 12;
+
+interface PanelPos {
+  x: number;
+  y: number;
+}
 
 type StatusNote = { type: "success" | "error"; text: string } | null;
 
@@ -125,7 +150,7 @@ function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
   );
 }
 
-export function StyleManagerDialog() {
+export function StyleManagerPanel() {
   const { t } = useTranslation();
   const open = useAppStore((s) => s.ui.styleManagerOpen);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
@@ -147,6 +172,60 @@ export function StyleManagerDialog() {
   const [saveKind, setSaveKind] = useState<StyleLibraryEntryKind>("style");
   const [saveTags, setSaveTags] = useState("");
   const [saveScope, setSaveScope] = useState<"app" | "project">("app");
+
+  // Floating-panel position; null means the default CSS position. Kept across
+  // close/reopen within a session (the component stays mounted).
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<PanelPos | null>(null);
+
+  // Dragging the panel by its header. Mirrors RasterSubsetPanel.
+  const handleDragStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if ((event.target as HTMLElement).closest("button")) return;
+      event.preventDefault();
+      const el = panelRef.current;
+      const parent =
+        (el?.offsetParent as HTMLElement | null) ?? el?.parentElement ?? null;
+      const pb = parent?.getBoundingClientRect();
+      const eb = el?.getBoundingClientRect();
+      const start: PanelPos = pos ?? {
+        x: (eb?.left ?? 0) - (pb?.left ?? 0),
+        y: (eb?.top ?? 0) - (pb?.top ?? 0),
+      };
+      if (!pos) setPos(start);
+      const handle = event.currentTarget;
+      handle.setPointerCapture(event.pointerId);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const w = eb?.width ?? PANEL_DEFAULT_W;
+      const h = eb?.height ?? 0;
+      const move = (m: PointerEvent) => {
+        if (!panelRef.current) return;
+        const bounds = parent?.getBoundingClientRect();
+        const maxX = bounds
+          ? bounds.width - w - PANEL_MARGIN
+          : Number.POSITIVE_INFINITY;
+        const maxY = bounds
+          ? bounds.height - h - PANEL_MARGIN
+          : Number.POSITIVE_INFINITY;
+        setPos({
+          x: clamp(start.x + (m.clientX - startX), 0, Math.max(0, maxX)),
+          y: clamp(start.y + (m.clientY - startY), 0, Math.max(0, maxY)),
+        });
+      };
+      const end = () => {
+        if (handle.hasPointerCapture(event.pointerId))
+          handle.releasePointerCapture(event.pointerId);
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", end);
+        handle.removeEventListener("pointercancel", end);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", end);
+      handle.addEventListener("pointercancel", end);
+    },
+    [pos],
+  );
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const canUseLayer =
@@ -399,51 +478,95 @@ export function StyleManagerDialog() {
     }
   };
 
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          setStyleManagerOpen(false);
-          setStatus(null);
-          setSaveFormOpen(false);
-        }
-      }}
-    >
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t("styleManager.title")}</DialogTitle>
-          <DialogDescription>{t("styleManager.description")}</DialogDescription>
-        </DialogHeader>
+  if (!open) return null;
 
+  return (
+    <div
+      ref={panelRef}
+      className={cn(
+        "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        pos
+          ? "w-[min(24rem,calc(100vw-1.5rem))]"
+          : "left-3 top-16 max-h-[calc(100%-6rem)] w-[min(24rem,calc(100vw-1.5rem))]",
+      )}
+      style={pos ? { left: pos.x, top: pos.y, maxHeight: "calc(100% - 5rem)" } : undefined}
+      role="region"
+      aria-label={t("styleManager.title")}
+      data-testid="style-manager-panel"
+    >
+      <div
+        className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b px-3 py-2"
+        onPointerDown={handleDragStart}
+        title={t("styleManager.description")}
+      >
+        <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <GripVertical
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Palette className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="truncate">{t("styleManager.title")}</span>
+        </div>
+        <button
+          type="button"
+          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          onClick={() => {
+            setStyleManagerOpen(false);
+            setStatus(null);
+            setSaveFormOpen(false);
+          }}
+          aria-label={t("common.close")}
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
         <div className="flex flex-wrap items-center gap-2">
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("styleManager.searchPlaceholder")}
-            className="h-8 w-48 flex-1"
+            className="h-8 min-w-32 flex-1"
             aria-label={t("styleManager.searchPlaceholder")}
           />
           <Button
             size="sm"
             variant="outline"
+            className="h-8 px-2"
             disabled={!canUseLayer}
-            title={canUseLayer ? undefined : t("styleManager.noLayer")}
+            title={
+              canUseLayer
+                ? t("styleManager.saveCurrent")
+                : t("styleManager.noLayer")
+            }
+            aria-label={t("styleManager.saveCurrent")}
             onClick={() => {
               setSaveFormOpen((current) => !current);
               setSaveName(layer?.name ?? "");
             }}
           >
-            <Save className="me-1.5 h-3.5 w-3.5" />
-            {t("styleManager.saveCurrent")}
+            <Save className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="outline" onClick={() => void handleImport()}>
-            <Upload className="me-1.5 h-3.5 w-3.5" />
-            {t("styleManager.import")}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2"
+            title={t("styleManager.import")}
+            aria-label={t("styleManager.import")}
+            onClick={() => void handleImport()}
+          >
+            <Upload className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="outline" onClick={() => void handleExport()}>
-            <Download className="me-1.5 h-3.5 w-3.5" />
-            {t("styleManager.export")}
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 px-2"
+            title={t("styleManager.export")}
+            aria-label={t("styleManager.export")}
+            onClick={() => void handleExport()}
+          >
+            <Download className="h-3.5 w-3.5" />
           </Button>
         </div>
 
@@ -639,7 +762,7 @@ export function StyleManagerDialog() {
             )}
           </div>
         </ScrollArea>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
