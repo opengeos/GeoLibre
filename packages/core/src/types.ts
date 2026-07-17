@@ -560,6 +560,15 @@ export interface LayerGroup {
 }
 
 /**
+ * Metadata `sourceKind` marking a live SQL query layer: a GeoJSON-backed layer
+ * created from a SQL Workspace result whose DuckDB statement is stored on the
+ * layer metadata and re-executed on refresh. Defined here so the desktop app
+ * (which owns the query/refresh logic) and `@geolibre/plugins` (which excludes
+ * these layers from in-place geometry editing) share one value.
+ */
+export const SQL_QUERY_SOURCE_KIND = "sql-query";
+
+/**
  * Detect a DuckDB query layer rendered through the plugin's external deck.gl
  * overlay. Shared by `@geolibre/map`, `@geolibre/plugins`, and the desktop
  * app so the detection criteria cannot drift.

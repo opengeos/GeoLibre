@@ -1,4 +1,8 @@
-import { isDuckDBQueryLayer, type GeoLibreLayer } from "@geolibre/core";
+import {
+  isDuckDBQueryLayer,
+  SQL_QUERY_SOURCE_KIND,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 
 /**
@@ -9,12 +13,6 @@ import type { FeatureCollection } from "geojson";
 
 /** Metadata `sourceKind` marking the GeoEditor's own "Sketches" layer. */
 export const SKETCHES_SOURCE_KIND = "geoeditor-sketches";
-
-// Live SQL query layers (SQL Workspace "Add as query layer"). Canonical source
-// is SQL_QUERY_SOURCE_KIND in apps/geolibre-desktop/src/lib/sql-query-layer.ts;
-// kept local (not imported) because this package cannot depend on app modules.
-// If the canonical value ever changes, update this copy too.
-const SQL_QUERY_SOURCE_KIND = "sql-query";
 
 /**
  * Transient feature-key tag written into a feature's `properties` while it is

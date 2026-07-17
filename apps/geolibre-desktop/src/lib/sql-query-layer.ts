@@ -1,5 +1,5 @@
 import type { FeatureCollection } from "geojson";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { SQL_QUERY_SOURCE_KIND, type GeoLibreLayer } from "@geolibre/core";
 
 /**
  * Live SQL query layers (issue #1295): GeoJSON-backed layers whose features are
@@ -13,13 +13,9 @@ import type { GeoLibreLayer } from "@geolibre/core";
  * {@link refreshSqlQueryLayer} pulls it in with a dynamic import instead.
  */
 
-/**
- * Metadata `sourceKind` marking a live SQL query layer. A copy of this value
- * lives in `packages/plugins/src/plugins/geo-editor-geometry.ts` (which cannot
- * import app modules) to keep query layers out of in-place geometry editing —
- * update both if this ever changes.
- */
-export const SQL_QUERY_SOURCE_KIND = "sql-query";
+// Re-exported so app-local callers and tests can keep importing the source
+// kind from this module alongside the query-layer helpers.
+export { SQL_QUERY_SOURCE_KIND };
 
 /** The persisted query definition carried on a query layer's metadata. */
 export interface SqlQueryLayerConfig {
@@ -100,6 +96,14 @@ export function sourceLayersForQueryRefresh(
 /**
  * Re-execute a query layer's SQL against the current layers and return the new
  * feature snapshot.
+ *
+ * Tables are bound by *name* at refresh time, mirroring the SQL Workspace's
+ * model: the statement references table names derived from the current layer
+ * names (deduplicated in layer order). Renaming, removing, or reordering
+ * same-named source layers between runs can therefore rebind a referenced
+ * table — usually surfacing as a catalog error on the layer, but with
+ * colliding names potentially to a different layer. Storing stable layer-id
+ * references instead is a possible future hardening.
  *
  * @param layer The query layer to refresh.
  * @param layers The current app layers (the query layer itself is excluded).
