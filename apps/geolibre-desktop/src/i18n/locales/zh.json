@@ -96,8 +96,7 @@
       "description_other": "此项目希望从您尚未安装的 URL 加载 {{count}} 个外部插件。插件运行的代码可完全访问本应用。",
       "warning": "请仅加载来自可信来源的插件。已加载的插件将以与 GeoLibre 本身相同的权限运行。",
       "trustButton": "信任并加载",
-      "dismissButton": "不加载",
-      "description_one": "此项目想要加载 1 个来自未安装 URL 的外部插件。插件以完整应用权限运行代码。"
+      "dismissButton": "不加载"
     }
   },
   "viewState": {
@@ -272,9 +271,7 @@
       "errorNoServices": "在该文件中未找到有效的服务。",
       "errorRead": "无法将该文件作为服务库读取。",
       "imported_other": "已导入 {{count}} 个服务。",
-      "importedWithDropped_other": "已导入 {{count}} 个服务（{{dropped}} 个因库已满而跳过）。",
-      "imported_one": "已导入 {{count}} 个服务。",
-      "importedWithDropped_one": "已导入 {{count}} 个服务（跳过 {{dropped}} 个 — 库已满）。"
+      "importedWithDropped_other": "已导入 {{count}} 个服务（{{dropped}} 个因库已满而跳过）。"
     },
     "xyz": {
       "defaultName": "XYZ 图层",
@@ -300,8 +297,7 @@
       "noLayersFound": "未在该服务中找到任何图层。",
       "retrieveError": "无法从该服务获取图层。",
       "version": "WMS 版本",
-      "sampleLabelGebco": "GEBCO 海洋测深",
-      "selectLayer_one": "从 {{count}} 个图层中选择"
+      "sampleLabelGebco": "GEBCO 海洋测深"
     },
     "wfs": {
       "defaultName": "WFS 图层",
@@ -321,8 +317,7 @@
       "retrievedTypes": "已获取要素类型",
       "selectType_other": "从 {{count}} 个要素类型中选择",
       "noTypesFound": "未在该服务中找到任何要素类型。",
-      "retrieveError": "无法从该服务获取要素类型。",
-      "selectType_one": "从 {{count}} 个要素类型中选择"
+      "retrieveError": "无法从该服务获取要素类型。"
     },
     "wmts": {
       "defaultName": "WMTS 图层",
@@ -432,9 +427,7 @@
       "longitudeField": "经度字段",
       "latitudeField": "纬度字段",
       "noneField": "无（属性表）",
-      "tableHint": "将两个坐标字段都保留为“无”，可将该文件作为非空间属性表添加（用于属性连接）。",
-      "retrievedColumns_one": "已获取 {{count}} 列。",
-      "retrievedColumnsTable_one": "已获取 {{count}} 列。未检测到坐标列，将作为属性表添加。"
+      "tableHint": "将两个坐标字段都保留为“无”，可将该文件作为非空间属性表添加（用于属性连接）。"
     },
     "photos": {
       "defaultName": "照片",
@@ -452,12 +445,7 @@
       "manualPromptBody": "请将其放置在当前地图中心，然后拖动到地图上的正确位置。",
       "manualPromptCenter": "地图中心：{{lng}}, {{lat}}",
       "manualPlace": "放置在地图中心",
-      "manualHint": "拖动此图钉以定位照片，然后点击“完成”。",
-      "selectedCount_one": "已选择 {{count}} 张照片",
-      "errorNoGps_one": "所选照片中未找到 GPS 位置信息。",
-      "addedSummary_one": "已添加 {{count}} 张地理标记照片。",
-      "skippedNote_one": "跳过了 {{count}} 张照片（无 GPS 位置）。",
-      "noThumbnailNote_one": "{{count}} 张照片无缩略图（HEIC 或不支持的格式）。"
+      "manualHint": "拖动此图钉以定位照片，然后点击“完成”。"
     },
     "mbtiles": {
       "defaultName": "MBTiles 图层",
@@ -504,9 +492,7 @@
       "editableTable": "表",
       "tableReadOnly": "{{table}}（只读：无主键）",
       "errorSelectTable": "请选择要加载的表。",
-      "errorRuntimeMissing": "处理服务器未安装 PostGIS 运行时（psycopg）。请安装 geolibre-server 的 “postgis” 扩展以加载可编辑图层。",
-      "statusFound_one": "找到 {{count}} 个数据源。",
-      "statusTablesFound_one": "找到 {{count}} 个空间表。"
+      "errorRuntimeMissing": "处理服务器未安装 PostGIS 运行时（psycopg）。请安装 geolibre-server 的 “postgis” 扩展以加载可编辑图层。"
     },
     "video": {
       "defaultName": "视频图层",
@@ -575,11 +561,7 @@
       "cellSize": "单元格大小",
       "lineWidth": "线宽",
       "extrusion": "3D 拉伸",
-      "modelUrlPlaceholder": "https://example.com/model.glb",
-      "mapRequiredFields_one": "请映射必填字段：{{fields}}。",
-      "loadedFeatures_one": "已加载 {{count}} 个要素。",
-      "loadedRows_one": "{{count}} 行",
-      "loadedColumns_one": "{{count}} 列"
+      "modelUrlPlaceholder": "https://example.com/model.glb"
     }
   },
   "offline": {
@@ -607,10 +589,7 @@
     "concurrencyHint": "降低此值可减轻对限制快速瓦片请求速率的服务器的压力。",
     "timeout": "请求超时（秒）",
     "timeoutHint": "每个瓦片请求在计为失败前最多等待 {{seconds}} 秒。",
-    "timeoutDisabled": "无超时限制 — 请求使用浏览器默认设置。对于较慢的网络连接，请提高此值。",
-    "relativeLevels_one": "+{{count}} 级 · 缩放 {{min}}–{{max}}",
-    "complete_one": "离线区域已保存。已缓存 {{count}} 个资源供离线使用。",
-    "retryFailed_one": "重试 {{count}} 个失败的资源"
+    "timeoutDisabled": "无超时限制 — 请求使用浏览器默认设置。对于较慢的网络连接，请提高此值。"
   },
   "offlineManager": {
     "title": "管理离线区域",
@@ -628,9 +607,7 @@
     "updateAll": "全部刷新",
     "updating": "正在刷新 {{done}} / {{total}}…",
     "totalFootprint_other": "共 {{size}}，跨 {{count}} 个区域",
-    "deviceUsage": "已使用 {{usage}} / {{quota}}",
-    "tilesCount_one": "{{count}} 个瓦片",
-    "totalFootprint_one": "{{size}}，共 {{count}} 个区域"
+    "deviceUsage": "已使用 {{usage}} / {{quota}}"
   },
   "recordTour": {
     "title": "录制地图导览",
@@ -685,11 +662,8 @@
     "pathTransition": "移动",
     "pathGenerate": "生成",
     "pathConfirmReplace": "是否用从此路径生成的关键帧替换当前关键帧？",
-    "pathGenerated_one": "已从路径生成 {{count}} 个关键帧。",
     "pathGenerated_other": "已从路径生成 {{count}} 个关键帧。",
-    "pathGenerateError": "无法从此路径生成关键帧。",
-    "configLoaded_one": "已加载包含 {{count}} 个关键帧的配置。",
-    "keyframeCount_one": "{{count}} 个关键帧"
+    "pathGenerateError": "无法从此路径生成关键帧。"
   },
   "recordVideo": {
     "title": "录制视频",
@@ -787,10 +761,7 @@
     "saved": {
       "point_other": "已将 {{count}} 个点保存到 {{layer}}。",
       "line_other": "已将 {{count}} 条线保存到 {{layer}}。",
-      "polygon_other": "已将 {{count}} 个面保存到 {{layer}}。",
-      "point_one": "已将 {{count}} 个点保存到 {{layer}}。",
-      "line_one": "已将 {{count}} 条线保存到 {{layer}}。",
-      "polygon_one": "已将 {{count}} 个多边形保存到 {{layer}}。"
+      "polygon_other": "已将 {{count}} 个面保存到 {{layer}}。"
     },
     "layerGone": "采集图层已不再可用。",
     "noGeolocation": "此设备不支持地理定位。",
@@ -799,8 +770,7 @@
     "photoReadError": "无法读取该图像。请尝试其他文件。",
     "errorRequired": "此字段为必填项。",
     "errorNumber": "请输入有效的数字。",
-    "errorChoice": "请从列出的选项中选择一项。",
-    "vertices_one": "{{count}} 个顶点"
+    "errorChoice": "请从列出的选项中选择一项。"
   },
   "georeferencer": {
     "title": "图像地理配准",
@@ -903,8 +873,7 @@
     "chatAttachLocation": "附加当前地图位置",
     "chatLocationAttached": "已附加位置（点击移除）",
     "chatGoToLocation": "前往此位置",
-    "sessionStatusUnread_other": "实时协作会话，{{count}} 条未读消息。点击查看当前连接的用户并聊天。",
-    "sessionStatusUnread_one": "实时协作会话，{{count}} 条未读消息。点击查看在线人员和聊天。"
+    "sessionStatusUnread_other": "实时协作会话，{{count}} 条未读消息。点击查看当前连接的用户并聊天。"
   },
   "share": {
     "title": "共享项目",
@@ -966,8 +935,7 @@
     "emptyFeatured": "暂无精选项目。",
     "emptyMine": "您尚未共享任何项目。",
     "visibilityUnlisted": "不公开列出",
-    "visibilityPrivate": "私有",
-    "views_one": "{{count}} 次查看"
+    "visibilityPrivate": "私有"
   },
   "language": {
     "label": "语言",
@@ -1138,8 +1106,7 @@
       "durationHours": "{{value}} 小时",
       "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
       "waypointCount_zero": "尚未放置途经点",
-      "waypointCount_other": "已放置 {{count}} 个途经点",
-      "waypointCount_one": "已放置 {{count}} 个路径点"
+      "waypointCount_other": "已放置 {{count}} 个途经点"
     },
     "reverseGeocodeMode": {
       "title": "反向地理编码模式已激活",
@@ -1413,8 +1380,7 @@
       "stripPromptTitle": "是否从文件中移除环境变量？",
       "stripPromptDesc": "此项目包含 {{count}} 个环境变量（其中可能包含 API 密钥）。它们以纯文本形式存储在项目文件中，共享时可能会被暴露。是否从已保存的文件中移除它们？无论如何，您的“设置”都会在本设备上保留它们。",
       "stripButton": "从文件中移除",
-      "keepButton": "保留在文件中",
-      "variablesCount_one": "{{count}} 个启用的运行时变量。"
+      "keepButton": "保留在文件中"
     },
     "geocoding": {
       "title": "地理编码",
@@ -2029,11 +1995,7 @@
       "addedRasterLayers_other": "已将 {{count}} 个栅格图层添加到图层面板。",
       "addedBoth": "已将 {{vector}} 和 {{raster}} 添加到图层面板。",
       "bothVectorLayers_other": "{{count}} 个矢量图层",
-      "bothRasterLayers_other": "{{count}} 个栅格图层",
-      "addedVectorLayers_one": "已将 {{count}} 个矢量图层添加到图层面板。",
-      "addedRasterLayers_one": "已将 {{count}} 个栅格图层添加到图层面板。",
-      "bothVectorLayers_one": "{{count}} 个矢量图层",
-      "bothRasterLayers_one": "{{count}} 个栅格图层"
+      "bothRasterLayers_other": "{{count}} 个栅格图层"
     },
     "error": {
       "couldNotOpenProject": "无法打开项目。",
@@ -2124,10 +2086,7 @@
         "boundingBox": "图层的边界框（空间）",
         "bufferPoint": "缓冲一个点（空间）",
         "areaPerFeature": "每个要素的面积（空间）"
-      },
-      "addedAsLayer_one": "已将 {{count}} 个要素以「{{name}}」添加到地图。",
-      "rowsCount_one": "{{count}} 行",
-      "columnsCount_one": "{{count}} 列"
+      }
     }
   },
   "loadEditorFeatures": {
@@ -2242,8 +2201,7 @@
     "loadingTiles": "正在加载瓦片…"
   },
   "basemaps": {
-    "confirmStyleReplace_other": "切换到“{{name}}”将替换整个地图样式，并移除您添加的 {{count}} 个叠加底图。是否继续？",
-    "confirmStyleReplace_one": "切换到「{{name}}」将替换整个地图样式并移除您添加的叠加底图。继续吗？"
+    "confirmStyleReplace_other": "切换到“{{name}}”将替换整个地图样式，并移除您添加的 {{count}} 个叠加底图。是否继续？"
   },
   "annotations": {
     "toolbar": "标注工具",
@@ -2338,9 +2296,7 @@
       "emptyBar": "没有可分组的行。",
       "emptyPie": "没有正值可用于绘图。",
       "pieCaptionCount_other": "行数 · {{count}} 个类别",
-      "pieCaptionSum_other": "总和 · {{count}} 个类别",
-      "pieCaptionCount_one": "行计数 · {{count}} 个类别",
-      "pieCaptionSum_one": "求和 · {{count}} 个类别"
+      "pieCaptionSum_other": "总和 · {{count}} 个类别"
     },
     "editor": {
       "addTitle": "添加组件",
@@ -2364,8 +2320,7 @@
       "colorDefault": "默认图表颜色",
       "cancel": "取消",
       "save": "保存"
-    },
-    "widgetCount_one": "{{count}} 个小组件"
+    }
   },
   "assistant": {
     "title": "AI 助手",
@@ -2568,7 +2523,6 @@
       "whiteboxTools": "Whitebox 工具",
       "toolbox": "Whitebox 工具箱",
       "checkingRuntime": "正在检查 runtime。",
-      "toolsAvailable_one": "{{count}} 个工具可用。",
       "toolsAvailable_other": "{{count}} 个工具可用。",
       "runtimeUnavailable": "Whitebox runtime 不可用。",
       "useMapExtent": "使用地图范围",
