@@ -86,7 +86,7 @@ function EntryPreview({ entry }: { entry: StyleLibraryEntry }) {
           className="text-sm font-semibold"
           style={{
             color: style.labels.color,
-            textShadow: `0 0 2px ${style.labels.haloColor}, 0 0 2px ${style.labels.haloColor}`,
+            textShadow: `-1px -1px 2px ${style.labels.haloColor}, 1px -1px 2px ${style.labels.haloColor}, -1px 1px 2px ${style.labels.haloColor}, 1px 1px 2px ${style.labels.haloColor}`,
           }}
         >
           Abc
@@ -311,14 +311,21 @@ export function StyleManagerDialog() {
         return;
       }
       const entries = parseStyleLibrary(picked.text);
+      // Ids that must not be claimed by an app-scope import: built-in preset
+      // ids, and ids of project-scoped entries (the app-scope upsert would
+      // silently pull those out of the project file). A collision with an
+      // existing app-library id is intentional upsert semantics, so
+      // re-importing an exported bundle updates entries instead of
+      // duplicating them.
+      const projectIds = new Set(projectStyleLibrary.map((e) => e.id));
       for (const entry of entries) {
         saveStyleLibraryEntry(
           {
             ...entry,
-            // Never let an imported bundle shadow a built-in preset id.
-            id: entry.id.startsWith("preset-")
-              ? createStyleLibraryEntryId()
-              : entry.id,
+            id:
+              entry.id.startsWith("preset-") || projectIds.has(entry.id)
+                ? createStyleLibraryEntryId()
+                : entry.id,
           },
           "app",
         );

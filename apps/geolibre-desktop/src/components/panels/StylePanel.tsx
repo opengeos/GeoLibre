@@ -3364,16 +3364,22 @@ export function StylePanel({
           {t("style.headingWithLayer", { name: layer.name })}
         </span>
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            title={t("style.openStyleManager")}
-            aria-label={t("style.openStyleManager")}
-            onClick={() => setStyleManagerOpen(true)}
-          >
-            <Palette className="h-4 w-4" />
-          </Button>
+          {/* Only the layer types the Style Manager can apply to (matching its
+              STYLABLE_LAYER_TYPES and the LayerPanel's canImportStyle gate);
+              this vector panel also serves mbtiles/plugin/deck layers, where
+              the dialog would open with Apply/Save disabled. */}
+          {(layer.type === "geojson" || layer.type === "vector-tiles") && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              title={t("style.openStyleManager")}
+              aria-label={t("style.openStyleManager")}
+              onClick={() => setStyleManagerOpen(true)}
+            >
+              <Palette className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

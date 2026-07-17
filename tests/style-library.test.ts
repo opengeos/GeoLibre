@@ -115,6 +115,31 @@ describe("normalizeStyleLibraryEntries", () => {
     assert.equal(entries[0].name, "Entry A");
   });
 
+  it("restricts the payload to the declared kind's key set", () => {
+    const [symbol] = normalizeStyleLibraryEntries([
+      entry({
+        kind: "symbol",
+        style: {
+          fillColor: "#ff0000",
+          labels: { ...DEFAULT_LAYER_STYLE.labels, enabled: true },
+          vectorStyleColorRamp: "plasma",
+        },
+      }),
+    ]);
+    // A "Symbol only" entry must not smuggle labels or ramp fields, or
+    // applying it would silently change more than symbology.
+    assert.deepEqual(Object.keys(symbol.style), ["fillColor"]);
+
+    const dropped = normalizeStyleLibraryEntries([
+      entry({
+        kind: "ramp",
+        style: { fillColor: "#ff0000" },
+      }),
+    ]);
+    // Nothing ramp-related survives, so the entry is dropped entirely.
+    assert.equal(dropped.length, 0);
+  });
+
   it("coerces an unknown kind to style and cleans tags", () => {
     const [normalized] = normalizeStyleLibraryEntries([
       entry({

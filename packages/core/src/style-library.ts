@@ -132,11 +132,39 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
 }
 
 /**
+ * Restrict a sanitized style patch to the key set its entry `kind` declares,
+ * mirroring what {@link extractStyleLibraryStyle} captures on save. Without
+ * this, a hand-edited project file or imported bundle could declare
+ * `kind: "symbol"` with extra full-style fields in the payload, and applying
+ * that "Symbol only" entry (a partial merge) would silently change labels or
+ * renderer settings on the target layer.
+ */
+function restrictStylePatchToKind(
+  style: Partial<LayerStyle>,
+  kind: StyleLibraryEntryKind,
+): Partial<LayerStyle> {
+  if (kind === "style") return style;
+  const allowed: readonly (keyof LayerStyle)[] =
+    kind === "symbol"
+      ? SYMBOL_STYLE_KEYS
+      : kind === "ramp"
+        ? RAMP_STYLE_KEYS
+        : ["labels"];
+  const out: Partial<LayerStyle> = {};
+  for (const key of allowed) {
+    if (key in style) {
+      (out as Record<string, unknown>)[key] = style[key];
+    }
+  }
+  return out;
+}
+
+/**
  * Coerce an untrusted (hand-edited project file or imported bundle) entries
  * array into valid {@link StyleLibraryEntry} records. Drops entries without a
  * usable id or name, de-duplicates by id, coerces an unknown kind to
- * `"style"`, and sanitizes each style payload; entries whose payload
- * sanitizes to nothing are dropped.
+ * `"style"`, and sanitizes each style payload (restricted to the declared
+ * kind's key set); entries whose payload sanitizes to nothing are dropped.
  *
  * @param value - The raw `styleLibrary` / bundle `entries` value.
  * @returns Normalized, de-duplicated entries (empty when none survive).
@@ -153,14 +181,17 @@ export function normalizeStyleLibraryEntries(
     const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
     const name = typeof candidate.name === "string" ? candidate.name.trim() : "";
     if (!id || !name || seen.has(id)) continue;
-    const style = sanitizeLayerStylePatch(candidate.style);
-    if (Object.keys(style).length === 0) continue;
-    seen.add(id);
     const kind = STYLE_LIBRARY_ENTRY_KINDS.includes(
       candidate.kind as StyleLibraryEntryKind,
     )
       ? (candidate.kind as StyleLibraryEntryKind)
       : "style";
+    const style = restrictStylePatchToKind(
+      sanitizeLayerStylePatch(candidate.style),
+      kind,
+    );
+    if (Object.keys(style).length === 0) continue;
+    seen.add(id);
     const tags = Array.isArray(candidate.tags)
       ? [
           ...new Set(
