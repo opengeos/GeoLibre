@@ -601,7 +601,13 @@ export function StyleManagerDialog() {
                               aria-label={t("styleManager.delete")}
                               title={t("styleManager.delete")}
                               onClick={() => {
-                                deleteStyleLibraryEntry(entry.id);
+                                // Scope-bound so deleting a project entry can
+                                // never erase an app-library entry that
+                                // happens to share the id (or vice versa).
+                                deleteStyleLibraryEntry(
+                                  entry.id,
+                                  section.key === "project" ? "project" : "app",
+                                );
                                 setStatus({
                                   type: "success",
                                   text: t("styleManager.deleted", {

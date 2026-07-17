@@ -39,6 +39,16 @@ export function useStyleLibraryPersistence() {
         // Leave the in-memory library usable for this session even when
         // IndexedDB is broken; saves below stay best-effort.
         loaded = true;
+        // A save made while the failed load was pending was skipped by the
+        // subscriber (loaded was false); flush the current state now so that
+        // entry is not silently lost on restart if the store recovered.
+        const current = useAppStore.getState().styleLibrary;
+        if (current.length > 0) {
+          persistStyleLibraryEntries(current).catch(() => {
+            // The load already failed; a failing flush here is expected when
+            // IndexedDB is genuinely unavailable.
+          });
+        }
       });
 
     const unsubscribe = useAppStore.subscribe((state, previous) => {

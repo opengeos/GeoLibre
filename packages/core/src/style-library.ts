@@ -102,11 +102,68 @@ export function extractStyleLibraryStyle(
 }
 
 /**
+ * Allowed values for the enum-typed {@link LayerStyle} fields, so a
+ * hand-edited file cannot smuggle an unknown mode/shape/unit string through
+ * the primitive `typeof` check and into the renderer. Fields absent here are
+ * free-form strings (colors, expressions, property names, SVG markup).
+ */
+const STYLE_ENUM_VALUES: Partial<Record<keyof LayerStyle, readonly string[]>> = {
+  strokeWidthUnit: ["pixels", "meters"],
+  vectorStyleMode: [
+    "single",
+    "graduated",
+    "categorized",
+    "rule-based",
+    "expression",
+  ],
+  fillPattern: [
+    "none",
+    "hatch",
+    "cross-hatch",
+    "horizontal",
+    "vertical",
+    "dots",
+    "svg",
+  ],
+  markerShape: [
+    "circle",
+    "square",
+    "triangle",
+    "diamond",
+    "star",
+    "cross",
+    "pin",
+    "custom",
+  ],
+  pointRenderer: ["single", "heatmap", "cluster"],
+};
+
+/** Allowed values for the enum-typed {@link LabelStyle} fields. */
+const LABEL_ENUM_VALUES: Partial<Record<keyof LabelStyle, readonly string[]>> = {
+  placement: ["point", "line"],
+  anchor: [
+    "center",
+    "left",
+    "right",
+    "top",
+    "bottom",
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+  ],
+  transform: ["none", "uppercase", "lowercase"],
+  dedupe: ["off", "unique", "concatenate"],
+};
+
+/**
  * Coerce an untrusted style patch (from a hand-edited project file or an
  * imported bundle) into a safe {@link LayerStyle} subset: unknown keys are
- * dropped, values whose primitive type disagrees with the default are dropped,
- * and a present `labels` object is completed against the default label style
- * so applying it never leaves the renderer reading undefined label fields.
+ * dropped, values whose primitive type disagrees with the default (or that
+ * are non-finite numbers, or strings outside an enum field's allowed set) are
+ * dropped, and a present `labels` object is completed against the default
+ * label style so applying it never leaves the renderer reading undefined
+ * label fields.
  *
  * @param value - The raw `style` value from JSON.
  * @returns The sanitized subset (empty when nothing usable survives).
@@ -128,8 +185,12 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
         ) as (keyof LabelStyle)[]) {
           const labelFallback = DEFAULT_LAYER_STYLE.labels[labelKey];
           const labelGiven = givenLabels[labelKey];
-          labels[labelKey] =
-            typeof labelGiven === typeof labelFallback ? labelGiven : labelFallback;
+          const labelAllowed = LABEL_ENUM_VALUES[labelKey];
+          const labelValid =
+            typeof labelGiven === typeof labelFallback &&
+            (typeof labelGiven !== "number" || Number.isFinite(labelGiven)) &&
+            (!labelAllowed || labelAllowed.includes(labelGiven as string));
+          labels[labelKey] = labelValid ? labelGiven : labelFallback;
         }
         out.labels = labels as unknown as LabelStyle;
       }
@@ -138,33 +199,60 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
     if (Array.isArray(fallback)) {
       if (!Array.isArray(given)) continue;
       // Validate array elements too, not just "is an array": malformed stop
-      // or rule objects would otherwise survive to the renderer.
+      // or rule objects would otherwise survive to the renderer. Rebuild each
+      // element from its known fields so extra keys are stripped along the
+      // way; an invalid optional label is dropped rather than the whole stop.
       if (key === "vectorStyleStops") {
-        out[key] = given.filter(
-          (item): item is LayerStyle["vectorStyleStops"][number] =>
-            !!item &&
-            typeof item === "object" &&
-            (typeof (item as { value?: unknown }).value === "string" ||
-              typeof (item as { value?: unknown }).value === "number") &&
-            typeof (item as { color?: unknown }).color === "string",
-        );
+        out[key] = given.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const stop = item as Record<string, unknown>;
+          if (
+            (typeof stop.value !== "string" && typeof stop.value !== "number") ||
+            typeof stop.color !== "string"
+          ) {
+            return [];
+          }
+          return [
+            {
+              value: stop.value,
+              color: stop.color,
+              ...(typeof stop.label === "string" ? { label: stop.label } : {}),
+            },
+          ];
+        });
       } else if (key === "vectorRules") {
-        out[key] = given.filter(
-          (item): item is LayerStyle["vectorRules"][number] =>
-            !!item &&
-            typeof item === "object" &&
-            typeof (item as { id?: unknown }).id === "string" &&
-            typeof (item as { label?: unknown }).label === "string" &&
-            typeof (item as { filter?: unknown }).filter === "string" &&
-            typeof (item as { color?: unknown }).color === "string" &&
-            typeof (item as { isElse?: unknown }).isElse === "boolean",
-        );
+        out[key] = given.flatMap((item) => {
+          if (!item || typeof item !== "object") return [];
+          const rule = item as Record<string, unknown>;
+          if (
+            typeof rule.id !== "string" ||
+            typeof rule.label !== "string" ||
+            typeof rule.filter !== "string" ||
+            typeof rule.color !== "string" ||
+            typeof rule.isElse !== "boolean"
+          ) {
+            return [];
+          }
+          return [
+            {
+              id: rule.id,
+              label: rule.label,
+              filter: rule.filter,
+              color: rule.color,
+              isElse: rule.isElse,
+            },
+          ];
+        });
       } else {
         out[key] = given;
       }
       continue;
     }
-    if (typeof given === typeof fallback) out[key] = given;
+    if (typeof given !== typeof fallback) continue;
+    if (typeof given === "number" && !Number.isFinite(given)) continue;
+    const allowed = STYLE_ENUM_VALUES[key];
+    if (allowed && !allowed.includes(given as string)) continue;
+    out[key] = given;
   }
   return structuredClone(out) as Partial<LayerStyle>;
 }
@@ -289,13 +377,24 @@ export function parseStyleLibrary(json: string): StyleLibraryEntry[] {
   } catch {
     throw new Error("Not a valid style library file (invalid JSON).");
   }
-  const rawEntries = Array.isArray(parsed)
-    ? parsed
-    : parsed &&
-        typeof parsed === "object" &&
-        (parsed as { type?: unknown }).type === STYLE_LIBRARY_BUNDLE_TYPE
-      ? (parsed as { entries?: unknown }).entries
-      : null;
+  let rawEntries: unknown = null;
+  if (Array.isArray(parsed)) {
+    rawEntries = parsed;
+  } else if (
+    parsed &&
+    typeof parsed === "object" &&
+    (parsed as { type?: unknown }).type === STYLE_LIBRARY_BUNDLE_TYPE
+  ) {
+    // Refuse bundles from a newer format rather than misreading them with v1
+    // semantics (e.g. coercing kinds this version does not know to "style").
+    // Bare arrays stay accepted for hand-authored files.
+    if (
+      (parsed as { version?: unknown }).version !== STYLE_LIBRARY_BUNDLE_VERSION
+    ) {
+      throw new Error("Unsupported style library version.");
+    }
+    rawEntries = (parsed as { entries?: unknown }).entries;
+  }
   if (rawEntries === null) {
     throw new Error("Not a valid style library file.");
   }

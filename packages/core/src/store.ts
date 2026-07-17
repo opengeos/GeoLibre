@@ -372,8 +372,14 @@ export interface AppState {
     entry: StyleLibraryEntry,
     scope?: "app" | "project",
   ) => void;
-  /** Remove a Style Manager entry by id from whichever scope holds it. */
-  deleteStyleLibraryEntry: (id: string) => void;
+  /**
+   * Remove a Style Manager entry by id. When `scope` is given only that list
+   * is touched — the two scopes can legitimately hold the same id after
+   * loading a project authored elsewhere, and deleting a project entry must
+   * not erase a local app-library style (or vice versa). Omitting `scope`
+   * removes the id from both lists.
+   */
+  deleteStyleLibraryEntry: (id: string, scope?: "app" | "project") => void;
 
   /** Insert a new model or replace an existing one matching by `id`. */
   saveModel: (model: ProcessingModel) => void;
@@ -1046,10 +1052,12 @@ export const useAppStore = create<AppState>()(
             isDirty: s.isDirty || movedOutOfProject,
           };
         }),
-      deleteStyleLibraryEntry: (id) =>
+      deleteStyleLibraryEntry: (id, scope) =>
         set((s) => {
-          const inProject = s.projectStyleLibrary.some((e) => e.id === id);
-          const inLibrary = s.styleLibrary.some((e) => e.id === id);
+          const inProject =
+            scope !== "app" && s.projectStyleLibrary.some((e) => e.id === id);
+          const inLibrary =
+            scope !== "project" && s.styleLibrary.some((e) => e.id === id);
           // Keep untouched scopes reference-stable so the IndexedDB
           // persistence (which watches the styleLibrary reference) does not
           // rewrite an unchanged library.

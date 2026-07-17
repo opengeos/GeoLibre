@@ -110,6 +110,28 @@ describe("sanitizeLayerStylePatch", () => {
     ]);
   });
 
+  it("rejects out-of-domain enum values and non-finite numbers", () => {
+    const patch = sanitizeLayerStylePatch({
+      vectorStyleMode: "hologram",
+      markerShape: "circle",
+      strokeWidth: Number.NaN,
+      circleRadius: 8,
+      labels: { ...DEFAULT_LAYER_STYLE.labels, anchor: "sideways" },
+    });
+    assert.equal("vectorStyleMode" in patch, false);
+    assert.equal(patch.markerShape, "circle");
+    assert.equal("strokeWidth" in patch, false);
+    assert.equal(patch.circleRadius, 8);
+    assert.equal(patch.labels?.anchor, DEFAULT_LAYER_STYLE.labels.anchor);
+  });
+
+  it("strips an invalid optional stop label without dropping the stop", () => {
+    const patch = sanitizeLayerStylePatch({
+      vectorStyleStops: [{ value: 1, color: "#111111", label: 42 }],
+    });
+    assert.deepEqual(patch.vectorStyleStops, [{ value: 1, color: "#111111" }]);
+  });
+
   it("returns an empty patch for non-object input", () => {
     assert.deepEqual(sanitizeLayerStylePatch(null), {});
     assert.deepEqual(sanitizeLayerStylePatch("x"), {});
@@ -188,7 +210,23 @@ describe("style library bundles", () => {
     assert.throws(() => parseStyleLibrary("not json"));
     assert.throws(() => parseStyleLibrary('{"type":"something-else"}'));
     assert.throws(() =>
-      parseStyleLibrary('{"type":"geolibre-style-library","entries":[]}'),
+      parseStyleLibrary(
+        '{"type":"geolibre-style-library","version":1,"entries":[]}',
+      ),
+    );
+  });
+
+  it("rejects wrapped bundles from an unknown format version", () => {
+    assert.throws(
+      () =>
+        parseStyleLibrary(
+          JSON.stringify({
+            type: "geolibre-style-library",
+            version: 2,
+            entries: [entry()],
+          }),
+        ),
+      /version/,
     );
   });
 });
@@ -260,6 +298,20 @@ describe("style library store actions", () => {
     state = useAppStore.getState();
     assert.equal(state.projectStyleLibrary.length, 0);
     assert.equal(state.isDirty, true);
+  });
+
+  it("a scoped delete leaves a same-id entry in the other scope untouched", () => {
+    // A loaded project can carry an entry whose id collides with a local
+    // app-library entry; deleting one must not erase the other.
+    useAppStore.setState({
+      styleLibrary: [entry({ name: "App copy" })],
+      projectStyleLibrary: [entry({ name: "Project copy" })],
+    });
+    useAppStore.getState().deleteStyleLibraryEntry("entry-a", "project");
+    const state = useAppStore.getState();
+    assert.equal(state.projectStyleLibrary.length, 0);
+    assert.equal(state.styleLibrary.length, 1);
+    assert.equal(state.styleLibrary[0].name, "App copy");
   });
 });
 
