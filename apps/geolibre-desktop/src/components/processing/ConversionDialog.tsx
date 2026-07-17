@@ -54,6 +54,10 @@ import {
 } from "../../lib/tauri-io";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import i18n from "../../i18n";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
@@ -578,6 +582,10 @@ export function ConversionDialog() {
   const [startingServer, setStartingServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<ConversionJob | null>(null);
+  // History tracker for the conversion dispatched last (#1292). Sidecar and
+  // browser runs both settle through `job`, so one pending slot suffices;
+  // `finish` is idempotent.
+  const pendingTrackerRef = useRef<ProcessingRunTracker | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
@@ -686,6 +694,17 @@ export function ConversionDialog() {
       cancelled = true;
       window.clearTimeout(timer);
     };
+  }, [job]);
+
+  // Record a History entry once a conversion reaches a terminal status (#1292).
+  // Covers sidecar jobs (via polling) and browser runs (synthetic jobs that
+  // arrive terminal). `finish` is idempotent across re-renders.
+  useEffect(() => {
+    if (!job || RUNNING_JOB_STATUSES.has(job.status)) return;
+    pendingTrackerRef.current?.finish(
+      job.status === "succeeded" ? "success" : "error",
+      job.error ?? undefined,
+    );
   }, [job]);
 
   // Keep the newest log lines in view as messages stream in.
@@ -1306,6 +1325,42 @@ export function ConversionDialog() {
   const runConversion = async () => {
     if (!kind) return;
     setError(null);
+    // Track the run for the Processing History panel (#1292). Only the
+    // parameters that apply to the selected conversion kind are recorded.
+    const browserInputName = usesBrowserRuntime
+      ? (splitBrowserSelection(browserFiles).mainFile?.name ?? "")
+      : "";
+    pendingTrackerRef.current = beginProcessingRun(
+      {
+        kind: "conversion",
+        toolId: kind,
+        toolName: TOOL_CONFIGS[kind].title,
+        engine: usesBrowserRuntime ? "browser" : "sidecar",
+        parameters: {
+          ...(compression ? { compression } : {}),
+          ...(kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet"
+            ? { rowGroupSize }
+            : {}),
+          ...(kind === "csv-to-geoparquet" ? { lonColumn, latColumn } : {}),
+          ...(kind === "vector-to-pmtiles"
+            ? { layerName, minZoom, maxZoom }
+            : {}),
+          ...(kind === "raster-to-pmtiles"
+            ? {
+                ...(band ? { band } : {}),
+                ...(colormap ? { colormap } : {}),
+                resampling,
+                minZoom,
+                maxZoom,
+              }
+            : {}),
+        },
+      },
+      {
+        inputPath: usesBrowserRuntime ? browserInputName : inputPath.trim(),
+        outputPath: outputPath.trim(),
+      },
+    );
     if (usesBrowserRuntime) {
       await runBrowserConversion();
       return;
@@ -1400,9 +1455,10 @@ export function ConversionDialog() {
         setError(i18n.t("toolbar.conversion.noSidecarConversion", { kind }));
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start conversion.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Could not start conversion.";
+      pendingTrackerRef.current?.finish("error", message);
+      setError(message);
     }
   };
 

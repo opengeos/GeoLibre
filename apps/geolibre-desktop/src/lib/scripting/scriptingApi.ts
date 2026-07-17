@@ -10,6 +10,7 @@ import {
 import { SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
 import type { Feature, FeatureCollection } from "geojson";
 import type { MapController } from "@geolibre/map";
+import { beginProcessingRun } from "../processing-history";
 import { captureMapImage } from "../print-layout-export";
 
 // The scripting command surface, shared by every programmatic entry point: the
@@ -203,6 +204,15 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
       if (!algo) throw new Error(`Unknown algorithm "${id}"`);
       const logs: string[] = [];
       const resultLayerIds: string[] = [];
+      // Track the run for the Processing History panel (#1292), so notebook /
+      // console runs document themselves alongside dialog runs.
+      const tracker = beginProcessingRun({
+        kind: "algorithm",
+        toolId: algo.id,
+        toolName: algo.name,
+        engine: "client",
+        parameters: (params.params as Record<string, unknown>) ?? {},
+      });
       // duckdb-wasm is browser-only and heavy; import it only when an algorithm
       // actually runs (also keeps this module importable in plain Node tests).
       const { createDuckDbCapability } = await import("../duckdb-processing");
@@ -217,6 +227,7 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
             return;
           }
           const layerId = useAppStore.getState().addGeoJsonLayer(name, fc);
+          tracker.addOutputLayer(name);
           resultLayerIds.push(layerId);
           const layer = useAppStore
             .getState()
@@ -231,7 +242,13 @@ export function createScriptingHandlers(deps: ScriptingDeps): ScriptingHandlers 
           return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
         },
       };
-      await algo.run(ctx);
+      try {
+        await algo.run(ctx);
+      } catch (error) {
+        tracker.finish("error", (error as Error).message);
+        throw error;
+      }
+      tracker.finish("success");
       return { logs, resultLayerIds };
     },
 

@@ -18,6 +18,10 @@ import {
 } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
 import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
+import {
   Button,
   Dialog,
   DialogContent,
@@ -69,6 +73,8 @@ export function VectorToolsDialog({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
   const [selectedId, setSelectedId] = useState<string>(
@@ -79,7 +85,9 @@ export function VectorToolsDialog({
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [sidecarAvailable, setSidecarAvailable] = useState<boolean | null>(null);
+  const [autoRunPending, setAutoRunPending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
 
   const tool = useMemo(
     () => getVectorTool(selectedId) ?? VECTOR_TOOLS[0],
@@ -110,6 +118,24 @@ export function VectorToolsDialog({
     if (tool.requiresSidecar) setEngine("sidecar");
     else if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
+
+  // Pre-fill from a pending History re-run once the requested tool is selected.
+  // Declared after the defaults-reset effect above so the recorded parameters
+  // win over the defaults when both effects fire in the same commit.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "vector") return;
+    if (rerun.toolId !== tool.id) return;
+    setParams({ ...rerun.parameters });
+    if (
+      rerun.engine === "client" ||
+      rerun.engine === "sidecar" ||
+      rerun.engine === "pyodide"
+    ) {
+      setEngine(rerun.engine);
+    }
+    setProcessingRerun(null);
+    if (rerun.autoRun) setAutoRunPending(true);
+  }, [open, rerun, tool, setProcessingRerun]);
 
   // Prefill the H3 grid's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
@@ -253,6 +279,7 @@ export function VectorToolsDialog({
         return;
       }
       const layerId = addGeoJsonLayer(name, fc);
+      runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
@@ -324,6 +351,14 @@ export function VectorToolsDialog({
       }
     }
 
+    const tracker = beginProcessingRun({
+      kind: "vector",
+      toolId: tool.id,
+      toolName: tool.name,
+      engine,
+      parameters: params,
+    });
+    runTrackerRef.current = tracker;
     setRunning(true);
     try {
       if (engine === "sidecar") {
@@ -359,8 +394,10 @@ export function VectorToolsDialog({
         };
         await tool.run(ctx);
       }
+      tracker.finish("success");
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
+      tracker.finish("error", (error as Error).message);
     } finally {
       setRunning(false);
     }
@@ -376,6 +413,19 @@ export function VectorToolsDialog({
     isParamVisible,
     duckdb,
   ]);
+
+  // Auto-run for a History "Re-run": kick off handleRun on the render after the
+  // pre-fill effect committed the recorded parameters. The ref always points at
+  // the latest handleRun closure, so the run sees the pre-filled state.
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
+  useEffect(() => {
+    if (!autoRunPending) return;
+    setAutoRunPending(false);
+    void handleRunRef.current();
+  }, [autoRunPending]);
 
   const groups = useMemo(groupedTools, []);
 

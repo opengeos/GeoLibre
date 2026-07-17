@@ -58,6 +58,9 @@ export function ProcessingMenu({
   const setNotebookOpen = useAppStore((s) => s.setNotebookOpen);
   const setAssistantOpen = useAppStore((s) => s.setAssistantOpen);
   const setDashboardOpen = useAppStore((s) => s.setDashboardOpen);
+  const setProcessingHistoryOpen = useAppStore(
+    (s) => s.setProcessingHistoryOpen,
+  );
 
   // Format Conversion, Raster tools, and AI Segmentation require the Python
   // sidecar, which cannot run on Android/iOS — hide them on mobile so they don't
@@ -97,6 +100,7 @@ export function ProcessingMenu({
     show("processing.segmentEverything");
   const showGeolibre = showGeolibreTools || showGeolibreActions;
   const showWorkspacesOrServices =
+    show("processing.history") ||
     show("processing.sqlWorkspace") ||
     show("processing.pythonConsole") ||
     show("processing.notebook") ||
@@ -560,6 +564,11 @@ export function ProcessingMenu({
         {show("processing.dashboard") && (
           <DropdownMenuItem onSelect={() => setDashboardOpen(true)}>
             {t("toolbar.command.dashboard")}
+          </DropdownMenuItem>
+        )}
+        {show("processing.history") && (
+          <DropdownMenuItem onSelect={() => setProcessingHistoryOpen(true)}>
+            {t("toolbar.item.processingHistory")}
           </DropdownMenuItem>
         )}
         {show("processing.planetaryComputer") && (

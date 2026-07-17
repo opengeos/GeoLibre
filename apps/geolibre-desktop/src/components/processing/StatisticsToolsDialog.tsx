@@ -28,6 +28,10 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import { ParameterField } from "./ParameterField";
 
 interface StatisticsToolsDialogProps {
@@ -70,6 +74,8 @@ export function StatisticsToolsDialog({
   const setStatisticsToolOpen = useAppStore((s) => s.setStatisticsToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
   const [selectedId, setSelectedId] = useState<string>(
@@ -78,7 +84,9 @@ export function StatisticsToolsDialog({
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [autoRunPending, setAutoRunPending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
 
   const tool = useMemo(
     () => getStatisticsTool(selectedId) ?? STATISTICS_TOOLS[0],
@@ -99,6 +107,17 @@ export function StatisticsToolsDialog({
     setParams(defaults);
     setLog([]);
   }, [tool]);
+
+  // Pre-fill from a pending History re-run once the requested tool is selected.
+  // Declared after the defaults-reset effect above so the recorded parameters
+  // win over the defaults when both effects fire in the same commit.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "statistics") return;
+    if (rerun.toolId !== tool.id) return;
+    setParams({ ...rerun.parameters });
+    setProcessingRerun(null);
+    if (rerun.autoRun) setAutoRunPending(true);
+  }, [open, rerun, tool, setProcessingRerun]);
 
   // Keep the newest log lines in view as they stream in.
   useEffect(() => {
@@ -160,6 +179,7 @@ export function StatisticsToolsDialog({
         return;
       }
       const layerId = addGeoJsonLayer(name, fc);
+      runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
@@ -221,6 +241,14 @@ export function StatisticsToolsDialog({
       }
     }
 
+    const tracker = beginProcessingRun({
+      kind: "statistics",
+      toolId: tool.id,
+      toolName: tool.name,
+      engine: "client",
+      parameters: params,
+    });
+    runTrackerRef.current = tracker;
     setRunning(true);
     try {
       const ctx: ProcessingContext = {
@@ -237,8 +265,10 @@ export function StatisticsToolsDialog({
         },
       };
       await tool.run(ctx);
+      tracker.finish("success");
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
+      tracker.finish("error", (error as Error).message);
     } finally {
       setRunning(false);
     }
@@ -251,6 +281,19 @@ export function StatisticsToolsDialog({
     mapControllerRef,
     isParamVisible,
   ]);
+
+  // Auto-run for a History "Re-run": kick off handleRun on the render after the
+  // pre-fill effect committed the recorded parameters. The ref always points at
+  // the latest handleRun closure, so the run sees the pre-filled state.
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
+  useEffect(() => {
+    if (!autoRunPending) return;
+    setAutoRunPending(false);
+    void handleRunRef.current();
+  }, [autoRunPending]);
 
   return (
     <Dialog

@@ -28,6 +28,10 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import { ParameterField } from "./ParameterField";
 
 interface NetworkToolsDialogProps {
@@ -50,6 +54,8 @@ export function NetworkToolsDialog({
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
   const [selectedId, setSelectedId] = useState<string>(
@@ -58,6 +64,8 @@ export function NetworkToolsDialog({
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [autoRunPending, setAutoRunPending] = useState(false);
+  const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   // Cancels the in-flight run (and any pending routing requests) when the
   // dialog closes or a new run starts, so closing the dialog mid-batch does not
@@ -86,6 +94,17 @@ export function NetworkToolsDialog({
     setParams(defaults);
     setLog([]);
   }, [tool]);
+
+  // Pre-fill from a pending History re-run once the requested tool is selected.
+  // Declared after the defaults-reset effect above so the recorded parameters
+  // win over the defaults when both effects fire in the same commit.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "network") return;
+    if (rerun.toolId !== tool.id) return;
+    setParams({ ...rerun.parameters });
+    setProcessingRerun(null);
+    if (rerun.autoRun) setAutoRunPending(true);
+  }, [open, rerun, tool, setProcessingRerun]);
 
   // Keep the newest log lines in view as they stream in.
   useEffect(() => {
@@ -150,6 +169,7 @@ export function NetworkToolsDialog({
         return;
       }
       const layerId = addGeoJsonLayer(name, fc);
+      runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
@@ -197,6 +217,14 @@ export function NetworkToolsDialog({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const tracker = beginProcessingRun({
+      kind: "network",
+      toolId: tool.id,
+      toolName: tool.name,
+      engine: "client",
+      parameters: params,
+    });
+    runTrackerRef.current = tracker;
     setRunning(true);
     try {
       const ctx: ProcessingContext = {
@@ -208,13 +236,28 @@ export function NetworkToolsDialog({
         signal: controller.signal,
       };
       await tool.run(ctx);
+      tracker.finish("success");
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
+      tracker.finish("error", (error as Error).message);
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
   }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef]);
+
+  // Auto-run for a History "Re-run": kick off handleRun on the render after the
+  // pre-fill effect committed the recorded parameters. The ref always points at
+  // the latest handleRun closure, so the run sees the pre-filled state.
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
+  useEffect(() => {
+    if (!autoRunPending) return;
+    setAutoRunPending(false);
+    void handleRunRef.current();
+  }, [autoRunPending]);
 
   const endpoint = (params.endpoint as string) || getRoutingConfig().endpoint;
 

@@ -73,6 +73,10 @@ import {
 } from "../../lib/subset-tool-url";
 import { clearPrintExtent, drawPrintExtent } from "../../lib/print-extent";
 import { startGeoLibreSidecar, stopGeoLibreSidecar } from "../../lib/sidecar";
+import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import { SidecarHelpBanner } from "./SidecarHelpBanner";
 
 interface ProcessingDialogProps {
@@ -451,6 +455,8 @@ export function ProcessingDialog({
   );
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const [tools, setTools] = useState<WhiteboxTool[]>([]);
   const [selectedToolId, setSelectedToolId] = useState("");
@@ -710,6 +716,11 @@ export function ProcessingDialog({
   // has actually started, so the apply only fires on a true -> false transition.
   const pendingInitialToolRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
+  // History trackers per dispatched job id (#1292). Entries stay after finish
+  // (finish is idempotent) so async output imports can still report layers.
+  const historyTrackersRef = useRef<Map<string, ProcessingRunTracker>>(
+    new Map(),
+  );
   // Bytes of input files the user browsed from disk (web build, where the
   // browser cannot expose a real path). Keyed by parameter name; consumed by
   // the in-browser WASM runner. GeoJSON files are parsed up front so vector
@@ -1038,6 +1049,26 @@ export function ProcessingDialog({
     importedJobIdRef.current = null;
   }, [selectedTool?.id]);
 
+  // Pre-fill from a pending History re-run (#1292). If the requested tool is
+  // not selected yet, select it once the catalog holds it (the initial-tool
+  // stash above covers the not-yet-loaded case); once selected, overlay the
+  // recorded values on the tool's defaults. Declared after the values-reset
+  // effect above so the recorded values win when both fire in the same commit.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "whitebox") return;
+    if (selectedTool?.id !== rerun.toolId) {
+      if (!loadingTools && tools.some((tool) => tool.id === rerun.toolId)) {
+        setSelectedToolId(rerun.toolId);
+      }
+      return;
+    }
+    setValues({
+      ...createDefaultValues(selectedTool),
+      ...(rerun.parameters as ParameterValues),
+    });
+    setProcessingRerun(null);
+  }, [open, rerun, selectedTool, loadingTools, tools, setProcessingRerun]);
+
   useEffect(() => {
     if (!job || !RUNNING_JOB_STATUSES.has(job.status)) return;
     // Schedule the next poll only after the current request resolves so a slow
@@ -1063,6 +1094,19 @@ export function ProcessingDialog({
       cancelled = true;
       window.clearTimeout(timer);
     };
+  }, [job]);
+
+  // Record a History entry once a job reaches a terminal status (#1292). WASM
+  // jobs arrive terminal on dispatch; sidecar jobs get here via polling.
+  // `finish` is idempotent, so re-renders with the same terminal job are no-ops.
+  useEffect(() => {
+    if (!job || RUNNING_JOB_STATUSES.has(job.status)) return;
+    historyTrackersRef.current
+      .get(job.id)
+      ?.finish(
+        job.status === "succeeded" ? "success" : "error",
+        job.error ?? undefined,
+      );
   }, [job]);
 
   const updateValue = (name: string, value: unknown) => {
@@ -1302,11 +1346,9 @@ export function ProcessingDialog({
           ? value
           : await fetchWhiteboxJsonOutput(path);
         if (!isFeatureCollection(data)) continue;
-        const layerId = addGeoJsonLayer(
-          `${jobToolLabel} ${humanize(name)}`,
-          data,
-          path || undefined,
-        );
+        const layerName = `${jobToolLabel} ${humanize(name)}`;
+        const layerId = addGeoJsonLayer(layerName, data, path || undefined);
+        historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(layerName);
         const layer = useAppStore
           .getState()
           .layers.find((item) => item.id === layerId);
@@ -1342,11 +1384,13 @@ export function ProcessingDialog({
           // Display name stays human-readable; the file name matches the actual
           // WASM output path (e.g. fill_depressions_wang_and_liu_output.tif), so
           // the layer's sourcePath lines up with the path shown in the panel.
+          const rasterName = `${jobToolLabel} ${humanize(name)}`;
           await onAddRaster(
             value,
-            `${jobToolLabel} ${humanize(name)}`,
+            rasterName,
             `${outputBaseName(nextJob.tool_id, name)}.tif`,
           );
+          historyTrackersRef.current.get(nextJob.id)?.addOutputLayer(rasterName);
         }
       }
     },
@@ -1441,6 +1485,16 @@ export function ProcessingDialog({
     // cast to a bogus format and produce a `..._output.undefined` filename.
     const vectorOutputFormat = normalizeVectorOutputFormat(vectorOutValue);
 
+    // Track the run for the Processing History panel (#1292). The raw form
+    // values (with `layer:` tokens) are recorded, not the resolved request
+    // parameters, so Edit & re-run can restore the form exactly.
+    const tracker = beginProcessingRun({
+      kind: "whitebox",
+      toolId: selectedTool.id,
+      toolName: toolLabel(selectedTool),
+      engine: runLocal ? "wasm" : "sidecar",
+      parameters: { ...values },
+    });
     try {
       const request = {
         tool_id: selectedTool.id,
@@ -1470,11 +1524,13 @@ export function ProcessingDialog({
       if (runLocal && nextJob.status === "succeeded") {
         runParametersByJobRef.current.set(nextJob.id, parameters);
       }
+      historyTrackersRef.current.set(nextJob.id, tracker);
       setJob(nextJob);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start Whitebox tool.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Could not start Whitebox tool.";
+      tracker.finish("error", message);
+      setError(message);
     } finally {
       setRunningLocal(false);
     }

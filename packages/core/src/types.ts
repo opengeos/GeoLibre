@@ -986,6 +986,76 @@ export interface ProcessingModel {
   steps: ProcessingModelStep[];
 }
 
+/**
+ * Which dialog family executed a {@link ProcessingRun}. Drives the History
+ * panel's re-run routing: each kind maps to the dialog (and store open-flag)
+ * that can be reopened pre-filled with the run's parameters.
+ */
+export type ProcessingRunKind =
+  | "vector"
+  | "statistics"
+  | "network"
+  | "whitebox"
+  | "raster"
+  | "conversion"
+  | "algorithm";
+
+export type ProcessingRunStatus = "success" | "error";
+
+/** Upper bound on persisted processing-history entries (oldest are dropped). */
+export const MAX_PROCESSING_HISTORY = 100;
+
+/**
+ * One recorded processing tool run (issue #1292). Appended by every processing
+ * dialog when a run finishes and persisted in the project file, so a saved
+ * project documents how its derived layers were produced. Parameter values are
+ * stored exactly as the dialog dispatched them (layer parameters hold layer
+ * ids), which is what re-run pre-fills and "Copy as Python" emit.
+ */
+export interface ProcessingRun {
+  /** Stable id, unique within the project (React key and update key). */
+  id: string;
+  kind: ProcessingRunKind;
+  /** The tool's registry id (e.g. `"buffer"`, `"slope"`). */
+  toolId: string;
+  /** Human-readable tool name captured at run time. */
+  toolName: string;
+  /** Engine that executed the run: `client`, `wasm`, `sidecar`, `pyodide`, `browser`. */
+  engine: string;
+  /** Parameter values keyed by the tool's parameter ids. */
+  parameters: Record<string, unknown>;
+  /** Names of input layers referenced by layer parameters, keyed by layer id. */
+  inputLayerNames?: Record<string, string>;
+  /** Names of layers the run added to the map. */
+  outputLayerNames?: string[];
+  /** Input file path/name, for file-based tools (raster/conversion). */
+  inputPath?: string;
+  /** Output file path/name, for file-based tools (raster/conversion). */
+  outputPath?: string;
+  /** ISO timestamp of when the run started. */
+  startedAt: string;
+  /** Wall-clock duration of the run in milliseconds. */
+  durationMs?: number;
+  status: ProcessingRunStatus;
+  /** Error message when `status` is `"error"`. */
+  error?: string;
+}
+
+/**
+ * A pending "re-run from History" request. The History panel writes it to the
+ * store and opens the target dialog; the dialog consumes it (pre-filling its
+ * parameter form) and clears it. `autoRun` asks the dialog to start the run
+ * immediately after pre-filling (plain Re-run vs Edit & re-run).
+ */
+export interface ProcessingRerunRequest {
+  kind: ProcessingRunKind;
+  toolId: string;
+  parameters: Record<string, unknown>;
+  /** Engine to preselect, when the dialog offers a choice. */
+  engine?: string;
+  autoRun?: boolean;
+}
+
 /** Column-count bounds for the Dashboard panel's widget grid. */
 export const MIN_DASHBOARD_COLUMNS = 1;
 export const MAX_DASHBOARD_COLUMNS = 6;
@@ -1059,6 +1129,8 @@ export interface GeoLibreProject {
   storymap?: StoryMap;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models?: ProcessingModel[];
+  /** Recorded processing tool runs (Processing History; issue #1292). */
+  processingHistory?: ProcessingRun[];
   /** Saved Dashboard panel chart widgets (issue #401). */
   widgets?: DashboardWidget[];
   /** Number of columns in the Dashboard widget grid; omitted when default. */

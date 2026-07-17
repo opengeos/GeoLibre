@@ -1970,6 +1970,7 @@
       "whitebox": "Whitebox",
       "geocode": "Geocode Addresses",
       "modelBuilder": "Batch & Models",
+      "processingHistory": "History",
       "conversion": "Conversion",
       "vector": "Vector",
       "network": "Network",
@@ -2719,6 +2720,19 @@
     "refreshCatalog": "Refresh catalog",
     "increaseValue": "Increase value",
     "decreaseValue": "Decrease value",
+    "history": {
+      "title": "Processing History",
+      "description": "Every processing run in this project, newest first. Re-run a tool, reopen it with the same parameters, or copy the run as JSON or Python.",
+      "empty": "No processing runs recorded yet. Run a tool from the Processing menu and it will appear here.",
+      "rerun": "Re-run",
+      "editRerun": "Edit & re-run",
+      "copyJson": "Copy JSON",
+      "copyPython": "Copy Python",
+      "copied": "Copied",
+      "clear": "Clear history",
+      "count_one": "{{count}} run recorded",
+      "count_other": "{{count}} runs recorded"
+    },
     "modelBuilder": {
       "moveStepUp": "Move step up",
       "moveStepDown": "Move step down",

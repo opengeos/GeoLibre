@@ -271,6 +271,20 @@ const StatisticsToolsDialog = lazy(() =>
     }),
 );
 
+const ProcessingHistoryDialog = lazy(() =>
+  import("../processing/ProcessingHistoryDialog")
+    .then((module) => ({
+      default: module.ProcessingHistoryDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load ProcessingHistoryDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../processing/ProcessingHistoryDialog").ProcessingHistoryDialog;
+      return { default: Fallback };
+    }),
+);
+
 const GeocodeDialog = lazy(() =>
   import("../processing/GeocodeDialog")
     .then((module) => ({
@@ -2293,6 +2307,9 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <GeocodeDialog mapControllerRef={mapControllerRef} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <ProcessingHistoryDialog />
       </Suspense>
       <Suspense fallback={null}>
         <RasterToolsDialog mapControllerRef={mapControllerRef} />
