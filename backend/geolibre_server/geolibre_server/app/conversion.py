@@ -500,6 +500,36 @@ if target_srs:
     if source_srs is None and is_geojson_input:
         # GeoJSON carries no CRS annotation but is WGS84 by spec (RFC 7946).
         source_srs = "EPSG:4326"
+    if source_srs is None and input_layer and not low.endswith((".parquet", ".geoparquet")):
+        # Last resort: GDAL's layer metadata. The DESCRIBE annotation and
+        # st_read_meta's geometry_fields[].crs are two different surfaces, and
+        # the layer-listing endpoint resolves CRS from the latter — falling
+        # back to the same surface here keeps the two paths agreeing on
+        # whether a layer's CRS is resolvable. Only attempted for an explicit
+        # layer (exact name match); a metadata failure just leaves the clear
+        # error below.
+        if low.endswith(".zip"):
+            meta_target = "/vsizip/" + input_path
+        elif os.path.isdir(input_path):
+            meta_target = os.path.join(input_path, "*.gdbtable")
+        else:
+            meta_target = input_path
+        try:
+            for (layer_list,) in con.execute(
+                f"SELECT layers FROM st_read_meta({quote(meta_target)})"
+            ).fetchall():
+                for meta_layer in layer_list or []:
+                    if meta_layer.get("name") != input_layer:
+                        continue
+                    fields = meta_layer.get("geometry_fields") or []
+                    crs = (fields[0].get("crs") or {}) if fields else {}
+                    auth_name = crs.get("auth_name")
+                    auth_code = crs.get("auth_code")
+                    if auth_name and auth_code:
+                        source_srs = f"{auth_name}:{auth_code}"
+                    break
+        except Exception:
+            pass
     if source_srs is None:
         raise SystemExit(
             "Cannot reproject: the input dataset does not declare a CRS."
@@ -652,8 +682,10 @@ else:
 
 layers = []
 seen = set()
+# ORDER BY file_name: the glob's match order is not guaranteed, and without it
+# the "first" layer of a per-file-enumerated .gdb could vary run to run.
 for (layer_list,) in con.execute(
-    f"SELECT layers FROM st_read_meta({quote(meta_target)})"
+    f"SELECT layers FROM st_read_meta({quote(meta_target)}) ORDER BY file_name"
 ).fetchall():
     for layer in layer_list or []:
         name = layer.get("name")

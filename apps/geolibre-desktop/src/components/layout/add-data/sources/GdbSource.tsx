@@ -148,14 +148,13 @@ export function GdbSource() {
     if (!gdbPath) throw new Error(t("addData.gdb.errorChooseFolder"));
     if (selectedLayer === null) throw new Error(t("addData.gdb.errorNoLayer"));
 
-    const layerInfo = layers.find((layer) => layer.name === selectedLayer);
     const name = source.layerName.trim() || defaultName;
 
     // MapLibre renders lon/lat. Reproject from the layer's declared CRS, or
     // from the user-entered one when the geodatabase's spatial reference could
     // not be resolved. With neither, the coordinates would render wherever
     // their raw values land, so refuse instead of silently misplacing them.
-    const sourceCrs = layerInfo?.crs ?? normalizeCrs(crsOverride);
+    const sourceCrs = selectedInfo?.crs ?? normalizeCrs(crsOverride);
     if (!sourceCrs) throw new Error(t("addData.gdb.errorMissingCrs"));
 
     // The sidecar writes the converted layer into the OS temp directory; the
@@ -167,6 +166,12 @@ export function GdbSource() {
 
     await startGeoLibreSidecar();
     let featureCollection: FeatureCollection;
+    // Set once the job is known to have finished on the sidecar; cleanup is
+    // gated on it because after a poll timeout (or a mid-poll network error)
+    // the job may still be running and writing outputPath — removing it then
+    // would unlink the file out from under the write. In that rare case the
+    // file is left for the OS temp cleaner instead.
+    let jobFinished = false;
     try {
       const job = await waitForConversionJob(
         await runVectorToVector({
@@ -176,10 +181,11 @@ export function GdbSource() {
           target_srs: "EPSG:4326",
           // Only sent when the layer itself declares nothing; the backend
           // otherwise reads the CRS from the dataset.
-          ...(layerInfo?.crs ? {} : { source_srs: sourceCrs }),
+          ...(selectedInfo?.crs ? {} : { source_srs: sourceCrs }),
         }),
         t("addData.gdb.errorTimeout"),
       );
+      jobFinished = true;
       if (job.status !== "succeeded") {
         throw new Error(job.error || t("addData.gdb.convertError"));
       }
@@ -192,7 +198,7 @@ export function GdbSource() {
       // capability grants remove for exactly this filename pattern). A failed
       // conversion already unlinked its partial output server-side, so a
       // missing file here is the normal failure-path outcome.
-      await remove(outputPath).catch(() => undefined);
+      if (jobFinished) await remove(outputPath).catch(() => undefined);
     }
 
     source.addAndClose(
@@ -264,7 +270,13 @@ export function GdbSource() {
             id="gdb-layer"
             value={selectedLayer ?? ""}
             disabled={isReadingLayers || layers.length === 0}
-            onChange={(event) => setSelectedLayer(event.target.value)}
+            onChange={(event) => {
+              setSelectedLayer(event.target.value);
+              // The override is a per-layer declaration; carrying it over to
+              // another CRS-less layer would silently reproject that layer
+              // from the previous layer's CRS.
+              setCrsOverride("");
+            }}
           >
             {layers.length === 0 ? (
               <option value="">
