@@ -128,6 +128,33 @@ describe("geometryBounds", () => {
     );
   });
 
+  it("unwraps antimeridian-crossing features to a narrow box", () => {
+    // Fiji-like: vertices on both sides of 180°. The raw min/max box would
+    // span the far side of the globe; the unwrapped box is ~2° wide with an
+    // east longitude past 180 (which MapLibre's fitBounds understands).
+    assert.deepEqual(
+      geometryBounds({
+        type: "LineString",
+        coordinates: [
+          [179, -17],
+          [-179, -16],
+        ],
+      }),
+      [179, -17, 181, -16],
+    );
+    // A hemisphere-wide feature that does not cross ±180° keeps the raw box.
+    assert.deepEqual(
+      geometryBounds({
+        type: "LineString",
+        coordinates: [
+          [-90, 0],
+          [90, 10],
+        ],
+      }),
+      [-90, 0, 90, 10],
+    );
+  });
+
   it("handles GeometryCollections and rejects empty geometries", () => {
     assert.deepEqual(
       geometryBounds({
@@ -205,6 +232,17 @@ describe("parseAtlasFilter", () => {
     assert.equal(eq?.({ ST: "OR" }), false);
     const bare = parseAtlasFilter("ST != CA");
     assert.equal(bare?.({ ST: "OR" }), true);
+  });
+
+  it("lets != match features missing the field entirely", () => {
+    const ne = parseAtlasFilter('STATUS != "archived"');
+    assert.equal(ne?.({}), true);
+    assert.equal(ne?.({ STATUS: null }), true);
+    assert.equal(ne?.({ STATUS: "active" }), true);
+    assert.equal(ne?.({ STATUS: "archived" }), false);
+    // Every other operator still cannot be satisfied by a missing field.
+    assert.equal(parseAtlasFilter('STATUS = "x"')?.({}), false);
+    assert.equal(parseAtlasFilter("STATUS contains x")?.({}), false);
   });
 
   it("treats == as an alias for =", () => {

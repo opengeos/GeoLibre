@@ -97,6 +97,11 @@ export function geometryBounds(
   let s = Infinity;
   let e = -Infinity;
   let n = -Infinity;
+  // Longitudes shifted into [0, 360), tracked in parallel to detect features
+  // that cross the antimeridian (Fiji, the Aleutians, ...): for those, the
+  // raw min/max box spans the far side of the globe instead of the feature.
+  let wShifted = Infinity;
+  let eShifted = -Infinity;
   const visit = (pos: Position) => {
     const [x, y] = pos;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
@@ -104,8 +109,13 @@ export function geometryBounds(
     s = Math.min(s, y);
     e = Math.max(e, x);
     n = Math.max(n, y);
+    const shifted = x < 0 ? x + 360 : x;
+    wShifted = Math.min(wShifted, shifted);
+    eShifted = Math.max(eShifted, shifted);
   };
   if (geometry.type === "GeometryCollection") {
+    // Children are merged on their raw boxes; a collection whose *combination*
+    // crosses the antimeridian is not unwrapped (leaf geometries are).
     for (const g of geometry.geometries) {
       const b = geometryBounds(g);
       if (!b) continue;
@@ -118,6 +128,12 @@ export function geometryBounds(
     walkPositions(geometry.coordinates, visit);
   }
   if (!Number.isFinite(w) || !Number.isFinite(s)) return null;
+  // A raw span over 180° that shrinks in the shifted frame means the feature
+  // crosses ±180°: return the shifted box (east may exceed 180°, which
+  // MapLibre's fitBounds understands and renders across the antimeridian).
+  if (e - w > 180 && eShifted - wShifted < e - w) {
+    return [wShifted, s, eShifted, n];
+  }
   return [w, s, e, n];
 }
 
@@ -289,7 +305,9 @@ export function parseAtlasFilter(
 }
 
 function matchCondition(c: FilterCondition, raw: unknown): boolean {
-  if (raw === null || raw === undefined) return false;
+  // A feature without the field at all: it is "not equal" to any value, but
+  // cannot satisfy equality, ordering, or containment.
+  if (raw === null || raw === undefined) return c.op === "!=";
   const asNum = typeof raw === "number" ? raw : Number(raw);
   const bothNumeric =
     c.numericValue !== null &&

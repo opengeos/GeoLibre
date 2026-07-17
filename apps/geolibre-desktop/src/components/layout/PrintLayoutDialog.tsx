@@ -1773,6 +1773,7 @@ export function PrintLayoutDialog({
                           <Select
                             id="atlas-name-field"
                             value={atlasNameField}
+                            disabled={atlasBusy}
                             onChange={(e) => setAtlasNameField(e.target.value)}
                           >
                             <option value="">
@@ -1792,6 +1793,7 @@ export function PrintLayoutDialog({
                           <Select
                             id="atlas-extent-mode"
                             value={atlasExtentMode}
+                            disabled={atlasBusy}
                             onChange={(e) =>
                               setAtlasExtentMode(
                                 e.target.value as "margin" | "scale",
@@ -1817,6 +1819,7 @@ export function PrintLayoutDialog({
                           <Input
                             id="atlas-margin"
                             type="number"
+                            disabled={atlasBusy}
                             min={0}
                             max={100}
                             value={atlasMarginPct}
@@ -1842,6 +1845,7 @@ export function PrintLayoutDialog({
                             <Input
                               id="atlas-scale"
                               inputMode="numeric"
+                              disabled={atlasBusy}
                               className="flex-1"
                               value={atlasScale}
                               onChange={(e) =>
@@ -1871,6 +1875,7 @@ export function PrintLayoutDialog({
                           <Select
                             id="atlas-sort"
                             value={atlasSortField}
+                            disabled={atlasBusy}
                             onChange={(e) => setAtlasSortField(e.target.value)}
                           >
                             <option value="">
@@ -1890,7 +1895,7 @@ export function PrintLayoutDialog({
                           <Select
                             id="atlas-sort-dir"
                             value={atlasSortDescending ? "desc" : "asc"}
-                            disabled={!atlasSortField}
+                            disabled={atlasBusy || !atlasSortField}
                             onChange={(e) =>
                               setAtlasSortDescending(e.target.value === "desc")
                             }
@@ -1911,6 +1916,7 @@ export function PrintLayoutDialog({
                         <Input
                           id="atlas-filter"
                           value={atlasFilter}
+                          disabled={atlasBusy}
                           placeholder={t("printLayout.atlas.filterPlaceholder")}
                           onChange={(e) => setAtlasFilter(e.target.value)}
                         />
@@ -1927,6 +1933,7 @@ export function PrintLayoutDialog({
                         <Input
                           id="atlas-filename"
                           value={atlasFilenamePattern}
+                          disabled={atlasBusy}
                           onChange={(e) =>
                             setAtlasFilenamePattern(e.target.value)
                           }
@@ -2568,7 +2575,19 @@ export function PrintLayoutDialog({
               <span className="text-sm text-muted-foreground">
                 {t("printLayout.preview")}
               </span>
-              <Button variant="ghost" size="sm" onClick={() => recapture()}>
+              {/* In atlas mode, recapture must re-drive the current page
+                  (never the plain viewport/extent capture, which would clip to
+                  an unrelated print-extent box and skip the fixed-scale
+                  correction). */}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={atlasBusy}
+                onClick={() => {
+                  if (atlasActive) void goToAtlasPage(clampedAtlasIndex);
+                  else recapture();
+                }}
+              >
                 <RefreshCw className="me-2 h-3.5 w-3.5" />
                 {t("printLayout.recapture")}
               </Button>
@@ -2583,7 +2602,7 @@ export function PrintLayoutDialog({
                   disabled={atlasBusy || clampedAtlasIndex <= 0}
                   onClick={() => void goToAtlasPage(clampedAtlasIndex - 1)}
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
                 </Button>
                 <span className="shrink-0 text-sm tabular-nums">
                   {t("printLayout.atlas.pageOf", {
@@ -2600,7 +2619,7 @@ export function PrintLayoutDialog({
                   }
                   onClick={() => void goToAtlasPage(clampedAtlasIndex + 1)}
                 >
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
                 {currentAtlasPage && (
                   <span
