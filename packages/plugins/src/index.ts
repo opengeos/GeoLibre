@@ -41,6 +41,10 @@ export {
   subscribeFloatingPanels,
   type FloatingPanelsSnapshot,
 } from "./floating-panel-registry";
+// Public so hosts and plugins that ship their own panel-like registries can
+// reuse the title-resolve-or-fallback + per-id warning-dedup behavior instead
+// of re-implementing (and drifting from) it.
+export { PanelTitleResolver } from "./panel-title";
 export { maplibreLayerControlPlugin } from "./plugins/layer-control";
 export { osmBasemapPlugin } from "./plugins/osm-basemap";
 export { cartoLightPlugin } from "./plugins/carto-light";

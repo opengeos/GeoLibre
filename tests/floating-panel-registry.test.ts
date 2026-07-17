@@ -225,8 +225,12 @@ describe("floating-panel registry", () => {
       errors.push(String(args[0]));
     };
     try {
-      const panel = getFloatingPanel("viewer");
-      assert.equal(panel?.title, "viewer");
+      // Many reads (as happen during a drag, which re-renders every
+      // pointermove) log exactly once, not once per read.
+      for (let i = 0; i < 5; i++) {
+        const panel = getFloatingPanel("viewer");
+        assert.equal(panel?.title, "viewer");
+      }
     } finally {
       console.error = original;
     }
@@ -248,13 +252,87 @@ describe("floating-panel registry", () => {
       warnings.push(String(args[0]));
     };
     try {
-      const panel = getFloatingPanel("viewer");
-      assert.equal(panel?.title, "viewer");
+      // Repeated reads during a drag log exactly once.
+      for (let i = 0; i < 5; i++) {
+        const panel = getFloatingPanel("viewer");
+        assert.equal(panel?.title, "viewer");
+      }
     } finally {
       console.warn = original;
     }
 
     assert.equal(warnings.length, 1);
     assert.match(warnings[0], /returned an empty string/);
+  });
+
+  it("dedups title warnings across repeated reads and re-enables on re-register", () => {
+    // getFloatingPanel is called unmemoized in FloatingPanelCard's render body,
+    // which re-renders on every pointermove while the card is dragged or
+    // resized. A throwing getter must log once per panel id (not once per
+    // read), otherwise the console floods on every frame of a drag. Mirrors the
+    // same guard in the right-panel registry. Re-registering clears the dedup
+    // so a later regression surfaces again; unregistering clears it too.
+    registerFloatingPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+
+    const errors: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(String(args[0]));
+    };
+    try {
+      for (let i = 0; i < 5; i++) {
+        getFloatingPanel("viewer");
+      }
+      assert.equal(errors.length, 1);
+    } finally {
+      console.error = original;
+    }
+
+    // Re-registering the same id clears dedup; a still-throwing getter logs
+    // once more.
+    registerFloatingPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+    const errors2: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors2.push(String(args[0]));
+    };
+    try {
+      getFloatingPanel("viewer");
+      assert.equal(errors2.length, 1);
+    } finally {
+      console.error = original;
+    }
+
+    // Unregistering also clears dedup: a re-registered panel under the same id
+    // logs fresh.
+    unregisterFloatingPanel("viewer");
+    registerFloatingPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+    const errors3: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors3.push(String(args[0]));
+    };
+    try {
+      getFloatingPanel("viewer");
+      assert.equal(errors3.length, 1);
+    } finally {
+      console.error = original;
+    }
   });
 });

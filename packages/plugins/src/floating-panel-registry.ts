@@ -1,4 +1,5 @@
 import type { GeoLibreFloatingPanelRegistration } from "./types";
+import { PanelTitleResolver } from "./panel-title";
 
 /**
  * Imperative registry for plugin-owned floating panels.
@@ -22,11 +23,14 @@ export interface FloatingPanelsSnapshot {
 }
 
 const registry = new Map<string, GeoLibreFloatingPanelRegistration>();
-// Title resolvers are kept in a side Map keyed by panel id rather than stashed
-// on the caller-supplied registration object, so the host never mutates a
-// plugin's object with an untyped hidden field. Both string titles and getter
-// functions normalize to a resolver here.
-const titleResolvers = new Map<string, () => string>();
+// Title resolution (string/getter normalization, throw/empty fallback, and the
+// per-id warning dedup the accessor relies on because it is called unmemoized
+// in FloatingPanelCard's render body, which re-renders on every pointermove
+// during a drag/resize) is shared with the right-panel registry via
+// PanelTitleResolver. Each registry owns its own instance.
+const titleResolver = new PanelTitleResolver<GeoLibreFloatingPanelRegistration>(
+  "Floating panel",
+);
 const listeners = new Set<() => void>();
 
 let openIds: string[] = [];
@@ -81,11 +85,7 @@ export function registerFloatingPanel(
     );
   }
   // Normalize title to a resolver so both strings and getters update live.
-  const resolveTitle =
-    typeof panel.title === "function"
-      ? panel.title
-      : () => panel.title as string;
-  titleResolvers.set(panel.id, resolveTitle);
+  titleResolver.set(panel);
   registry.set(panel.id, panel);
   emit();
   return () => {
@@ -102,7 +102,7 @@ export function unregisterFloatingPanel(id: string): void {
   const wasOpen = openIds.includes(id);
   if (wasOpen) openIds = openIds.filter((openId) => openId !== id);
   registry.delete(id);
-  titleResolvers.delete(id);
+  titleResolver.delete(id);
   emit();
   if (wasOpen) runHook(id, "onClose", panel.onClose);
 }
@@ -169,35 +169,13 @@ export function getFloatingPanel(
 ): (GeoLibreFloatingPanelRegistration & { title: string }) | undefined {
   const panel = registry.get(id);
   if (!panel) return undefined;
-  const resolve = titleResolvers.get(id);
-  // Return a shallow clone with the resolved title so the caller's original
+  // Returns a shallow clone with the resolved title so the caller's original
   // registration object is never mutated (its title may be a getter function
   // that must survive re-registration for i18n reactivity). Consumers that
   // need stable object identity for effect dependencies should key on
-  // panel.render rather than the panel object itself.
-  let resolved: string;
-  try {
-    resolved = resolve ? resolve() : String(panel.title);
-  } catch (error) {
-    console.error(`Floating panel "${id}" title resolver threw.`, error);
-    resolved = id;
-  }
-  // A resolver that returns "" (e.g. a mistyped i18n key whose value is
-  // missing and the library falls back to empty) would otherwise render as a
-  // blank title bar with no signal. Degrade to the panel id and warn so the
-  // failure is visible. Render-time fallback (not registration-time) keeps
-  // early i18n loads from false-positive; a later re-render once the key
-  // resolves picks up the real value. Mirrors resolvePanelTitle in the
-  // right-panel registry. A non-string return is covered by the same branch.
-  if (typeof resolved !== "string" || resolved.length === 0) {
-    console.warn(
-      `Floating panel "${id}" title resolver returned ${
-        resolved === "" ? "an empty string" : "a non-string value"
-      }; falling back to the panel id.`,
-    );
-    resolved = id;
-  }
-  return { ...panel, title: resolved } as GeoLibreFloatingPanelRegistration & { title: string };
+  // panel.render rather than the panel object itself. Throw/empty fallback and
+  // per-id warning dedup live in the shared resolver.
+  return titleResolver.resolve(panel);
 }
 
 /** Current reactive snapshot for `useSyncExternalStore`. */
@@ -219,7 +197,7 @@ export function subscribeFloatingPanels(listener: () => void): () => void {
  */
 export function __resetFloatingPanelRegistryForTests(): void {
   registry.clear();
-  titleResolvers.clear();
+  titleResolver.clear();
   listeners.clear();
   openIds = [];
   version = 0;

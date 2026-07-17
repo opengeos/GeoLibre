@@ -2,6 +2,7 @@ import type {
   GeoLibreRightPanelDock,
   GeoLibreRightPanelRegistration,
 } from "./types";
+import { PanelTitleResolver } from "./panel-title";
 
 /**
  * Imperative registry for plugin-owned dockable side panels.
@@ -84,18 +85,13 @@ export interface RightPanelSnapshot {
 }
 
 const registry = new Map<string, GeoLibreRightPanelRegistration>();
-// Title resolvers are kept in a side Map keyed by panel id rather than stashed
-// on the caller-supplied registration object, so the host never mutates a
-// plugin's object with an untyped hidden field. Both string titles and getter
-// functions normalize to a resolver here.
-const titleResolvers = new Map<string, () => string>();
-// Panel ids whose title resolver already logged a throw or empty-string
-// warning. The accessors are called unmemoized on every render (DesktopShell,
-// SharedSidebar, and PluginRightPanel, which mounts up to 4x for the dock
-// slots), so without dedup a throwing getter would log on every read. Cleared
-// on (re-)registration and unregister so a fixed or replaced panel can surface
-// a later regression.
-const loggedTitleWarnings = new Set<string>();
+// Title resolution (string/getter normalization, throw/empty fallback, and the
+// per-id warning dedup the accessors rely on because they are called unmemoized
+// on every render) is shared with the floating-panel registry via
+// PanelTitleResolver. Each registry owns its own instance.
+const titleResolver = new PanelTitleResolver<GeoLibreRightPanelRegistration>(
+  "Right panel",
+);
 const listeners = new Set<() => void>();
 
 let activeId: string | null = null;
@@ -158,18 +154,11 @@ export function registerRightPanel(
     );
   }
   // Normalize title to a resolver so both strings and getters update live.
-  const resolveTitle =
-    typeof panel.title === "function"
-      ? (panel.title as () => string)
-      : () => panel.title as string;
-  titleResolvers.set(panel.id, resolveTitle);
+  titleResolver.set(panel);
   // Re-registering an id replaces it (a plugin may rebuild its panel). The
   // returned disposer only removes the panel while this exact registration is
   // still the current one, so a stale disposer cannot evict a newer panel that
   // reused the id.
-  // Clear dedup state so a rebuilt panel (e.g. a fixed title getter) can log
-  // again if its new resolver also misbehaves.
-  loggedTitleWarnings.delete(panel.id);
   registry.set(panel.id, panel);
   emit();
   return () => {
@@ -195,8 +184,7 @@ export function unregisterRightPanel(id: string): void {
     activeDock = null;
   }
   registry.delete(id);
-  titleResolvers.delete(id);
-  loggedTitleWarnings.delete(id);
+  titleResolver.delete(id);
   emit();
   if (wasActive) runHook(id, "onClose", panel.onClose);
 }
@@ -308,48 +296,6 @@ export function isRightPanelCollapsed(): boolean {
 }
 
 /**
- * Build a shallow clone of a panel with its title resolved to a string, so the
- * caller's original registration object is never mutated (its title may be a
- * getter function that must survive re-registration for i18n reactivity).
- * Shared by both accessors below so `getRightPanel` and `listRightPanels` stay
- * symmetric: every `.title` they expose is already a string, never a getter.
- */
-function resolvePanelTitle(
-  panel: GeoLibreRightPanelRegistration,
-): GeoLibreRightPanelRegistration & { title: string } {
-  const resolve = titleResolvers.get(panel.id);
-  let resolved: string;
-  try {
-    resolved = resolve ? resolve() : String(panel.title);
-  } catch (error) {
-    if (!loggedTitleWarnings.has(panel.id)) {
-      loggedTitleWarnings.add(panel.id);
-      console.error(`Right panel "${panel.id}" title resolver threw.`, error);
-    }
-    resolved = panel.id;
-  }
-  // A resolver that returns "" (e.g. a mistyped i18n key whose value is
-  // missing and the library falls back to empty) would otherwise render as a
-  // blank header with no signal. Degrade to the panel id and warn so the
-  // failure is visible. This is a render-time fallback, not a registration-time
-  // check: the title may legitimately be empty before i18n loads, and a later
-  // re-render once the key resolves will pick up the real value. A non-string
-  // return (mistyped resolver) is covered by the same branch for robustness.
-  if (typeof resolved !== "string" || resolved.length === 0) {
-    if (!loggedTitleWarnings.has(panel.id)) {
-      loggedTitleWarnings.add(panel.id);
-      console.warn(
-        `Right panel "${panel.id}" title resolver returned ${
-          resolved === "" ? "an empty string" : "a non-string value"
-        }; falling back to the panel id.`,
-      );
-    }
-    resolved = panel.id;
-  }
-  return { ...panel, title: resolved } as GeoLibreRightPanelRegistration & { title: string };
-}
-
-/**
  * Look up a registered right panel by id. Title is always resolved to a string
  * by re-running the panel's title resolver on every call. The registry does
  * not itself subscribe to i18n language changes, so live title translation
@@ -362,7 +308,7 @@ export function getRightPanel(
 ): (GeoLibreRightPanelRegistration & { title: string }) | undefined {
   const panel = registry.get(id);
   if (!panel) return undefined;
-  return resolvePanelTitle(panel);
+  return titleResolver.resolve(panel);
 }
 
 /**
@@ -371,7 +317,7 @@ export function getRightPanel(
  * so consumers can read `.title` directly without unwrapping a getter.
  */
 export function listRightPanels(): (GeoLibreRightPanelRegistration & { title: string })[] {
-  return [...registry.values()].map(resolvePanelTitle);
+  return [...registry.values()].map((panel) => titleResolver.resolve(panel));
 }
 
 /** Current reactive snapshot for `useSyncExternalStore`. */
@@ -393,8 +339,7 @@ export function subscribeRightPanels(listener: () => void): () => void {
  */
 export function __resetRightPanelRegistryForTests(): void {
   registry.clear();
-  titleResolvers.clear();
-  loggedTitleWarnings.clear();
+  titleResolver.clear();
   listeners.clear();
   activeId = null;
   collapsed = false;
