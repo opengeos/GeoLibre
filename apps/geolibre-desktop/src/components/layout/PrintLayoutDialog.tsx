@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   DEFAULT_LEGEND_CONFIG,
@@ -112,18 +119,25 @@ interface ToggleFieldProps {
   id: string;
   label: string;
   checked: boolean;
+  disabled?: boolean;
   onChange: (next: boolean) => void;
 }
 
 /** A labelled checkbox row for toggling a map element on or off. */
-function ToggleField({ id, label, checked, onChange }: ToggleFieldProps) {
+function ToggleField({ id, label, checked, disabled, onChange }: ToggleFieldProps) {
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-center gap-2 text-sm">
+    <label
+      htmlFor={id}
+      className={`flex items-center gap-2 text-sm ${
+        disabled ? "cursor-default opacity-50" : "cursor-pointer"
+      }`}
+    >
       <input
         id={id}
         type="checkbox"
         className="h-4 w-4 accent-primary"
         checked={checked}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
       />
       {label}
@@ -742,11 +756,15 @@ export function PrintLayoutDialog({
       atlasLayer?.geojson ? listAtlasFields(atlasLayer.geojson.features) : [],
     [atlasLayer],
   );
+  // Reparse (and rebuild the page list below) off React's deferred lane, so
+  // typing in the filter box does not synchronously re-iterate a large
+  // coverage layer on every keystroke.
+  const deferredAtlasFilter = useDeferredValue(atlasFilter);
   // null = malformed expression: surface the error and fall back to no filter,
   // so a half-typed condition never blanks the whole page list.
   const atlasFilterPredicate = useMemo(
-    () => parseAtlasFilter(atlasFilter),
-    [atlasFilter],
+    () => parseAtlasFilter(deferredAtlasFilter),
+    [deferredAtlasFilter],
   );
   const atlasPages = useMemo(
     () =>
@@ -767,6 +785,13 @@ export function PrintLayoutDialog({
     ],
   );
   const atlasPageCount = atlasPages.length;
+  // Order + membership signature of the series: changes when sorting or
+  // filtering reshuffles which feature sits at each page, but not when only
+  // the display names do (a name-field switch must not re-drive the map).
+  const atlasDriveKey = useMemo(
+    () => atlasPages.map((p) => p.sourceIndex).join(","),
+    [atlasPages],
+  );
   // The stored index can go stale when a filter/sort change shrinks the list.
   const clampedAtlasIndex = Math.min(
     atlasIndex,
@@ -952,11 +977,13 @@ export function PrintLayoutDialog({
 
   // Re-drive the preview whenever the series or its capture settings change:
   // enabling the atlas or switching layers (their handlers reset the index to
-  // 0), reordering/filtering (a new atlasPages identity), or editing the
-  // extent margin/scale. Without this the derived title/name text updates
+  // 0), reordering/filtering (a new atlasDriveKey), or editing the extent
+  // margin/scale. Without this the derived title/name text updates
   // immediately while the captured map still shows the previously driven
-  // feature. Debounced so free-text typing does not thrash the live map;
-  // goToAtlasPage's busy guard drops re-drives landing mid-capture.
+  // feature. Keyed on the sourceIndex signature (not the pages array) so a
+  // name-field-only change never recaptures. Debounced so free-text typing
+  // does not thrash the live map; goToAtlasPage's busy guard drops re-drives
+  // landing mid-capture.
   useEffect(() => {
     if (!open || !atlasEnabled || atlasPageCount === 0) return;
     const timer = window.setTimeout(() => {
@@ -968,7 +995,8 @@ export function PrintLayoutDialog({
   }, [
     open,
     atlasEnabled,
-    atlasPages,
+    atlasLayerId,
+    atlasDriveKey,
     atlasPageCount,
     atlasExtentMode,
     atlasMarginPct,
@@ -1727,6 +1755,7 @@ export function PrintLayoutDialog({
                 id="atlas-enabled"
                 label={t("printLayout.atlas.enable")}
                 checked={atlasEnabled}
+                disabled={atlasBusy}
                 onChange={(next) => {
                   setAtlasEnabled(next);
                   // Start the series from its first page on (re-)enable.
@@ -1920,7 +1949,8 @@ export function PrintLayoutDialog({
                           placeholder={t("printLayout.atlas.filterPlaceholder")}
                           onChange={(e) => setAtlasFilter(e.target.value)}
                         />
-                        {atlasFilter.trim() !== "" && !atlasFilterPredicate && (
+                        {deferredAtlasFilter.trim() !== "" &&
+                          !atlasFilterPredicate && (
                           <p className="text-xs text-destructive">
                             {t("printLayout.atlas.filterError")}
                           </p>
