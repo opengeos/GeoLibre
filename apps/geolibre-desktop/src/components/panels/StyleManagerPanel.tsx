@@ -53,6 +53,7 @@ import {
 import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -232,6 +233,21 @@ export function StyleManagerPanel() {
   const layer = layers.find((l) => l.id === selectedLayerId);
   const canUseLayer =
     layer !== undefined && isStyleLibraryTargetLayer(layer.type);
+
+  // The panel is non-modal, so the selection can change while the save form
+  // is open. Re-seed the name from the newly selected layer (the save always
+  // captures the currently selected layer's style), so switching from layer A
+  // to layer B can never save B's style under A's stale name.
+  useEffect(() => {
+    if (saveFormOpen) {
+      setSaveName(
+        useAppStore.getState().layers.find((l) => l.id === selectedLayerId)
+          ?.name ?? "",
+      );
+    }
+    // Only selection changes re-seed; typing in the field must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLayerId]);
 
   const kindLabels: Record<StyleLibraryEntryKind, string> = {
     style: t("styleManager.kindStyle"),
