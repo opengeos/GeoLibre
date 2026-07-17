@@ -110,7 +110,7 @@ def test_vector_layers_starts_job_for_gdb_directory(
     gdb.mkdir()
     captured: dict[str, object] = {}
 
-    def fake_start_job(tool_id, script, params, output_name):  # noqa: ANN001
+    def fake_start_job(tool_id, script, params, output_name) -> JobState:  # noqa: ANN001
         captured["tool_id"] = tool_id
         captured["script"] = script
         captured["params"] = params
@@ -128,12 +128,12 @@ def test_vector_layers_starts_job_for_gdb_directory(
 def test_vector_to_vector_passes_layer_and_target_srs(
     tmp_path: Path, monkeypatch
 ) -> None:
-    """input_layer and target_srs flow through to the conversion job params."""
+    """input_layer, target_srs, and source_srs flow through to the job params."""
     gdb = tmp_path / "sample.gdb"
     gdb.mkdir()
     captured: dict[str, object] = {}
 
-    def fake_start_job(tool_id, script, params, output_name):  # noqa: ANN001
+    def fake_start_job(_tool_id, _script, params, _output_name) -> JobState:  # noqa: ANN001
         captured["params"] = params
         return _job("job", "pending", "2026-01-01T00:00:00+00:00")
 
@@ -144,11 +144,13 @@ def test_vector_to_vector_passes_layer_and_target_srs(
             output_path=str(tmp_path / "out.geojson"),
             input_layer="cities",
             target_srs="EPSG:4326",
+            source_srs="ESRI:102039",
         )
     )
     params = captured["params"]
     assert params["input_layer"] == "cities"
     assert params["target_srs"] == "EPSG:4326"
+    assert params["source_srs"] == "ESRI:102039"
 
 
 def test_validate_paths_rejects_missing_input(tmp_path: Path) -> None:

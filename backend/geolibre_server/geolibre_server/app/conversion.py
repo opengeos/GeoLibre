@@ -154,13 +154,17 @@ class VectorToVectorRequest(BaseModel):
 
     ``input_layer`` selects one layer of a multi-layer dataset (a File
     Geodatabase or GeoPackage); ``target_srs`` reprojects the geometry to the
-    given CRS (e.g. ``EPSG:4326``) before writing.
+    given CRS (e.g. ``EPSG:4326``) before writing. ``source_srs`` declares the
+    CRS to reproject *from* when set, overriding (or standing in for) the CRS
+    the dataset itself declares — for layers whose spatial reference GDAL
+    cannot resolve to an authority code.
     """
 
     input_path: str
     output_path: str
     input_layer: str | None = None
     target_srs: str | None = None
+    source_srs: str | None = None
 
 
 class VectorLayersRequest(BaseModel):
@@ -410,6 +414,7 @@ output_driver = params.get("output_driver", "")
 zip_shapefile = bool(params.get("zip_shapefile", False))
 input_layer = params.get("input_layer") or None
 target_srs = params.get("target_srs") or None
+source_srs_override = params.get("source_srs") or None
 
 def quote(value):
     return "'" + str(value).replace("'", "''") + "'"
@@ -481,15 +486,17 @@ is_geojson_input = low.endswith(
 )
 
 if target_srs:
-    # DuckDB spatial annotates the geometry's CRS in its DESCRIBE type, e.g.
-    # GEOMETRY('EPSG:4326'); that is the only place the source CRS is exposed.
-    source_srs = None
-    for name, column_type, *_ in columns:
-        if name == geometry_column:
-            match = re.search(r"GEOMETRY\\('([^']+)'\\)", str(column_type))
-            if match:
-                source_srs = match.group(1)
-            break
+    # An explicit source_srs wins; otherwise DuckDB spatial annotates the
+    # geometry's CRS in its DESCRIBE type, e.g. GEOMETRY('EPSG:4326') — that
+    # is the only place the dataset's own CRS is exposed.
+    source_srs = source_srs_override
+    if source_srs is None:
+        for name, column_type, *_ in columns:
+            if name == geometry_column:
+                match = re.search(r"GEOMETRY\\('([^']+)'\\)", str(column_type))
+                if match:
+                    source_srs = match.group(1)
+                break
     if source_srs is None and is_geojson_input:
         # GeoJSON carries no CRS annotation but is WGS84 by spec (RFC 7946).
         source_srs = "EPSG:4326"
@@ -1165,6 +1172,12 @@ def vector_layers(request: VectorLayersRequest):
     Supports every input ``ST_Read`` understands, including a File Geodatabase
     (a ``.gdb`` directory or a zipped one). Returns a job whose result carries
     ``layers``: name, feature count, geometry type, and CRS per layer.
+
+    The feature counts come from ``st_read_meta``, i.e. whatever the GDAL
+    driver reports. FileGDB stores row counts in its catalog so the primary
+    ``.gdb`` case is metadata-only, but a driver without a fast feature count
+    (e.g. a GeoPackage with stale ``gpkg_ogr_contents``) may scan the layer to
+    produce it, making this probe slower than "metadata-only" suggests.
     """
     input_path = _validate_input_path(request.input_path)
     return _start_job(
@@ -1199,6 +1212,7 @@ def vector_to_vector(request: VectorToVectorRequest):
             "zip_shapefile": False,
             "input_layer": request.input_layer,
             "target_srs": request.target_srs,
+            "source_srs": request.source_srs,
         }
         output_name = "geoparquet"
     else:
@@ -1224,6 +1238,7 @@ def vector_to_vector(request: VectorToVectorRequest):
             "zip_shapefile": extension == "zip",
             "input_layer": request.input_layer,
             "target_srs": request.target_srs,
+            "source_srs": request.source_srs,
         }
         output_name = extension
 

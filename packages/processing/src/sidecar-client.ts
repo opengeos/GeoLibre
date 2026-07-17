@@ -432,9 +432,16 @@ export interface VectorToVectorRequest {
   input_layer?: string;
   /**
    * Reproject the geometry to this CRS (e.g. `"EPSG:4326"`) before writing.
-   * The backend rejects the request when the input declares no CRS.
+   * The backend rejects the request when the input declares no CRS and no
+   * `source_srs` is supplied.
    */
   target_srs?: string;
+  /**
+   * CRS to reproject *from*, overriding (or standing in for) the CRS the
+   * dataset declares — for layers whose spatial reference GDAL cannot resolve
+   * to an authority code. Only meaningful together with `target_srs`.
+   */
+  source_srs?: string;
 }
 
 export interface VectorLayersRequest {

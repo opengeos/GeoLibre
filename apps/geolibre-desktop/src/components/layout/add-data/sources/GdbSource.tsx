@@ -5,12 +5,13 @@ import {
   type ConversionJob,
   type VectorDatasetLayer,
 } from "@geolibre/processing";
-import { Button, Label, Select } from "@geolibre/ui";
+import { Button, Input, Label, Select } from "@geolibre/ui";
 import { FolderOpen, Layers } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { FeatureCollection } from "geojson";
 import { tempDir, join } from "@tauri-apps/api/path";
+import { remove } from "@tauri-apps/plugin-fs";
 import { startGeoLibreSidecar } from "../../../../lib/sidecar";
 import {
   isTauri,
@@ -51,6 +52,19 @@ async function waitForConversionJob(
 }
 
 /**
+ * Normalize a user-entered CRS into the `AUTHORITY:CODE` form `ST_Transform`
+ * expects (mirrors the CAD source): a bare number becomes `EPSG:<n>`, an
+ * `epsg:4326` is upper-cased, and an already-qualified `ESRI:102039` passes
+ * through. A blank stays blank (load the layer's coordinates as-is).
+ */
+function normalizeCrs(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (/^\d+$/.test(value)) return `EPSG:${value}`;
+  return value.toUpperCase();
+}
+
+/**
  * Add Data source for Esri File Geodatabases (`.gdb` folders). A geodatabase
  * is a directory-based, multi-layer format that neither MapLibre nor
  * DuckDB-WASM can read (the WASM spatial build lacks the OpenFileGDB driver),
@@ -66,11 +80,15 @@ export function GdbSource() {
   const [gdbPath, setGdbPath] = useState<string | null>(null);
   const [layers, setLayers] = useState<VectorDatasetLayer[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
+  // Source CRS typed by the user, only consulted for layers whose spatial
+  // reference GDAL could not resolve to an authority code (crs === null).
+  const [crsOverride, setCrsOverride] = useState("");
   const [isReadingLayers, setIsReadingLayers] = useState(false);
   // Bumped on every folder pick so a slow layer probe that resolves after a
   // newer one cannot overwrite the newer geodatabase's layers.
   const loadSeq = useRef(0);
   const desktop = isTauri();
+  const selectedInfo = layers.find((layer) => layer.name === selectedLayer);
 
   const handleChooseFolder = async () => {
     source.setError(null);
@@ -88,6 +106,7 @@ export function GdbSource() {
     setGdbPath(path);
     setLayers([]);
     setSelectedLayer(null);
+    setCrsOverride("");
     setIsReadingLayers(true);
     try {
       await startGeoLibreSidecar();
@@ -132,34 +151,49 @@ export function GdbSource() {
     const layerInfo = layers.find((layer) => layer.name === selectedLayer);
     const name = source.layerName.trim() || defaultName;
 
+    // MapLibre renders lon/lat. Reproject from the layer's declared CRS, or
+    // from the user-entered one when the geodatabase's spatial reference could
+    // not be resolved. With neither, the coordinates would render wherever
+    // their raw values land, so refuse instead of silently misplacing them.
+    const sourceCrs = layerInfo?.crs ?? normalizeCrs(crsOverride);
+    if (!sourceCrs) throw new Error(t("addData.gdb.errorMissingCrs"));
+
     // The sidecar writes the converted layer into the OS temp directory; the
-    // file is read straight back and only serves this one add, so a leftover
-    // (there is no delete IPC) is ephemeral and reclaimed by the OS.
+    // file only serves this one add and is removed after the read below.
     const outputPath = await join(
       await tempDir(),
       `geolibre-gdb-${Date.now()}-${Math.random().toString(36).slice(2)}.geojson`,
     );
 
     await startGeoLibreSidecar();
-    const job = await waitForConversionJob(
-      await runVectorToVector({
-        input_path: gdbPath,
-        output_path: outputPath,
-        input_layer: selectedLayer,
-        // MapLibre renders lon/lat; reproject unless the layer declares no CRS
-        // (then the data is passed through as-is rather than rejected).
-        ...(layerInfo?.crs ? { target_srs: "EPSG:4326" } : {}),
-      }),
-      t("addData.gdb.errorTimeout"),
-    );
-    if (job.status !== "succeeded") {
-      throw new Error(job.error || t("addData.gdb.convertError"));
+    let featureCollection: FeatureCollection;
+    try {
+      const job = await waitForConversionJob(
+        await runVectorToVector({
+          input_path: gdbPath,
+          output_path: outputPath,
+          input_layer: selectedLayer,
+          target_srs: "EPSG:4326",
+          // Only sent when the layer itself declares nothing; the backend
+          // otherwise reads the CRS from the dataset.
+          ...(layerInfo?.crs ? {} : { source_srs: sourceCrs }),
+        }),
+        t("addData.gdb.errorTimeout"),
+      );
+      if (job.status !== "succeeded") {
+        throw new Error(job.error || t("addData.gdb.convertError"));
+      }
+      const bytes = await readLocalFileBytes(outputPath);
+      featureCollection = JSON.parse(
+        new TextDecoder("utf-8").decode(bytes),
+      ) as FeatureCollection;
+    } finally {
+      // Best-effort cleanup so repeated imports cannot pile up in temp (the
+      // capability grants remove for exactly this filename pattern). A failed
+      // conversion already unlinked its partial output server-side, so a
+      // missing file here is the normal failure-path outcome.
+      await remove(outputPath).catch(() => undefined);
     }
-
-    const bytes = await readLocalFileBytes(outputPath);
-    const featureCollection = JSON.parse(
-      new TextDecoder("utf-8").decode(bytes),
-    ) as FeatureCollection;
 
     source.addAndClose(
       {
@@ -170,7 +204,7 @@ export function GdbSource() {
           {
             sourceKind: "gdb",
             gdbLayer: selectedLayer,
-            sourceCrs: layerInfo?.crs ?? null,
+            sourceCrs,
             featureCount: featureCollection.features.length,
           },
         ),
@@ -254,6 +288,21 @@ export function GdbSource() {
             {t("addData.gdb.help")}
           </p>
         </div>
+
+        {selectedInfo && !selectedInfo.crs ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="gdb-crs">{t("addData.gdb.crs")}</Label>
+            <Input
+              id="gdb-crs"
+              placeholder={t("addData.gdb.crsPlaceholder")}
+              value={crsOverride}
+              onChange={(event) => setCrsOverride(event.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("addData.gdb.crsHelp")}
+            </p>
+          </div>
+        ) : null}
       </div>
     </AddDataSourceForm>
   );

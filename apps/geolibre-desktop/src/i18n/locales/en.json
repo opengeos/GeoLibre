@@ -436,7 +436,11 @@
       "errorNoLayers": "No feature classes with geometry were found in this geodatabase.",
       "errorChooseFolder": "Choose a .gdb folder first.",
       "errorNoLayer": "Select a feature class to load.",
-      "errorTimeout": "Reading the geodatabase timed out."
+      "errorTimeout": "Reading the geodatabase timed out.",
+      "crs": "Source CRS",
+      "crsPlaceholder": "e.g. EPSG:26915",
+      "crsHelp": "This feature class's coordinate system could not be detected. Enter the EPSG (or ESRI) code it was stored in so it can be reprojected to WGS84.",
+      "errorMissingCrs": "This feature class's coordinate system could not be detected. Enter its source CRS to add it."
     },
     "delimitedText": {
       "defaultName": "Delimited Text Layer",
