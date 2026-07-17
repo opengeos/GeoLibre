@@ -41,6 +41,13 @@ const PYTHON_TOOL_IDS = new Set(
     (tool) => tool.id,
   ),
 );
+/**
+ * Run kinds whose tool ids resolve against those registries. Ids are not
+ * disjoint across engines (e.g. Whitebox and raster both have "clip"/
+ * "reproject"), so a bare id match would offer a Python snippet that silently
+ * invokes the client vector tool with foreign parameters.
+ */
+const PYTHON_ELIGIBLE_KINDS = new Set(["vector", "statistics", "algorithm"]);
 
 /** Dialog families whose History "Re-run" can auto-start the run. */
 const AUTO_RERUN_KINDS = new Set(["vector", "statistics", "network"]);
@@ -312,7 +319,8 @@ export function ProcessingHistoryDialog(): ReactElement {
                           ? t("processing.history.copied")
                           : t("processing.history.copyJson")}
                       </Button>
-                      {PYTHON_TOOL_IDS.has(run.toolId) ? (
+                      {PYTHON_ELIGIBLE_KINDS.has(run.kind) &&
+                      PYTHON_TOOL_IDS.has(run.toolId) ? (
                         <Button
                           variant="ghost"
                           size="sm"

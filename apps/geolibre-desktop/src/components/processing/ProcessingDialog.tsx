@@ -96,6 +96,9 @@ type ParameterValues = Record<string, unknown>;
 const LAYER_TOKEN_PREFIX = "layer:";
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
+/** Cap on retained per-job history trackers (#1292); oldest are evicted. */
+const MAX_TRACKED_HISTORY_JOBS = 50;
+
 // Smallest the floating panel can be resized to, so the two-column tool browser
 // stays usable (left list + a readable parameter form).
 const PANEL_MIN_W = 560;
@@ -717,7 +720,9 @@ export function ProcessingDialog({
   const pendingInitialToolRef = useRef<string | null>(null);
   const wasLoadingRef = useRef(false);
   // History trackers per dispatched job id (#1292). Entries stay after finish
-  // (finish is idempotent) so async output imports can still report layers.
+  // (finish is idempotent) so async output imports can still report layers;
+  // the map is capped (oldest evicted, Map preserves insertion order) so a
+  // long batch session cannot grow it without bound.
   const historyTrackersRef = useRef<Map<string, ProcessingRunTracker>>(
     new Map(),
   );
@@ -1057,8 +1062,18 @@ export function ProcessingDialog({
   useEffect(() => {
     if (!open || !rerun || rerun.kind !== "whitebox") return;
     if (selectedTool?.id !== rerun.toolId) {
-      if (!loadingTools && tools.some((tool) => tool.id === rerun.toolId)) {
-        setSelectedToolId(rerun.toolId);
+      if (!loadingTools && tools.length > 0) {
+        if (tools.some((tool) => tool.id === rerun.toolId)) {
+          setSelectedToolId(rerun.toolId);
+        } else {
+          // A saved-project history entry can reference a tool the current
+          // Whitebox catalog no longer ships (e.g. after a geolibre-wasm
+          // rename); drop the request instead of leaving it pending forever.
+          setError(
+            `Tool "${rerun.toolId}" is no longer in the Whitebox catalog.`,
+          );
+          setProcessingRerun(null);
+        }
       }
       return;
     }
@@ -1525,6 +1540,11 @@ export function ProcessingDialog({
         runParametersByJobRef.current.set(nextJob.id, parameters);
       }
       historyTrackersRef.current.set(nextJob.id, tracker);
+      while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
+        const oldest = historyTrackersRef.current.keys().next().value;
+        if (oldest === undefined) break;
+        historyTrackersRef.current.delete(oldest);
+      }
       setJob(nextJob);
     } catch (err) {
       const message =

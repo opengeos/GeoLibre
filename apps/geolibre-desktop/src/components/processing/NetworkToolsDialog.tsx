@@ -100,6 +100,16 @@ export function NetworkToolsDialog({
   // win over the defaults when both effects fire in the same commit.
   useEffect(() => {
     if (!open || !rerun || rerun.kind !== "network") return;
+    // A saved-project history entry can reference a tool that was renamed or
+    // removed since; drop the request instead of leaving it pending forever.
+    if (!getNetworkTool(rerun.toolId)) {
+      setLog((prev) => [
+        ...prev,
+        `Error: tool "${rerun.toolId}" is no longer available`,
+      ]);
+      setProcessingRerun(null);
+      return;
+    }
     if (rerun.toolId !== tool.id) return;
     setParams({ ...rerun.parameters });
     setProcessingRerun(null);

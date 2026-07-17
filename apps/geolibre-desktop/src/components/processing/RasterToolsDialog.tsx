@@ -85,6 +85,9 @@ type RasterEngine = "sidecar" | "client";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
 
+/** Cap on retained per-job history trackers (#1292); oldest are evicted. */
+const MAX_TRACKED_HISTORY_JOBS = 50;
+
 /** Tools grouped by their `group` label, preserving registry order. */
 function groupedTools(): { group: string; tools: RasterTool[] }[] {
   const groups: { group: string; tools: RasterTool[] }[] = [];
@@ -144,7 +147,8 @@ export function RasterToolsDialog({
   // new pick supersedes it, so its state setters never fire on a dead component.
   const layerFetchAbortRef = useRef<AbortController | null>(null);
   // History trackers per dispatched sidecar job id (#1292). Entries stay after
-  // finish (finish is idempotent).
+  // finish (finish is idempotent); the map is capped (oldest evicted) so a
+  // long session cannot grow it without bound.
   const historyTrackersRef = useRef<Map<string, ProcessingRunTracker>>(
     new Map(),
   );
@@ -225,6 +229,13 @@ export function RasterToolsDialog({
   // are not restored: the user re-picks files.
   useEffect(() => {
     if (!open || !rerun || rerun.kind !== "raster") return;
+    // A saved-project history entry can reference a tool that was renamed or
+    // removed since; drop the request instead of leaving it pending forever.
+    if (!getRasterTool(rerun.toolId)) {
+      setError(`Tool "${rerun.toolId}" is no longer available.`);
+      setProcessingRerun(null);
+      return;
+    }
     if (rerun.toolId !== tool.id) return;
     setParams({ ...toolDefaults(tool), ...rerun.parameters });
     setProcessingRerun(null);
@@ -507,6 +518,11 @@ export function RasterToolsDialog({
         parameters: sidecarParams,
       });
       historyTrackersRef.current.set(nextJob.id, tracker);
+      while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
+        const oldest = historyTrackersRef.current.keys().next().value;
+        if (oldest === undefined) break;
+        historyTrackersRef.current.delete(oldest);
+      }
       setJob(nextJob);
     } catch (err) {
       const message =
@@ -605,6 +621,7 @@ export function RasterToolsDialog({
         // The compute succeeded but the result never made it onto the map, so
         // record the run as failed rather than a green no-output "success".
         tracker.finish("error", mapMessage);
+        return;
       }
       tracker.finish("success");
     } catch (err) {
