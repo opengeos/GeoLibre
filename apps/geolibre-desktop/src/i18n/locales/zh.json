@@ -96,7 +96,8 @@
       "description_other": "此项目希望从您尚未安装的 URL 加载 {{count}} 个外部插件。插件运行的代码可完全访问本应用。",
       "warning": "请仅加载来自可信来源的插件。已加载的插件将以与 GeoLibre 本身相同的权限运行。",
       "trustButton": "信任并加载",
-      "dismissButton": "不加载"
+      "dismissButton": "不加载",
+      "description_one": "此项目想要加载 1 个来自未安装 URL 的外部插件。插件以完整应用权限运行代码。"
     }
   },
   "viewState": {
@@ -117,7 +118,8 @@
     "savePromptTitle": "是否保存当前项目？",
     "savePromptDescription": "当前项目有未保存的更改。是否在创建新项目前保存？",
     "doNotSave": "不保存",
-    "saving": "正在保存…"
+    "saving": "正在保存…",
+    "invalidCustomUrl": "请输入有效的 style.json 或 .pmtiles URL。"
   },
   "basemapPicker": {
     "title": "更改底图",
@@ -244,7 +246,9 @@
       "noFileSelected": "未选择文件",
       "loading": "正在加载...",
       "workspaceLayerPlaceholder": "workspace:layer",
-      "requestFailed": "请求失败，状态码为 {{status}}"
+      "requestFailed": "请求失败，状态码为 {{status}}",
+      "networkFailure": "无法访问服务。请检查主机是否可达，以及其 TLS 证书、防火墙和代理设置是否允许请求；在浏览器中可能被 CORS 阻止，请尝试桌面应用。",
+      "requestTimedOut": "请求超时。主机可能响应缓慢、不可达，或被防火墙/代理阻止。"
     },
     "serviceLibrary": {
       "title": "已保存的服务",
@@ -268,7 +272,9 @@
       "errorNoServices": "在该文件中未找到有效的服务。",
       "errorRead": "无法将该文件作为服务库读取。",
       "imported_other": "已导入 {{count}} 个服务。",
-      "importedWithDropped_other": "已导入 {{count}} 个服务（{{dropped}} 个因库已满而跳过）。"
+      "importedWithDropped_other": "已导入 {{count}} 个服务（{{dropped}} 个因库已满而跳过）。",
+      "imported_one": "已导入 {{count}} 个服务。",
+      "importedWithDropped_one": "已导入 {{count}} 个服务（跳过 {{dropped}} 个 — 库已满）。"
     },
     "xyz": {
       "defaultName": "XYZ 图层",
@@ -293,7 +299,9 @@
       "selectLayer_other": "从 {{count}} 个图层中选择",
       "noLayersFound": "未在该服务中找到任何图层。",
       "retrieveError": "无法从该服务获取图层。",
-      "version": "WMS 版本"
+      "version": "WMS 版本",
+      "sampleLabelGebco": "GEBCO 海洋测深",
+      "selectLayer_one": "从 {{count}} 个图层中选择"
     },
     "wfs": {
       "defaultName": "WFS 图层",
@@ -313,7 +321,8 @@
       "retrievedTypes": "已获取要素类型",
       "selectType_other": "从 {{count}} 个要素类型中选择",
       "noTypesFound": "未在该服务中找到任何要素类型。",
-      "retrieveError": "无法从该服务获取要素类型。"
+      "retrieveError": "无法从该服务获取要素类型。",
+      "selectType_one": "从 {{count}} 个要素类型中选择"
     },
     "wmts": {
       "defaultName": "WMTS 图层",
@@ -423,7 +432,9 @@
       "longitudeField": "经度字段",
       "latitudeField": "纬度字段",
       "noneField": "无（属性表）",
-      "tableHint": "将两个坐标字段都保留为“无”，可将该文件作为非空间属性表添加（用于属性连接）。"
+      "tableHint": "将两个坐标字段都保留为“无”，可将该文件作为非空间属性表添加（用于属性连接）。",
+      "retrievedColumns_one": "已获取 {{count}} 列。",
+      "retrievedColumnsTable_one": "已获取 {{count}} 列。未检测到坐标列，将作为属性表添加。"
     },
     "photos": {
       "defaultName": "照片",
@@ -441,7 +452,12 @@
       "manualPromptBody": "请将其放置在当前地图中心，然后拖动到地图上的正确位置。",
       "manualPromptCenter": "地图中心：{{lng}}, {{lat}}",
       "manualPlace": "放置在地图中心",
-      "manualHint": "拖动此图钉以定位照片，然后点击“完成”。"
+      "manualHint": "拖动此图钉以定位照片，然后点击“完成”。",
+      "selectedCount_one": "已选择 {{count}} 张照片",
+      "errorNoGps_one": "所选照片中未找到 GPS 位置信息。",
+      "addedSummary_one": "已添加 {{count}} 张地理标记照片。",
+      "skippedNote_one": "跳过了 {{count}} 张照片（无 GPS 位置）。",
+      "noThumbnailNote_one": "{{count}} 张照片无缩略图（HEIC 或不支持的格式）。"
     },
     "mbtiles": {
       "defaultName": "MBTiles 图层",
@@ -488,7 +504,9 @@
       "editableTable": "表",
       "tableReadOnly": "{{table}}（只读：无主键）",
       "errorSelectTable": "请选择要加载的表。",
-      "errorRuntimeMissing": "处理服务器未安装 PostGIS 运行时（psycopg）。请安装 geolibre-server 的 “postgis” 扩展以加载可编辑图层。"
+      "errorRuntimeMissing": "处理服务器未安装 PostGIS 运行时（psycopg）。请安装 geolibre-server 的 “postgis” 扩展以加载可编辑图层。",
+      "statusFound_one": "找到 {{count}} 个数据源。",
+      "statusTablesFound_one": "找到 {{count}} 个空间表。"
     },
     "video": {
       "defaultName": "视频图层",
@@ -557,7 +575,11 @@
       "cellSize": "单元格大小",
       "lineWidth": "线宽",
       "extrusion": "3D 拉伸",
-      "modelUrlPlaceholder": "https://example.com/model.glb"
+      "modelUrlPlaceholder": "https://example.com/model.glb",
+      "mapRequiredFields_one": "请映射必填字段：{{fields}}。",
+      "loadedFeatures_one": "已加载 {{count}} 个要素。",
+      "loadedRows_one": "{{count}} 行",
+      "loadedColumns_one": "{{count}} 列"
     }
   },
   "offline": {
@@ -585,7 +607,10 @@
     "concurrencyHint": "降低此值可减轻对限制快速瓦片请求速率的服务器的压力。",
     "timeout": "请求超时（秒）",
     "timeoutHint": "每个瓦片请求在计为失败前最多等待 {{seconds}} 秒。",
-    "timeoutDisabled": "无超时限制 — 请求使用浏览器默认设置。对于较慢的网络连接，请提高此值。"
+    "timeoutDisabled": "无超时限制 — 请求使用浏览器默认设置。对于较慢的网络连接，请提高此值。",
+    "relativeLevels_one": "+{{count}} 级 · 缩放 {{min}}–{{max}}",
+    "complete_one": "离线区域已保存。已缓存 {{count}} 个资源供离线使用。",
+    "retryFailed_one": "重试 {{count}} 个失败的资源"
   },
   "offlineManager": {
     "title": "管理离线区域",
@@ -603,7 +628,9 @@
     "updateAll": "全部刷新",
     "updating": "正在刷新 {{done}} / {{total}}…",
     "totalFootprint_other": "共 {{size}}，跨 {{count}} 个区域",
-    "deviceUsage": "已使用 {{usage}} / {{quota}}"
+    "deviceUsage": "已使用 {{usage}} / {{quota}}",
+    "tilesCount_one": "{{count}} 个瓦片",
+    "totalFootprint_one": "{{size}}，共 {{count}} 个区域"
   },
   "recordTour": {
     "title": "录制地图导览",
@@ -646,7 +673,23 @@
     "saved": "已保存 {{name}}",
     "saveCancelled": "保存已取消。",
     "recordError": "无法录制导览。请重试。",
-    "saveError": "无法保存视频。请重试。"
+    "saveError": "无法保存视频。请重试。",
+    "pathTitle": "从路径生成",
+    "pathNoLayers": "添加 LineString 图层以从路径生成关键帧。",
+    "pathLayer": "路径图层",
+    "pathLayerOption": "{{name}}（{{count}} 个点）",
+    "pathKeyframes": "关键帧",
+    "pathZoom": "缩放",
+    "pathPitch": "俯仰角",
+    "pathHold": "停留",
+    "pathTransition": "移动",
+    "pathGenerate": "生成",
+    "pathConfirmReplace": "是否用从此路径生成的关键帧替换当前关键帧？",
+    "pathGenerated_one": "已从路径生成 {{count}} 个关键帧。",
+    "pathGenerated_other": "已从路径生成 {{count}} 个关键帧。",
+    "pathGenerateError": "无法从此路径生成关键帧。",
+    "configLoaded_one": "已加载包含 {{count}} 个关键帧的配置。",
+    "keyframeCount_one": "{{count}} 个关键帧"
   },
   "recordVideo": {
     "title": "录制视频",
@@ -672,7 +715,20 @@
     "saved": "已保存 {{name}}",
     "saveCancelled": "保存已取消。",
     "recordError": "无法录制视频。请重试。",
-    "saveError": "无法保存视频。请重试。"
+    "saveError": "无法保存视频。请重试。",
+    "caption": "字幕（烧录到视频中）",
+    "captionTitlePlaceholder": "标题（可选）",
+    "captionTextLabel": "字幕副标题或数据来源",
+    "captionTextPlaceholder": "副标题或数据来源（可选）",
+    "captionPosition": "字幕位置",
+    "captionPos": {
+      "top-left": "左上",
+      "top-center": "顶部居中",
+      "top-right": "右上",
+      "bottom-left": "左下",
+      "bottom-center": "底部居中",
+      "bottom-right": "右下"
+    }
   },
   "fieldCollection": {
     "title": "野外采集",
@@ -731,7 +787,10 @@
     "saved": {
       "point_other": "已将 {{count}} 个点保存到 {{layer}}。",
       "line_other": "已将 {{count}} 条线保存到 {{layer}}。",
-      "polygon_other": "已将 {{count}} 个面保存到 {{layer}}。"
+      "polygon_other": "已将 {{count}} 个面保存到 {{layer}}。",
+      "point_one": "已将 {{count}} 个点保存到 {{layer}}。",
+      "line_one": "已将 {{count}} 条线保存到 {{layer}}。",
+      "polygon_one": "已将 {{count}} 个多边形保存到 {{layer}}。"
     },
     "layerGone": "采集图层已不再可用。",
     "noGeolocation": "此设备不支持地理定位。",
@@ -740,7 +799,8 @@
     "photoReadError": "无法读取该图像。请尝试其他文件。",
     "errorRequired": "此字段为必填项。",
     "errorNumber": "请输入有效的数字。",
-    "errorChoice": "请从列出的选项中选择一项。"
+    "errorChoice": "请从列出的选项中选择一项。",
+    "vertices_one": "{{count}} 个顶点"
   },
   "georeferencer": {
     "title": "图像地理配准",
@@ -843,7 +903,8 @@
     "chatAttachLocation": "附加当前地图位置",
     "chatLocationAttached": "已附加位置（点击移除）",
     "chatGoToLocation": "前往此位置",
-    "sessionStatusUnread_other": "实时协作会话，{{count}} 条未读消息。点击查看当前连接的用户并聊天。"
+    "sessionStatusUnread_other": "实时协作会话，{{count}} 条未读消息。点击查看当前连接的用户并聊天。",
+    "sessionStatusUnread_one": "实时协作会话，{{count}} 条未读消息。点击查看在线人员和聊天。"
   },
   "share": {
     "title": "共享项目",
@@ -905,7 +966,8 @@
     "emptyFeatured": "暂无精选项目。",
     "emptyMine": "您尚未共享任何项目。",
     "visibilityUnlisted": "不公开列出",
-    "visibilityPrivate": "私有"
+    "visibilityPrivate": "私有",
+    "views_one": "{{count}} 次查看"
   },
   "language": {
     "label": "语言",
@@ -1076,7 +1138,8 @@
       "durationHours": "{{value}} 小时",
       "durationHoursMinutes": "{{hours}} 小时 {{minutes}} 分钟",
       "waypointCount_zero": "尚未放置途经点",
-      "waypointCount_other": "已放置 {{count}} 个途经点"
+      "waypointCount_other": "已放置 {{count}} 个途经点",
+      "waypointCount_one": "已放置 {{count}} 个路径点"
     },
     "reverseGeocodeMode": {
       "title": "反向地理编码模式已激活",
@@ -1189,7 +1252,8 @@
     "centerHere": "以此为中心",
     "zoomInHere": "放大到此处",
     "viewInGoogleMaps": "在 Google 地图中查看",
-    "viewInGoogleEarth": "在 Google Earth 中查看"
+    "viewInGoogleEarth": "在 Google Earth 中查看",
+    "whatsHere": "这里是什么？"
   },
   "onboarding": {
     "title": "欢迎使用 GeoLibre",
@@ -1265,7 +1329,12 @@
       "renderWorldCopies": "渲染世界副本",
       "ellipsoid": "天体",
       "ellipsoidHint": "设置用于距离、面积和比例尺测量的半径。请在“添加数据”中选择匹配的星球底图。",
-      "errorBoundsUnavailable": "地图范围尚不可用。"
+      "errorBoundsUnavailable": "地图范围不可用。",
+      "scaleUnit": "比例尺单位",
+      "scaleUnitMetric": "公制 (m / km)",
+      "scaleUnitImperial": "英制 (ft / mi)",
+      "scaleUnitNautical": "海里 (nmi)",
+      "scaleUnitHint": "选择地图底部比例尺显示的单位。"
     },
     "layout": {
       "title": "布局",
@@ -1344,7 +1413,8 @@
       "stripPromptTitle": "是否从文件中移除环境变量？",
       "stripPromptDesc": "此项目包含 {{count}} 个环境变量（其中可能包含 API 密钥）。它们以纯文本形式存储在项目文件中，共享时可能会被暴露。是否从已保存的文件中移除它们？无论如何，您的“设置”都会在本设备上保留它们。",
       "stripButton": "从文件中移除",
-      "keepButton": "保留在文件中"
+      "keepButton": "保留在文件中",
+      "variablesCount_one": "{{count}} 个启用的运行时变量。"
     },
     "geocoding": {
       "title": "地理编码",
@@ -1398,7 +1468,11 @@
         "customBaseUrl": "https://api.example.com/v1",
         "customModel": "model-id",
         "customApiKey": "sk-…（如需要）"
-      }
+      },
+      "secretsNote": "凭据保存在此设备本地，不在您共享的项目文件中，因此会在重启后保留。任何有权访问此设备的人都可以读取它们。",
+      "osEnvNote": "桌面应用还会从系统环境变量读取匹配的 API 密钥。这些会自动使用且永远不会保存到项目文件中 — 留空字段以继续使用环境变量值。",
+      "osEnvField": "从系统环境变量 {{name}} 读取。",
+      "osEnvPlaceholder": "在系统环境中设置"
     }
   },
   "toolbar": {
@@ -1459,7 +1533,21 @@
       "trail": "轨迹",
       "collapse": "折叠",
       "expand": "展开",
-      "close": "关闭"
+      "close": "关闭",
+      "followPitch": "相机俯仰角",
+      "followZoom": "相机缩放",
+      "followRotate": "旋转到航向",
+      "saveVideoMp4": "保存为 MP4",
+      "saveVideoWebm": "保存为 WebM",
+      "estimatedLength": "≈ {{seconds}} 秒",
+      "recordingStatus": "录制中… {{percent}}%",
+      "savingVideo": "保存视频…",
+      "stop": "停止",
+      "videoSaved": "已保存 {{name}}",
+      "videoError": "无法录制动画。请重试。",
+      "videoUnsupported": "此浏览器不支持视频录制。",
+      "videoFileTypeMp4": "MP4 视频",
+      "videoFileTypeWebm": "WebM 视频"
     },
     "setView": {
       "title": "设置视图",
@@ -1572,7 +1660,9 @@
       "checkForUpdates": "检查更新",
       "about": "关于",
       "togglePlugin": "切换 {{name}}",
-      "managePlugins": "管理插件"
+      "managePlugins": "管理插件",
+      "objectDetection": "目标检测",
+      "segmentEverything": "万物分割"
     },
     "layerType": {
       "delimitedText": "分隔文本图层",
@@ -1606,7 +1696,32 @@
       "vectorToGeopackage": "矢量转 GeoPackage",
       "csvToGeoparquet": "CSV 转 GeoParquet",
       "vectorToPmtiles": "矢量转 PMTiles",
-      "rasterToCog": "栅格转 COG"
+      "rasterToCog": "栅格转 COG",
+      "rasterToPmtiles": "栅格转 PMTiles",
+      "needsDesktop": "此转换需要 GeoLibre 桌面应用或运行中的 sidecar。",
+      "runsInBrowserDuckDb": "转换在浏览器中使用 DuckDB-WASM 运行。",
+      "runsInBrowserWriters": "转换在浏览器中使用 DuckDB-WASM 和内置写入器运行。",
+      "runsInBrowserWasm": "转换在浏览器中使用 geolibre-wasm 运行。无需 sidecar。",
+      "convertingWithWasm": "使用 geolibre-wasm 转换 {{name}}",
+      "rasterShape": "读取 {{width}}×{{height}} 栅格，{{bands}} 个波段",
+      "wroteCog": "已写入带概览的分块 COG（{{compression}}）",
+      "notAGeoTiff": "此文件不是可读的 GeoTIFF。在浏览器中，栅格转 COG 仅读取 GeoTIFF；其他格式需要桌面应用。",
+      "zoomRangeError": "缩放级别必须满足 0 ≤ 最小 ≤ 最大 ≤ {{max}}。",
+      "colormap": "颜色映射",
+      "resampling": "重采样",
+      "colormapDefault": "默认 (viridis)",
+      "zoomNative": "原始",
+      "rasterToPmtilesDesc": "将栅格渲染为单个 PMTiles 档案，包含 Web Mercator PNG 瓦片，可直接用于云原生服务。单波段通过颜色映射渲染，因此多波段影像不会以真彩色绘制。完全在 WebAssembly 中运行，无需桌面应用或 sidecar。",
+      "cogBrowserNote": "在浏览器中，8 位栅格保持其类型，其他所有类型（Int16 DEM、Float64 等）写为 Float32。桌面应用保留原始类型。",
+      "noSidecarConversion": "{{kind}} 没有 sidecar 转换。",
+      "minZoom": "最小缩放",
+      "maxZoom": "最大缩放",
+      "convertFailed": "无法转换此文件。",
+      "notAGeoTiffRasterOnly": "此文件不是可读的 GeoTIFF。栅格转 PMTiles 仅读取 GeoTIFF，适用于网页和桌面应用。",
+      "band": "波段",
+      "bandError": "波段必须为正整数。",
+      "bandOutOfRange": "波段 {{band}} 不存在；此栅格有 {{bands}} 个波段。",
+      "runsInBrowserVectorEngines": "转换在浏览器中使用 DuckDB-WASM 运行，FlatGeobuf 输出使用 geolibre-wasm。"
     },
     "vectorTool": {
       "buffer": "缓冲区",
@@ -1901,7 +2016,10 @@
       "maplibre-gl-swipe": "图层滑动对比",
       "geolibre-elevation-profile": "高程剖面",
       "maplibre-gl-basemap-control": "底图",
-      "maplibre-layer-control": "图层控制"
+      "maplibre-layer-control": "图层控制",
+      "maplibre-gl-openaerialmap": "OpenAerialMap",
+      "maplibre-gl-source-coop": "Source Cooperative",
+      "maplibre-gl-natural-earth": "Natural Earth"
     },
     "fileDrop": {
       "overlayTitle": "将矢量或栅格文件拖放到此处以添加图层",
@@ -1911,7 +2029,11 @@
       "addedRasterLayers_other": "已将 {{count}} 个栅格图层添加到图层面板。",
       "addedBoth": "已将 {{vector}} 和 {{raster}} 添加到图层面板。",
       "bothVectorLayers_other": "{{count}} 个矢量图层",
-      "bothRasterLayers_other": "{{count}} 个栅格图层"
+      "bothRasterLayers_other": "{{count}} 个栅格图层",
+      "addedVectorLayers_one": "已将 {{count}} 个矢量图层添加到图层面板。",
+      "addedRasterLayers_one": "已将 {{count}} 个栅格图层添加到图层面板。",
+      "bothVectorLayers_one": "{{count}} 个矢量图层",
+      "bothRasterLayers_one": "{{count}} 个栅格图层"
     },
     "error": {
       "couldNotOpenProject": "无法打开项目。",
@@ -2002,7 +2124,10 @@
         "boundingBox": "图层的边界框（空间）",
         "bufferPoint": "缓冲一个点（空间）",
         "areaPerFeature": "每个要素的面积（空间）"
-      }
+      },
+      "addedAsLayer_one": "已将 {{count}} 个要素以「{{name}}」添加到地图。",
+      "rowsCount_one": "{{count}} 行",
+      "columnsCount_one": "{{count}} 列"
     }
   },
   "loadEditorFeatures": {
@@ -2092,7 +2217,11 @@
     "edgesLeftBottom": "左侧 + 底部",
     "edgesAll": "全部边缘",
     "labelColor": "标签颜色",
-    "labelSize": "标签大小"
+    "labelSize": "标签大小",
+    "gridType": "网格类型",
+    "typeGeographic": "地理坐标（经纬度）",
+    "typeUtm": "UTM（东距/北距）",
+    "intervalMeters": "间隔 (m)"
   },
   "timelapse": {
     "title": "延时影像",
@@ -2113,7 +2242,8 @@
     "loadingTiles": "正在加载瓦片…"
   },
   "basemaps": {
-    "confirmStyleReplace_other": "切换到“{{name}}”将替换整个地图样式，并移除您添加的 {{count}} 个叠加底图。是否继续？"
+    "confirmStyleReplace_other": "切换到“{{name}}”将替换整个地图样式，并移除您添加的 {{count}} 个叠加底图。是否继续？",
+    "confirmStyleReplace_one": "切换到「{{name}}」将替换整个地图样式并移除您添加的叠加底图。继续吗？"
   },
   "annotations": {
     "toolbar": "标注工具",
@@ -2208,7 +2338,9 @@
       "emptyBar": "没有可分组的行。",
       "emptyPie": "没有正值可用于绘图。",
       "pieCaptionCount_other": "行数 · {{count}} 个类别",
-      "pieCaptionSum_other": "总和 · {{count}} 个类别"
+      "pieCaptionSum_other": "总和 · {{count}} 个类别",
+      "pieCaptionCount_one": "行计数 · {{count}} 个类别",
+      "pieCaptionSum_one": "求和 · {{count}} 个类别"
     },
     "editor": {
       "addTitle": "添加组件",
@@ -2232,7 +2364,8 @@
       "colorDefault": "默认图表颜色",
       "cancel": "取消",
       "save": "保存"
-    }
+    },
+    "widgetCount_one": "{{count}} 个小组件"
   },
   "assistant": {
     "title": "AI 助手",
@@ -2251,7 +2384,12 @@
     "thinking": "正在处理…",
     "toolError": "失败",
     "provider": "LLM 提供方",
-    "model": "模型"
+    "model": "模型",
+    "codeApprovalTitle": "批准代码运行？",
+    "codeApprovalBody": "助手想要执行代码来操作地图和访问应用数据。",
+    "codeApprovalAlways": "本次会话允许助手运行代码",
+    "codeApprovalRun": "运行",
+    "codeApprovalDecline": "取消"
   },
   "storymap": {
     "title": "故事地图",
@@ -2427,7 +2565,20 @@
       "filterBySource": "按来源筛选",
       "allSources": "所有来源",
       "geolibreTools": "GeoLibre 工具",
-      "whiteboxTools": "Whitebox 工具"
+      "whiteboxTools": "Whitebox 工具",
+      "toolbox": "Whitebox 工具箱",
+      "checkingRuntime": "正在检查 runtime。",
+      "toolsAvailable_one": "{{count}} 个工具可用。",
+      "toolsAvailable_other": "{{count}} 个工具可用。",
+      "runtimeUnavailable": "Whitebox runtime 不可用。",
+      "useMapExtent": "使用地图范围",
+      "fromLayer": "从图层",
+      "drawBbox": "在地图上绘制",
+      "drawingBbox": "绘制中…",
+      "drawBboxHint": "在地图上拖拽绘制边界框，按 Esc 取消。",
+      "mapExtentPlaceholder": "minX,minY,maxX,maxY",
+      "mapExtentUnavailable": "地图视图尚未可用。请等待地图加载完成后再试。",
+      "mapExtentInvalid": "当前地图视图无法用作边界框：它跨越了 180° 经线或超出有效经纬度范围。请调整视图后再试。"
     },
     "sidecar": {
       "unavailableTitle": "处理服务器不可用。",
@@ -2606,7 +2757,17 @@
     "invalidExpression": "无效的表达式。",
     "calcCouldNotApply": "无法将该计算应用于此图层。",
     "calcAppliedWithErrors": "已应用，但 {{evaluated}} 个要素中有 {{errors}} 个出错，已写入为 null。",
-    "exportFailed": "无法导出所选图层。"
+    "exportFailed": "无法导出所选图层。",
+    "featureViewAria": "要素视图",
+    "showAllFeatures": "显示所有要素",
+    "showSelectedFeatures": "显示已选（{{count}}）",
+    "geomMeasureLabel": "几何：",
+    "geomMetric": {
+      "length": "长度",
+      "perimeter": "周长",
+      "area": "面积"
+    },
+    "geomInsert": "插入"
   },
   "style": {
     "panelLabel": "图层样式",
@@ -2973,7 +3134,11 @@
       "m1": "1 分钟",
       "m5": "5 分钟",
       "m15": "15 分钟"
-    }
+    },
+    "extractSubset": "提取子集…",
+    "reloadFromDisk": "从磁盘重新加载",
+    "watchFile": "监视文件变化",
+    "watchError": "无法监视此文件的变化。"
   },
   "rasterSymbology": {
     "gamma": "伽马值",
@@ -3001,5 +3166,222 @@
     "cogConvertFailed": "无法将“{{name}}”转换为云优化 GeoTIFF。请尝试使用 gdal_translate 或 rio cogeo 进行转换，然后加载结果。",
     "rasterDownloadFailed": "无法下载“{{name}}”。服务器可能响应缓慢、无法访问或阻止跨域请求，或者文件可能过大而无法保存在内存中。请检查 URL 并重试。",
     "rasterNotGeotiff": "“{{name}}”未返回 GeoTIFF。服务器可能返回了错误或登录页面。请检查 URL 并重试。"
+  },
+  "terrainMeasure": {
+    "title": "地形 (3D)",
+    "surfaceDistance": "地表距离",
+    "surfaceArea": "地表面积",
+    "elevationGainLoss": "升降高度",
+    "elevationRange": "最低 / 最高海拔",
+    "meanSlope": "平均坡度",
+    "computing": "正在计算地形…",
+    "partialData": "部分采样点无地形数据"
+  },
+  "rasterSubset": {
+    "title": "提取子集",
+    "drawBbox": "绘制边界框",
+    "drawing": "绘制中…",
+    "drawHint": "在地图上拖拽绘制边界框，按 Esc 取消。",
+    "layer": "图层",
+    "outputFormat": "输出格式",
+    "clipToBbox": "裁剪到边界框",
+    "extract": "提取",
+    "extracting": "提取中…",
+    "success": "提取成功。",
+    "error": {
+      "noLayer": "请先选择一个栅格图层。",
+      "noBbox": "请先绘制边界框。",
+      "failed": "提取失败。"
+    },
+    "useView": "使用视图",
+    "north": "北",
+    "south": "南",
+    "west": "西",
+    "east": "东",
+    "bboxHint": "请输入有效的边界框：东西经度在 -180 到 180 之间，南北纬度在 -90 到 90 之间，且西 < 东、南 < 北。",
+    "bboxAntimeridianHint": "西经度必须小于东经度。不支持跨越 180° 经线的边界框；请拆分为两次提取。",
+    "zoom": "缩放级别",
+    "zoomHint": "请输入 0 到 30 之间的整数缩放级别。",
+    "resolution": "分辨率",
+    "resolutionPlaceholder": "原始",
+    "resolutionHint": "输出 CRS 单位的像素大小。留空保持原始分辨率。",
+    "advanced": "高级选项",
+    "outputCrs": "输出 CRS (EPSG)",
+    "outputCrsPlaceholder": "与输入相同",
+    "nodata": "Nodata 值",
+    "nodataPlaceholder": "无",
+    "additionalArgs": "附加选项",
+    "additionalArgsPlaceholder": "level=2\nwidth=512",
+    "additionalArgsHint": "每行一个 key=value，例如 level、width、height。",
+    "errorResolution": "分辨率必须为正数。",
+    "errorOutputCrs": "输出 CRS 必须为正 EPSG 代码。",
+    "errorNodata": "Nodata 必须为数字。",
+    "errorAdditionalArgs": "附加选项必须每行一个 key=value。"
+  },
+  "sourceCoop": {
+    "openProductTitle": "在 source.coop 上打开此产品",
+    "unsupportedTitle": "不支持的类型",
+    "largeFileWarning": "文件较大（{{size}}），加载可能需要较长时间。",
+    "streamHint": "文件较大（{{size}}），建议使用流式加载。",
+    "tooLargeToOpen": "文件过大（{{size}}），超过限制（{{limit}}）。请使用流式加载或下载。",
+    "hint": "在 Source Cooperative 搜索开放地理空间数据，或输入账户/产品 ID。",
+    "searchPlaceholder": "搜索数据、账户或产品",
+    "search": "搜索",
+    "searching": "搜索中…",
+    "loading": "加载目录…",
+    "loadError": "无法访问 Source Cooperative：{{message}}。请重试。",
+    "noResults": "无匹配产品。",
+    "retry": "重试",
+    "featured": "精选",
+    "showing": "显示 {{shown}} / {{total}} 个产品。",
+    "browseAccount": "浏览 {{account}} 的所有产品",
+    "back": "返回",
+    "files": "文件",
+    "noFiles": "此文件夹中没有文件。",
+    "loadingFiles": "加载文件…",
+    "loadMore": "加载更多",
+    "parent": "上一级",
+    "add": "添加",
+    "adding": "添加中…",
+    "added": "已添加",
+    "stream": "流式加载",
+    "streaming": "流式加载中",
+    "remove": "移除",
+    "download": "下载",
+    "copyUrl": "复制 URL",
+    "copied": "已复制",
+    "openProduct": "在 source.coop 上打开",
+    "addTitle": "将此文件添加到地图",
+    "streamTitle": "在原位查询此文件，只读取视图中的部分。整个文件不会复制到 DuckDB 中 — 适合大文件。",
+    "removeTitle": "从地图移除此文件",
+    "downloadTitle": "下载此文件",
+    "copyUrlTitle": "复制此文件的 URL",
+    "addError": "无法添加此文件：{{message}}"
+  },
+  "sourceCopi": {
+    "addError": "添加失败：{{message}}"
+  },
+  "objectDetection": {
+    "title": "目标检测",
+    "description": "在浏览器中运行导出为 ONNX 格式的 YOLO 模型处理 GeoTIFF。检测到的框会被地理配准，每个类别添加为单独图层。",
+    "hint": "使用内置 COCO 模型（下载并缓存一次）或使用自己的 YOLOv5/v8/v11 ONNX。检测在浏览器本地运行。内置模型检测日常物体；对于航拍图像，请提供自己训练的俯视模型。",
+    "imageLabel": "图像 (GeoTIFF)",
+    "imagePlaceholder": "选择 GeoTIFF…",
+    "chooseImage": "选择图像",
+    "modelLabel": "模型",
+    "modelSourceBuiltin": "内置（下载）",
+    "modelSourceLocal": "本地文件",
+    "builtinModelLabel": "内置模型",
+    "modelFileLabel": "模型文件 (ONNX)",
+    "modelPlaceholder": "选择 .onnx 模型…",
+    "chooseModel": "选择模型",
+    "downloadingModel": "正在下载模型…",
+    "classNamesLabel": "类别名称（逗号分隔，可选）",
+    "classNamesPlaceholder": "例如：汽车、树木、建筑",
+    "confidenceLabel": "置信度",
+    "iouLabel": "IoU (NMS)",
+    "inputSizeLabel": "输入尺寸",
+    "detect": "检测",
+    "noObjects": "未检测到物体。请尝试降低置信度阈值。",
+    "added": "已添加 {{count}} 个检测结果，共 {{classes}} 个类别。",
+    "layerName": "检测：{{class}}",
+    "error": {
+      "chooseImage": "请选择一个图像 (GeoTIFF) 进行检测。",
+      "chooseModel": "请选择导出为 ONNX 的 YOLO 模型 (.onnx)。",
+      "downloadModel": "无法下载模型。请检查网络连接后重试。",
+      "failed": "检测失败。"
+    }
+  },
+  "segmentEverything": {
+    "title": "万物分割",
+    "description": "在浏览器中自动运行 SlimSAM 处理 GeoTIFF。每个检测到的对象都会成为地理配准的多边形并添加为一个图层。",
+    "hint": "在图像上采样网格点并使用 SlimSAM 分割（下载并缓存一次）。无需点击或标注 — 更密集的网格能找到更多对象，但耗时更长。",
+    "imageLabel": "图像 (GeoTIFF)",
+    "imagePlaceholder": "选择 GeoTIFF…",
+    "chooseImage": "选择图像",
+    "gridLabel": "网格",
+    "qualityLabel": "质量",
+    "minSizeLabel": "最小尺寸 %",
+    "run": "分割",
+    "downloadingModel": "正在下载模型…",
+    "progress": "分割中… {{done}}/{{total}}",
+    "noObjects": "未分割到对象。请尝试更密集的网格或更低的质量阈值。",
+    "added": "已添加 {{count}} 个分割结果。",
+    "layerName": "分割结果",
+    "error": {
+      "chooseImage": "请选择一个图像 (GeoTIFF) 进行分割。",
+      "downloadModel": "无法下载模型。请检查网络连接后重试。",
+      "failed": "分割失败。"
+    }
+  },
+  "knowledgeCard": {
+    "title": "地点信息",
+    "loading": "正在查询此地点…",
+    "empty": "此地点附近未找到维基百科条目。",
+    "error": "无法加载地点信息。请重试。",
+    "readMore": "在维基百科上阅读更多",
+    "nearby": "附近地点",
+    "attribution": "内容来自维基百科，采用 CC BY-SA 许可。",
+    "noticeTitle": "知识卡片使用维基百科",
+    "noticeDesc": "打开知识卡片会将您点击地点的坐标（以及您打开的附近条目标题）发送到维基百科公共 API 以获取摘要和照片 — 您的坐标会离开您的设备用于这些请求。"
+  },
+  "openAerialMap": {
+    "modeView": "地图视图",
+    "modeDraw": "绘制框",
+    "modeBbox": "坐标",
+    "drawHint": "在地图上点击并拖拽绘制搜索框。",
+    "drawStart": "在地图上绘制框",
+    "drawCancel": "取消绘制",
+    "drawnBox": "搜索框：{{box}}",
+    "coordWest": "西",
+    "coordSouth": "南",
+    "coordEast": "东",
+    "coordNorth": "北",
+    "coordSearch": "搜索此框",
+    "bboxInvalid": "请输入四个有效坐标，且西 < 东、南 < 北。",
+    "footprintsLayer": "OpenAerialMap 足迹",
+    "footprintUnavailable": "此图像无可用的瓦片服务。",
+    "metadataHeading": "图像元数据",
+    "close": "关闭",
+    "metaTitle": "标题",
+    "metaProvider": "提供商",
+    "metaPlatform": "平台",
+    "metaResolution": "分辨率",
+    "metaAcquired": "获取时间",
+    "metaBounds": "边界 (W, S, E, N)",
+    "metaSource": "源 GeoTIFF",
+    "metaRaw": "原始元数据",
+    "hint": "通过地图视图、绘制框或坐标搜索 OpenAerialMap 影像。",
+    "search": "搜索此视图",
+    "loadMore": "加载更多",
+    "searching": "搜索中…",
+    "loadingMore": "加载更多…",
+    "noResults": "此区域未找到影像。",
+    "showing": "显示 {{shown}} / {{total}} 张图像。",
+    "searchError": "无法访问 OpenAerialMap：{{message}}。请重试。",
+    "add": "添加",
+    "remove": "移除",
+    "zoom": "缩放",
+    "download": "下载",
+    "metadata": "元数据",
+    "addTitle": "将此图像添加到地图",
+    "removeTitle": "从地图移除此图像",
+    "addUnavailableTitle": "此图像无可用的瓦片服务",
+    "zoomTitle": "缩放到此图像",
+    "downloadTitle": "下载源 GeoTIFF",
+    "metadataTitle": "查看此图像的元数据"
+  },
+  "mapillary": {
+    "title": "Mapillary",
+    "hint": "点击地图上的覆盖点查看街景图像。",
+    "noToken": "需要 Mapillary 访问令牌才能加载覆盖范围和图像。请在下方粘贴一个以开始使用。",
+    "tokenPlaceholder": "MLY|…",
+    "tokenSave": "保存令牌",
+    "tokenHelp": "获取令牌",
+    "tokenLabel": "Mapillary 访问令牌",
+    "loading": "加载图像…",
+    "loadError": "无法加载此图像。",
+    "coverageLines": "Mapillary 序列",
+    "coveragePoints": "Mapillary 图像"
   }
 }
