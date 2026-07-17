@@ -346,11 +346,12 @@ export function legendEditorRows(
  * charts that are not on the map.
  */
 function diagramSwatches(
-  layer: Pick<GeoLibreLayer, "type" | "geojson" | "style">,
+  layer: Pick<GeoLibreLayer, "type" | "geojson" | "style" | "metadata">,
 ): { color: string; label: string }[] {
   if (
     !layer.geojson ||
     layer.type === "deckgl-viz" ||
+    layer.metadata.externalDeckLayer === true ||
     styleValue(layer.style, "diagramType") === "none" ||
     diagramsSuppressedByPointRenderer(layer.geojson, layer.style)
   ) {

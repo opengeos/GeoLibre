@@ -69,8 +69,10 @@ export function isDiagramStyleEnabled(style: LayerStyle): boolean {
  * non-point geometry must not block diagrams — this mirrors the Style Panel's
  * own `!supportsPointRenderer || pointRenderer === "single"` visibility gate,
  * keeping the render and legend gates consistent with what the panel lets the
- * user configure. The geometry scan samples up to 2000 features, matching the
- * panel's other geometry probes.
+ * user configure. The full feature list is scanned (matching the panel's
+ * isPointOnlyGeoJsonLayer, which uses an uncapped every()) so the two gates
+ * can never disagree on layers whose non-point features sit past a sampling
+ * window; the scan only runs for the uncommon non-"single" renderer values.
  *
  * @param geojson - The layer's feature collection (undefined suppresses nothing).
  * @param style - The layer style carrying `pointRenderer`.
@@ -82,12 +84,10 @@ export function diagramsSuppressedByPointRenderer(
   if (styleValue(style, "pointRenderer") === "single") return false;
   const features = geojson?.features ?? [];
   if (features.length === 0) return false;
-  const limit = Math.min(features.length, 2000);
-  for (let i = 0; i < limit; i += 1) {
-    const type = features[i]?.geometry?.type;
-    if (type !== "Point" && type !== "MultiPoint") return false;
-  }
-  return true;
+  return features.every((feature) => {
+    const type = feature?.geometry?.type;
+    return type === "Point" || type === "MultiPoint";
+  });
 }
 
 /** Shoelace area of a linear ring (planar, in degree space; sign = winding). */

@@ -1283,15 +1283,15 @@ export function StylePanel({
     if (!layer || !diagramGeojson || diagramStyleType === "none") {
       return { diagramTruncated: false, diagramAtlasDropped: 0 };
     }
-    const truncated =
-      (diagramGeojson.features?.length ?? 0) > MAX_DIAGRAM_FEATURES &&
-      collectDiagramData(diagramGeojson, layer.style).truncated;
+    // One shared scan feeds both notices; countAtlasDroppedDiagrams reuses it
+    // instead of rescanning the features.
+    const diagramData = collectDiagramData(diagramGeojson, layer.style);
     return {
-      diagramTruncated: truncated,
-      diagramAtlasDropped: countAtlasDroppedDiagrams({
-        geojson: diagramGeojson,
-        style: layer.style,
-      }),
+      diagramTruncated: diagramData.truncated,
+      diagramAtlasDropped: countAtlasDroppedDiagrams(
+        { geojson: diagramGeojson, style: layer.style },
+        diagramData,
+      ),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- layer.style is
     // intentionally represented by the specific diagram fields below.
@@ -1303,6 +1303,21 @@ export function StylePanel({
     diagramStyleSize,
     diagramStyleSizeProperty,
   ]);
+  // Numeric-attribute candidates for the diagram field pickers. Unlike
+  // graduated classification (which needs a value spread), one finite value
+  // qualifies. Memoized on the geojson/metadata (not the layer object) so
+  // unrelated panel edits never re-run the per-property feature scans. Kept
+  // before the early returns below so the hook order stays stable.
+  const diagramMetadata = layer?.metadata;
+  const diagramNumericProperties = useMemo(() => {
+    if (!diagramGeojson) return [];
+    const probe = { geojson: diagramGeojson, metadata: diagramMetadata ?? {} };
+    return getAttributePropertyNames(probe).filter((property) =>
+      getPropertyValues(probe, property).some((value) =>
+        Number.isFinite(Number(value)),
+      ),
+    );
+  }, [diagramGeojson, diagramMetadata]);
   // Whether the layer's coordinates carry real Z values (e.g. GPX track
   // elevations), which unlocks the "3D (Z values)" visualization mode.
   // Memoized on the geojson reference (not the layer object, which is
@@ -2504,18 +2519,11 @@ export function StylePanel({
     </div>
   );
   // --- Diagram symbology (per-feature pie/bar charts, immediate writes) ---
+  // The numeric-attribute candidates (diagramNumericProperties) are memoized
+  // above the early returns.
   const diagramType = styleValue(style, "diagramType");
   const diagramFields = styleValue(style, "diagramFields");
   const diagramSizeMode = styleValue(style, "diagramSizeMode");
-  // Unlike graduated classification (which needs a value spread, so
-  // isNumericProperty demands several values), a diagram is meaningful with a
-  // single feature; one finite value qualifies an attribute.
-  const diagramNumericProperties = vectorStylePropertyOptions.filter(
-    (property) =>
-      getPropertyValues(layer, property).some((value) =>
-        Number.isFinite(Number(value)),
-      ),
-  );
   const setDiagramFields = (fields: DiagramField[]) =>
     setLayerStyle(layer.id, { diagramFields: fields });
   const addDiagramField = () => {

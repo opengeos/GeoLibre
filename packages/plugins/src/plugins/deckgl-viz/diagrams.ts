@@ -56,6 +56,9 @@ export function isDiagramLayer(layer: GeoLibreLayer): boolean {
     !!layer.geojson &&
     layer.type !== "deckgl-viz" &&
     !isDeckVizLayer(layer) &&
+    // Layers rendered by an external deck path (e.g. DuckDB custom layers)
+    // don't get diagrams — the Style Panel hides the controls for them.
+    layer.metadata.externalDeckLayer !== true &&
     !diagramsSuppressedByPointRenderer(layer.geojson, layer.style) &&
     isDiagramStyleEnabled(layer.style)
   );
@@ -91,6 +94,9 @@ interface DiagramAtlas {
 interface DiagramCacheValue {
   signature: string;
   atlas: DiagramAtlas | null;
+  /** Diagram-loss counts of this build, for change-gated console notes. */
+  truncated: boolean;
+  dropped: number;
 }
 
 // One cache entry per source FeatureCollection; rebuilt only when the diagram
@@ -296,15 +302,18 @@ function diagramCellSizes(
  * silently dropped diagrams (e.g. a large diagram size on many features).
  *
  * @param layer - The layer's GeoJSON and style.
+ * @param diagramData - Optional precomputed dataset, so a caller that already
+ *   ran {@link collectDiagramData} does not scan the features twice.
  */
 export function countAtlasDroppedDiagrams(
   layer: Pick<GeoLibreLayer, "geojson" | "style">,
+  diagramData?: DiagramData,
 ): number {
   if (!layer.geojson) return 0;
-  const diagramData = collectDiagramData(layer.geojson, layer.style);
-  if (diagramData.data.length === 0) return 0;
+  const data = diagramData ?? collectDiagramData(layer.geojson, layer.style);
+  if (data.data.length === 0) return 0;
   return packDiagramCells(
-    diagramCellSizes(diagramData, layer.style),
+    diagramCellSizes(data, layer.style),
     Math.min(MAX_ATLAS_HEIGHT, deviceMaxTextureSize()),
   ).dropped;
 }
@@ -327,24 +336,11 @@ function buildAtlas(
   const type = styleValue(style, "diagramType");
 
   // Lay out cells first so the canvas can be allocated at its final size.
-  const { cells, atlasHeight, dropped } = packDiagramCells(
+  const { cells, atlasHeight } = packDiagramCells(
     diagramCellSizes(diagramData, style),
     Math.min(MAX_ATLAS_HEIGHT, deviceMaxTextureSize()),
   );
   if (cells.length === 0) return null;
-  if (diagramData.truncated) {
-    console.info(
-      `[GeoLibre] diagrams: layer exceeds ${MAX_DIAGRAM_FEATURES} features; ` +
-        `only the first ${MAX_DIAGRAM_FEATURES} are charted`,
-    );
-  }
-  if (dropped > 0) {
-    console.info(
-      `[GeoLibre] diagrams: atlas full, dropped ${dropped} of ` +
-        `${diagramData.data.length} feature diagrams (reduce the diagram size ` +
-        `to fit more)`,
-    );
-  }
 
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_WIDTH;
@@ -417,8 +413,33 @@ function getAtlas(layer: GeoLibreLayer): DiagramAtlas | null {
   const signature = diagramSignature(layer);
   const cached = atlasCache.get(geojson);
   if (cached && cached.signature === signature) return cached.atlas;
-  const atlas = buildAtlas(layer, collectDiagramData(geojson, layer.style));
-  atlasCache.set(geojson, { signature, atlas });
+
+  const diagramData = collectDiagramData(geojson, layer.style);
+  const atlas = buildAtlas(layer, diagramData);
+  const dropped = atlas
+    ? diagramData.data.length - atlas.entries.length
+    : 0;
+  // Console notes are gated on a change in the loss counts, so per-keystroke
+  // style edits (each of which rebuilds the atlas) don't spam the console.
+  if (diagramData.truncated && !cached?.truncated) {
+    console.info(
+      `[GeoLibre] diagrams: layer exceeds ${MAX_DIAGRAM_FEATURES} features; ` +
+        `only the first ${MAX_DIAGRAM_FEATURES} are charted`,
+    );
+  }
+  if (dropped > 0 && dropped !== cached?.dropped) {
+    console.info(
+      `[GeoLibre] diagrams: atlas full, dropped ${dropped} of ` +
+        `${diagramData.data.length} feature diagrams (reduce the diagram size ` +
+        `to fit more)`,
+    );
+  }
+  atlasCache.set(geojson, {
+    signature,
+    atlas,
+    truncated: diagramData.truncated,
+    dropped,
+  });
   return atlas;
 }
 
