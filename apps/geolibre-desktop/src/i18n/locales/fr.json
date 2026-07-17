@@ -2764,7 +2764,8 @@
       "size": "Taille (px)",
       "minZoom": "Zoom minimum",
       "declutter": "Masquer les diagrammes qui se chevauchent",
-      "truncated": "Les diagrammes ne sont dessinés que pour les {{count}} premières entités."
+      "truncated": "Les diagrammes ne sont dessinés que pour les {{count}} premières entités.",
+      "atlasFull": "{{count}} diagrammes ne tiennent pas à cette taille et sont masqués. Réduisez la taille des diagrammes."
     },
     "symbology": {
       "colormap": "Palette de couleurs",

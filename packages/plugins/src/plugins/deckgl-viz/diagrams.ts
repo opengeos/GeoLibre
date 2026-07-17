@@ -213,6 +213,8 @@ export interface DiagramCell {
  * canvas.
  *
  * @param sizes - Content box sizes in atlas pixels, in datum order.
+ * @param maxHeight - Atlas height bound; callers pass the device texture
+ *   limit when it is lower than {@link MAX_ATLAS_HEIGHT}.
  * @returns The packed cells (positions exclude the per-cell padding gutter),
  *   the resulting atlas height, and how many boxes were dropped for space.
  */
@@ -269,6 +271,44 @@ function deviceMaxTextureSize(): number {
   return size;
 }
 
+/** Atlas-pixel content box sizes for every datum, in datum order. */
+function diagramCellSizes(
+  diagramData: DiagramData,
+  style: GeoLibreLayer["style"],
+): { width: number; height: number }[] {
+  const type = styleValue(style, "diagramType");
+  return diagramData.data.map((datum) => {
+    const size = Math.round(
+      diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR,
+    );
+    const width =
+      type === "stacked-bar"
+        ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO))
+        : size;
+    return { width, height: size };
+  });
+}
+
+/**
+ * Predicted number of a layer's drawable diagrams that the icon atlas cannot
+ * fit (0 when everything fits). Runs the same packing arithmetic as the
+ * renderer without touching a canvas, so the Style Panel can warn about
+ * silently dropped diagrams (e.g. a large diagram size on many features).
+ *
+ * @param layer - The layer's GeoJSON and style.
+ */
+export function countAtlasDroppedDiagrams(
+  layer: Pick<GeoLibreLayer, "geojson" | "style">,
+): number {
+  if (!layer.geojson) return 0;
+  const diagramData = collectDiagramData(layer.geojson, layer.style);
+  if (diagramData.data.length === 0) return 0;
+  return packDiagramCells(
+    diagramCellSizes(diagramData, layer.style),
+    Math.min(MAX_ATLAS_HEIGHT, deviceMaxTextureSize()),
+  ).dropped;
+}
+
 /**
  * Rasterize every feature diagram into one atlas canvas with shelf packing
  * (cells laid out left-to-right in rows). Returns null when no feature has
@@ -281,23 +321,14 @@ function buildAtlas(
   if (diagramData.data.length === 0) return null;
   if (typeof document === "undefined") return null;
   const style = layer.style;
-  const type = styleValue(style, "diagramType");
   const colors = styleValue(style, "diagramFields")
     .filter((field) => field.property !== "")
     .map((field) => field.color);
+  const type = styleValue(style, "diagramType");
 
   // Lay out cells first so the canvas can be allocated at its final size.
   const { cells, atlasHeight, dropped } = packDiagramCells(
-    diagramData.data.map((datum) => {
-      const size = Math.round(
-        diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR,
-      );
-      const width =
-        type === "stacked-bar"
-          ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO))
-          : size;
-      return { width, height: size };
-    }),
+    diagramCellSizes(diagramData, style),
     Math.min(MAX_ATLAS_HEIGHT, deviceMaxTextureSize()),
   );
   if (cells.length === 0) return null;

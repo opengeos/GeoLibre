@@ -339,15 +339,18 @@ export function legendEditorRows(
 
 /**
  * Legend swatches for a layer's diagram symbology: one per charted attribute,
- * labeled with the attribute name. Empty when diagrams are off — including
- * when a point-only layer's heatmap/cluster renderer suppresses diagram
- * rendering (the shared core helper mirrors isDiagramLayer in the deck
- * overlay and the Style Panel's visibility gate).
+ * labeled with the attribute name. Empty whenever the deck overlay would not
+ * draw diagrams for the layer (no in-memory GeoJSON, a deck-viz dataset
+ * layer, diagrams off, or a point-only layer whose heatmap/cluster renderer
+ * suppresses them), matching isDiagramLayer's gate so the legend never lists
+ * charts that are not on the map.
  */
 function diagramSwatches(
-  layer: Pick<GeoLibreLayer, "geojson" | "style">,
+  layer: Pick<GeoLibreLayer, "type" | "geojson" | "style">,
 ): { color: string; label: string }[] {
   if (
+    !layer.geojson ||
+    layer.type === "deckgl-viz" ||
     styleValue(layer.style, "diagramType") === "none" ||
     diagramsSuppressedByPointRenderer(layer.geojson, layer.style)
   ) {

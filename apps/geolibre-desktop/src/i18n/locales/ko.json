@@ -2720,7 +2720,8 @@
       "size": "크기 (px)",
       "minZoom": "최소 줌",
       "declutter": "겹치는 다이어그램 숨기기",
-      "truncated": "다이어그램은 처음 {{count}}개의 피처에 대해서만 그려집니다."
+      "truncated": "다이어그램은 처음 {{count}}개의 피처에 대해서만 그려집니다.",
+      "atlasFull": "이 크기에서는 {{count}}개의 다이어그램이 들어가지 않아 숨겨집니다. 다이어그램 크기를 줄이세요."
     },
     "symbology": {
       "colormap": "컬러맵",

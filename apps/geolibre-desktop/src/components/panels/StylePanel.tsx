@@ -37,7 +37,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@geolibre/ui";
-import { RASTER_SOURCE_KIND, SKETCHES_SOURCE_KIND } from "@geolibre/plugins";
+import {
+  RASTER_SOURCE_KIND,
+  SKETCHES_SOURCE_KIND,
+  countAtlasDroppedDiagrams,
+} from "@geolibre/plugins";
 import type { MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
@@ -1252,20 +1256,53 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
-  // Whether the diagram feature cap actually truncates this layer: derived
-  // from the real drawable-diagram scan (features without an anchor or a
-  // positive value don't consume the cap), not the raw feature count, so the
-  // notice never shows for a large layer whose drawable subset fits. The raw
-  // count pre-check keeps the scan off layers that cannot possibly truncate.
-  // Kept before the early returns below so the hook order stays stable.
-  const diagramTruncated = useMemo(() => {
-    if (!layer?.geojson) return false;
-    if (styleValue(layer.style, "diagramType") === "none") return false;
-    if ((layer.geojson.features?.length ?? 0) <= MAX_DIAGRAM_FEATURES) {
-      return false;
+  // Diagram-loss notices: whether the feature cap truncates the drawable
+  // dataset (derived from the real scan — features without an anchor or a
+  // positive value don't consume the cap, so the raw count alone would
+  // false-positive), and whether the icon atlas drops diagrams that don't fit
+  // its height/texture bound (e.g. a large diagram size on many features).
+  // Dependencies are the geojson and the specific diagram style fields (not
+  // the layer object, which is recreated on every style edit) so unrelated
+  // panel edits never re-run the feature scan. Kept before the early returns
+  // below so the hook order stays stable.
+  const diagramGeojson = layer?.geojson;
+  const diagramStyleType = layer ? styleValue(layer.style, "diagramType") : "none";
+  const diagramStyleFields = layer
+    ? styleValue(layer.style, "diagramFields")
+    : DEFAULT_LAYER_STYLE.diagramFields;
+  const diagramStyleSizeMode = layer
+    ? styleValue(layer.style, "diagramSizeMode")
+    : DEFAULT_LAYER_STYLE.diagramSizeMode;
+  const diagramStyleSize = layer
+    ? styleValue(layer.style, "diagramSize")
+    : DEFAULT_LAYER_STYLE.diagramSize;
+  const diagramStyleSizeProperty = layer
+    ? styleValue(layer.style, "diagramSizeProperty")
+    : "";
+  const { diagramTruncated, diagramAtlasDropped } = useMemo(() => {
+    if (!layer || !diagramGeojson || diagramStyleType === "none") {
+      return { diagramTruncated: false, diagramAtlasDropped: 0 };
     }
-    return collectDiagramData(layer.geojson, layer.style).truncated;
-  }, [layer]);
+    const truncated =
+      (diagramGeojson.features?.length ?? 0) > MAX_DIAGRAM_FEATURES &&
+      collectDiagramData(diagramGeojson, layer.style).truncated;
+    return {
+      diagramTruncated: truncated,
+      diagramAtlasDropped: countAtlasDroppedDiagrams({
+        geojson: diagramGeojson,
+        style: layer.style,
+      }),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- layer.style is
+    // intentionally represented by the specific diagram fields below.
+  }, [
+    diagramGeojson,
+    diagramStyleType,
+    diagramStyleFields,
+    diagramStyleSizeMode,
+    diagramStyleSize,
+    diagramStyleSizeProperty,
+  ]);
   // Whether the layer's coordinates carry real Z values (e.g. GPX track
   // elevations), which unlocks the "3D (Z values)" visualization mode.
   // Memoized on the geojson reference (not the layer object, which is
@@ -2687,6 +2724,11 @@ export function StylePanel({
           {diagramTruncated && (
             <p className="text-xs text-muted-foreground">
               {t("style.diagrams.truncated", { count: MAX_DIAGRAM_FEATURES })}
+            </p>
+          )}
+          {diagramAtlasDropped > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t("style.diagrams.atlasFull", { count: diagramAtlasDropped })}
             </p>
           )}
           <NumericStyleInput

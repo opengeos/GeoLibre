@@ -270,6 +270,7 @@ export {
   maplibreDeckGlVizPlugin,
 } from "./plugins/maplibre-deckgl-viz";
 export { restoreDeckViz } from "./plugins/deckgl-viz/overlay";
+export { countAtlasDroppedDiagrams } from "./plugins/deckgl-viz/diagrams";
 export { ensureMercatorProjection } from "./plugins/map-projection-utils";
 export {
   DECK_VIZ_CATEGORY_LABELS,

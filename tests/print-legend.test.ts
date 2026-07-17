@@ -99,10 +99,32 @@ describe("buildLegend", () => {
     assert.equal(legend[0].swatches[1].label, "≥ 100");
   });
 
+  const polygonGeojson = {
+    type: "FeatureCollection",
+    features: [
+      {
+        type: "Feature",
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0],
+            ],
+          ],
+        },
+        properties: { votes_a: 1, votes_b: 2, youth: 3 },
+      },
+    ],
+  } as GeoJSON.FeatureCollection;
+
   it("appends a labeled swatch per diagram attribute after the base symbology", () => {
     const legend = buildLegend([
       makeLayer({
         name: "Election",
+        geojson: polygonGeojson,
         style: {
           vectorStyleMode: "single",
           fillColor: "#ff0000",
@@ -180,6 +202,7 @@ describe("buildLegend", () => {
     const legend = buildLegend([
       makeLayer({
         name: "Population",
+        geojson: polygonGeojson,
         style: {
           vectorStyleMode: "graduated",
           vectorStyleStops: [
