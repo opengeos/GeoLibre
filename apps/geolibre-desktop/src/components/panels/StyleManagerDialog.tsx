@@ -129,6 +129,7 @@ export function StyleManagerDialog() {
   const styleLibrary = useAppStore((s) => s.styleLibrary);
   const projectStyleLibrary = useAppStore((s) => s.projectStyleLibrary);
   const saveStyleLibraryEntry = useAppStore((s) => s.saveStyleLibraryEntry);
+  const setStyleLibrary = useAppStore((s) => s.setStyleLibrary);
   const deleteStyleLibraryEntry = useAppStore((s) => s.deleteStyleLibraryEntry);
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
@@ -316,20 +317,26 @@ export function StyleManagerDialog() {
       // silently pull those out of the project file). A collision with an
       // existing app-library id is intentional upsert semantics, so
       // re-importing an exported bundle updates entries instead of
-      // duplicating them.
+      // duplicating them. Merge into one setStyleLibrary call so the whole
+      // import costs a single store update and a single IndexedDB flush.
       const projectIds = new Set(projectStyleLibrary.map((e) => e.id));
+      const next = [...useAppStore.getState().styleLibrary];
       for (const entry of entries) {
-        saveStyleLibraryEntry(
-          {
-            ...entry,
-            id:
-              entry.id.startsWith("preset-") || projectIds.has(entry.id)
-                ? createStyleLibraryEntryId()
-                : entry.id,
-          },
-          "app",
-        );
+        const imported = {
+          ...entry,
+          id:
+            entry.id.startsWith("preset-") || projectIds.has(entry.id)
+              ? createStyleLibraryEntryId()
+              : entry.id,
+        };
+        const index = next.findIndex((e) => e.id === imported.id);
+        if (index >= 0) {
+          next[index] = imported;
+        } else {
+          next.push(imported);
+        }
       }
+      setStyleLibrary(next);
       setStatus({
         type: "success",
         text: t("styleManager.importedCount", { count: entries.length }),
@@ -373,7 +380,9 @@ export function StyleManagerDialog() {
       setStatus({
         type: "error",
         text:
-          error instanceof Error ? error.message : t("styleManager.exportEmpty"),
+          error instanceof Error
+            ? error.message
+            : t("styleManager.exportFailed"),
       });
     }
   };

@@ -3042,6 +3042,7 @@
     "importInvalid": "That file is not a style library, QML, or SLD.",
     "importNoMatch": "No symbology could be read from that style.",
     "exportEmpty": "There are no saved styles to export.",
+    "exportFailed": "Could not export the style library.",
     "exportSuccess": "Style library exported.",
     "noLayer": "Select a vector layer to save or apply styles."
   },

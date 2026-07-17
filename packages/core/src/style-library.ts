@@ -136,7 +136,32 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
       continue;
     }
     if (Array.isArray(fallback)) {
-      if (Array.isArray(given)) out[key] = given;
+      if (!Array.isArray(given)) continue;
+      // Validate array elements too, not just "is an array": malformed stop
+      // or rule objects would otherwise survive to the renderer.
+      if (key === "vectorStyleStops") {
+        out[key] = given.filter(
+          (item): item is LayerStyle["vectorStyleStops"][number] =>
+            !!item &&
+            typeof item === "object" &&
+            (typeof (item as { value?: unknown }).value === "string" ||
+              typeof (item as { value?: unknown }).value === "number") &&
+            typeof (item as { color?: unknown }).color === "string",
+        );
+      } else if (key === "vectorRules") {
+        out[key] = given.filter(
+          (item): item is LayerStyle["vectorRules"][number] =>
+            !!item &&
+            typeof item === "object" &&
+            typeof (item as { id?: unknown }).id === "string" &&
+            typeof (item as { label?: unknown }).label === "string" &&
+            typeof (item as { filter?: unknown }).filter === "string" &&
+            typeof (item as { color?: unknown }).color === "string" &&
+            typeof (item as { isElse?: unknown }).isElse === "boolean",
+        );
+      } else {
+        out[key] = given;
+      }
       continue;
     }
     if (typeof given === typeof fallback) out[key] = given;

@@ -90,6 +90,26 @@ describe("sanitizeLayerStylePatch", () => {
     assert.equal(patch.labels?.anchor, DEFAULT_LAYER_STYLE.labels.anchor);
   });
 
+  it("drops malformed stop and rule elements while keeping valid ones", () => {
+    const patch = sanitizeLayerStylePatch({
+      vectorStyleStops: [
+        { value: 1, color: "#111111" },
+        { value: {}, color: "#222222" },
+        { color: "#333333" },
+        "junk",
+      ],
+      vectorRules: [
+        { id: "r1", label: "A", filter: "[]", color: "#111111", isElse: false },
+        { id: "r2", label: "B", filter: "[]", color: "#222222" },
+        null,
+      ],
+    });
+    assert.deepEqual(patch.vectorStyleStops, [{ value: 1, color: "#111111" }]);
+    assert.deepEqual(patch.vectorRules, [
+      { id: "r1", label: "A", filter: "[]", color: "#111111", isElse: false },
+    ]);
+  });
+
   it("returns an empty patch for non-object input", () => {
     assert.deepEqual(sanitizeLayerStylePatch(null), {});
     assert.deepEqual(sanitizeLayerStylePatch("x"), {});
