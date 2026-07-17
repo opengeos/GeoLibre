@@ -353,7 +353,15 @@ export function StyleManagerDialog() {
   };
 
   const handleExport = async () => {
-    const entries = [...projectStyleLibrary, ...styleLibrary];
+    // De-duplicate by id (project scope wins): the two scopes can legitimately
+    // share an id after loading a project authored elsewhere, and a bundle
+    // with duplicate ids would re-import as a single entry.
+    const seenIds = new Set<string>();
+    const entries = [...projectStyleLibrary, ...styleLibrary].filter((e) => {
+      if (seenIds.has(e.id)) return false;
+      seenIds.add(e.id);
+      return true;
+    });
     if (entries.length === 0) {
       setStatus({ type: "error", text: t("styleManager.exportEmpty") });
       return;

@@ -136,6 +136,15 @@ const STYLE_ENUM_VALUES: Partial<Record<keyof LayerStyle, readonly string[]>> = 
     "custom",
   ],
   pointRenderer: ["single", "heatmap", "cluster"],
+  // Union of the graduated and categorized schemes the Style panel offers.
+  vectorStyleClassificationScheme: [
+    "equal-interval",
+    "quantile",
+    "natural-breaks",
+    "top-values",
+    "alphabetical",
+    "first-values",
+  ],
 };
 
 /** Allowed values for the enum-typed {@link LabelStyle} fields. */
@@ -207,7 +216,8 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
           if (!item || typeof item !== "object") return [];
           const stop = item as Record<string, unknown>;
           if (
-            (typeof stop.value !== "string" && typeof stop.value !== "number") ||
+            (typeof stop.value !== "string" &&
+              !(typeof stop.value === "number" && Number.isFinite(stop.value))) ||
             typeof stop.color !== "string"
           ) {
             return [];
