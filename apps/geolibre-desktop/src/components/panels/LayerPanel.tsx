@@ -89,6 +89,7 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  Database,
   Download,
   Eye,
   EyeOff,
@@ -134,6 +135,12 @@ import {
   reloadLocalFileLayer,
   setLayerWatchConfig,
 } from "../../lib/local-file-watch";
+import {
+  getSqlQueryLayerConfig,
+  isSqlQueryLayer,
+  refreshSqlQueryLayer,
+} from "../../lib/sql-query-layer";
+import { requestSqlWorkspaceQuery } from "../../lib/sql-workspace-prefill";
 import {
   canExportRasterLayer,
   exportRasterLayer,
@@ -541,6 +548,7 @@ export function LayerPanel({
   const setLoadEditorFeaturesOpen = useAppStore(
     (s) => s.setLoadEditorFeaturesOpen,
   );
+  const setSqlWorkspaceOpen = useAppStore((s) => s.setSqlWorkspaceOpen);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [basemapPickerOpen, setBasemapPickerOpen] = useState(false);
@@ -837,6 +845,39 @@ export function LayerPanel({
       }));
 
       try {
+        if (isSqlQueryLayer(layer)) {
+          // SQL query layers refresh by re-executing their stored DuckDB
+          // statement against the current layers (the query layer itself is
+          // excluded so it cannot shadow a source table name).
+          const { geojson, featureCount } = await refreshSqlQueryLayer(
+            layer,
+            useAppStore.getState().layers,
+          );
+          const latest = useAppStore
+            .getState()
+            .layers.find((candidate) => candidate.id === layer.id);
+          if (!latest) return;
+
+          updateLayer(layer.id, {
+            geojson,
+            metadata: {
+              ...latest.metadata,
+              featureCount,
+            },
+          });
+
+          setRefreshStatuses((current) => ({
+            ...current,
+            [layer.id]: {
+              type: "success",
+              message: t("layers.refreshedCount", {
+                count: featureCount.toLocaleString(),
+              }),
+            },
+          }));
+          scheduleStatusClear(layer.id);
+          return;
+        }
         if (isLocalFileLayer(layer)) {
           // Local-file vector layers re-read their features from disk (the same
           // conversion the import ran) rather than fetching a URL.
@@ -2339,6 +2380,9 @@ export function LayerPanel({
               layer.metadata.sourceKind === RASTER_SOURCE_KIND;
             const canRefresh = isRefreshableLayer(layer);
             const refreshConfig = getLayerRefreshConfig(layer);
+            // Live SQL query layers (issue #1295) refresh by re-running their
+            // stored DuckDB statement and offer a shortcut to edit it.
+            const isSqlLayer = isSqlQueryLayer(layer);
             // Local-file vector layers (desktop only) can be reloaded from disk
             // and watched for changes instead of the URL-based refresh above.
             const canWatchLocalFile = isTauri() && isLocalFileLayer(layer);
@@ -2945,6 +2989,21 @@ export function LayerPanel({
                               ? t("layers.autoRefreshOn")
                               : t("layers.autoRefresh")}
                           </DropdownMenuItem>
+                          {isSqlLayer && (
+                            <DropdownMenuItem
+                              onSelect={() => {
+                                const config = getSqlQueryLayerConfig(layer);
+                                if (!config) return;
+                                // Park the query first so the panel finds it
+                                // whether it mounts now or is already open.
+                                requestSqlWorkspaceQuery(config.sql);
+                                setSqlWorkspaceOpen(true);
+                              }}
+                            >
+                              <Database className="me-2 h-3.5 w-3.5" />
+                              {t("layers.editSqlQuery")}
+                            </DropdownMenuItem>
+                          )}
                           {!canRefresh && (
                             <>
                               <DropdownMenuSeparator />

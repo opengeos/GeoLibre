@@ -254,6 +254,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   { id: "processing.pythonConsole", menuId: "processing", labelKey: "toolbar.command.pythonConsole", tier: "advanced" },
   { id: "processing.notebook", menuId: "processing", labelKey: "toolbar.command.notebook", tier: "advanced" },
   { id: "processing.dashboard", menuId: "processing", labelKey: "toolbar.command.dashboard", tier: "intermediate" },
+  { id: "processing.history", menuId: "processing", labelKey: "toolbar.item.processingHistory", tier: "intermediate" },
   { id: "processing.planetaryComputer", menuId: "processing", labelKey: "toolbar.command.planetaryComputer", tier: "advanced" },
   { id: "processing.earthEngine", menuId: "processing", labelKey: "toolbar.command.earthEngine", tier: "advanced" },
   // Controls — built-in map controls

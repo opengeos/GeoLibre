@@ -7,6 +7,18 @@ export {
 } from "./registry";
 export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
 export {
+  TOPOLOGY_TOOLS,
+  TOPOLOGY_RULES,
+  FIXABLE_TOPOLOGY_RULES,
+  checkValidityTool,
+  fixGeometriesTool,
+  checkTopologyRulesTool,
+  fixTopologyTool,
+  setTopologyWasmRunner,
+  type WasmToolRunner,
+  type WasmToolRunResult,
+} from "./topology-tools";
+export {
   runAlgorithmCapture,
   runModel,
   type RunnerHost,

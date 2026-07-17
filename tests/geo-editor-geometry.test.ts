@@ -93,6 +93,22 @@ describe("canEditLayerGeometry", () => {
     );
   });
 
+  it("rejects live SQL query layers", () => {
+    // A query result is derived: refresh re-runs the stored SQL and would
+    // overwrite in-place edits, so editing is disabled.
+    assert.equal(
+      canEditLayerGeometry(
+        makeLayer({
+          metadata: {
+            sourceKind: "sql-query",
+            sqlQuery: { engine: "duckdb", sql: "SELECT 1 AS geom" },
+          },
+        }),
+      ),
+      false,
+    );
+  });
+
   it("rejects generic external native layers", () => {
     // externalNativeLayer that is not an Add-Vector-Layer source is not editable.
     assert.equal(

@@ -1151,3 +1151,97 @@ def test_json_wrapper_round_trips() -> None:
     assert set(result) == {"geojson", "messages"}
     assert result["geojson"]["type"] == "FeatureCollection"
     assert isinstance(result["messages"], list)
+
+
+BOWTIE = {
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {"name": "bowtie"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[0, 0], [2, 2], [2, 0], [0, 2], [0, 0]]],
+            },
+        },
+        {
+            "type": "Feature",
+            "properties": {"name": "ok"},
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [[10, 0], [14, 0], [14, 4], [10, 4], [10, 0]]
+                ],
+            },
+        },
+    ],
+}
+
+
+@requires_geopandas
+def test_check_validity_marks_invalid_features() -> None:
+    geojson, messages = run_vector_tool("check-validity", BOWTIE)
+    assert geojson["type"] == "FeatureCollection"
+    assert len(geojson["features"]) == 1
+    marker = geojson["features"][0]
+    assert marker["geometry"]["type"] == "Point"
+    assert marker["properties"]["feature_index"] == 0
+    # explain_validity names the problem (e.g. "Self-intersection[...]").
+    assert "intersection" in marker["properties"]["detail"].lower()
+    assert any("1 invalid" in m for m in messages)
+
+
+@requires_geopandas
+def test_check_validity_reports_clean_layer() -> None:
+    geojson, messages = run_vector_tool("check-validity", SQUARE)
+    assert geojson["features"] == []
+    assert any("No invalid geometries" in m for m in messages)
+
+
+@requires_geopandas
+def test_fix_geometries_repairs_only_invalid() -> None:
+    from shapely.geometry import shape
+
+    geojson, messages = run_vector_tool("fix-geometries", BOWTIE)
+    assert len(geojson["features"]) == 2
+    repaired = shape(geojson["features"][0]["geometry"])
+    assert repaired.is_valid
+    assert repaired.geom_type == "MultiPolygon"
+    assert geojson["features"][0]["properties"]["name"] == "bowtie"
+    # The already-valid square keeps its ring untouched.
+    untouched = shape(geojson["features"][1]["geometry"])
+    assert untouched.equals(shape(BOWTIE["features"][1]["geometry"]))
+    assert any("Fixed 1 invalid geometry" in m for m in messages)
+
+
+@requires_geopandas
+def test_fix_geometries_no_op_on_valid_layer() -> None:
+    geojson, messages = run_vector_tool("fix-geometries", SQUARE)
+    assert len(geojson["features"]) == 1
+    assert any("already valid" in m for m in messages)
+
+
+@requires_geopandas
+def test_validity_anchor_parses_scientific_notation() -> None:
+    anchor = vector_ops._validity_anchor(
+        "Self-intersection[1.5e-10 -2.3e-05]", None
+    )
+    assert anchor == (1.5e-10, -2.3e-05)
+
+
+@requires_geopandas
+def test_check_validity_counts_empty_geometry_as_missing() -> None:
+    with_empty = {
+        "type": "FeatureCollection",
+        "features": [
+            SQUARE["features"][0],
+            {
+                "type": "Feature",
+                "properties": {"name": "empty"},
+                "geometry": {"type": "Polygon", "coordinates": []},
+            },
+        ],
+    }
+    _, messages = run_vector_tool("check-validity", with_empty)
+    assert any("1 without geometry" in m for m in messages)
+    assert any("Checked 1 feature(s)" in m for m in messages)

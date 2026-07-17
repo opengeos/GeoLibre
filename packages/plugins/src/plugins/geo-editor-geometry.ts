@@ -1,4 +1,8 @@
-import { isDuckDBQueryLayer, type GeoLibreLayer } from "@geolibre/core";
+import {
+  isDuckDBQueryLayer,
+  SQL_QUERY_SOURCE_KIND,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 
 /**
@@ -42,6 +46,10 @@ export function canEditLayerGeometry(
   if (layer.type !== "geojson") return false;
   if (isDuckDBQueryLayer(layer)) return false;
   if (layer.metadata.sourceKind === SKETCHES_SOURCE_KIND) return false;
+  // A query result is derived, not writable: refresh re-runs the stored SQL
+  // and would overwrite any in-place edits. Load a copy into the editor (or
+  // export) to edit the features.
+  if (layer.metadata.sourceKind === SQL_QUERY_SOURCE_KIND) return false;
 
   if (layer.metadata.externalNativeLayer === true) {
     // Externally-rendered layers are only editable when they are Add-Vector-Layer

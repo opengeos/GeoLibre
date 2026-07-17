@@ -348,6 +348,7 @@ export function useProjectFileActions(mapControllerRef: MapControllerRef) {
       legend: state.legend,
       storymap: state.storymap,
       models: state.models,
+      processingHistory: state.processingHistory,
       widgets: state.widgets,
       dashboardColumns: state.dashboardColumns,
       mapLayout: state.mapLayout,

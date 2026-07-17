@@ -57,6 +57,11 @@ import {
   saveBinaryFileWithFallback,
 } from "../../lib/tauri-io";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import {
+  beginProcessingRun,
+  MAX_TRACKED_HISTORY_JOBS,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import { createAppAPI } from "../../hooks/usePlugins";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
 import { fetchableUrl } from "../../lib/url-utils";
@@ -115,6 +120,8 @@ export function RasterToolsDialog({
   const openTool = useAppStore((s) => s.ui.rasterToolOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const layers = useAppStore((s) => s.layers);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
   const desktop = isTauri();
@@ -137,6 +144,12 @@ export function RasterToolsDialog({
   // Aborts an in-flight layer-bytes fetch when the dialog closes/unmounts or a
   // new pick supersedes it, so its state setters never fire on a dead component.
   const layerFetchAbortRef = useRef<AbortController | null>(null);
+  // History trackers per dispatched sidecar job id (#1292). Entries stay after
+  // finish (finish is idempotent); the map is capped (oldest evicted) so a
+  // long session cannot grow it without bound.
+  const historyTrackersRef = useRef<Map<string, ProcessingRunTracker>>(
+    new Map(),
+  );
 
   // Client-engine state. The browser fallback reads a GeoTIFF into memory,
   // computes a new raster, adds it to the map, and offers a download.
@@ -208,6 +221,26 @@ export function RasterToolsDialog({
     setEngine(tool.supportsClient && !desktop ? "client" : "sidecar");
   }, [open, tool, desktop]);
 
+  // Pre-fill from a pending History re-run once the requested tool is selected.
+  // Declared after the reset effect above so the recorded parameters win over
+  // the defaults when both effects fire in the same commit. Input/output paths
+  // are not restored: the user re-picks files.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "raster") return;
+    // A saved-project history entry can reference a tool that was renamed or
+    // removed since; drop the request instead of leaving it pending forever.
+    if (!getRasterTool(rerun.toolId)) {
+      setError(
+        t("processing.history.toolUnavailable", { toolId: rerun.toolId }),
+      );
+      setProcessingRerun(null);
+      return;
+    }
+    if (rerun.toolId !== tool.id) return;
+    setParams({ ...toolDefaults(tool), ...rerun.parameters });
+    setProcessingRerun(null);
+  }, [open, rerun, tool, setProcessingRerun, t]);
+
   // Probe the runtime only when the dialog opens, not on every tool switch
   // (each probe spawns a sidecar subprocess import check).
   useEffect(() => {
@@ -240,6 +273,18 @@ export function RasterToolsDialog({
       cancelled = true;
       window.clearTimeout(timer);
     };
+  }, [job]);
+
+  // Record a History entry once a sidecar job reaches a terminal status
+  // (#1292). `finish` is idempotent, so re-renders with the same job are no-ops.
+  useEffect(() => {
+    if (!job || RUNNING_JOB_STATUSES.has(job.status)) return;
+    historyTrackersRef.current
+      .get(job.id)
+      ?.finish(
+        job.status === "succeeded" ? "success" : "error",
+        job.error ?? undefined,
+      );
   }, [job]);
 
   // Keep the newest log lines in view as messages stream in. One effect per log
@@ -453,19 +498,37 @@ export function RasterToolsDialog({
         return;
       }
     }
+    // Record the raw form params (not the injected sidecar expression) so
+    // Edit & re-run restores the form exactly (#1292).
+    const tracker = beginProcessingRun(
+      {
+        kind: "raster",
+        toolId: tool.id,
+        toolName: tool.name,
+        engine: "sidecar",
+        parameters: params,
+      },
+      { inputPath: inputPath.trim(), outputPath: outputPath.trim() },
+    );
     try {
-      setJob(
-        await runRasterTool({
-          tool_id: tool.id,
-          input_path: inputPath.trim(),
-          output_path: outputPath.trim(),
-          parameters: sidecarParams,
-        }),
-      );
+      const nextJob = await runRasterTool({
+        tool_id: tool.id,
+        input_path: inputPath.trim(),
+        output_path: outputPath.trim(),
+        parameters: sidecarParams,
+      });
+      historyTrackersRef.current.set(nextJob.id, tracker);
+      while (historyTrackersRef.current.size > MAX_TRACKED_HISTORY_JOBS) {
+        const oldest = historyTrackersRef.current.keys().next().value;
+        if (oldest === undefined) break;
+        historyTrackersRef.current.delete(oldest);
+      }
+      setJob(nextJob);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start raster tool.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Could not start raster tool.";
+      tracker.finish("error", message);
+      setError(message);
     }
   }, [tool, inputPath, outputPath, params, validateParams, t]);
 
@@ -483,6 +546,16 @@ export function RasterToolsDialog({
     }
     setClientRunning(true);
     setClientLog([t("toolbar.rasterTool.runningInBrowser", { tool: tool.name })]);
+    const tracker = beginProcessingRun(
+      {
+        kind: "raster",
+        toolId: tool.id,
+        toolName: tool.name,
+        engine: "client",
+        parameters: params,
+      },
+      { inputPath: clientInput.name },
+    );
     try {
       const raster = await readRasterData(clientInput.bytes);
       setClientLog((prev) => [
@@ -534,6 +607,7 @@ export function RasterToolsDialog({
           ...prev,
           t("toolbar.rasterTool.addedToMap", { name: outName }),
         ]);
+        tracker.addOutputLayer(outName);
       } catch (mapError) {
         const mapMessage =
           mapError instanceof Error
@@ -544,10 +618,16 @@ export function RasterToolsDialog({
           ...prev,
           t("toolbar.rasterTool.mapAddFailed", { message: mapMessage }),
         ]);
+        // The compute succeeded but the result never made it onto the map, so
+        // record the run as failed rather than a green no-output "success".
+        tracker.finish("error", mapMessage);
+        return;
       }
+      tracker.finish("success");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : t("toolbar.rasterTool.runError");
+      tracker.finish("error", message);
       setError(message);
       setClientLog((prev) => [...prev, message]);
     } finally {

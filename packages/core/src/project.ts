@@ -22,7 +22,10 @@ import {
   type MapGridLayout,
   type MapScaleUnit,
   type MapViewState,
+  MAX_PROCESSING_HISTORY,
   type ProcessingModel,
+  type ProcessingRun,
+  type ProcessingRunKind,
   type SecondaryMapView,
   type ProcessingModelStep,
   type ProjectPluginControlPosition,
@@ -134,6 +137,8 @@ export function parseProject(json: string): GeoLibreProject {
     legend: normalizeLegendConfig(data.legend),
     storymap: normalizeStoryMap(data.storymap) ?? undefined,
     models: normalizeModels(data.models) ?? undefined,
+    processingHistory:
+      normalizeProcessingHistory(data.processingHistory) ?? undefined,
     widgets: normalizeWidgets(data.widgets) ?? undefined,
     ...(data.dashboardColumns === undefined
       ? {}
@@ -458,6 +463,99 @@ export function normalizeModels(value: unknown): ProcessingModel[] | null {
     models.push({ id, name: normalizeString(candidate.name), steps });
   }
   return models.length > 0 ? models : null;
+}
+
+const PROCESSING_RUN_KINDS = new Set<ProcessingRunKind>([
+  "vector",
+  "statistics",
+  "network",
+  "whitebox",
+  "raster",
+  "conversion",
+  "algorithm",
+]);
+
+/**
+ * Coerce an untrusted (possibly hand-edited) `processingHistory` array into
+ * valid {@link ProcessingRun} records. Drops entries without a usable id, tool
+ * id, or known kind, de-duplicates by id, keeps `parameters` as a plain object,
+ * and caps the list at {@link MAX_PROCESSING_HISTORY} (keeping the newest,
+ * i.e. last, entries). Returns `null` when nothing survives, so a history-less
+ * project stays free of the key.
+ *
+ * @param value Raw `processingHistory` value from the project JSON.
+ * @returns Normalized runs, or `null` when none survive.
+ */
+export function normalizeProcessingHistory(
+  value: unknown,
+): ProcessingRun[] | null {
+  if (!Array.isArray(value)) return null;
+  // Bound the work for a crafted or corrupted file (shared/collaboration
+  // projects reach this path too): only the newest entries can survive the
+  // cap anyway, so ignore all but a generous tail up front.
+  const source =
+    value.length > MAX_PROCESSING_HISTORY * 10
+      ? value.slice(-MAX_PROCESSING_HISTORY * 10)
+      : value;
+  const runs: ProcessingRun[] = [];
+  const seen = new Set<string>();
+  for (const entry of source) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Partial<ProcessingRun>;
+    const id = normalizeString(candidate.id).trim();
+    const toolId = normalizeString(candidate.toolId).trim();
+    const kind = candidate.kind;
+    if (!id || !toolId || seen.has(id)) continue;
+    if (!kind || !PROCESSING_RUN_KINDS.has(kind)) continue;
+    seen.add(id);
+    const inputLayerNames =
+      candidate.inputLayerNames && typeof candidate.inputLayerNames === "object"
+        ? Object.fromEntries(
+            Object.entries(candidate.inputLayerNames).filter(
+              ([, name]) => typeof name === "string",
+            ),
+          )
+        : undefined;
+    const outputLayerNames = Array.isArray(candidate.outputLayerNames)
+      ? candidate.outputLayerNames.filter(
+          (name): name is string => typeof name === "string",
+        )
+      : undefined;
+    runs.push({
+      id,
+      kind,
+      toolId,
+      toolName: normalizeString(candidate.toolName) || toolId,
+      engine: normalizeString(candidate.engine),
+      parameters:
+        candidate.parameters && typeof candidate.parameters === "object"
+          ? (candidate.parameters as Record<string, unknown>)
+          : {},
+      ...(inputLayerNames && Object.keys(inputLayerNames).length > 0
+        ? { inputLayerNames }
+        : {}),
+      ...(outputLayerNames?.length ? { outputLayerNames } : {}),
+      ...(normalizeString(candidate.inputPath)
+        ? { inputPath: normalizeString(candidate.inputPath) }
+        : {}),
+      ...(normalizeString(candidate.outputPath)
+        ? { outputPath: normalizeString(candidate.outputPath) }
+        : {}),
+      startedAt: normalizeString(candidate.startedAt),
+      ...(Number.isFinite(candidate.durationMs)
+        ? { durationMs: Math.max(0, Number(candidate.durationMs)) }
+        : {}),
+      // Only an explicit "success" earns the green checkmark; a missing or
+      // corrupted status from hand-edited JSON degrades to "error" rather than
+      // presenting an indeterminate run as having succeeded.
+      status: candidate.status === "success" ? "success" : "error",
+      ...(normalizeString(candidate.error)
+        ? { error: normalizeString(candidate.error) }
+        : {}),
+    });
+  }
+  if (runs.length === 0) return null;
+  return runs.slice(-MAX_PROCESSING_HISTORY);
 }
 
 /**
@@ -1001,6 +1099,7 @@ export function projectFromStore(state: {
   legend?: LegendConfig | null;
   storymap?: StoryMap | null;
   models?: ProcessingModel[] | null;
+  processingHistory?: ProcessingRun[] | null;
   widgets?: DashboardWidget[] | null;
   dashboardColumns?: number;
   mapLayout?: MapGridLayout;
@@ -1018,6 +1117,7 @@ export function projectFromStore(state: {
   const legend = normalizeLegendConfig(state.legend);
   const storymap = normalizeStoryMap(state.storymap);
   const models = normalizeModels(state.models);
+  const processingHistory = normalizeProcessingHistory(state.processingHistory);
   const widgets = normalizeWidgets(state.widgets);
   // Persist a non-default column count only; a default-layout dashboard (or a
   // widget-less project) stays free of the key for legacy readers.
@@ -1054,6 +1154,7 @@ export function projectFromStore(state: {
     ...(legend ? { legend } : {}),
     ...(storymap ? { storymap } : {}),
     ...(models ? { models } : {}),
+    ...(processingHistory ? { processingHistory } : {}),
     ...(widgets ? { widgets } : {}),
     ...(dashboardColumns !== DEFAULT_DASHBOARD_COLUMNS ? { dashboardColumns } : {}),
     ...(persistGrid
@@ -1168,6 +1269,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   legend: LegendConfig;
   storymap: StoryMap | null;
   models: ProcessingModel[];
+  processingHistory: ProcessingRun[];
   widgets: DashboardWidget[];
   dashboardColumns: number;
   mapLayout: MapGridLayout;
@@ -1222,6 +1324,8 @@ export function applyProjectToStore(project: GeoLibreProject): {
     legend: normalizeLegendConfig(project.legend) ?? { ...DEFAULT_LEGEND_CONFIG },
     storymap: normalizeStoryMap(project.storymap),
     models: normalizeModels(project.models) ?? [],
+    processingHistory:
+      normalizeProcessingHistory(project.processingHistory) ?? [],
     widgets: normalizeWidgets(project.widgets) ?? [],
     dashboardColumns: normalizeDashboardColumns(project.dashboardColumns),
     mapLayout,

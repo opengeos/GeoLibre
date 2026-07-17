@@ -18,6 +18,10 @@ import {
 } from "../../lib/pyodide/pyodide-vector-loader";
 import { createDuckDbCapability } from "../../lib/duckdb-processing";
 import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
+import {
   Button,
   Dialog,
   DialogContent,
@@ -40,6 +44,7 @@ import {
   useState,
   type ReactElement,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 interface VectorToolsDialogProps {
   mapControllerRef: React.RefObject<MapController | null>;
@@ -65,10 +70,13 @@ function groupedTools(): { group: string; tools: ProcessingAlgorithm[] }[] {
 export function VectorToolsDialog({
   mapControllerRef,
 }: VectorToolsDialogProps): ReactElement {
+  const { t } = useTranslation();
   const openTool = useAppStore((s) => s.ui.vectorToolOpen);
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
   const [selectedId, setSelectedId] = useState<string>(
@@ -79,7 +87,9 @@ export function VectorToolsDialog({
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [sidecarAvailable, setSidecarAvailable] = useState<boolean | null>(null);
+  const [autoRunPending, setAutoRunPending] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
 
   const tool = useMemo(
     () => getVectorTool(selectedId) ?? VECTOR_TOOLS[0],
@@ -110,6 +120,34 @@ export function VectorToolsDialog({
     if (tool.requiresSidecar) setEngine("sidecar");
     else if (!tool.supportsSidecar) setEngine("client");
   }, [tool]);
+
+  // Pre-fill from a pending History re-run once the requested tool is selected.
+  // Declared after the defaults-reset effect above so the recorded parameters
+  // win over the defaults when both effects fire in the same commit.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "vector") return;
+    // A saved-project history entry can reference a tool that was renamed or
+    // removed since; drop the request instead of leaving it pending forever.
+    if (!getVectorTool(rerun.toolId)) {
+      setLog((prev) => [
+        ...prev,
+        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
+      ]);
+      setProcessingRerun(null);
+      return;
+    }
+    if (rerun.toolId !== tool.id) return;
+    setParams({ ...rerun.parameters });
+    if (
+      rerun.engine === "client" ||
+      rerun.engine === "sidecar" ||
+      rerun.engine === "pyodide"
+    ) {
+      setEngine(rerun.engine);
+    }
+    setProcessingRerun(null);
+    if (rerun.autoRun) setAutoRunPending(true);
+  }, [open, rerun, tool, setProcessingRerun, t]);
 
   // Prefill the H3 grid's manual bounding-box fields from the current map
   // viewport when the user first switches to that source, so they can tweak the
@@ -161,10 +199,16 @@ export function VectorToolsDialog({
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [log]);
 
-  const appendLog = useCallback(
-    (message: string) => setLog((prev) => [...prev, message]),
-    [],
-  );
+  // Client tools report validation failures via ctx.log("Error: ...") plus a
+  // plain return rather than throwing; capture the last such line so the run
+  // is recorded as failed in the Processing History (#1292). Reset per run.
+  const softErrorRef = useRef<string | null>(null);
+  const appendLog = useCallback((message: string) => {
+    if (message.startsWith("Error:")) {
+      softErrorRef.current = message.slice("Error:".length).trim();
+    }
+    setLog((prev) => [...prev, message]);
+  }, []);
 
   const layerOptions = useCallback(
     (filter?: GeometryFamily[]) =>
@@ -253,6 +297,7 @@ export function VectorToolsDialog({
         return;
       }
       const layerId = addGeoJsonLayer(name, fc);
+      runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
@@ -264,23 +309,27 @@ export function VectorToolsDialog({
   // Shared tail for the two Python engines (sidecar and Pyodide): both take the
   // same {tool_id, geojson, overlay, parameters} request and return
   // {geojson, messages}. Resolve the layers, invoke, then validate and add the
-  // result. `label` describes where it ran, for the log line.
+  // result. `label` describes where it ran, for the log line. Returns the
+  // failure message when the run bailed out (so the caller records the run as
+  // failed in the Processing History), or null on success.
   const runRemoteEngine = useCallback(
     async (
       label: string,
       invoke: (request: VectorToolRequest) => Promise<VectorToolResult>,
-    ) => {
+    ): Promise<string | null> => {
       const inputLayer = layers.find((l) => l.id === params.layer);
       const overlayLayer = layers.find((l) => l.id === params.overlay);
       // A layer may have been removed from the project after the dialog opened;
       // bail out with a clear message instead of sending null GeoJSON.
       if (!inputLayer?.geojson) {
-        appendLog("Error: input layer no longer exists in the project");
-        return;
+        const message = "input layer no longer exists in the project";
+        appendLog(`Error: ${message}`);
+        return message;
       }
       if (params.overlay && !overlayLayer?.geojson) {
-        appendLog("Error: overlay layer no longer exists in the project");
-        return;
+        const message = "overlay layer no longer exists in the project";
+        appendLog(`Error: ${message}`);
+        return message;
       }
       appendLog(`Running "${tool.name}" ${label}...`);
       const result = await invoke({
@@ -300,15 +349,18 @@ export function VectorToolsDialog({
         Array.isArray(remoteResult.features)
       ) {
         addResultLayer(tool.name, remoteResult as unknown as FeatureCollection);
-      } else {
-        appendLog("Error: engine returned invalid GeoJSON");
+        return null;
       }
+      const message = "engine returned invalid GeoJSON";
+      appendLog(`Error: ${message}`);
+      return message;
     },
     [layers, params, tool, appendLog, addResultLayer],
   );
 
   const handleRun = useCallback(async () => {
     setLog([]);
+    softErrorRef.current = null;
     // Validate required parameters before doing any work.
     for (const param of tool.parameters) {
       if (!param.required || !isParamVisible(param)) continue;
@@ -324,10 +376,22 @@ export function VectorToolsDialog({
       }
     }
 
+    const tracker = beginProcessingRun({
+      kind: "vector",
+      toolId: tool.id,
+      toolName: tool.name,
+      engine,
+      parameters: params,
+    });
+    runTrackerRef.current = tracker;
     setRunning(true);
     try {
+      // A remote engine can bail out without throwing (missing layer, invalid
+      // response); its returned failure message keeps the run from being
+      // recorded as a green no-output success.
+      let failure: string | null = null;
       if (engine === "sidecar") {
-        await runRemoteEngine("on the Python sidecar", runVectorTool);
+        failure = await runRemoteEngine("on the Python sidecar", runVectorTool);
       } else if (engine === "pyodide") {
         // Progress phases (one-time runtime + GeoPandas download) stream into
         // the log; the subscription is dropped once the run finishes.
@@ -335,7 +399,7 @@ export function VectorToolsDialog({
           appendLog(`${phase}...`),
         );
         try {
-          await runRemoteEngine(
+          failure = await runRemoteEngine(
             "in your browser (Pyodide)",
             runVectorToolInPyodide,
           );
@@ -359,8 +423,14 @@ export function VectorToolsDialog({
         };
         await tool.run(ctx);
       }
+      // A logged "Error: ..." line marks a soft failure (the client tools
+      // bail out without throwing); don't record those as successes.
+      const softError = failure ?? softErrorRef.current;
+      if (softError) tracker.finish("error", softError);
+      else tracker.finish("success");
     } catch (error) {
       appendLog(`Error: ${(error as Error).message}`);
+      tracker.finish("error", (error as Error).message);
     } finally {
       setRunning(false);
     }
@@ -376,6 +446,19 @@ export function VectorToolsDialog({
     isParamVisible,
     duckdb,
   ]);
+
+  // Auto-run for a History "Re-run": kick off handleRun on the render after the
+  // pre-fill effect committed the recorded parameters. The ref always points at
+  // the latest handleRun closure, so the run sees the pre-filled state.
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
+  useEffect(() => {
+    if (!autoRunPending) return;
+    setAutoRunPending(false);
+    void handleRunRef.current();
+  }, [autoRunPending]);
 
   const groups = useMemo(groupedTools, []);
 

@@ -28,6 +28,10 @@ import {
   type ReactElement,
 } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import { ParameterField } from "./ParameterField";
 
 interface NetworkToolsDialogProps {
@@ -50,6 +54,8 @@ export function NetworkToolsDialog({
   const setNetworkToolOpen = useAppStore((s) => s.setNetworkToolOpen);
   const layers = useAppStore((s) => s.layers);
   const addGeoJsonLayer = useAppStore((s) => s.addGeoJsonLayer);
+  const rerun = useAppStore((s) => s.ui.processingRerun);
+  const setProcessingRerun = useAppStore((s) => s.setProcessingRerun);
 
   const open = openTool !== null;
   const [selectedId, setSelectedId] = useState<string>(
@@ -58,6 +64,8 @@ export function NetworkToolsDialog({
   const [params, setParams] = useState<Record<string, unknown>>({});
   const [log, setLog] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
+  const [autoRunPending, setAutoRunPending] = useState(false);
+  const runTrackerRef = useRef<ProcessingRunTracker | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   // Cancels the in-flight run (and any pending routing requests) when the
   // dialog closes or a new run starts, so closing the dialog mid-batch does not
@@ -87,15 +95,42 @@ export function NetworkToolsDialog({
     setLog([]);
   }, [tool]);
 
+  // Pre-fill from a pending History re-run once the requested tool is selected.
+  // Declared after the defaults-reset effect above so the recorded parameters
+  // win over the defaults when both effects fire in the same commit.
+  useEffect(() => {
+    if (!open || !rerun || rerun.kind !== "network") return;
+    // A saved-project history entry can reference a tool that was renamed or
+    // removed since; drop the request instead of leaving it pending forever.
+    if (!getNetworkTool(rerun.toolId)) {
+      setLog((prev) => [
+        ...prev,
+        `Error: ${t("processing.history.toolUnavailable", { toolId: rerun.toolId })}`,
+      ]);
+      setProcessingRerun(null);
+      return;
+    }
+    if (rerun.toolId !== tool.id) return;
+    setParams({ ...rerun.parameters });
+    setProcessingRerun(null);
+    if (rerun.autoRun) setAutoRunPending(true);
+  }, [open, rerun, tool, setProcessingRerun, t]);
+
   // Keep the newest log lines in view as they stream in.
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ block: "end" });
   }, [log]);
 
-  const appendLog = useCallback(
-    (message: string) => setLog((prev) => [...prev, message]),
-    [],
-  );
+  // Client tools report validation failures via ctx.log("Error: ...") plus a
+  // plain return rather than throwing; capture the last such line so the run
+  // is recorded as failed in the Processing History (#1292). Reset per run.
+  const softErrorRef = useRef<string | null>(null);
+  const appendLog = useCallback((message: string) => {
+    if (message.startsWith("Error:")) {
+      softErrorRef.current = message.slice("Error:".length).trim();
+    }
+    setLog((prev) => [...prev, message]);
+  }, []);
 
   const layerOptions = useCallback(
     (filter?: GeometryFamily[]) =>
@@ -150,6 +185,7 @@ export function NetworkToolsDialog({
         return;
       }
       const layerId = addGeoJsonLayer(name, fc);
+      runTrackerRef.current?.addOutputLayer(name);
       const layer = useAppStore
         .getState()
         .layers.find((item) => item.id === layerId);
@@ -178,6 +214,7 @@ export function NetworkToolsDialog({
 
   const handleRun = useCallback(async () => {
     setLog([]);
+    softErrorRef.current = null;
     for (const param of tool.parameters) {
       if (!param.required) continue;
       const value = params[param.id];
@@ -197,6 +234,14 @@ export function NetworkToolsDialog({
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const tracker = beginProcessingRun({
+      kind: "network",
+      toolId: tool.id,
+      toolName: tool.name,
+      engine: "client",
+      parameters: params,
+    });
+    runTrackerRef.current = tracker;
     setRunning(true);
     try {
       const ctx: ProcessingContext = {
@@ -208,13 +253,35 @@ export function NetworkToolsDialog({
         signal: controller.signal,
       };
       await tool.run(ctx);
+      // A logged "Error: ..." line marks a soft failure (the client tools
+      // bail out without throwing); don't record those as successes.
+      if (softErrorRef.current) tracker.finish("error", softErrorRef.current);
+      else tracker.finish("success");
     } catch (error) {
+      // A user-initiated cancel (closing the dialog or starting a new run)
+      // rejects with an AbortError; that is not a failed run, so don't log it
+      // or record it in the Processing History.
+      if (controller.signal.aborted) return;
       appendLog(`Error: ${(error as Error).message}`);
+      tracker.finish("error", (error as Error).message);
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
       setRunning(false);
     }
   }, [tool, params, layers, appendLog, addResultLayer, mapControllerRef]);
+
+  // Auto-run for a History "Re-run": kick off handleRun on the render after the
+  // pre-fill effect committed the recorded parameters. The ref always points at
+  // the latest handleRun closure, so the run sees the pre-filled state.
+  const handleRunRef = useRef(handleRun);
+  useEffect(() => {
+    handleRunRef.current = handleRun;
+  });
+  useEffect(() => {
+    if (!autoRunPending) return;
+    setAutoRunPending(false);
+    void handleRunRef.current();
+  }, [autoRunPending]);
 
   const endpoint = (params.endpoint as string) || getRoutingConfig().endpoint;
 

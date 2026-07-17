@@ -54,6 +54,10 @@ import {
 } from "../../lib/tauri-io";
 import type { LargeVectorDataset } from "../../lib/duckdb-vector-guard";
 import { startGeoLibreSidecar } from "../../lib/sidecar";
+import {
+  beginProcessingRun,
+  type ProcessingRunTracker,
+} from "../../lib/processing-history";
 import i18n from "../../i18n";
 
 const RUNNING_JOB_STATUSES = new Set(["pending", "running"]);
@@ -578,6 +582,12 @@ export function ConversionDialog() {
   const [startingServer, setStartingServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<ConversionJob | null>(null);
+  // History tracker for the conversion dispatched last (#1292). Sidecar and
+  // browser runs both settle through `job`, so one pending slot suffices;
+  // `finish` is idempotent. Overlapping dispatches (which would cross-wire
+  // trackers) are prevented by the synchronous guard in runConversion.
+  const pendingTrackerRef = useRef<ProcessingRunTracker | null>(null);
+  const dispatchGuardRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement | null>(null);
 
   const config = kind ? TOOL_CONFIGS[kind] : null;
@@ -686,6 +696,17 @@ export function ConversionDialog() {
       cancelled = true;
       window.clearTimeout(timer);
     };
+  }, [job]);
+
+  // Record a History entry once a conversion reaches a terminal status (#1292).
+  // Covers sidecar jobs (via polling) and browser runs (synthetic jobs that
+  // arrive terminal). `finish` is idempotent across re-renders.
+  useEffect(() => {
+    if (!job || RUNNING_JOB_STATUSES.has(job.status)) return;
+    pendingTrackerRef.current?.finish(
+      job.status === "succeeded" ? "success" : "error",
+      job.error ?? undefined,
+    );
   }, [job]);
 
   // Keep the newest log lines in view as messages stream in.
@@ -1304,9 +1325,73 @@ export function ConversionDialog() {
   };
 
   const runConversion = async () => {
+    // Serialize dispatches. `running` derives from job state, which is not yet
+    // set while the initial sidecar request is in flight, so rapid clicks
+    // could otherwise dispatch overlapping jobs and cross-wire their history
+    // trackers (#1292 review).
+    if (dispatchGuardRef.current) return;
+    dispatchGuardRef.current = true;
+    try {
+      await dispatchConversion();
+    } finally {
+      dispatchGuardRef.current = false;
+    }
+  };
+
+  const dispatchConversion = async () => {
     if (!kind) return;
     setError(null);
+    // History tracker for this run (#1292), built lazily so a submit that
+    // fails the validation checks below is never recorded (matching the other
+    // processing dialogs) and never occupies the pending slot. Only the
+    // parameters that apply to the selected conversion kind are recorded.
+    const makeTracker = () =>
+      beginProcessingRun(
+        {
+          kind: "conversion",
+          toolId: kind,
+          toolName: TOOL_CONFIGS[kind].titleKey
+            ? t(TOOL_CONFIGS[kind].titleKey)
+            : TOOL_CONFIGS[kind].title,
+          engine: usesBrowserRuntime ? "browser" : "sidecar",
+          parameters: {
+            ...(compression ? { compression } : {}),
+            ...(kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet"
+              ? { rowGroupSize }
+              : {}),
+            ...(kind === "csv-to-geoparquet" ? { lonColumn, latColumn } : {}),
+            ...(kind === "vector-to-pmtiles"
+              ? { layerName, minZoom, maxZoom }
+              : {}),
+            ...(kind === "raster-to-pmtiles"
+              ? {
+                  ...(band ? { band } : {}),
+                  ...(colormap ? { colormap } : {}),
+                  resampling,
+                  minZoom,
+                  maxZoom,
+                }
+              : {}),
+          },
+        },
+        {
+          inputPath: usesBrowserRuntime
+            ? (splitBrowserSelection(browserFiles).mainFile?.name ?? "")
+            : inputPath.trim(),
+          outputPath: outputPath.trim(),
+        },
+      );
     if (usesBrowserRuntime) {
+      // Mirror runBrowserConversion's own input check before creating the
+      // tracker. Deeper per-kind validations inside the browser sub-runners
+      // return before any job is dispatched, so a tracker they strand is
+      // never finished nor misattributed (the terminal-status effect only
+      // fires on job transitions, and each dispatch overwrites the slot).
+      if (!splitBrowserSelection(browserFiles).mainFile) {
+        setError("Choose an input file.");
+        return;
+      }
+      pendingTrackerRef.current = makeTracker();
       await runBrowserConversion();
       return;
     }
@@ -1323,16 +1408,48 @@ export function ConversionDialog() {
     const parsedRowGroupSize = Number.parseInt(rowGroupSize, 10);
     const rowGroupValid =
       Number.isFinite(parsedRowGroupSize) && parsedRowGroupSize > 0;
+    // Per-kind parameter validation, before the tracker exists so an invalid
+    // submit is not recorded and cannot strand a pending tracker.
+    if (
+      (kind === "vector-to-geoparquet" || kind === "csv-to-geoparquet") &&
+      !rowGroupValid
+    ) {
+      setError("Row group size must be a positive integer.");
+      return;
+    }
+    if (
+      kind === "csv-to-geoparquet" &&
+      (!lonColumn.trim() || !latColumn.trim())
+    ) {
+      setError("Longitude and latitude column names are required.");
+      return;
+    }
+    // Unlike Raster to PMTiles, the sidecar requires both bounds, so a blank
+    // (undefined) one is an error rather than a "let the engine decide".
+    let pmtilesZoomRange: { minZoom: number; maxZoom: number } | null = null;
+    if (kind === "vector-to-pmtiles") {
+      const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
+      if (
+        !zooms ||
+        zooms.minZoom === undefined ||
+        zooms.maxZoom === undefined
+      ) {
+        setError(
+          i18n.t("toolbar.conversion.zoomRangeError", {
+            max: MAX_PMTILES_ZOOM,
+          }),
+        );
+        return;
+      }
+      pmtilesZoomRange = { minZoom: zooms.minZoom, maxZoom: zooms.maxZoom };
+    }
+    pendingTrackerRef.current = makeTracker();
     try {
       if (kind === "vector-to-vector") {
         // The backend resolves the output format from the output extension, so
         // the input/output paths are all it needs.
         setJob(await runVectorToVector({ input_path, output_path }));
       } else if (kind === "vector-to-geoparquet") {
-        if (!rowGroupValid) {
-          setError("Row group size must be a positive integer.");
-          return;
-        }
         setJob(
           await runVectorToGeoParquet({
             input_path,
@@ -1348,14 +1465,6 @@ export function ConversionDialog() {
       } else if (kind === "vector-to-geopackage") {
         setJob(await runVectorToGeoPackage({ input_path, output_path }));
       } else if (kind === "csv-to-geoparquet") {
-        if (!rowGroupValid) {
-          setError("Row group size must be a positive integer.");
-          return;
-        }
-        if (!lonColumn.trim() || !latColumn.trim()) {
-          setError("Longitude and latitude column names are required.");
-          return;
-        }
         setJob(
           await runCsvToGeoParquet({
             input_path,
@@ -1366,29 +1475,14 @@ export function ConversionDialog() {
             row_group_size: parsedRowGroupSize,
           }),
         );
-      } else if (kind === "vector-to-pmtiles") {
-        // Unlike Raster to PMTiles, the sidecar requires both bounds, so a blank
-        // (undefined) one is an error rather than a "let the engine decide".
-        const zooms = parseZoomRange(minZoom, maxZoom, MAX_PMTILES_ZOOM);
-        if (
-          !zooms ||
-          zooms.minZoom === undefined ||
-          zooms.maxZoom === undefined
-        ) {
-          setError(
-            i18n.t("toolbar.conversion.zoomRangeError", {
-              max: MAX_PMTILES_ZOOM,
-            }),
-          );
-          return;
-        }
+      } else if (kind === "vector-to-pmtiles" && pmtilesZoomRange) {
         setJob(
           await runVectorToPmtiles({
             input_path,
             output_path,
             layer_name: layerName.trim() || "data",
-            min_zoom: zooms.minZoom,
-            max_zoom: zooms.maxZoom,
+            min_zoom: pmtilesZoomRange.minZoom,
+            max_zoom: pmtilesZoomRange.maxZoom,
           }),
         );
       } else if (kind === "raster-to-cog") {
@@ -1397,12 +1491,19 @@ export function ConversionDialog() {
         // raster-to-pmtiles is the only remaining kind and has no sidecar
         // endpoint; conversionUsesBrowserRuntime always routes it to the WASM
         // path above, so reaching here means those two have drifted apart.
-        setError(i18n.t("toolbar.conversion.noSidecarConversion", { kind }));
+        const message = i18n.t("toolbar.conversion.noSidecarConversion", {
+          kind,
+        });
+        // No job will ever settle this dispatch, so finish the tracker here
+        // rather than stranding it in the pending slot.
+        pendingTrackerRef.current?.finish("error", message);
+        setError(message);
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start conversion.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Could not start conversion.";
+      pendingTrackerRef.current?.finish("error", message);
+      setError(message);
     }
   };
 
