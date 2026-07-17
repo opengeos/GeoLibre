@@ -140,7 +140,16 @@ export type GeoLibreToolbarMenuItem =
 
 export interface GeoLibreFloatingPanelRegistration {
   id: string;
-  // A getter makes the title re-localize live on language changes.
+  // A getter makes the title re-localize live on language changes: it is
+  // re-evaluated on every getFloatingPanel() call, so it picks up the current
+  // language without re-registering the panel. Caveat: the registry itself
+  // does not subscribe to i18n events, so the getter is only re-run when a
+  // consumer re-reads the panel. In practice every host component that renders
+  // the title also calls useTranslation(), whose languageChanged re-render
+  // re-reads the panel as a side effect; a host that reads the title without
+  // that subscription would show a stale title after a language switch until
+  // the next registry mutation, and must re-read the panel itself on language
+  // change. A plain string is frozen at registration time.
   title: string | (() => string);
   icon?: string; // URL or data: URI
   defaultWidth?: number;
@@ -159,7 +168,16 @@ export type GeoLibreRightPanelDock =
 
 export interface GeoLibreRightPanelRegistration {
   id: string;
-  // A getter makes the title re-localize live on language changes.
+  // A getter makes the title re-localize live on language changes: it is
+  // re-evaluated on every getRightPanel() call, so it picks up the current
+  // language without re-registering the panel. Caveat: the registry itself
+  // does not subscribe to i18n events, so the getter is only re-run when a
+  // consumer re-reads the panel. In practice every host component that renders
+  // the title also calls useTranslation(), whose languageChanged re-render
+  // re-reads the panel as a side effect; a host that reads the title without
+  // that subscription would show a stale title after a language switch until
+  // the next registry mutation, and must re-read the panel itself on language
+  // change. A plain string is frozen at registration time.
   title: string | (() => string);
   /** Initial dock position; "right-of-style" (default). */
   dock?: GeoLibreRightPanelDock;
