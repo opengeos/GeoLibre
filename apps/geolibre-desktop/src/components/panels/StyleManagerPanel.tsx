@@ -483,13 +483,18 @@ export function StyleManagerPanel() {
   return (
     <div
       ref={panelRef}
+      // `resize` (CSS resize: both) gives the native bottom-end resize grip;
+      // it writes inline width/height on drag, overriding the default width
+      // class, and the min-/max- classes bound it. Requires the non-visible
+      // overflow this container already has.
       className={cn(
-        "pointer-events-auto absolute z-20 flex flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        "pointer-events-auto absolute z-20 flex resize flex-col overflow-hidden rounded-lg border bg-background shadow-xl",
+        "max-h-[calc(100%-1.5rem)] min-h-64 min-w-80 max-w-[calc(100%-1.5rem)]",
         pos
           ? "w-[min(24rem,calc(100vw-1.5rem))]"
-          : "left-3 top-16 max-h-[calc(100%-6rem)] w-[min(24rem,calc(100vw-1.5rem))]",
+          : "left-3 top-3 w-[min(24rem,calc(100vw-1.5rem))]",
       )}
-      style={pos ? { left: pos.x, top: pos.y, maxHeight: "calc(100% - 5rem)" } : undefined}
+      style={pos ? { left: pos.x, top: pos.y } : undefined}
       role="region"
       aria-label={t("styleManager.title")}
       data-testid="style-manager-panel"
