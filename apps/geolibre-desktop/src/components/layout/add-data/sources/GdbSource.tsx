@@ -7,7 +7,7 @@ import {
 } from "@geolibre/processing";
 import { Button, Input, Label, Select } from "@geolibre/ui";
 import { FolderOpen, Layers } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { FeatureCollection } from "geojson";
 import { tempDir, join } from "@tauri-apps/api/path";
@@ -18,6 +18,7 @@ import {
   pickLocalDirectory,
   readLocalFileBytes,
 } from "../../../../lib/tauri-io";
+import { LAST_GEODATABASE_STORAGE_KEY } from "../constants";
 import {
   createBaseLayer,
   errorMessage,
@@ -52,6 +53,38 @@ async function waitForConversionJob(
   return job;
 }
 
+interface StoredGdbSelection {
+  path: string;
+  layer?: string;
+}
+
+/** Reads the last-used geodatabase selection from localStorage (best-effort). */
+function readStoredGdbSelection(): StoredGdbSelection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(LAST_GEODATABASE_STORAGE_KEY);
+    if (!value) return null;
+    const parsed = JSON.parse(value) as StoredGdbSelection;
+    return typeof parsed?.path === "string" && parsed.path ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Persists the last-used geodatabase selection to localStorage (best-effort). */
+function writeStoredGdbSelection(selection: StoredGdbSelection): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(
+      LAST_GEODATABASE_STORAGE_KEY,
+      JSON.stringify(selection),
+    );
+  } catch {
+    // Best-effort persistence: a quota/private-mode failure must not break the
+    // Add Data dialog (mirrors the service library's guard).
+  }
+}
+
 /**
  * Add Data source for Esri File Geodatabases (`.gdb` folders). A geodatabase
  * is a directory-based, multi-layer format that neither MapLibre nor
@@ -78,18 +111,11 @@ export function GdbSource() {
   const desktop = isTauri();
   const selectedInfo = layers.find((layer) => layer.name === selectedLayer);
 
-  const handleChooseFolder = async () => {
-    source.setError(null);
-    const path = await pickLocalDirectory().catch((err: unknown) => {
-      source.setError(errorMessage(err, t("addData.gdb.readError")));
-      return null;
-    });
-    if (!path) return;
-    if (!/\.gdb$/i.test(path.replace(/[/\\]+$/, ""))) {
-      source.setError(t("addData.gdb.errorNotGdb"));
-      return;
-    }
-
+  // Shared by the folder picker and the reopen-restore effect: list the
+  // geodatabase's feature classes and select `preferredLayer` when it is
+  // still present (else the first). Persists the selection so the panel can
+  // restore it the next time it opens.
+  const loadGdbLayers = async (path: string, preferredLayer?: string) => {
     const requestId = ++loadSeq.current;
     setGdbPath(path);
     setLayers([]);
@@ -116,13 +142,19 @@ export function GdbSource() {
       if (spatialLayers.length === 0) {
         throw new Error(t("addData.gdb.errorNoLayers"));
       }
+      const selected =
+        preferredLayer &&
+        spatialLayers.some((layer) => layer.name === preferredLayer)
+          ? preferredLayer
+          : spatialLayers[0].name;
       setLayers(spatialLayers);
-      setSelectedLayer(spatialLayers[0].name);
+      setSelectedLayer(selected);
       source.setLayerName((current) =>
         current.trim() && current !== defaultName
           ? current
           : layerNameFromPath(path, defaultName),
       );
+      writeStoredGdbSelection({ path, layer: selected });
     } catch (err) {
       if (requestId === loadSeq.current) {
         source.setError(errorMessage(err, t("addData.gdb.readError")));
@@ -130,6 +162,33 @@ export function GdbSource() {
     } finally {
       if (requestId === loadSeq.current) setIsReadingLayers(false);
     }
+  };
+
+  // Reopening the panel starts blank (the dialog unmounts on close), so
+  // restore the last-used geodatabase and re-list its feature classes. A
+  // stale path (moved/deleted .gdb) surfaces the normal read error and the
+  // picker stays usable; the stored value is only replaced by a newer
+  // successful listing, so a transient sidecar failure does not lose it.
+  useEffect(() => {
+    if (!desktop) return;
+    const stored = readStoredGdbSelection();
+    if (stored) void loadGdbLayers(stored.path, stored.layer);
+    // Mount-only restore; loadGdbLayers is stable for the component's life.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleChooseFolder = async () => {
+    source.setError(null);
+    const path = await pickLocalDirectory().catch((err: unknown) => {
+      source.setError(errorMessage(err, t("addData.gdb.readError")));
+      return null;
+    });
+    if (!path) return;
+    if (!/\.gdb$/i.test(path.replace(/[/\\]+$/, ""))) {
+      source.setError(t("addData.gdb.errorNotGdb"));
+      return;
+    }
+    await loadGdbLayers(path);
   };
 
   const handleSubmit = source.runSubmit(async () => {
@@ -188,6 +247,10 @@ export function GdbSource() {
       // missing file here is the normal failure-path outcome.
       if (jobFinished) await remove(outputPath).catch(() => undefined);
     }
+
+    // Remember the layer that was actually added (it may differ from the
+    // listing default), so reopening the panel preselects it.
+    writeStoredGdbSelection({ path: gdbPath, layer: selectedLayer });
 
     source.addAndClose(
       {

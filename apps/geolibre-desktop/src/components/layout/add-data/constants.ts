@@ -140,6 +140,9 @@ export const WFS_PROXY_PATH = "/__geolibre_wfs_proxy";
 // service-library.ts). Bumping the key would orphan a user's saved services.
 export const SERVICE_LIBRARY_STORAGE_KEY = "geolibre.serviceLibrary";
 export const MAX_SAVED_SERVICES = 200;
+// Last File Geodatabase (and feature class) added through the GDB source, so
+// reopening the panel restores the selection instead of starting blank.
+export const LAST_GEODATABASE_STORAGE_KEY = "geolibre.lastGeodatabase";
 // A short list of common coordinate systems offered as quick presets in the Add
 // CAD Layer dialog (CAD files carry no CRS of their own, so the user names one).
 // The labels are CRS proper names and stay untranslated; selecting one fills the
