@@ -521,12 +521,28 @@ export async function rasterizeDomOverlays(
       continue;
     }
     try {
+      // Crop the raster to the element's on-screen footprint. html2canvas-pro
+      // clones the element into a sandboxed iframe and re-lays it out; an overlay
+      // with an unconstrained stretch layout (the colorbar is a column flex with
+      // `align-items: stretch` and no fixed width) can otherwise spread to the
+      // iframe's viewport width and rasterize far wider than it appears on the
+      // map — its content stays at the top-left, but the canvas is padded out to
+      // the right. The compositor then squeezes that wide raster into the narrow
+      // footprint, so the panel shows up as a thin sliver. Passing `width`/`height`
+      // (in CSS px, the panel's measured box) clips the output canvas to the
+      // footprint, dropping the stray padding so the raster's aspect ratio matches
+      // the footprint's in every browser. We deliberately do NOT pin the clone's
+      // window size — that reflows text-wrapping panels (the HTML control) by a
+      // pixel; only the output crop is needed.
+      const rect = el.getBoundingClientRect();
       const raster = await html2canvas(el, {
         backgroundColor: null,
         scale,
         useCORS: true,
         allowTaint: false,
         logging: false,
+        width: Math.max(1, Math.ceil(rect.width)),
+        height: Math.max(1, Math.ceil(rect.height)),
       });
       // The origin-clean guarantee this whole feature rests on lives here, so
       // fail closed: without a readable 2d context we cannot verify the raster,
