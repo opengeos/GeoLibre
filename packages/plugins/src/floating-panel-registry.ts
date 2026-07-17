@@ -22,6 +22,11 @@ export interface FloatingPanelsSnapshot {
 }
 
 const registry = new Map<string, GeoLibreFloatingPanelRegistration>();
+// Title resolvers are kept in a side Map keyed by panel id rather than stashed
+// on the caller-supplied registration object, so the host never mutates a
+// plugin's object with an untyped hidden field. Both string titles and getter
+// functions normalize to a resolver here.
+const titleResolvers = new Map<string, () => string>();
 const listeners = new Set<() => void>();
 
 let openIds: string[] = [];
@@ -63,11 +68,11 @@ export function registerFloatingPanel(
     );
   }
   if (typeof panel.title !== "string" && typeof panel.title !== "function") {
-      throw new Error(
-        `Floating panel "${panel.id}" must have a non-empty title string or a title getter function.`,
-      );
-    }
-    if (typeof panel.title === "string" && panel.title.length === 0) {
+    throw new Error(
+      `Floating panel "${panel.id}" must have a non-empty title string or a title getter function.`,
+    );
+  }
+  if (typeof panel.title === "string" && panel.title.length === 0) {
     throw new Error(`Floating panel "${panel.id}" must have a non-empty title.`);
   }
   if (typeof panel.render !== "function") {
@@ -76,12 +81,12 @@ export function registerFloatingPanel(
     );
   }
   // Normalize title to a resolver so both strings and getters update live.
-    const resolveTitle =
-      typeof panel.title === "function"
-        ? panel.title
-        : () => panel.title as string;
-    (panel as { _resolveTitle?: () => string })._resolveTitle = resolveTitle;
-    registry.set(panel.id, panel);
+  const resolveTitle =
+    typeof panel.title === "function"
+      ? panel.title
+      : () => panel.title as string;
+  titleResolvers.set(panel.id, resolveTitle);
+  registry.set(panel.id, panel);
   emit();
   return () => {
     if (registry.get(panel.id) === panel) unregisterFloatingPanel(panel.id);
@@ -96,7 +101,8 @@ export function unregisterFloatingPanel(id: string): void {
   // removal notifies subscribers exactly once.
   const wasOpen = openIds.includes(id);
   if (wasOpen) openIds = openIds.filter((openId) => openId !== id);
-    registry.delete(id);
+  registry.delete(id);
+  titleResolvers.delete(id);
   emit();
   if (wasOpen) runHook(id, "onClose", panel.onClose);
 }
@@ -155,13 +161,13 @@ export function getFloatingPanel(
 ): (GeoLibreFloatingPanelRegistration & { title: string }) | undefined {
   const panel = registry.get(id);
   if (!panel) return undefined;
-  const resolve = (panel as { _resolveTitle?: () => string })._resolveTitle;
+  const resolve = titleResolvers.get(id);
   if (resolve) {
     // Mutate in-place so the same panel object identity is preserved across
     // calls — FloatingPanelCard's useEffect uses the panel as a dependency to
     // detect re-registration, and a new-object-every-time pattern would tear
     // down and rebuild the panel's DOM on every render (drag/resize/focus).
-    (panel as { title: string }).title = resolve();
+    panel.title = resolve();
   }
   return panel as GeoLibreFloatingPanelRegistration & { title: string };
 }
@@ -184,9 +190,10 @@ export function subscribeFloatingPanels(listener: () => void): () => void {
  * public plugin API.
  */
 export function __resetFloatingPanelRegistryForTests(): void {
-    registry.clear();
-    listeners.clear();
-    openIds = [];
-    version = 0;
-    snapshot = { openIds: [], version: 0 };
-  }
+  registry.clear();
+  titleResolvers.clear();
+  listeners.clear();
+  openIds = [];
+  version = 0;
+  snapshot = { openIds: [], version: 0 };
+}

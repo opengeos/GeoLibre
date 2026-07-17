@@ -84,6 +84,11 @@ export interface RightPanelSnapshot {
 }
 
 const registry = new Map<string, GeoLibreRightPanelRegistration>();
+// Title resolvers are kept in a side Map keyed by panel id rather than stashed
+// on the caller-supplied registration object, so the host never mutates a
+// plugin's object with an untyped hidden field. Both string titles and getter
+// functions normalize to a resolver here.
+const titleResolvers = new Map<string, () => string>();
 const listeners = new Set<() => void>();
 
 let activeId: string | null = null;
@@ -150,7 +155,7 @@ export function registerRightPanel(
     typeof panel.title === "function"
       ? (panel.title as () => string)
       : () => panel.title as string;
-  (panel as { _resolveTitle?: () => string })._resolveTitle = resolveTitle;
+  titleResolvers.set(panel.id, resolveTitle);
   // Re-registering an id replaces it (a plugin may rebuild its panel). The
   // returned disposer only removes the panel while this exact registration is
   // still the current one, so a stale disposer cannot evict a newer panel that
@@ -180,6 +185,7 @@ export function unregisterRightPanel(id: string): void {
     activeDock = null;
   }
   registry.delete(id);
+  titleResolvers.delete(id);
   emit();
   if (wasActive) runHook(id, "onClose", panel.onClose);
 }
@@ -296,13 +302,13 @@ export function getRightPanel(
 ): (GeoLibreRightPanelRegistration & { title: string }) | undefined {
   const panel = registry.get(id);
   if (!panel) return undefined;
-  const resolve = (panel as { _resolveTitle?: () => string })._resolveTitle;
+  const resolve = titleResolvers.get(id);
   if (resolve) {
     // Mutate in-place so the same panel object identity is preserved across
     // calls — several callers use the panel as a React effect dependency to
     // detect re-registration, and a new-object-every-time pattern would cause
     // unnecessary teardown/rebuild on every render.
-    (panel as { title: string }).title = resolve();
+    panel.title = resolve();
   }
   return panel as GeoLibreRightPanelRegistration & { title: string };
 }
@@ -331,6 +337,7 @@ export function subscribeRightPanels(listener: () => void): () => void {
  */
 export function __resetRightPanelRegistryForTests(): void {
   registry.clear();
+  titleResolvers.clear();
   listeners.clear();
   activeId = null;
   collapsed = false;

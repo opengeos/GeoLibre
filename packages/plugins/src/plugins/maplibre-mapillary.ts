@@ -93,7 +93,7 @@ let labels: MapillaryLabels = {
 };
 
 export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
-    labels = { ...labels, ...next };
+  labels = { ...labels, ...next };
   if (!panelContainer) return;
   // With a live viewer, only refresh the static text nodes — rebuilding would
   // tear down the mapillary-js WebGL viewer and lose the user's current photo
@@ -102,8 +102,6 @@ export function setMapillaryLabels(next: Partial<MapillaryLabels>): void {
   if (viewer) updatePanelText();
   else buildPanel(panelContainer);
 }
-
-
 
 function updatePanelText(): void {
   if (hintEl) hintEl.textContent = labels.hint;
@@ -362,15 +360,15 @@ function setSelectedMarker(lngLat: { lng: number; lat: number } | null): void {
   source.setData(
     lngLat
       ? {
-          type: "FeatureCollection",
-          features: [
-            {
-              type: "Feature",
-              geometry: { type: "Point", coordinates: [lngLat.lng, lngLat.lat] },
-              properties: {},
-            },
-          ],
-        }
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [lngLat.lng, lngLat.lat] },
+            properties: {},
+          },
+        ],
+      }
       : emptyCollection(),
   );
   raiseSelectionLayers();
@@ -685,7 +683,7 @@ async function doMountViewer(): Promise<void> {
       void viewer
         .moveTo(pendingImageId)
         .then((image) => applyCurrentImage(image))
-        .catch(() => {});
+        .catch(() => { });
     }
   } catch {
     if (viewerContainer) {
