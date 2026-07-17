@@ -1219,3 +1219,29 @@ def test_fix_geometries_no_op_on_valid_layer() -> None:
     geojson, messages = run_vector_tool("fix-geometries", SQUARE)
     assert len(geojson["features"]) == 1
     assert any("already valid" in m for m in messages)
+
+
+@requires_geopandas
+def test_validity_anchor_parses_scientific_notation() -> None:
+    anchor = vector_ops._validity_anchor(
+        "Self-intersection[1.5e-10 -2.3e-05]", None
+    )
+    assert anchor == (1.5e-10, -2.3e-05)
+
+
+@requires_geopandas
+def test_check_validity_counts_empty_geometry_as_missing() -> None:
+    with_empty = {
+        "type": "FeatureCollection",
+        "features": [
+            SQUARE["features"][0],
+            {
+                "type": "Feature",
+                "properties": {"name": "empty"},
+                "geometry": {"type": "Polygon", "coordinates": []},
+            },
+        ],
+    }
+    _, messages = run_vector_tool("check-validity", with_empty)
+    assert any("1 without geometry" in m for m in messages)
+    assert any("Checked 1 feature(s)" in m for m in messages)

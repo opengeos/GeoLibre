@@ -230,12 +230,17 @@ describe("check-validity (fake DuckDB)", () => {
     assert.match(logs.join("\n"), /No invalid geometries found/);
   });
 
-  it("counts features without geometry", async () => {
+  it("counts null and empty geometry as missing, like the sidecar", async () => {
     const noGeom = { type: "Feature", properties: {}, geometry: null };
+    const emptyGeom = {
+      type: "Feature",
+      properties: {},
+      geometry: { type: "Polygon", coordinates: [] },
+    };
     const duckdb = fakeDuckDb([{ idx: 0, valid: true, fixed: null }]);
-    const { ctx, logs } = makeCtx(fcOf(SQUARE, noGeom), {}, duckdb);
+    const { ctx, logs } = makeCtx(fcOf(SQUARE, noGeom, emptyGeom), {}, duckdb);
     await checkValidityTool.run(ctx);
-    assert.match(logs.join("\n"), /1 without geometry/);
+    assert.match(logs.join("\n"), /Checked 1 feature\(s\): 0 invalid, 2 without geometry/);
   });
 
   it("fails clearly without a DuckDB capability", async () => {
