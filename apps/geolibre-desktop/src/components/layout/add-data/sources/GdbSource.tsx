@@ -23,6 +23,7 @@ import {
   errorMessage,
   fileNameFromPath,
   layerNameFromPath,
+  normalizeCrs,
 } from "../helpers";
 import { AddDataSourceForm, useAddDataSource } from "../shared";
 
@@ -49,19 +50,6 @@ async function waitForConversionJob(
     job = await fetchConversionJob(job.id);
   }
   return job;
-}
-
-/**
- * Normalize a user-entered CRS into the `AUTHORITY:CODE` form `ST_Transform`
- * expects (mirrors the CAD source): a bare number becomes `EPSG:<n>`, an
- * `epsg:4326` is upper-cased, and an already-qualified `ESRI:102039` passes
- * through. A blank stays blank (load the layer's coordinates as-is).
- */
-function normalizeCrs(raw: string): string {
-  const value = raw.trim();
-  if (!value) return "";
-  if (/^\d+$/.test(value)) return `EPSG:${value}`;
-  return value.toUpperCase();
 }
 
 /**

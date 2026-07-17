@@ -511,7 +511,10 @@ if target_srs:
         if low.endswith(".zip"):
             meta_target = "/vsizip/" + input_path
         elif os.path.isdir(input_path):
-            meta_target = os.path.join(input_path, "*.gdbtable")
+            # Forward-slash join (not os.path.join): GDAL/DuckDB accept "/" on
+            # every platform, while a backslash-joined glob is untested on a
+            # Windows sidecar.
+            meta_target = input_path.replace("\\\\", "/") + "/*.gdbtable"
         else:
             meta_target = input_path
         try:
@@ -675,8 +678,10 @@ if low.endswith(".zip"):
 elif os.path.isdir(input_path):
     # st_read_meta globs for files and returns no rows for a bare directory
     # dataset, so a .gdb folder is enumerated per .gdbtable file instead; each
-    # one reports the single layer it stores.
-    meta_target = os.path.join(input_path, "*.gdbtable")
+    # one reports the single layer it stores. Forward-slash join (not
+    # os.path.join): GDAL/DuckDB accept "/" on every platform, while a
+    # backslash-joined glob is untested on a Windows sidecar.
+    meta_target = input_path.replace("\\\\", "/") + "/*.gdbtable"
 else:
     meta_target = input_path
 
@@ -967,17 +972,19 @@ def _validate_input_path(input_path: str) -> str:
     if not input_path.strip():
         raise HTTPException(status_code=400, detail="input_path is required")
     source = Path(input_path).expanduser()
-    is_gdb_directory = source.is_dir() and source.suffix.lower() == ".gdb"
-    if not source.is_file() and not is_gdb_directory:
-        raise HTTPException(
-            status_code=400, detail=f"Input file not found: {input_path}"
-        )
     # When an allowlist is configured, confine reads to those roots so a
-    # same-origin caller cannot probe arbitrary files.
+    # same-origin caller cannot probe arbitrary files. Checked BEFORE the
+    # existence test so out-of-root paths always get the same 403 — a 400/403
+    # split would otherwise leak whether a path outside the sandbox exists.
     if not _is_within_roots(source):
         raise HTTPException(
             status_code=403,
             detail="Path is outside the allowed conversion directories",
+        )
+    is_gdb_directory = source.is_dir() and source.suffix.lower() == ".gdb"
+    if not source.is_file() and not is_gdb_directory:
+        raise HTTPException(
+            status_code=400, detail=f"Input file not found: {input_path}"
         )
     return str(source.resolve())
 

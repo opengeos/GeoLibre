@@ -15,6 +15,7 @@ import {
   errorMessage,
   fileNameFromPath,
   layerNameFromPath,
+  normalizeCrs,
 } from "../helpers";
 import {
   AddDataSourceForm,
@@ -31,19 +32,6 @@ interface SelectedCadFile {
 function extensionFromPath(path: string): string {
   const match = /\.([^.\\/]+)$/.exec(fileNameFromPath(path));
   return match ? match[1].toLowerCase() : "";
-}
-
-/**
- * Normalize a user-entered CRS into the `AUTHORITY:CODE` form `ST_Transform`
- * expects: a bare number becomes `EPSG:<n>`, an `epsg:4326` is upper-cased, and
- * an already-qualified `ESRI:102100` passes through. A blank stays blank (load
- * the drawing as-is, i.e. assume it is already in lon/lat).
- */
-function normalizeCrs(raw: string): string {
-  const value = raw.trim();
-  if (!value) return "";
-  if (/^\d+$/.test(value)) return `EPSG:${value}`;
-  return value.toUpperCase();
 }
 
 /**
