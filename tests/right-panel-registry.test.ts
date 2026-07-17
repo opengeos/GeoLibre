@@ -329,4 +329,38 @@ describe("right-panel registry", () => {
     const byId = Object.fromEntries(listRightPanels().map((p) => [p.id, p.title]));
     assert.deepEqual(byId, { workbench: "Workbench (zh)", extra: "Extra" });
   });
+
+  it("falls back to the panel id when a getter title throws, for both accessors", () => {
+    // A throwing title getter must not propagate into the React render tree
+    // (getRightPanel/listRightPanels are called directly in component bodies).
+    // It degrades to the panel id and logs the error, mirroring runHook/render.
+    registerRightPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+
+    const errors: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(String(args[0]));
+    };
+    try {
+      // getRightPanel must not throw and must fall back to the panel id.
+      const byId = getRightPanel("workbench");
+      assert.equal(byId?.title, "workbench");
+      // listRightPanels must mirror that behavior.
+      const listed = listRightPanels();
+      assert.equal(listed.length, 1);
+      assert.equal(listed[0].title, "workbench");
+    } finally {
+      console.error = original;
+    }
+
+    assert.equal(errors.length, 2);
+    assert.match(errors[0], /Right panel "workbench" title resolver threw/);
+    assert.match(errors[1], /Right panel "workbench" title resolver threw/);
+  });
 });

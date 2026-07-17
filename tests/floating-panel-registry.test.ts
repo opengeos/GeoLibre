@@ -206,4 +206,32 @@ describe("floating-panel registry", () => {
     assert.equal(a?.title, "Dynamic");
     assert.equal(b?.title, "Dynamic");
   });
+
+  it("falls back to the panel id when a getter title throws", () => {
+    // A throwing title getter must not propagate into the React render tree
+    // (getFloatingPanel is called directly in FloatingPanelCard's render body).
+    // It degrades to the panel id and logs the error, mirroring runHook/render.
+    registerFloatingPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+
+    const errors: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(String(args[0]));
+    };
+    try {
+      const panel = getFloatingPanel("viewer");
+      assert.equal(panel?.title, "viewer");
+    } finally {
+      console.error = original;
+    }
+
+    assert.equal(errors.length, 1);
+    assert.match(errors[0], /Floating panel "viewer" title resolver threw/);
+  });
 });

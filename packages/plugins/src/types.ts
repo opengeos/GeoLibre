@@ -520,7 +520,12 @@ export interface GeoLibreToolbarMenu {
 export interface GeoLibreFloatingPanelRegistration {
   /** Stable unique id used to open/close the panel. */
   id: string;
-  /** Title shown in the card's title bar. */
+  /**
+   * Title shown in the card's title bar. Pass a getter function to make the
+   * title reactive (re-evaluated on every `getFloatingPanel` call), so it
+   * updates live on language changes without re-registering the panel. A plain
+   * string is frozen at registration time.
+   */
   title: string | (() => string);
   /** Optional icon: a URL or `data:` URI rendered in the title bar. */
   icon?: string;

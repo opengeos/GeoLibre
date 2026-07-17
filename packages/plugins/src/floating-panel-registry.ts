@@ -167,7 +167,13 @@ export function getFloatingPanel(
   // that must survive re-registration for i18n reactivity). Consumers that
   // need stable object identity for effect dependencies should key on
   // panel.render rather than the panel object itself.
-  const resolved = resolve ? resolve() : String(panel.title);
+  let resolved: string;
+  try {
+    resolved = resolve ? resolve() : String(panel.title);
+  } catch (error) {
+    console.error(`Floating panel "${id}" title resolver threw.`, error);
+    resolved = id;
+  }
   return { ...panel, title: resolved } as GeoLibreFloatingPanelRegistration & { title: string };
 }
 

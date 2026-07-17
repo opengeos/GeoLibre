@@ -307,7 +307,13 @@ function resolvePanelTitle(
   panel: GeoLibreRightPanelRegistration,
 ): GeoLibreRightPanelRegistration & { title: string } {
   const resolve = titleResolvers.get(panel.id);
-  const resolved = resolve ? resolve() : String(panel.title);
+  let resolved: string;
+  try {
+    resolved = resolve ? resolve() : String(panel.title);
+  } catch (error) {
+    console.error(`Right panel "${panel.id}" title resolver threw.`, error);
+    resolved = panel.id;
+  }
   return { ...panel, title: resolved } as GeoLibreRightPanelRegistration & { title: string };
 }
 
