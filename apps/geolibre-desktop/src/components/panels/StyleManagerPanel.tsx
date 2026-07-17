@@ -444,7 +444,12 @@ export function StyleManagerPanel() {
       // exported bundle updates entries instead of duplicating them. Merge
       // into one setStyleLibrary call so the whole import costs a single
       // store update and a single IndexedDB flush.
-      const projectIds = new Set(projectStyleLibrary.map((e) => e.id));
+      // Read both lists fresh from the store: the file-picker await above can
+      // block while the store changes, and a render-time snapshot could miss a
+      // project-scoped id created meanwhile.
+      const projectIds = new Set(
+        useAppStore.getState().projectStyleLibrary.map((e) => e.id),
+      );
       const next = [...useAppStore.getState().styleLibrary];
       for (const entry of entries) {
         const imported = {
