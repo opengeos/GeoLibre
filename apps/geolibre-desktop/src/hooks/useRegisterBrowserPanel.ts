@@ -38,9 +38,9 @@ export function useRegisterBrowserPanel(): void {
     const dispose = registerRightPanel({
       id: BROWSER_PANEL_ID,
       title: () => i18n.t("browser.title"),
-     dock: "replace-layers",
+      dock: "replace-layers",
       render: () => {},
-   });
+    });
     // Default on, but docked collapsed to the Layers rail (open then collapse),
     // so it is present without burying the map on first load.
     openRightPanel(BROWSER_PANEL_ID);

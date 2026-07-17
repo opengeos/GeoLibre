@@ -182,6 +182,21 @@ export function getFloatingPanel(
     console.error(`Floating panel "${id}" title resolver threw.`, error);
     resolved = id;
   }
+  // A resolver that returns "" (e.g. a mistyped i18n key whose value is
+  // missing and the library falls back to empty) would otherwise render as a
+  // blank title bar with no signal. Degrade to the panel id and warn so the
+  // failure is visible. Render-time fallback (not registration-time) keeps
+  // early i18n loads from false-positive; a later re-render once the key
+  // resolves picks up the real value. Mirrors resolvePanelTitle in the
+  // right-panel registry. A non-string return is covered by the same branch.
+  if (typeof resolved !== "string" || resolved.length === 0) {
+    console.warn(
+      `Floating panel "${id}" title resolver returned ${
+        resolved === "" ? "an empty string" : "a non-string value"
+      }; falling back to the panel id.`,
+    );
+    resolved = id;
+  }
   return { ...panel, title: resolved } as GeoLibreFloatingPanelRegistration & { title: string };
 }
 

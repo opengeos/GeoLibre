@@ -359,8 +359,88 @@ describe("right-panel registry", () => {
       console.error = original;
     }
 
-    assert.equal(errors.length, 2);
+    // The throw is logged once per panel id even though both accessors ran;
+    // repeated unmemoized reads don't spam the console.
+    assert.equal(errors.length, 1);
     assert.match(errors[0], /Right panel "workbench" title resolver threw/);
-    assert.match(errors[1], /Right panel "workbench" title resolver threw/);
+  });
+
+  it("falls back to the panel id when a getter title returns an empty string, for both accessors", () => {
+    // A resolver that returns "" (e.g. a mistyped i18n key whose value is
+    // missing and the library falls back to empty) would otherwise render as a
+    // blank header with no signal. Degrade to the id and warn, mirroring the
+    // throwing-getter fallback above.
+    registerRightPanel(testPanel({ title: () => "" }));
+
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(String(args[0]));
+    };
+    try {
+      // getRightPanel must fall back to the panel id (not "").
+      const byId = getRightPanel("workbench");
+      assert.equal(byId?.title, "workbench");
+      // listRightPanels must mirror that behavior.
+      const listed = listRightPanels();
+      assert.equal(listed.length, 1);
+      assert.equal(listed[0].title, "workbench");
+    } finally {
+      console.warn = original;
+    }
+
+    // The empty result is logged once per panel id even though both
+    // accessors ran.
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /returned an empty string/);
+  });
+
+  it("dedups title warnings across repeated reads and re-enables on re-register", () => {
+    // getRightPanel/listRightPanels are called unmemoized on every render and
+    // PluginRightPanel mounts up to 4x for the dock slots, so a throwing getter
+    // must log once per panel id (not once per read). Re-registering the panel
+    // clears the dedup so a later regression surfaces again.
+    registerRightPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+
+    const errors: string[] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(String(args[0]));
+    };
+    try {
+      // Many reads across both accessors produce exactly one log.
+      for (let i = 0; i < 5; i++) {
+        getRightPanel("workbench");
+        listRightPanels();
+      }
+      assert.equal(errors.length, 1);
+    } finally {
+      console.error = original;
+    }
+
+    // Re-registering clears dedup; a still-throwing getter logs once more.
+    registerRightPanel(
+      testPanel({
+        title: () => {
+          throw new Error("bad i18n key");
+        },
+      }),
+    );
+    const errors2: string[] = [];
+    console.error = (...args: unknown[]) => {
+      errors2.push(String(args[0]));
+    };
+    try {
+      getRightPanel("workbench");
+      assert.equal(errors2.length, 1);
+    } finally {
+      console.error = original;
+    }
   });
 });

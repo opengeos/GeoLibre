@@ -234,4 +234,27 @@ describe("floating-panel registry", () => {
     assert.equal(errors.length, 1);
     assert.match(errors[0], /Floating panel "viewer" title resolver threw/);
   });
+
+  it("falls back to the panel id when a getter title returns an empty string", () => {
+    // A resolver that returns "" (e.g. a mistyped i18n key whose value is
+    // missing and the library falls back to empty) would otherwise render as a
+    // blank title bar with no signal. Degrade to the id and warn, mirroring the
+    // throwing-getter fallback above.
+    registerFloatingPanel(testPanel({ title: () => "" }));
+
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(String(args[0]));
+    };
+    try {
+      const panel = getFloatingPanel("viewer");
+      assert.equal(panel?.title, "viewer");
+    } finally {
+      console.warn = original;
+    }
+
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /returned an empty string/);
+  });
 });

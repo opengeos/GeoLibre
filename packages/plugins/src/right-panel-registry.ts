@@ -89,6 +89,13 @@ const registry = new Map<string, GeoLibreRightPanelRegistration>();
 // plugin's object with an untyped hidden field. Both string titles and getter
 // functions normalize to a resolver here.
 const titleResolvers = new Map<string, () => string>();
+// Panel ids whose title resolver already logged a throw or empty-string
+// warning. The accessors are called unmemoized on every render (DesktopShell,
+// SharedSidebar, and PluginRightPanel, which mounts up to 4x for the dock
+// slots), so without dedup a throwing getter would log on every read. Cleared
+// on (re-)registration and unregister so a fixed or replaced panel can surface
+// a later regression.
+const loggedTitleWarnings = new Set<string>();
 const listeners = new Set<() => void>();
 
 let activeId: string | null = null;
@@ -160,6 +167,9 @@ export function registerRightPanel(
   // returned disposer only removes the panel while this exact registration is
   // still the current one, so a stale disposer cannot evict a newer panel that
   // reused the id.
+  // Clear dedup state so a rebuilt panel (e.g. a fixed title getter) can log
+  // again if its new resolver also misbehaves.
+  loggedTitleWarnings.delete(panel.id);
   registry.set(panel.id, panel);
   emit();
   return () => {
@@ -186,6 +196,7 @@ export function unregisterRightPanel(id: string): void {
   }
   registry.delete(id);
   titleResolvers.delete(id);
+  loggedTitleWarnings.delete(id);
   emit();
   if (wasActive) runHook(id, "onClose", panel.onClose);
 }
@@ -311,7 +322,28 @@ function resolvePanelTitle(
   try {
     resolved = resolve ? resolve() : String(panel.title);
   } catch (error) {
-    console.error(`Right panel "${panel.id}" title resolver threw.`, error);
+    if (!loggedTitleWarnings.has(panel.id)) {
+      loggedTitleWarnings.add(panel.id);
+      console.error(`Right panel "${panel.id}" title resolver threw.`, error);
+    }
+    resolved = panel.id;
+  }
+  // A resolver that returns "" (e.g. a mistyped i18n key whose value is
+  // missing and the library falls back to empty) would otherwise render as a
+  // blank header with no signal. Degrade to the panel id and warn so the
+  // failure is visible. This is a render-time fallback, not a registration-time
+  // check: the title may legitimately be empty before i18n loads, and a later
+  // re-render once the key resolves will pick up the real value. A non-string
+  // return (mistyped resolver) is covered by the same branch for robustness.
+  if (typeof resolved !== "string" || resolved.length === 0) {
+    if (!loggedTitleWarnings.has(panel.id)) {
+      loggedTitleWarnings.add(panel.id);
+      console.warn(
+        `Right panel "${panel.id}" title resolver returned ${
+          resolved === "" ? "an empty string" : "a non-string value"
+        }; falling back to the panel id.`,
+      );
+    }
     resolved = panel.id;
   }
   return { ...panel, title: resolved } as GeoLibreRightPanelRegistration & { title: string };
@@ -362,6 +394,7 @@ export function subscribeRightPanels(listener: () => void): () => void {
 export function __resetRightPanelRegistryForTests(): void {
   registry.clear();
   titleResolvers.clear();
+  loggedTitleWarnings.clear();
   listeners.clear();
   activeId = null;
   collapsed = false;
