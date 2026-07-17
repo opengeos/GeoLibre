@@ -759,10 +759,19 @@ export function PrintLayoutDialog({
     () => atlasLayers.find((l) => l.id === atlasLayerId) ?? null,
     [atlasLayers, atlasLayerId],
   );
-  const atlasFields = useMemo(
+  // The per-vertex geometry walk runs once per coverage layer; sort/filter
+  // edits below only re-iterate these lightweight per-feature records.
+  const atlasFeatureInfos = useMemo(
     () =>
-      atlasLayer?.geojson ? listAtlasFields(atlasLayer.geojson.features) : [],
+      atlasLayer?.geojson ? collectAtlasFeatures(atlasLayer.geojson) : [],
     [atlasLayer],
+  );
+  // Field names come from ALL features (once per layer, cheap over the
+  // precomputed records), so sparse attributes past any sample window still
+  // appear in the name/sort selectors.
+  const atlasFields = useMemo(
+    () => listAtlasFields(atlasFeatureInfos),
+    [atlasFeatureInfos],
   );
   // Reparse (and rebuild the page list below) off React's deferred lane, so
   // typing in the filter box does not synchronously re-iterate a large
@@ -773,13 +782,6 @@ export function PrintLayoutDialog({
   const atlasFilterPredicate = useMemo(
     () => parseAtlasFilter(deferredAtlasFilter),
     [deferredAtlasFilter],
-  );
-  // The per-vertex geometry walk runs once per coverage layer; sort/filter
-  // edits below only re-iterate these lightweight per-feature records.
-  const atlasFeatureInfos = useMemo(
-    () =>
-      atlasLayer?.geojson ? collectAtlasFeatures(atlasLayer.geojson) : [],
-    [atlasLayer],
   );
   const atlasPages = useMemo(
     () =>
@@ -896,6 +898,10 @@ export function PrintLayoutDialog({
         { animate: false, padding: 0 },
       );
       await waitForAtlasSettle(map);
+      // Mirror recapture: an active graticule draws coordinate labels at the
+      // map edges, so fit with "contain" to keep them un-cropped on every
+      // atlas page (mapFit is persistent state, so it must be set here too).
+      setMapFit(map.getLayer(GRATICULE_LABEL_LAYER_ID) ? "contain" : "cover");
       // Hide the drawn print-extent box while reading the buffer, as recapture
       // does, so its outline is never baked into a page.
       const capture = () => {
@@ -977,10 +983,16 @@ export function PrintLayoutDialog({
   goToAtlasPageRef.current = goToAtlasPage;
 
   // Default the coverage layer to the first eligible layer when the atlas is
-  // switched on without one selected.
+  // switched on without one selected, or when the selected layer disappears
+  // (e.g. removed from the Layers panel while the dialog is open) — a stale
+  // id would leave the Select valueless and the series silently empty.
   useEffect(() => {
-    if (atlasEnabled && !atlasLayerId && atlasLayers.length > 0) {
+    if (!atlasEnabled || atlasLayers.length === 0) return;
+    if (!atlasLayers.some((l) => l.id === atlasLayerId)) {
       setAtlasLayerId(atlasLayers[0].id);
+      setAtlasNameField("");
+      setAtlasSortField("");
+      setAtlasIndex(0);
     }
   }, [atlasEnabled, atlasLayerId, atlasLayers]);
 

@@ -6,7 +6,7 @@
  * produced here and composes each capture through the regular layout pipeline,
  * so everything in this module is unit-testable without a map.
  */
-import type { Feature, FeatureCollection, Geometry, Position } from "geojson";
+import type { FeatureCollection, Geometry, Position } from "geojson";
 
 /** Geographic bounds as `[west, south, east, north]` in WGS84 degrees. */
 export type AtlasBounds = [number, number, number, number];
@@ -181,17 +181,22 @@ export function expandBounds(
 }
 
 /**
- * Collect the union of attribute names across (a sample of) the features, in
- * first-seen order, for populating the name/sort field selectors.
+ * Collect the union of attribute names across the features (or a sample of
+ * them, when `sampleLimit` is set), in first-seen order, for populating the
+ * name/sort field selectors. Accepts anything carrying `properties`, so both
+ * GeoJSON Features and precomputed {@link AtlasFeatureInfo}s work.
  */
 export function listAtlasFields(
-  features: readonly Feature[],
-  sampleLimit = 100,
+  features: ReadonlyArray<{
+    properties?: Record<string, unknown> | null;
+  }>,
+  sampleLimit = Infinity,
 ): string[] {
   const fields: string[] = [];
   const seen = new Set<string>();
-  for (const f of features.slice(0, sampleLimit)) {
-    for (const key of Object.keys(f.properties ?? {})) {
+  const limit = Math.min(features.length, sampleLimit);
+  for (let i = 0; i < limit; i++) {
+    for (const key of Object.keys(features[i].properties ?? {})) {
       if (seen.has(key)) continue;
       seen.add(key);
       fields.push(key);
