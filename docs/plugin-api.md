@@ -140,7 +140,8 @@ export type GeoLibreToolbarMenuItem =
 
 export interface GeoLibreFloatingPanelRegistration {
   id: string;
-  title: string;
+  // A getter makes the title re-localize live on language changes.
+  title: string | (() => string);
   icon?: string; // URL or data: URI
   defaultWidth?: number;
   render: (container: HTMLElement) => void | (() => void);
@@ -158,7 +159,8 @@ export type GeoLibreRightPanelDock =
 
 export interface GeoLibreRightPanelRegistration {
   id: string;
-  title: string;
+  // A getter makes the title re-localize live on language changes.
+  title: string | (() => string);
   /** Initial dock position; "right-of-style" (default). */
   dock?: GeoLibreRightPanelDock;
   /** Optional rail icon: a URL or data: URI rendered as an image. */
