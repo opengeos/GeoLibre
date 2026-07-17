@@ -155,7 +155,15 @@ export function getOpenFloatingPanels(): string[] {
   return [...openIds];
 }
 
-/** Look up a registered floating panel by id. Title is always resolved to a string. */
+/**
+ * Look up a registered floating panel by id. Title is always resolved to a
+ * string by re-running the panel's title resolver on every call. The registry
+ * does not itself subscribe to i18n language changes, so live title
+ * translation relies on the consumer re-rendering and re-reading on
+ * `languageChanged`; see the `title` field on
+ * {@link GeoLibreFloatingPanelRegistration} for the full contract a host must
+ * satisfy.
+ */
 export function getFloatingPanel(
   id: string,
 ): (GeoLibreFloatingPanelRegistration & { title: string }) | undefined {

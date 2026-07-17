@@ -317,7 +317,14 @@ function resolvePanelTitle(
   return { ...panel, title: resolved } as GeoLibreRightPanelRegistration & { title: string };
 }
 
-/** Look up a registered right panel by id. Title is always resolved to a string. */
+/**
+ * Look up a registered right panel by id. Title is always resolved to a string
+ * by re-running the panel's title resolver on every call. The registry does
+ * not itself subscribe to i18n language changes, so live title translation
+ * relies on the consumer re-rendering and re-reading on `languageChanged`;
+ * see the `title` field on {@link GeoLibreRightPanelRegistration} for the full
+ * contract a host must satisfy.
+ */
 export function getRightPanel(
   id: string,
 ): (GeoLibreRightPanelRegistration & { title: string }) | undefined {

@@ -360,15 +360,15 @@ function setSelectedMarker(lngLat: { lng: number; lat: number } | null): void {
   source.setData(
     lngLat
       ? {
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            geometry: { type: "Point", coordinates: [lngLat.lng, lngLat.lat] },
-            properties: {},
-          },
-        ],
-      }
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [lngLat.lng, lngLat.lat] },
+              properties: {},
+            },
+          ],
+        }
       : emptyCollection(),
   );
   raiseSelectionLayers();
@@ -683,7 +683,7 @@ async function doMountViewer(): Promise<void> {
       void viewer
         .moveTo(pendingImageId)
         .then((image) => applyCurrentImage(image))
-        .catch(() => { });
+        .catch(() => {});
     }
   } catch {
     if (viewerContainer) {

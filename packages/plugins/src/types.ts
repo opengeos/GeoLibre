@@ -522,9 +522,15 @@ export interface GeoLibreFloatingPanelRegistration {
   id: string;
   /**
    * Title shown in the card's title bar. Pass a getter function to make the
-   * title reactive (re-evaluated on every `getFloatingPanel` call), so it
-   * updates live on language changes without re-registering the panel. A plain
-   * string is frozen at registration time.
+   * title reactive: it is re-evaluated on every `getFloatingPanel` call, so it
+   * picks up a new language without re-registering the panel. Caveat: the
+   * registry itself does not subscribe to i18n events, so the getter is only
+   * re-run when a consumer re-reads the panel. Today every host component that
+   * displays a title also calls `useTranslation()`, whose `languageChanged`
+   * re-render re-reads the panel as a side effect; a host that reads a panel
+   * without that subscription would show a stale title after a language switch
+   * until the next registry mutation, and should re-read the panel itself on
+   * language change. A plain string is frozen at registration time.
    */
   title: string | (() => string);
   /** Optional icon: a URL or `data:` URI rendered in the title bar. */
@@ -597,9 +603,16 @@ export interface GeoLibreRightPanelRegistration {
   id: string;
   /**
    * Human-readable title shown in the panel header and collapsed rail.
-   * Pass a getter function to make the title reactive (re-evaluated on every
-   * `getRightPanel` call), so it updates live on language changes without
-   * re-registering the panel. A plain string is frozen at registration time.
+   * Pass a getter function to make the title reactive: it is re-evaluated on
+   * every `getRightPanel` call, so it picks up a new language without
+   * re-registering the panel. Caveat: the registry itself does not subscribe
+   * to i18n events, so the getter is only re-run when a consumer re-reads the
+   * panel. Today every host component that displays a title also calls
+   * `useTranslation()`, whose `languageChanged` re-render re-reads the panel
+   * as a side effect; a host that reads a panel without that subscription
+   * would show a stale title after a language switch until the next registry
+   * mutation, and should re-read the panel itself on language change. A plain
+   * string is frozen at registration time.
    */
   title: string | (() => string);
   /**
