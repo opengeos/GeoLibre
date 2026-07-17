@@ -220,12 +220,13 @@ export function StyleManagerDialog() {
     } else {
       setLayerStyle(layer.id, patch);
     }
-    // A ramp entry deliberately carries no renderer mode or attribute, so on a
-    // single-symbology layer it changes nothing visible yet; say so instead of
-    // implying the map just changed.
+    // A ramp entry deliberately carries no renderer mode or attribute, and
+    // only the graduated/categorized renderers consume its fields, so in any
+    // other mode it changes nothing visible yet; say so instead of implying
+    // the map just changed.
+    const mode = styleValue(layer.style, "vectorStyleMode");
     const rampPending =
-      entry.kind === "ramp" &&
-      styleValue(layer.style, "vectorStyleMode") === "single";
+      entry.kind === "ramp" && mode !== "graduated" && mode !== "categorized";
     setStatus({
       type: "success",
       text: rampPending
