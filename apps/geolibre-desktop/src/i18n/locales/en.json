@@ -727,7 +727,7 @@
       "bottom-center": "Bottom center",
       "bottom-right": "Bottom right"
     },
-    "includeHtmlPanel": "Include HTML panel in video",
+    "includePanels": "Include map panels (legend, colorbar, HTML) in video",
     "record": "Record",
     "preparing": "Preparing…",
     "stop": "Stop",

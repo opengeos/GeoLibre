@@ -46,12 +46,14 @@ type Status = "idle" | "preparing" | "recording" | "ready" | "saving";
 type Mode = "whole" | "region";
 
 const DEFAULT_FILE_NAME = "map-recording";
-// The on-map HTML display panel(s) added via the Components plugin's HTML
-// control. This is the info box shown over the map (upstream class
-// `maplibre-gl-html-control`), NOT the `geolibre-html-control` authoring GUI —
-// we burn the rendered info in, not the editor chrome. Mirrors the class from
-// maplibre-gl-components; re-check it when that package is bumped.
-const HTML_PANEL_SELECTOR = ".maplibre-gl-html-control";
+// The on-map info panels added via the Components plugin: the HTML control's
+// display box, the legend, and the colorbar. These are the *rendered* overlays
+// (`maplibre-gl-html-control` / `maplibre-gl-legend` / `maplibre-gl-colorbar`),
+// NOT the `*-gui-control` authoring editors -- we burn the info in, not the
+// editor chrome. These class names mirror maplibre-gl-components internals; see
+// CLAUDE.md and re-check them when that package is bumped.
+const MAP_PANEL_SELECTOR =
+  ".maplibre-gl-html-control, .maplibre-gl-legend, .maplibre-gl-colorbar";
 // Hoisted so the save path doesn't recompile it on every call (and to satisfy
 // the e18e/prefer-static-regex lint rule).
 const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
@@ -108,11 +110,11 @@ export function RecordVideoDialog({
   const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
     DEFAULT_CAPTION_POSITION,
   );
-  // Burn the on-map HTML control panel into the video (it is DOM, so it is
-  // rasterized and composited rather than captured from the canvas). Offered
-  // only when such a panel is on the map (detected when the dialog opens).
-  const [includeHtmlPanel, setIncludeHtmlPanel] = useState(false);
-  const [htmlPanelAvailable, setHtmlPanelAvailable] = useState(false);
+  // Burn the on-map info panels (HTML control, legend, colorbar) into the video
+  // (they are DOM, so they are rasterized and composited rather than captured
+  // from the canvas). Offered only when at least one such panel is on the map.
+  const [includePanels, setIncludePanels] = useState(false);
+  const [panelsAvailable, setPanelsAvailable] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -228,21 +230,20 @@ export function RecordVideoDialog({
       caption: captionText,
       position: captionPosition,
     };
-    // Collect the on-map HTML panel(s) to burn in, if the user opted in.
-    const htmlOverlays =
-      includeHtmlPanel && htmlPanelAvailable
-        ? Array.from(
-            map
-              .getContainer()
-              .querySelectorAll<HTMLElement>(HTML_PANEL_SELECTOR),
-          )
-        : null;
+    // Collect the on-map info panels (HTML, legend, colorbar) to burn in, if the
+    // user opted in. Queried live so a panel added/removed since the dialog
+    // opened is reflected (the checkbox availability tracks this too).
+    const domOverlays = includePanels
+      ? Array.from(
+          map.getContainer().querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR),
+        )
+      : null;
     try {
       const rec = await recordMapCanvas({
         map,
         region: mode === "region" ? region : null,
         caption: hasCaptionText(captionOptions) ? captionOptions : null,
-        htmlOverlays,
+        domOverlays,
         fps,
         signal: controller.signal,
         onStarted: () => setStatus("recording"),
@@ -284,10 +285,10 @@ export function RecordVideoDialog({
     return () => abortRef.current?.abort();
   }, [open]);
 
-  // Offer the "include HTML panel" option only when such a panel is actually on
-  // the map. Kept live while the dialog is open by observing the map's control
-  // container, so toggling the panel on/off from the toolbar between recordings
-  // updates the checkbox without reopening the dialog.
+  // Offer the "include map panels" option only when at least one such panel is
+  // actually on the map. Kept live while the dialog is open by observing the
+  // map's control container, so toggling a panel on/off from the toolbar between
+  // recordings updates the checkbox without reopening the dialog.
   useEffect(() => {
     if (!open) return;
     const container = mapControllerRef.current?.getMap()?.getContainer();
@@ -296,16 +297,14 @@ export function RecordVideoDialog({
     const controlContainer =
       container?.querySelector(".maplibregl-control-container") ?? container;
     if (!controlContainer) {
-      setHtmlPanelAvailable(false);
-      setIncludeHtmlPanel(false);
+      setPanelsAvailable(false);
+      setIncludePanels(false);
       return;
     }
     const refresh = () => {
-      const present = Boolean(
-        controlContainer.querySelector(HTML_PANEL_SELECTOR),
-      );
-      setHtmlPanelAvailable(present);
-      if (!present) setIncludeHtmlPanel(false);
+      const present = Boolean(controlContainer.querySelector(MAP_PANEL_SELECTOR));
+      setPanelsAvailable(present);
+      if (!present) setIncludePanels(false);
     };
     refresh();
     const observer = new MutationObserver(refresh);
@@ -543,18 +542,19 @@ export function RecordVideoDialog({
             )}
           </div>
 
-          {/* Burn the on-map HTML control panel into the video. Shown only when
-              such a panel exists; unlike the map canvas, the panel is DOM, so it
-              is rasterized and composited into every frame. */}
-          {htmlPanelAvailable && (
+          {/* Burn the on-map info panels (HTML control, legend, colorbar) into
+              the video. Shown only when at least one exists; unlike the map
+              canvas, these are DOM, so they are rasterized and composited into
+              every frame. */}
+          {panelsAvailable && (
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <input
                 type="checkbox"
                 disabled={editingFrozen}
-                checked={includeHtmlPanel}
-                onChange={(e) => setIncludeHtmlPanel(e.target.checked)}
+                checked={includePanels}
+                onChange={(e) => setIncludePanels(e.target.checked)}
               />
-              {t("recordVideo.includeHtmlPanel")}
+              {t("recordVideo.includePanels")}
             </label>
           )}
 
