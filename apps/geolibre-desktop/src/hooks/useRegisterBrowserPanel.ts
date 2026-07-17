@@ -37,7 +37,7 @@ export function useRegisterBrowserPanel(): void {
     // render-time dependency; the body still localizes live via useTranslation.
     const dispose = registerRightPanel({
       id: BROWSER_PANEL_ID,
-      title: i18n.t("browser.title"),
+      getTitle: () => i18n.t("browser.title"),
       dock: "replace-layers",
       render: () => {},
     });
