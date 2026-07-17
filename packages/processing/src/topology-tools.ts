@@ -76,11 +76,22 @@ export function firstCoordinate(geometry: Geometry | null): Position | null {
     }
     return null;
   }
-  let cursor: unknown = geometry.coordinates;
-  while (Array.isArray(cursor) && Array.isArray(cursor[0])) cursor = cursor[0];
-  return Array.isArray(cursor) && typeof cursor[0] === "number"
-    ? (cursor as Position)
-    : null;
+  return firstPositionIn(geometry.coordinates);
+}
+
+/**
+ * Depth-first search for the first `[x, y]` leaf in a coordinates array.
+ * Unlike a naive "descend the first branch" walk, empty siblings are skipped,
+ * so `Polygon [[], [ring]]`-shaped nesting still yields a coordinate.
+ */
+function firstPositionIn(node: unknown): Position | null {
+  if (!Array.isArray(node)) return null;
+  if (typeof node[0] === "number") return node as Position;
+  for (const child of node) {
+    const found = firstPositionIn(child);
+    if (found) return found;
+  }
+  return null;
 }
 
 /**
@@ -165,13 +176,18 @@ async function queryValidity(
   }
 }
 
-/** Whether a repaired geometry is usable (non-empty) as a replacement. */
+/**
+ * Whether a geometry is usable (contains at least one actual coordinate).
+ * Recursive rather than a top-level length check so nested-empty shapes like
+ * `Polygon [[]]` count as empty — matching Shapely's `is_empty` on the
+ * sidecar, which this file's parity messaging depends on.
+ */
 export function isUsableGeometry(geometry: Geometry | null): boolean {
   if (!geometry) return false;
   if (geometry.type === "GeometryCollection") {
     return geometry.geometries.some((member) => isUsableGeometry(member));
   }
-  return Array.isArray(geometry.coordinates) && geometry.coordinates.length > 0;
+  return firstPositionIn(geometry.coordinates) !== null;
 }
 
 export const checkValidityTool: ProcessingAlgorithm = {
@@ -214,6 +230,16 @@ export const checkValidityTool: ProcessingAlgorithm = {
       });
     }
     const checked = fc.features.length - missingGeometry;
+    // Rows can be dropped by queryValidity (unparseable payloads) or omitted
+    // by the reader; surface the gap instead of silently understating counts.
+    const evaluated = rows.filter((row) =>
+      isUsableGeometry(fc.features[row.idx].geometry),
+    ).length;
+    if (evaluated < checked) {
+      ctx.log(
+        `Warning: ${checked - evaluated} feature(s) could not be evaluated and are not counted as invalid`,
+      );
+    }
     ctx.log(
       `Checked ${checked} feature(s): ${invalid} invalid` +
         (missingGeometry ? `, ${missingGeometry} without geometry` : ""),

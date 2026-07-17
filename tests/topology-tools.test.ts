@@ -174,6 +174,15 @@ describe("topology helper functions", () => {
       isUsableGeometry({ type: "GeometryCollection", geometries: [] }),
       false,
     );
+    // Nested-empty shapes must count as empty, matching Shapely's is_empty.
+    assert.equal(
+      isUsableGeometry({ type: "Polygon", coordinates: [[]] }),
+      false,
+    );
+    assert.equal(
+      isUsableGeometry({ type: "MultiPolygon", coordinates: [[[]]] }),
+      false,
+    );
     assert.equal(isUsableGeometry(BOWTIE.geometry), true);
   });
 
