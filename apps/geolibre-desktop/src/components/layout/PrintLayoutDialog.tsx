@@ -289,6 +289,9 @@ export function PrintLayoutDialog({
     current: number;
     total: number;
   } | null>(null);
+  // Set when the last atlas capture had to clamp a fixed scale to the map's
+  // zoom limits, mirroring the manual scale flow's out-of-range notice.
+  const [atlasScaleNotice, setAtlasScaleNotice] = useState<string | null>(null);
   const [captured, setCaptured] = useState<CapturedMap | null>(null);
   // "contain" when a graticule is active, so its edge labels are not trimmed by
   // the default "cover" crop; "cover" (fill the frame) otherwise.
@@ -773,6 +776,14 @@ export function PrintLayoutDialog({
     ? (atlasPages[clampedAtlasIndex] ?? null)
     : null;
   const atlasActive = atlasEnabled && atlasPageCount > 0;
+  const atlasFilterValid = atlasFilterPredicate !== null;
+  const atlasScaleValid =
+    atlasExtentMode !== "scale" || Number(atlasScale) > 0;
+  // A visible-but-invalid filter or a blank fixed scale must block the export:
+  // proceeding would silently export all features / arbitrary fitted scales
+  // while the user is looking at an error message.
+  const atlasConfigBlocked =
+    atlasEnabled && (!atlasFilterValid || !atlasScaleValid);
   const atlasTokenCtx = useMemo<AtlasTokenContext | null>(
     () =>
       currentAtlasPage
@@ -873,12 +884,22 @@ export function PrintLayoutDialog({
             map.getMinZoom(),
             Math.min(map.getMaxZoom(), zoom),
           );
+          // A clamp means this page renders at the closest reachable scale,
+          // not the requested one: surface that (like applyScale's notice)
+          // instead of letting the substitution pass silently.
+          setAtlasScaleNotice(
+            Math.abs(clamped - zoom) > 1e-3
+              ? t("printLayout.errors.scaleOutOfRange")
+              : null,
+          );
           if (Math.abs(clamped - map.getZoom()) > 1e-3) {
             map.setZoom(clamped);
             await waitForAtlasSettle(map);
             cap = capture();
           }
         }
+      } else {
+        setAtlasScaleNotice(null);
       }
       return cap;
     },
@@ -889,6 +910,7 @@ export function PrintLayoutDialog({
       atlasScale,
       waitForAtlasSettle,
       options,
+      t,
     ],
   );
 
@@ -923,14 +945,35 @@ export function PrintLayoutDialog({
     }
   }, [atlasEnabled, atlasLayerId, atlasLayers]);
 
-  // Jump to the first page when the atlas is enabled or the coverage layer
-  // changes, so the preview immediately reflects the series.
+  // Latest page index for the auto-drive effect below, so stepping (which
+  // sets the index) does not itself re-trigger a capture.
+  const atlasIndexRef = useRef(atlasIndex);
+  atlasIndexRef.current = atlasIndex;
+
+  // Re-drive the preview whenever the series or its capture settings change:
+  // enabling the atlas or switching layers (their handlers reset the index to
+  // 0), reordering/filtering (a new atlasPages identity), or editing the
+  // extent margin/scale. Without this the derived title/name text updates
+  // immediately while the captured map still shows the previously driven
+  // feature. Debounced so free-text typing does not thrash the live map;
+  // goToAtlasPage's busy guard drops re-drives landing mid-capture.
   useEffect(() => {
-    if (open && atlasEnabled && atlasLayerId) {
-      setAtlasIndex(0);
-      void goToAtlasPageRef.current(0);
-    }
-  }, [open, atlasEnabled, atlasLayerId]);
+    if (!open || !atlasEnabled || atlasPageCount === 0) return;
+    const timer = window.setTimeout(() => {
+      void goToAtlasPageRef.current(
+        Math.min(atlasIndexRef.current, atlasPageCount - 1),
+      );
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [
+    open,
+    atlasEnabled,
+    atlasPages,
+    atlasPageCount,
+    atlasExtentMode,
+    atlasMarginPct,
+    atlasScale,
+  ]);
 
   // Fixed scale is only meaningful on physical paper (like the manual scale
   // input); fall back to margin mode when the page switches to pixel sizes.
@@ -1201,7 +1244,7 @@ export function PrintLayoutDialog({
   // option templates are frozen at click time so edits made while the loop
   // runs cannot produce a mixed document.
   const handleAtlasExport = async (kind: "pdf" | "zip") => {
-    if (!atlasActive || atlasBusy) return;
+    if (!atlasActive || atlasBusy || atlasConfigBlocked) return;
     const pages = atlasPages;
     const total = pages.length;
     setExporting(true);
@@ -1684,7 +1727,11 @@ export function PrintLayoutDialog({
                 id="atlas-enabled"
                 label={t("printLayout.atlas.enable")}
                 checked={atlasEnabled}
-                onChange={setAtlasEnabled}
+                onChange={(next) => {
+                  setAtlasEnabled(next);
+                  // Start the series from its first page on (re-)enable.
+                  if (next) setAtlasIndex(0);
+                }}
               />
               {atlasEnabled && (
                 <div className="space-y-3 rounded-md border p-3">
@@ -1704,9 +1751,11 @@ export function PrintLayoutDialog({
                           disabled={atlasBusy}
                           onChange={(e) => {
                             setAtlasLayerId(e.target.value);
-                            // Field choices belong to the previous layer.
+                            // Field choices belong to the previous layer, and
+                            // the new series starts from its first page.
                             setAtlasNameField("");
                             setAtlasSortField("");
+                            setAtlasIndex(0);
                           }}
                         >
                           {atlasLayers.map((l) => (
@@ -1802,6 +1851,16 @@ export function PrintLayoutDialog({
                               }
                             />
                           </div>
+                          {!atlasScaleValid && (
+                            <p className="text-xs text-destructive">
+                              {t("printLayout.atlas.scaleRequired")}
+                            </p>
+                          )}
+                          {atlasScaleValid && atlasScaleNotice && (
+                            <p className="text-xs text-destructive">
+                              {atlasScaleNotice}
+                            </p>
+                          )}
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-3">
@@ -2607,7 +2666,10 @@ export function PrintLayoutDialog({
           <Button
             variant="outline"
             disabled={
-              exporting || atlasBusy || (atlasEnabled ? !atlasActive : !captured)
+              exporting ||
+              atlasBusy ||
+              atlasConfigBlocked ||
+              (atlasEnabled ? !atlasActive : !captured)
             }
             onClick={() =>
               void (atlasActive ? handleAtlasExport("zip") : handleExport("png"))
@@ -2621,7 +2683,10 @@ export function PrintLayoutDialog({
           <Button
             variant="outline"
             disabled={
-              exporting || atlasBusy || (atlasEnabled ? !atlasActive : !captured)
+              exporting ||
+              atlasBusy ||
+              atlasConfigBlocked ||
+              (atlasEnabled ? !atlasActive : !captured)
             }
             onClick={() =>
               void (atlasActive ? handleAtlasExport("pdf") : handleExport("pdf"))

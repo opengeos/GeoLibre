@@ -164,6 +164,14 @@ describe("expandBounds", () => {
     assert.equal(s, -85);
     assert.equal(n, 85);
   });
+
+  it("keeps polar point bounds valid (no inverted box)", () => {
+    const [w, s, e, n] = expandBounds([0, 90, 0, 90], 10);
+    assert.ok(n > s);
+    assert.ok(e > w);
+    assert.ok(s >= -85 && n <= 85);
+    assert.ok(n - s >= 0.005 - 1e-12);
+  });
 });
 
 describe("listAtlasFields", () => {
@@ -197,6 +205,23 @@ describe("parseAtlasFilter", () => {
     assert.equal(eq?.({ ST: "OR" }), false);
     const bare = parseAtlasFilter("ST != CA");
     assert.equal(bare?.({ ST: "OR" }), true);
+  });
+
+  it("treats == as an alias for =", () => {
+    const p = parseAtlasFilter('ST == "CA"');
+    assert.equal(p?.({ ST: "CA" }), true);
+    assert.equal(p?.({ ST: "OR" }), false);
+  });
+
+  it("does not split on 'and' inside quoted values", () => {
+    const eq = parseAtlasFilter('NAME = "Sam and Max"');
+    assert.equal(eq?.({ NAME: "Sam and Max" }), true);
+    assert.equal(eq?.({ NAME: "Sam" }), false);
+    const combined = parseAtlasFilter(
+      "NAME contains 'rock and roll' and POP > 5",
+    );
+    assert.equal(combined?.({ NAME: "Rock and Roll Hall", POP: 10 }), true);
+    assert.equal(combined?.({ NAME: "Rock and Roll Hall", POP: 1 }), false);
   });
 
   it("supports case-insensitive contains", () => {
@@ -238,6 +263,7 @@ describe("buildAtlasPages", () => {
       ["Feature 1", "Feature 2", "Feature 3"],
     );
     assert.deepEqual(pages.map((p) => p.index), [0, 1, 2]);
+    assert.deepEqual(pages.map((p) => p.sourceIndex), [0, 1, 2]);
     assert.deepEqual(pages[0].bounds, [1, 1, 1, 1]);
   });
 
@@ -271,6 +297,8 @@ describe("buildAtlasPages", () => {
       ["A-town", "B-ville", "C-city"],
     );
     assert.deepEqual(desc.map((p) => p.index), [0, 1, 2]);
+    // Source identity survives the reorder.
+    assert.deepEqual(desc.map((p) => p.sourceIndex), [1, 0, 2]);
   });
 
   it("sorts missing values last in both directions", () => {

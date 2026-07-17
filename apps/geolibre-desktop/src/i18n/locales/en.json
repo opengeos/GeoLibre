@@ -1163,6 +1163,7 @@
       "extentScale": "Fixed scale",
       "marginLabel": "Margin (%)",
       "scaleLabel": "Scale",
+      "scaleRequired": "Enter a scale greater than zero.",
       "sortField": "Sort by",
       "sortNone": "Layer order",
       "sortOrder": "Order",

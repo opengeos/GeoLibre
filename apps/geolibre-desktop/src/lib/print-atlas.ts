@@ -15,6 +15,9 @@ export type AtlasBounds = [number, number, number, number];
 export interface AtlasPage {
   /** 0-based position in the final (filtered + sorted) page order. */
   index: number;
+  /** 0-based position of the feature in the source collection: a stable
+   * identity that survives filtering and sorting. */
+  sourceIndex: number;
   /** Display name resolved from the name field, or `Feature N` (1-based, from
    * the feature's position in the source collection) when unset/blank. */
   name: string;
@@ -144,13 +147,21 @@ export function expandBounds(
     w = cx - minSpanDeg / 2;
     e = cx + minSpanDeg / 2;
   }
+  // Clamp latitudes into Web Mercator's renderable range *before* enforcing
+  // the minimum span, and keep the padded centre inside it too: clamping after
+  // padding could invert the box for a feature at the poles (e.g. a point at
+  // latitude 90 became [~89.9975, 85]).
+  s = Math.max(-85, Math.min(85, s));
+  n = Math.max(-85, Math.min(85, n));
   if (n - s < minSpanDeg) {
-    const cy = (s + n) / 2;
+    const cy = Math.max(
+      -85 + minSpanDeg / 2,
+      Math.min(85 - minSpanDeg / 2, (s + n) / 2),
+    );
     s = cy - minSpanDeg / 2;
     n = cy + minSpanDeg / 2;
   }
-  // Keep latitudes inside Web Mercator's renderable range.
-  return [w, Math.max(-85, s), e, Math.min(85, n)];
+  return [w, s, e, n];
 }
 
 /**
@@ -186,7 +197,7 @@ interface FilterCondition {
 }
 
 const CONDITION_RE =
-  /^(.+?)\s*(!=|>=|<=|=|>|<)\s*(.+)$|^(.+?)\s+(contains)\s+(.+)$/i;
+  /^(.+?)\s*(==|!=|>=|<=|=|>|<)\s*(.+)$|^(.+?)\s+(contains)\s+(.+)$/i;
 
 function unquote(raw: string): string {
   const v = raw.trim();
@@ -210,12 +221,52 @@ function unquote(raw: string): string {
  * words. Equality compares numerically when both sides are numbers, otherwise
  * as strings; ordering comparisons require numbers on both sides.
  */
+/**
+ * Split a filter expression on the standalone keyword `and`, ignoring any
+ * occurrence inside a single- or double-quoted value so expressions like
+ * `NAME = "Sam and Max"` stay one condition.
+ */
+function splitConditions(expr: string): string[] {
+  const parts: string[] = [];
+  let current = "";
+  let quote: string | null = null;
+  let i = 0;
+  while (i < expr.length) {
+    const ch = expr[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      current += ch;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      current += ch;
+      i++;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      const m = /^\s+and\s+/i.exec(expr.slice(i));
+      if (m) {
+        parts.push(current);
+        current = "";
+        i += m[0].length;
+        continue;
+      }
+    }
+    current += ch;
+    i++;
+  }
+  parts.push(current);
+  return parts;
+}
+
 export function parseAtlasFilter(
   expression: string,
 ): AtlasFilterPredicate | null {
   const expr = expression.trim();
   if (!expr) return () => true;
-  const parts = expr.split(/\s+and\s+/i);
+  const parts = splitConditions(expr);
   const conditions: FilterCondition[] = [];
   for (const part of parts) {
     const m = CONDITION_RE.exec(part.trim());
@@ -311,6 +362,7 @@ export function buildAtlasPages(
       if (v !== null && v !== undefined) name = String(v).trim();
     }
     pages.push({
+      sourceIndex: i,
       name: name || `Feature ${i + 1}`,
       properties,
       bounds,

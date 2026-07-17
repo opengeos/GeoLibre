@@ -434,6 +434,11 @@ export async function exportAtlasPngZip(
   if (total < 1) throw new Error("Atlas export needs at least one page");
   const files: Record<string, Uint8Array> = {};
   const used = new Set<string>();
+  // Compare names the way common filesystems do on extraction (Windows/macOS
+  // are case-insensitive and drop trailing dots/spaces), so "CA" and "Ca"
+  // pages cannot silently overwrite each other when the zip is unpacked.
+  const collisionKey = (name: string) =>
+    name.normalize("NFC").replace(/[ .]+$/g, "").toLowerCase();
   for (let i = 0; i < total; i++) {
     onProgress?.(i + 1, total);
     const opts = await optionsForPage(i);
@@ -441,8 +446,10 @@ export async function exportAtlasPngZip(
     const bytes = await canvasToPngBytes(canvas);
     const base = entryName(i) || String(i + 1);
     let name = base;
-    for (let suffix = 2; used.has(name); suffix++) name = `${base}-${suffix}`;
-    used.add(name);
+    for (let suffix = 2; used.has(collisionKey(name)); suffix++) {
+      name = `${base}-${suffix}`;
+    }
+    used.add(collisionKey(name));
     files[`${name}.png`] = bytes;
   }
   // PNG payloads are already compressed; store them instead of re-deflating.
