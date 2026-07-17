@@ -7,6 +7,7 @@ import {
   computeCaptureRect,
   hasCaptionText,
   MAP_RECORD_MIME_CANDIDATES,
+  overlayOutputRect,
   pickSupportedMimeType,
   videoExtensionForMime,
 } from "../apps/geolibre-desktop/src/lib/map-recorder";
@@ -230,5 +231,97 @@ describe("captionBoxOrigin", () => {
       assert.ok(x >= 0 && x + box.w <= W, `${position} x in bounds`);
       assert.ok(y >= 0 && y + box.h <= H, `${position} y in bounds`);
     }
+  });
+});
+
+describe("overlayOutputRect", () => {
+  // A whole-map frame at devicePixelRatio 2: the 800x600 CSS canvas has a
+  // 1600x1200 device source, captured 1:1 into a 1600x1200 output.
+  const wholeSource = { sx: 0, sy: 0, sw: 1600, sh: 1200 };
+  const OUT_W = 1600;
+  const OUT_H = 1200;
+
+  it("scales a CSS overlay rect into device-pixel output space", () => {
+    // A 200x100 CSS panel 20px from the top-left corner, at scale 2.
+    const placed = overlayOutputRect(
+      { left: 20, top: 20, width: 200, height: 100 },
+      2,
+      wholeSource,
+      OUT_W,
+      OUT_H,
+    );
+    assert.deepEqual(placed, { dx: 40, dy: 40, dw: 400, dh: 200 });
+  });
+
+  it("offsets the overlay by a selected area's source origin", () => {
+    // A selected area starting 100 device px in from the left/top, output 1:1.
+    const regionSource = { sx: 100, sy: 100, sw: 600, sh: 400 };
+    const placed = overlayOutputRect(
+      { left: 100, top: 100, width: 50, height: 50 },
+      2,
+      regionSource,
+      600,
+      400,
+    );
+    // Panel left edge is at 200 device px; the region starts at 100, so it lands
+    // 100 px into the output frame.
+    assert.deepEqual(placed, { dx: 100, dy: 100, dw: 100, dh: 100 });
+  });
+
+  it("remaps against a per-frame source that diverges from the fixed output", () => {
+    // After a mid-recording resize the source shrinks (sw/sh) while the output
+    // stays locked at its initial size, so the overlay is scaled UP to fill it.
+    // This is the split the SourceRect-vs-outW/outH signature guards.
+    const shrunkSource = { sx: 0, sy: 0, sw: 800, sh: 600 };
+    const placed = overlayOutputRect(
+      { left: 10, top: 10, width: 100, height: 50 },
+      2,
+      shrunkSource,
+      OUT_W, // still 1600x1200
+      OUT_H,
+    );
+    // kx = 1600/800 = 2, ky = 1200/600 = 2, on top of the scale-2 device factor.
+    assert.deepEqual(placed, { dx: 40, dy: 40, dw: 400, dh: 200 });
+  });
+
+  it("returns null for an overlay fully outside the captured region", () => {
+    // A panel far below a small selected area contributes nothing.
+    const regionSource = { sx: 0, sy: 0, sw: 400, sh: 300 };
+    assert.equal(
+      overlayOutputRect(
+        { left: 0, top: 500, width: 100, height: 100 },
+        2,
+        regionSource,
+        400,
+        300,
+      ),
+      null,
+    );
+  });
+
+  it("returns null for a degenerate overlay", () => {
+    assert.equal(
+      overlayOutputRect(
+        { left: 0, top: 0, width: 0, height: 100 },
+        2,
+        wholeSource,
+        OUT_W,
+        OUT_H,
+      ),
+      null,
+    );
+  });
+
+  it("keeps a partially clipped overlay (canvas clips the overflow)", () => {
+    // A panel straddling the top-left origin: negative dx/dy are returned so the
+    // 2D context clips the off-frame portion rather than dropping the overlay.
+    const placed = overlayOutputRect(
+      { left: -10, top: -10, width: 100, height: 100 },
+      2,
+      wholeSource,
+      OUT_W,
+      OUT_H,
+    );
+    assert.deepEqual(placed, { dx: -20, dy: -20, dw: 200, dh: 200 });
   });
 });

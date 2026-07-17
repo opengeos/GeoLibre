@@ -38,11 +38,22 @@ interface RecordVideoDialogProps {
 
 // "ready" holds a finished recording in memory so saving is a deliberate second
 // step (name + Save) rather than an automatic download the moment recording ends.
-type Status = "idle" | "recording" | "ready" | "saving";
+// "preparing" covers the brief async setup before capture starts (rasterizing
+// the HTML panel overlay); the UI stays out of the live "recording" state until
+// MediaRecorder is actually running.
+type Status = "idle" | "preparing" | "recording" | "ready" | "saving";
 // Which part of the map a recording captures.
 type Mode = "whole" | "region";
 
 const DEFAULT_FILE_NAME = "map-recording";
+// The on-map info panels added via the Components plugin: the HTML control's
+// display box, the legend, and the colorbar. These are the *rendered* overlays
+// (`maplibre-gl-html-control` / `maplibre-gl-legend` / `maplibre-gl-colorbar`),
+// NOT the `*-gui-control` authoring editors -- we burn the info in, not the
+// editor chrome. These class names mirror maplibre-gl-components internals; see
+// CLAUDE.md and re-check them when that package is bumped.
+const MAP_PANEL_SELECTOR =
+  ".maplibre-gl-html-control, .maplibre-gl-legend, .maplibre-gl-colorbar";
 // Hoisted so the save path doesn't recompile it on every call (and to satisfy
 // the e18e/prefer-static-regex lint rule).
 const VIDEO_EXTENSION_RE = /\.(mp4|webm)$/i;
@@ -99,6 +110,11 @@ export function RecordVideoDialog({
   const [captionPosition, setCaptionPosition] = useState<CaptionPosition>(
     DEFAULT_CAPTION_POSITION,
   );
+  // Burn the on-map info panels (HTML control, legend, colorbar) into the video
+  // (they are DOM, so they are rasterized and composited rather than captured
+  // from the canvas). Offered only when at least one such panel is on the map.
+  const [includePanels, setIncludePanels] = useState(false);
+  const [panelsAvailable, setPanelsAvailable] = useState(false);
   const [status, setStatus] = useState<Status>("idle");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -118,7 +134,8 @@ export function RecordVideoDialog({
   const dragOffset = useRef<{ x: number; y: number } | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const busy = status === "recording" || status === "saving";
+  const busy =
+    status === "preparing" || status === "recording" || status === "saving";
   // Also frozen in "ready": a finished take is held, so mode/region editing is
   // locked until it is saved or discarded, matching the tour recorder.
   const editingFrozen = busy || status === "ready";
@@ -201,7 +218,10 @@ export function RecordVideoDialog({
     }
     clearResultMessages();
     setElapsed(0);
-    setStatus("recording");
+    // "preparing" until MediaRecorder actually starts (onStarted below): the
+    // HTML-panel overlay is rasterized first, so the red "recording" UI must not
+    // claim capture is live before it is.
+    setStatus("preparing");
     const controller = new AbortController();
     abortRef.current = controller;
     // Snapshot the caption text at record start; blank fields draw nothing.
@@ -210,13 +230,23 @@ export function RecordVideoDialog({
       caption: captionText,
       position: captionPosition,
     };
+    // Collect the on-map info panels (HTML, legend, colorbar) to burn in, if the
+    // user opted in. Queried live so a panel added/removed since the dialog
+    // opened is reflected (the checkbox availability tracks this too).
+    const domOverlays = includePanels
+      ? Array.from(
+          map.getContainer().querySelectorAll<HTMLElement>(MAP_PANEL_SELECTOR),
+        )
+      : null;
     try {
       const rec = await recordMapCanvas({
         map,
         region: mode === "region" ? region : null,
         caption: hasCaptionText(captionOptions) ? captionOptions : null,
+        domOverlays,
         fps,
         signal: controller.signal,
+        onStarted: () => setStatus("recording"),
         onElapsed: setElapsed,
       });
       // An empty clip (a stop before the first frame flushed) is treated as a
@@ -237,7 +267,9 @@ export function RecordVideoDialog({
       setStatus("idle");
     } finally {
       abortRef.current = null;
-      setStatus((current) => (current === "recording" ? "idle" : current));
+      setStatus((current) =>
+        current === "recording" || current === "preparing" ? "idle" : current,
+      );
     }
   };
 
@@ -252,6 +284,35 @@ export function RecordVideoDialog({
     if (!open) abortRef.current?.abort();
     return () => abortRef.current?.abort();
   }, [open]);
+
+  // Offer the "include map panels" option only when at least one such panel is
+  // actually on the map. Kept live while the dialog is open by observing the
+  // map's control container, so toggling a panel on/off from the toolbar between
+  // recordings updates the checkbox without reopening the dialog.
+  useEffect(() => {
+    if (!open) return;
+    const container = mapControllerRef.current?.getMap()?.getContainer();
+    // Observe the control container specifically (not the whole map) to avoid
+    // tile/marker churn. A control's own internal DOM updates (e.g. legend
+    // swatches) can still fire the callback, but refresh() is a cheap querySelector
+    // and React bails on an unchanged value, so the extra calls are harmless.
+    const controlContainer =
+      container?.querySelector(".maplibregl-control-container") ?? container;
+    if (!controlContainer) {
+      setPanelsAvailable(false);
+      setIncludePanels(false);
+      return;
+    }
+    const refresh = () => {
+      const present = Boolean(controlContainer.querySelector(MAP_PANEL_SELECTOR));
+      setPanelsAvailable(present);
+      if (!present) setIncludePanels(false);
+    };
+    refresh();
+    const observer = new MutationObserver(refresh);
+    observer.observe(controlContainer, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [open, mapControllerRef]);
 
   const handleSave = async () => {
     if (!pendingRec || savingRef.current) return;
@@ -483,8 +544,24 @@ export function RecordVideoDialog({
             )}
           </div>
 
+          {/* Burn the on-map info panels (HTML control, legend, colorbar) into
+              the video. Shown only when at least one exists; unlike the map
+              canvas, these are DOM, so they are rasterized and composited into
+              every frame. */}
+          {panelsAvailable && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                disabled={editingFrozen}
+                checked={includePanels}
+                onChange={(e) => setIncludePanels(e.target.checked)}
+              />
+              {t("recordVideo.includePanels")}
+            </label>
+          )}
+
           {/* Record / Stop, then the save step. */}
-          {status === "recording" ? (
+          {status === "recording" || status === "preparing" ? (
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -495,10 +572,16 @@ export function RecordVideoDialog({
                 <Square className="me-1.5 h-3.5 w-3.5 fill-current" />
                 {t("recordVideo.stop")}
               </Button>
-              <span className="flex items-center gap-1.5 text-xs font-medium text-red-500">
-                <Circle className="h-2.5 w-2.5 animate-pulse fill-current" />
-                {formatElapsed(elapsed)}
-              </span>
+              {status === "preparing" ? (
+                <span className="text-xs font-medium text-muted-foreground">
+                  {t("recordVideo.preparing")}
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-medium text-red-500">
+                  <Circle className="h-2.5 w-2.5 animate-pulse fill-current" />
+                  {formatElapsed(elapsed)}
+                </span>
+              )}
             </div>
           ) : status === "ready" ? (
             <div className="flex flex-col gap-2 rounded-md border border-border/60 p-2">

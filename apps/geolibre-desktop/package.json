@@ -56,6 +56,7 @@
     "exifr": "^7.1.3",
     "fflate": "^0.8.3",
     "gdal3.js": "^2.8.1",
+    "html2canvas-pro": "^2.2.4",
     "i18next": "^26.3.6",
     "jspdf": "^4.2.1",
     "mapillary-js": "^4.1.2",

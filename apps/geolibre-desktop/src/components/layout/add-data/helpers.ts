@@ -32,6 +32,19 @@ export function layerNameFromPath(path: string, fallback: string): string {
   return fileNameFromPath(path).replace(/\.[^.]+$/, "") || fallback;
 }
 
+/**
+ * Normalize a user-entered CRS into the `AUTHORITY:CODE` form `ST_Transform`
+ * expects: a bare number becomes `EPSG:<n>`, an `epsg:4326` is upper-cased, and
+ * an already-qualified `ESRI:102100` passes through. A blank stays blank (load
+ * the data as-is). Shared by the CAD and File Geodatabase sources.
+ */
+export function normalizeCrs(raw: string): string {
+  const value = raw.trim();
+  if (!value) return "";
+  if (/^\d+$/.test(value)) return `EPSG:${value}`;
+  return value.toUpperCase();
+}
+
 export function createBaseLayer(
   name: string,
   type: GeoLibreLayer["type"],
