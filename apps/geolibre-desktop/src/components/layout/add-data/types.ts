@@ -12,6 +12,7 @@ export type AddDataKind =
   | "georss"
   | "delimited-text"
   | "cad"
+  | "gdb"
   | "photos"
   | "mbtiles"
   | "arcgis"

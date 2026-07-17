@@ -206,6 +206,10 @@
         "label": "Add CAD (DXF/DWG) Layer",
         "description": "Add an AutoCAD DXF or DWG drawing as a vector layer, choosing which layer to load and the coordinate reference system to project it from."
       },
+      "gdb": {
+        "label": "Add File Geodatabase Layer",
+        "description": "Add a layer from an Esri File Geodatabase (.gdb folder). The layer is read with the local GeoLibre server and reprojected to WGS84."
+      },
       "photos": {
         "label": "Add Geotagged Photos",
         "description": "Import JPEG/HEIC photos as a point layer, placing each one from its EXIF GPS location."
@@ -415,6 +419,28 @@
       "errorChooseFile": "Choose a CAD (DXF/DWG) file first.",
       "errorNoLayer": "Select a CAD layer to load.",
       "errorUnsupportedGeometry": "This CAD layer contains mixed or collection geometry that cannot be displayed. Try another layer."
+    },
+    "gdb": {
+      "defaultName": "Geodatabase Layer",
+      "chooseFolder": "Choose .gdb folder...",
+      "noFolderSelected": "No geodatabase selected",
+      "layer": "Feature class",
+      "layerPlaceholder": "Choose a geodatabase first",
+      "readingLayers": "Reading layers...",
+      "layerOption": "{{name}} ({{type}}, {{count}} features)",
+      "help": "Attribute-only tables are not listed. The selected feature class is loaded through the local GeoLibre server and reprojected to WGS84.",
+      "desktopOnly": "File Geodatabase layers are only available in GeoLibre Desktop. This feature reads a local .gdb folder through the local GeoLibre server, which the web app cannot access.",
+      "readError": "Could not read this File Geodatabase.",
+      "convertError": "Could not load this feature class.",
+      "errorNotGdb": "Choose a folder ending in .gdb (an Esri File Geodatabase).",
+      "errorNoLayers": "No feature classes with geometry were found in this geodatabase.",
+      "errorChooseFolder": "Choose a .gdb folder first.",
+      "errorNoLayer": "Select a feature class to load.",
+      "errorTimeout": "Reading the geodatabase timed out.",
+      "crs": "Source CRS",
+      "crsPlaceholder": "e.g. EPSG:26915",
+      "crsHelp": "This feature class's coordinate system could not be detected. Enter the EPSG (or ESRI) code it was stored in so it can be reprojected to WGS84.",
+      "errorMissingCrs": "This feature class's coordinate system could not be detected. Enter its source CRS to add it."
     },
     "delimitedText": {
       "defaultName": "Delimited Text Layer",
@@ -1925,6 +1951,7 @@
       "georeferencing": "Georeferencing",
       "vectorLayer": "Vector Layer",
       "cadLayer": "CAD (DXF/DWG) Layer",
+      "gdbLayer": "File Geodatabase (GDB)",
       "rasterLayer": "Raster Layer",
       "osmPbfLayer": "OSM PBF Layer",
       "stacLayer": "STAC Layer",

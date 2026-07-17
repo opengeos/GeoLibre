@@ -16,6 +16,7 @@ import { ArcGISSource } from "./add-data/sources/ArcGISSource";
 import { CadSource } from "./add-data/sources/CadSource";
 import { DeckVizSource } from "./add-data/sources/DeckVizSource";
 import { DelimitedTextSource } from "./add-data/sources/DelimitedTextSource";
+import { GdbSource } from "./add-data/sources/GdbSource";
 import { GeoRssSource } from "./add-data/sources/GeoRssSource";
 import { GpxSource } from "./add-data/sources/GpxSource";
 import { MbtilesSource } from "./add-data/sources/MbtilesSource";
@@ -79,6 +80,8 @@ function renderSource(
       return <DelimitedTextSource />;
     case "cad":
       return <CadSource />;
+    case "gdb":
+      return <GdbSource />;
     case "photos":
       return <PhotosSource />;
     case "mbtiles":

@@ -60,6 +60,7 @@ export function AddDataMenu({
     raster: { onSelect: addLayer.raster },
     "delimited-text": { onSelect: () => onSetAddDataKind("delimited-text") },
     cad: { onSelect: () => onSetAddDataKind("cad") },
+    gdb: { onSelect: () => onSetAddDataKind("gdb") },
     photos: { onSelect: () => onSetAddDataKind("photos") },
     gpx: { onSelect: () => onSetAddDataKind("gpx") },
     mbtiles: { onSelect: () => onSetAddDataKind("mbtiles") },

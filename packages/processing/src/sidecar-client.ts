@@ -425,6 +425,38 @@ export interface VectorToVectorRequest {
    * the matching DuckDB spatial driver.
    */
   output_path: string;
+  /**
+   * Layer to read from a multi-layer input (a File Geodatabase or GeoPackage).
+   * Omitted, the first layer is read.
+   */
+  input_layer?: string;
+  /**
+   * Reproject the geometry to this CRS (e.g. `"EPSG:4326"`) before writing.
+   * The backend rejects the request when the input declares no CRS and no
+   * `source_srs` is supplied.
+   */
+  target_srs?: string;
+  /**
+   * CRS to reproject *from*, overriding (or standing in for) the CRS the
+   * dataset declares — for layers whose spatial reference GDAL cannot resolve
+   * to an authority code. Only meaningful together with `target_srs`.
+   */
+  source_srs?: string;
+}
+
+export interface VectorLayersRequest {
+  /** Dataset path: a file, a `.gdb` directory, or a zipped dataset. */
+  input_path: string;
+}
+
+/** One layer of a multi-layer vector dataset, as listed by the sidecar. */
+export interface VectorDatasetLayer {
+  name: string;
+  feature_count: number | null;
+  /** OGR geometry type (e.g. "Point"); null for non-spatial tables. */
+  geometry_type: string | null;
+  /** `AUTHORITY:CODE` (e.g. "EPSG:4326"), or null when undeclared. */
+  crs: string | null;
 }
 
 export interface VectorToGeoParquetRequest {
@@ -504,6 +536,23 @@ export async function runVectorToVector(
 ): Promise<ConversionJob> {
   return startConversion(
     `${baseUrl}/conversion/vector-to-vector`,
+    request,
+    baseUrl,
+  );
+}
+
+/**
+ * Start a job listing the layers of a multi-layer vector dataset (a File
+ * Geodatabase directory, a zipped dataset, or a GeoPackage). Poll the returned
+ * job with {@link fetchConversionJob}; on success its `result` carries
+ * `{ layers: VectorDatasetLayer[] }`.
+ */
+export async function runVectorLayers(
+  request: VectorLayersRequest,
+  baseUrl = DEFAULT_SIDECAR_URL,
+): Promise<ConversionJob> {
+  return startConversion(
+    `${baseUrl}/conversion/vector-layers`,
     request,
     baseUrl,
   );
@@ -624,6 +673,7 @@ export async function runRasterTool(
 
 type ConversionRequest =
   | VectorToVectorRequest
+  | VectorLayersRequest
   | VectorToGeoParquetRequest
   | VectorToFlatGeobufRequest
   | VectorToShapefileRequest
