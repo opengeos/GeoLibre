@@ -304,6 +304,7 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Kept in step with the AI Assistant (which reads its API key from here).
   { id: "settings.environment", menuId: "settings", labelKey: "settings.menu.environmentVariables", tier: "intermediate" },
   { id: "settings.managePlugins", menuId: "settings", labelKey: "settings.menu.managePlugins", tier: "intermediate" },
+  { id: "settings.styleManager", menuId: "settings", labelKey: "settings.menu.styleManager", tier: "intermediate" },
   // Help
   { id: "help.commandPalette", menuId: "help", labelKey: "toolbar.item.commandPalette", tier: "basic" },
   { id: "help.keyboardShortcuts", menuId: "help", labelKey: "toolbar.command.keyboardShortcuts", tier: "intermediate" },

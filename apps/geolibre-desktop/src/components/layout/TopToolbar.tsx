@@ -63,6 +63,7 @@ import {
   MapPin,
   MessageSquare,
   Moon,
+  Palette,
   Printer,
   RefreshCw,
   Save,
@@ -371,6 +372,7 @@ export function TopToolbar({
   const setVectorToolOpen = useAppStore((s) => s.setVectorToolOpen);
   const setGeocodeOpen = useAppStore((s) => s.setGeocodeOpen);
   const setModelBuilderOpen = useAppStore((s) => s.setModelBuilderOpen);
+  const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setRasterToolOpen = useAppStore((s) => s.setRasterToolOpen);
   const setSegmentationOpen = useAppStore((s) => s.setSegmentationOpen);
   const setObjectDetectionOpen = useAppStore((s) => s.setObjectDetectionOpen);
@@ -1078,6 +1080,14 @@ export function TopToolbar({
       group: t("toolbar.commandGroup.settings"),
       keywords: "install external plugin marketplace",
       run: () => setManagePluginsOpen(true),
+    },
+    {
+      id: "settings.style-manager",
+      title: t("toolbar.command.styleManager"),
+      group: t("toolbar.commandGroup.settings"),
+      keywords: "style manager saved styles symbol ramp label preset library",
+      icon: Palette,
+      run: () => setStyleManagerOpen(true),
     },
   ];
 

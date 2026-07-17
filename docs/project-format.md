@@ -19,6 +19,7 @@ Projects are saved as **`.geolibre.json`** files.
 | `storymap`        | object  | Optional scroll-driven story map (chapters and presentation settings); omitted when there are no chapters    |
 | `widgets`         | array   | Optional Dashboard panel chart widgets (see below); omitted when there are none                              |
 | `dashboardColumns`| number  | Optional Dashboard widget-grid column count (1-6, default 2); omitted when default                          |
+| `styleLibrary`    | array   | Optional project-scoped Style Manager entries (name, tags, kind, `LayerStyle` subset); omitted when empty    |
 | `metadata`        | object  | Free-form project metadata                                                                                   |
 
 ## Plugin state

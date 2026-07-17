@@ -54,6 +54,7 @@ import {
   type RecentProjectEntry,
   type StoryChapter,
   type StoryMap,
+  type StyleLibraryEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
 import {
@@ -162,6 +163,17 @@ export interface AppState {
   storymap: StoryMap | null;
   /** Saved processing pipelines (batch/model chaining; issue #344). */
   models: ProcessingModel[];
+  /**
+   * App-level Style Manager library (issue #1294). Lives outside the project
+   * lifecycle: never serialized into the project file, untouched by
+   * newProject/loadProject, and persisted by the desktop app (IndexedDB).
+   */
+  styleLibrary: StyleLibraryEntry[];
+  /**
+   * Project-scoped Style Manager entries (issue #1294), serialized into the
+   * `.geolibre.json` `styleLibrary` array and replaced on project load.
+   */
+  projectStyleLibrary: StyleLibraryEntry[];
   /** Recorded processing tool runs, oldest first (Processing History; #1292). */
   processingHistory: ProcessingRun[];
   /** Saved Dashboard panel chart widgets (issue #401). */
@@ -238,6 +250,8 @@ export interface AppState {
     // save the resulting camera back into this chapter (issue #775).
     storymapComposingId: string | null;
     modelBuilderOpen: boolean;
+    /** Style Manager dialog visibility (issue #1294). */
+    styleManagerOpen: boolean;
     /** Processing History panel visibility (#1292). */
     processingHistoryOpen: boolean;
     /**
@@ -361,6 +375,32 @@ export interface AppState {
   setProcessingRerun: (request: ProcessingRerunRequest | null) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
+
+  setStyleManagerOpen: (open: boolean) => void;
+  /**
+   * Replace the app-level style library wholesale. Used by the persistence
+   * layer on startup and by bundle imports.
+   */
+  setStyleLibrary: (entries: StyleLibraryEntry[]) => void;
+  /**
+   * Insert or replace (matching by `id`) a Style Manager entry in the given
+   * scope. Scope-local, like {@link deleteStyleLibraryEntry}: the other
+   * scope's list is never touched, since a same id there can belong to an
+   * unrelated entry after loading a project authored elsewhere. Project-scope
+   * saves mark the project dirty.
+   */
+  saveStyleLibraryEntry: (
+    entry: StyleLibraryEntry,
+    scope?: "app" | "project",
+  ) => void;
+  /**
+   * Remove a Style Manager entry by id. When `scope` is given only that list
+   * is touched — the two scopes can legitimately hold the same id after
+   * loading a project authored elsewhere, and deleting a project entry must
+   * not erase a local app-library style (or vice versa). Omitting `scope`
+   * removes the id from both lists.
+   */
+  deleteStyleLibraryEntry: (id: string, scope?: "app" | "project") => void;
 
   /** Insert a new model or replace an existing one matching by `id`. */
   saveModel: (model: ProcessingModel) => void;
@@ -670,6 +710,8 @@ export const useAppStore = create<AppState>()(
       legend: { ...DEFAULT_LEGEND_CONFIG },
       storymap: null,
       models: [],
+      styleLibrary: [],
+      projectStyleLibrary: [],
       processingHistory: [],
       widgets: [],
       dashboardColumns: DEFAULT_DASHBOARD_COLUMNS,
@@ -710,6 +752,7 @@ export const useAppStore = create<AppState>()(
         storymapReturnToEditor: false,
         storymapComposingId: null,
         modelBuilderOpen: false,
+        styleManagerOpen: false,
         processingHistoryOpen: false,
         processingRerun: null,
         zoomToSelectedFeature: false,
@@ -1008,6 +1051,44 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, collaborateDialogOpen: open } })),
       setZoomToSelectedFeature: (enabled) =>
         set((s) => ({ ui: { ...s.ui, zoomToSelectedFeature: enabled } })),
+
+      setStyleManagerOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, styleManagerOpen: open } })),
+      setStyleLibrary: (entries) => set({ styleLibrary: entries }),
+      saveStyleLibraryEntry: (entry, scope = "app") =>
+        set((s) => {
+          const upsert = (list: StyleLibraryEntry[]) =>
+            list.some((e) => e.id === entry.id)
+              ? list.map((e) => (e.id === entry.id ? entry : e))
+              : [...list, entry];
+          if (scope === "project") {
+            return {
+              projectStyleLibrary: upsert(s.projectStyleLibrary),
+              isDirty: true,
+            };
+          }
+          // App-level saves don't touch the project file, so no dirty flag.
+          return { styleLibrary: upsert(s.styleLibrary) };
+        }),
+      deleteStyleLibraryEntry: (id, scope) =>
+        set((s) => {
+          const inProject =
+            scope !== "app" && s.projectStyleLibrary.some((e) => e.id === id);
+          const inLibrary =
+            scope !== "project" && s.styleLibrary.some((e) => e.id === id);
+          // Keep untouched scopes reference-stable so the IndexedDB
+          // persistence (which watches the styleLibrary reference) does not
+          // rewrite an unchanged library.
+          return {
+            styleLibrary: inLibrary
+              ? s.styleLibrary.filter((e) => e.id !== id)
+              : s.styleLibrary,
+            projectStyleLibrary: inProject
+              ? s.projectStyleLibrary.filter((e) => e.id !== id)
+              : s.projectStyleLibrary,
+            isDirty: s.isDirty || inProject,
+          };
+        }),
 
       saveModel: (model) =>
         set((s) => {

@@ -39,11 +39,13 @@ import {
   type StoryLayerOpacityChange,
   type StoryMap,
   type StorySlideMode,
+  type StyleLibraryEntry,
 } from "./types";
 import {
   DEFAULT_LAYER_GROUP_OPACITY,
   normalizeGroupContiguity,
 } from "./layer-groups";
+import { normalizeStyleLibraryEntries } from "./style-library";
 import { getEllipsoid } from "./ellipsoids";
 
 /** Placeholder name a project carries before the user names it. */
@@ -119,6 +121,7 @@ export function parseProject(json: string): GeoLibreProject {
     normalizeSecondaryMapViews(data.secondaryMapViews),
     { mapView: data.mapView },
   );
+  const styleLibrary = normalizeStyleLibraryEntries(data.styleLibrary);
   return {
     version: data.version,
     name: data.name,
@@ -151,6 +154,7 @@ export function parseProject(json: string): GeoLibreProject {
             : {}),
         }
       : {}),
+    ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     metadata: data.metadata ?? {},
   };
 }
@@ -1101,6 +1105,8 @@ export function projectFromStore(state: {
   mapLayout?: MapGridLayout;
   secondaryMapViews?: SecondaryMapView[];
   primaryMapLabel?: string;
+  /** Project-scoped Style Manager entries (the store's `projectStyleLibrary`). */
+  styleLibrary?: StyleLibraryEntry[] | null;
   metadata: Record<string, unknown>;
 }): GeoLibreProject {
   const styles: Record<string, LayerStyle> = {};
@@ -1132,6 +1138,7 @@ export function projectFromStore(state: {
     { mapView: state.mapView },
   );
   const persistGrid = mapLayout.rows * mapLayout.cols > 1;
+  const styleLibrary = normalizeStyleLibraryEntries(state.styleLibrary);
   return {
     version: PROJECT_VERSION,
     name: state.projectName,
@@ -1159,6 +1166,7 @@ export function projectFromStore(state: {
             : {}),
         }
       : {}),
+    ...(styleLibrary.length > 0 ? { styleLibrary } : {}),
     metadata: state.metadata,
   };
 }
@@ -1267,6 +1275,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
   mapLayout: MapGridLayout;
   secondaryMapViews: SecondaryMapView[];
   primaryMapLabel: string;
+  projectStyleLibrary: StyleLibraryEntry[];
   metadata: Record<string, unknown>;
 } {
   const layers = project.layers.map((layer) => ({
@@ -1322,6 +1331,7 @@ export function applyProjectToStore(project: GeoLibreProject): {
     mapLayout,
     secondaryMapViews,
     primaryMapLabel: normalizeString(project.primaryMapLabel),
+    projectStyleLibrary: normalizeStyleLibraryEntries(project.styleLibrary),
     metadata: project.metadata,
   };
 }

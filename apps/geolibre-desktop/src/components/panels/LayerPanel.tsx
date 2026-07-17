@@ -18,6 +18,7 @@ import {
   getPlanetaryBasemapByStyleUrl,
   isDuckDBQueryLayer,
   PLANET_SWITCHER_OPTIONS,
+  isStyleLibraryTargetLayer,
   useAppStore,
 } from "@geolibre/core";
 import type {
@@ -157,6 +158,7 @@ import {
   openLocalDataFileWithFallback,
   saveTextFileWithFallback,
 } from "../../lib/tauri-io";
+import { isQmlStyleXml } from "../../lib/style-format";
 import {
   readPostgisTable,
   writePostgisTable,
@@ -542,6 +544,7 @@ export function LayerPanel({
   const moveLayer = useAppStore((s) => s.moveLayer);
   const removeLayer = useAppStore((s) => s.removeLayer);
   const updateLayer = useAppStore((s) => s.updateLayer);
+  const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
   const setLoadEditorFeaturesOpen = useAppStore(
     (s) => s.setLoadEditorFeaturesOpen,
@@ -1236,7 +1239,7 @@ export function LayerPanel({
         // and everything else is parsed as a Mapbox GL style JSON.
         const trimmed = picked.text.trimStart();
         const isXml = trimmed.startsWith("<");
-        const isQml = isXml && /<qgis[\s>]|<renderer-v2[\s>]/.test(picked.text);
+        const isQml = isXml && isQmlStyleXml(picked.text);
         const isSld = isXml && !isQml;
 
         let result:
@@ -2356,9 +2359,8 @@ export function LayerPanel({
             // Importing a style (Mapbox GL or SLD) only writes the layer's
             // vector symbology, so it applies to any vector-styled layer (local
             // GeoJSON and vector tiles), not just the export-capable GeoJSON
-            // layers.
-            const canImportStyle =
-              layer.type === "geojson" || layer.type === "vector-tiles";
+            // layers. Shares the Style Manager's gate so the two can't drift.
+            const canImportStyle = isStyleLibraryTargetLayer(layer.type);
             // Write-back commits edits to the layer's local source file in place
             // (desktop only, supported formats); Export writes a new file.
             const canWriteBack = canWriteEditsToSource(layer);
@@ -2863,6 +2865,22 @@ export function LayerPanel({
                                 <Upload className="me-2 h-3.5 w-3.5" />
                                 {t("layers.importStyle")}
                               </DropdownMenuItem>
+                            )}
+                            {canImportStyle && (
+                              <>
+                                <DropdownMenuSeparator />
+                                {/* The Style Manager reads the selected layer,
+                                    so select this one before opening it. */}
+                                <DropdownMenuItem
+                                  onSelect={() => {
+                                    selectLayer(layer.id);
+                                    setStyleManagerOpen(true);
+                                  }}
+                                >
+                                  <Palette className="me-2 h-3.5 w-3.5" />
+                                  {t("layers.openStyleManager")}
+                                </DropdownMenuItem>
+                              </>
                             )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
