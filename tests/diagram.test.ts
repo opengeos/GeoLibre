@@ -11,6 +11,11 @@ import {
   isDiagramStyleEnabled,
   type LayerStyle,
 } from "../packages/core/src/index";
+import {
+  MAX_ATLAS_HEIGHT,
+  declutterEntries,
+  packDiagramCells,
+} from "../packages/plugins/src/plugins/deckgl-viz/diagrams";
 
 function style(overrides: Partial<LayerStyle> = {}): LayerStyle {
   return {
@@ -171,6 +176,27 @@ describe("collectDiagramData", () => {
     assert.deepEqual(data.data[0].values, [2, 2]);
   });
 
+  it("falls back to constant sizing when attribute mode has no field yet", () => {
+    const data = collectDiagramData(
+      collection([
+        pointFeature({ a: 1, b: 1 }),
+        pointFeature({ a: 5, b: 5 }),
+      ]),
+      style({ diagramSizeMode: "attribute", diagramSizeProperty: "" }),
+    );
+    assert.ok(data.data.every((datum) => datum.sizeValue === 1));
+    assert.equal(data.maxSizeValue, 1);
+    // Full-size diagrams, not the legibility floor.
+    assert.equal(
+      diagramPixelSize(
+        data.data[0],
+        style({ diagramSizeMode: "attribute", diagramSize: 40 }),
+        data.maxSizeValue,
+      ),
+      40,
+    );
+  });
+
   it("sizes by the configured attribute in attribute mode", () => {
     const data = collectDiagramData(
       collection([pointFeature({ a: 1, b: 1, pop: 250 })]),
@@ -187,6 +213,82 @@ describe("collectDiagramData", () => {
     const data = collectDiagramData(collection(many), style());
     assert.equal(data.data.length, MAX_DIAGRAM_FEATURES);
     assert.equal(data.truncated, true);
+  });
+});
+
+describe("packDiagramCells", () => {
+  it("packs cells into rows without overlap and wraps at the atlas width", () => {
+    const sizes = Array.from({ length: 40 }, () => ({
+      width: 200,
+      height: 200,
+    }));
+    const { cells, atlasHeight, dropped } = packDiagramCells(sizes);
+    assert.equal(cells.length, 40);
+    assert.equal(dropped, 0);
+    assert.ok(atlasHeight <= MAX_ATLAS_HEIGHT);
+    for (const cell of cells) {
+      assert.ok(cell.x + cell.width <= 2048);
+    }
+    // No two cells overlap.
+    for (let i = 0; i < cells.length; i += 1) {
+      for (let j = i + 1; j < cells.length; j += 1) {
+        const a = cells[i];
+        const b = cells[j];
+        const overlaps =
+          a.x < b.x + b.width &&
+          b.x < a.x + a.width &&
+          a.y < b.y + b.height &&
+          b.y < a.y + a.height;
+        assert.equal(overlaps, false);
+      }
+    }
+  });
+
+  it("drops cells past the atlas height cap instead of growing unbounded", () => {
+    // 248px cells, 8 per 2048px row: 2000 diagrams would need ~62,000px of
+    // height, far past the cap.
+    const sizes = Array.from({ length: 2000 }, () => ({
+      width: 240,
+      height: 240,
+    }));
+    const { cells, atlasHeight, dropped } = packDiagramCells(sizes);
+    assert.ok(atlasHeight <= MAX_ATLAS_HEIGHT);
+    assert.ok(dropped > 0);
+    assert.equal(cells.length + dropped, 2000);
+  });
+});
+
+describe("declutterEntries", () => {
+  const project = (position: [number, number]) => ({
+    x: position[0],
+    y: position[1],
+  });
+
+  it("keeps non-overlapping entries and drops overlapped smaller ones", () => {
+    const big = { width: 40, height: 40, position: [0, 0] as [number, number] };
+    const overlapped = {
+      width: 20,
+      height: 20,
+      position: [10, 10] as [number, number],
+    };
+    const far = {
+      width: 20,
+      height: 20,
+      position: [500, 500] as [number, number],
+    };
+    const kept = declutterEntries([overlapped, big, far], project);
+    assert.ok(kept.includes(big));
+    assert.ok(kept.includes(far));
+    assert.equal(kept.includes(overlapped), false);
+  });
+
+  it("keeps everything when nothing overlaps", () => {
+    const entries = Array.from({ length: 5 }, (_, i) => ({
+      width: 10,
+      height: 10,
+      position: [i * 100, 0] as [number, number],
+    }));
+    assert.equal(declutterEntries(entries, project).length, 5);
   });
 });
 

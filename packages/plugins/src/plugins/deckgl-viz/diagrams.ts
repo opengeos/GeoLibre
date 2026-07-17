@@ -28,6 +28,13 @@ const DPR = 2;
 // between neighboring icons.
 const CELL_PAD = 2 * DPR;
 const ATLAS_WIDTH = 2048;
+/**
+ * Hard cap on the atlas canvas height. Without it, many features at a large
+ * diagram size could demand a canvas past browser per-axis limits (Firefox:
+ * 32,767px) and hundreds of MB of pixels; diagrams that do not fit are
+ * dropped (largest layers hit MAX_DIAGRAM_FEATURES first anyway).
+ */
+export const MAX_ATLAS_HEIGHT = 8192;
 // Donut hole radius as a fraction of the outer radius.
 const DONUT_INNER_RATIO = 0.5;
 // Stacked bars are columns: narrower than the square pie/bar box.
@@ -36,7 +43,9 @@ const STACKED_BAR_WIDTH_RATIO = 0.45;
 /**
  * Whether a store layer has diagrams to render: an in-memory GeoJSON vector
  * layer (not a deck-viz dataset layer, which has its own renderer) whose style
- * enables diagram symbology.
+ * enables diagram symbology. Point layers rendered as heatmap/cluster don't
+ * draw diagrams — the Style Panel hides the diagram controls there, so
+ * rendering them would leave charts with no UI path to turn them off.
  *
  * @param layer - The store layer to test.
  */
@@ -45,6 +54,7 @@ export function isDiagramLayer(layer: GeoLibreLayer): boolean {
     !!layer.geojson &&
     layer.type !== "deckgl-viz" &&
     !isDeckVizLayer(layer) &&
+    styleValue(layer.style, "pointRenderer") === "single" &&
     isDiagramStyleEnabled(layer.style)
   );
 }
@@ -142,12 +152,14 @@ function drawBars(
   maxFieldValue: number,
   colors: string[],
 ): void {
-  if (maxFieldValue <= 0) return;
-  const gap = DPR;
-  const barWidth = Math.max(
-    DPR,
-    (width - gap * (values.length - 1)) / values.length,
-  );
+  if (maxFieldValue <= 0 || values.length === 0) return;
+  // Gaps are capped to a fraction of the box so bars always fit inside their
+  // own atlas cell (a forced minimum bar width would spill into neighbors).
+  const gap =
+    values.length > 1
+      ? Math.min(DPR, (width * 0.2) / (values.length - 1))
+      : 0;
+  const barWidth = (width - gap * (values.length - 1)) / values.length;
   ctx.lineWidth = Math.max(1, DPR / 2);
   ctx.strokeStyle = "rgba(255,255,255,0.9)";
   for (let i = 0; i < values.length; i += 1) {
@@ -183,6 +195,53 @@ function drawStackedBar(
   }
 }
 
+/** One packed atlas cell: content box position/size plus its source datum. */
+export interface DiagramCell {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  datumIndex: number;
+}
+
+/**
+ * Shelf-pack content boxes into the atlas: cells flow left-to-right in rows of
+ * the tallest cell's height, wrapping at {@link ATLAS_WIDTH} and stopping at
+ * {@link MAX_ATLAS_HEIGHT}. Pure so the arithmetic is unit-testable without a
+ * canvas.
+ *
+ * @param sizes - Content box sizes in atlas pixels, in datum order.
+ * @returns The packed cells (positions exclude the per-cell padding gutter),
+ *   the resulting atlas height, and how many boxes were dropped for space.
+ */
+export function packDiagramCells(
+  sizes: ReadonlyArray<{ width: number; height: number }>,
+): { cells: DiagramCell[]; atlasHeight: number; dropped: number } {
+  const cells: DiagramCell[] = [];
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+  let dropped = 0;
+  for (let i = 0; i < sizes.length; i += 1) {
+    const { width, height } = sizes[i];
+    const cellWidth = width + CELL_PAD * 2;
+    const cellHeight = height + CELL_PAD * 2;
+    if (cursorX + cellWidth > ATLAS_WIDTH && cursorX > 0) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+    if (cursorY + cellHeight > MAX_ATLAS_HEIGHT) {
+      dropped = sizes.length - i;
+      break;
+    }
+    cells.push({ x: cursorX, y: cursorY, width, height, datumIndex: i });
+    cursorX += cellWidth;
+    if (cellHeight > rowHeight) rowHeight = cellHeight;
+  }
+  return { cells, atlasHeight: cursorY + rowHeight, dropped };
+}
+
 /**
  * Rasterize every feature diagram into one atlas canvas with shelf packing
  * (cells laid out left-to-right in rows). Returns null when no feature has
@@ -201,37 +260,26 @@ function buildAtlas(
     .map((field) => field.color);
 
   // Lay out cells first so the canvas can be allocated at its final size.
-  const cells: Array<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    datumIndex: number;
-  }> = [];
-  let cursorX = 0;
-  let cursorY = 0;
-  let rowHeight = 0;
-  for (let i = 0; i < diagramData.data.length; i += 1) {
-    const datum = diagramData.data[i];
-    const size = Math.round(
-      diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR,
+  const { cells, atlasHeight, dropped } = packDiagramCells(
+    diagramData.data.map((datum) => {
+      const size = Math.round(
+        diagramPixelSize(datum, style, diagramData.maxSizeValue) * DPR,
+      );
+      const width =
+        type === "stacked-bar"
+          ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO))
+          : size;
+      return { width, height: size };
+    }),
+  );
+  if (cells.length === 0) return null;
+  if (dropped > 0) {
+    console.info(
+      `[GeoLibre] diagrams: atlas full, dropped ${dropped} of ` +
+        `${diagramData.data.length} feature diagrams (reduce the diagram size ` +
+        `to fit more)`,
     );
-    const width =
-      type === "stacked-bar"
-        ? Math.max(4 * DPR, Math.round(size * STACKED_BAR_WIDTH_RATIO))
-        : size;
-    const cellWidth = width + CELL_PAD * 2;
-    const cellHeight = size + CELL_PAD * 2;
-    if (cursorX + cellWidth > ATLAS_WIDTH && cursorX > 0) {
-      cursorX = 0;
-      cursorY += rowHeight;
-      rowHeight = 0;
-    }
-    cells.push({ x: cursorX, y: cursorY, width, height: size, datumIndex: i });
-    cursorX += cellWidth;
-    if (cellHeight > rowHeight) rowHeight = cellHeight;
   }
-  const atlasHeight = cursorY + rowHeight;
 
   const canvas = document.createElement("canvas");
   canvas.width = ATLAS_WIDTH;
@@ -312,12 +360,17 @@ function getAtlas(layer: GeoLibreLayer): DiagramAtlas | null {
 /**
  * Greedy screen-space decluttering: keep the largest diagrams and drop any
  * whose screen box overlaps one already kept. A coarse spatial hash keeps the
- * overlap test linear-ish for dense layers.
+ * overlap test linear-ish for dense layers. Pure (exported for tests).
+ *
+ * @param entries - Diagram entries with screen-pixel width/height.
+ * @param project - Maps a lng/lat position to screen coordinates.
  */
-function declutterEntries(
-  entries: AtlasEntry[],
+export function declutterEntries<
+  T extends { width: number; height: number; position: [number, number] },
+>(
+  entries: T[],
   project: (position: [number, number]) => { x: number; y: number },
-): AtlasEntry[] {
+): T[] {
   interface Placed {
     x: number;
     y: number;
@@ -332,7 +385,7 @@ function declutterEntries(
     .sort((a, b) => b.entry.height - a.entry.height);
   const cellSize = 64;
   const grid = new Map<string, Placed[]>();
-  const kept: AtlasEntry[] = [];
+  const kept: T[] = [];
   for (const candidate of ordered) {
     const halfW = candidate.entry.width / 2;
     const halfH = candidate.entry.height / 2;

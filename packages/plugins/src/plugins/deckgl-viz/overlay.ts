@@ -192,6 +192,11 @@ function renderDeckVizLayers(): void {
     if (!layer.visible) continue;
     const entry = contextById.get(layer.id);
     try {
+      // Diagrams go first so the final reverse() puts them on top of the same
+      // layer's other deck rendering (e.g. its 3D Z-value geometry).
+      if (isDiagramLayer(layer)) {
+        deckLayers.push(...buildDiagramLayers(deckGL, layer, diagramOptions));
+      }
       if (entry) {
         deckLayers.push(
           entry.def.build(deckGL, entry.id, {
@@ -201,9 +206,6 @@ function renderDeckVizLayers(): void {
         );
       } else if (isElevation3dLayer(layer)) {
         deckLayers.push(...buildElevation3dLayers(deckGL, layer));
-      }
-      if (isDiagramLayer(layer)) {
-        deckLayers.push(...buildDiagramLayers(deckGL, layer, diagramOptions));
       }
     } catch (error) {
       console.warn("[GeoLibre] deckgl-viz: failed to build layer", error);

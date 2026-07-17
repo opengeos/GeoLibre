@@ -2454,8 +2454,14 @@ export function StylePanel({
   const diagramType = styleValue(style, "diagramType");
   const diagramFields = styleValue(style, "diagramFields");
   const diagramSizeMode = styleValue(style, "diagramSizeMode");
+  // Unlike graduated classification (which needs a value spread, so
+  // isNumericProperty demands several values), a diagram is meaningful with a
+  // single feature; one finite value qualifies an attribute.
   const diagramNumericProperties = vectorStylePropertyOptions.filter(
-    (property) => isNumericProperty(layer, property),
+    (property) =>
+      getPropertyValues(layer, property).some((value) =>
+        Number.isFinite(Number(value)),
+      ),
   );
   const setDiagramFields = (fields: DiagramField[]) =>
     setLayerStyle(layer.id, { diagramFields: fields });

@@ -208,10 +208,12 @@ export function collectDiagramData(
     const values = properties.map((property) => readValue(feature, property));
     const total = values.reduce((sum, value) => sum + value, 0);
     if (total <= 0) continue;
+    // Attribute sizing with no attribute chosen yet falls back to a constant
+    // (full-size diagrams) instead of collapsing everything to the floor.
     const sizeValue =
       sizeMode === "sum"
         ? total
-        : sizeMode === "attribute"
+        : sizeMode === "attribute" && sizeProperty !== ""
           ? readValue(feature, sizeProperty)
           : 1;
     if (sizeValue > maxSizeValue) maxSizeValue = sizeValue;
