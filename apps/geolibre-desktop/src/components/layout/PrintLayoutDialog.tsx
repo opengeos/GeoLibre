@@ -1050,6 +1050,7 @@ export function PrintLayoutDialog({
                     count: data.truncated,
                   })
                 : undefined,
+            truncated: data.truncated,
             position: tablePosition,
           };
         }

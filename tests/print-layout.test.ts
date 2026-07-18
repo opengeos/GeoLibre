@@ -19,8 +19,17 @@ import {
 function recordingCanvas(): {
   canvas: HTMLCanvasElement;
   fills: { text: string; textAlign: string; textBaseline: string }[];
+  fillRects: { w: number; h: number; fillStyle: string }[];
+  arcs: number;
+  polylines: number[];
 } {
   const fills: { text: string; textAlign: string; textBaseline: string }[] = [];
+  // Filled rectangles (swatches, chart bars), with the fill colour in effect.
+  const fillRects: { w: number; h: number; fillStyle: string }[] = [];
+  // Stroked polylines: one entry per beginPath..stroke sequence that used
+  // lineTo, holding the segment count (the line chart's path).
+  const polylines: number[] = [];
+  const counters = { arcs: 0, pendingLines: 0 };
   const state: Record<string, unknown> = {
     textAlign: "start",
     textBaseline: "alphabetic",
@@ -36,8 +45,33 @@ function recordingCanvas(): {
             textBaseline: String(target.textBaseline),
           });
       }
+      if (prop === "fillRect") {
+        return (_x: number, _y: number, w: number, h: number) =>
+          fillRects.push({ w, h, fillStyle: String(target.fillStyle) });
+      }
+      if (prop === "arc") {
+        return () => {
+          counters.arcs += 1;
+        };
+      }
+      if (prop === "beginPath") {
+        return () => {
+          counters.pendingLines = 0;
+        };
+      }
+      if (prop === "lineTo") {
+        return () => {
+          counters.pendingLines += 1;
+        };
+      }
+      if (prop === "stroke") {
+        return () => {
+          if (counters.pendingLines > 0) polylines.push(counters.pendingLines);
+          counters.pendingLines = 0;
+        };
+      }
       if (prop in target) return target[prop as string];
-      // Any other method (save, restore, fillRect, beginPath, clip, ...) is a no-op.
+      // Any other method (save, restore, clip, ...) is a no-op.
       return () => {};
     },
     set(target, prop, value) {
@@ -50,7 +84,15 @@ function recordingCanvas(): {
     height: 400,
     getContext: () => ctx,
   } as unknown as HTMLCanvasElement;
-  return { canvas, fills };
+  return {
+    canvas,
+    fills,
+    fillRects,
+    get arcs() {
+      return counters.arcs;
+    },
+    polylines,
+  };
 }
 
 function baseOptions(overrides: Partial<LayoutOptions> = {}): LayoutOptions {
@@ -501,6 +543,31 @@ describe("drawLayout data blocks (GH #1324)", () => {
     }
   });
 
+  it("drops rows that cannot fit the body height and folds them into the note", () => {
+    const rows = Array.from({ length: 50 }, (_, i) => [`row${i}`]);
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        dataTable: {
+          columns: ["name"],
+          rows,
+          note: "+5 more",
+          truncated: 5,
+          position: "bottom-left",
+        },
+      }),
+    );
+    // 50 rows cannot fit a 400px page body; the tail rows must be dropped...
+    assert.ok(rec.fills.some((f) => f.text === "row0"));
+    assert.ok(!rec.fills.some((f) => f.text === "row49"));
+    // ...and the note must count both the dialog-truncated and height-hidden
+    // rows (so it reads "+N more" with N > the dialog's own 5).
+    const note = rec.fills.find((f) => /^\+\d+ more$/.test(f.text));
+    assert.ok(note, "expected a truncation note to be drawn");
+    assert.ok(Number(note.text.match(/\d+/)?.[0]) > 5);
+  });
+
   it("skips a table with no rows or no columns", () => {
     const { canvas, fills } = recordingCanvas();
     drawLayout(
@@ -516,10 +583,10 @@ describe("drawLayout data blocks (GH #1324)", () => {
     assert.ok(!fills.some((f) => f.text === "name"));
   });
 
-  it("renders bar chart labels and values", () => {
-    const { canvas, fills } = recordingCanvas();
+  it("renders bar chart labels, values, and one bar rect per category", () => {
+    const rec = recordingCanvas();
     drawLayout(
-      canvas,
+      rec.canvas,
       baseOptions({
         dataChart: {
           title: "Population",
@@ -538,16 +605,23 @@ describe("drawLayout data blocks (GH #1324)", () => {
     );
     for (const text of ["Population", "CA", "OR", "12", "4"]) {
       assert.ok(
-        fills.some((f) => f.text === text),
+        rec.fills.some((f) => f.text === text),
         `expected "${text}" to be drawn`,
       );
     }
+    // The bars themselves must be filled in each category's colour, with the
+    // larger value producing the wider rect.
+    const ca = rec.fillRects.find((r) => r.fillStyle === "#111111");
+    const or = rec.fillRects.find((r) => r.fillStyle === "#222222");
+    assert.ok(ca && or, "expected one filled bar rect per category");
+    assert.ok(ca.w > or.w, "expected the larger value to draw a wider bar");
   });
 
-  it("renders pie slice labels with their percentage share", () => {
-    const { canvas, fills } = recordingCanvas();
+  it("renders pie slice labels, percentages, and slice arcs", () => {
+    const rec = recordingCanvas();
+    const before = rec.arcs;
     drawLayout(
-      canvas,
+      rec.canvas,
       baseOptions({
         dataChart: {
           position: "bottom-right",
@@ -562,14 +636,23 @@ describe("drawLayout data blocks (GH #1324)", () => {
         },
       }),
     );
-    assert.ok(fills.some((f) => f.text === "a (75%)"));
-    assert.ok(fills.some((f) => f.text === "b (25%)"));
+    assert.ok(rec.fills.some((f) => f.text === "a (75%)"));
+    assert.ok(rec.fills.some((f) => f.text === "b (25%)"));
+    // One arc per slice plus the outline circle (the north arrow's backing
+    // disc also uses arc, so require at least that many new arcs).
+    assert.ok(
+      rec.arcs - before >= 3,
+      "expected slice arcs and the outline circle to be drawn",
+    );
+    // Slice colours are also used for the legend swatch rects.
+    assert.ok(rec.fillRects.some((r) => r.fillStyle === "#111111"));
+    assert.ok(rec.fillRects.some((r) => r.fillStyle === "#222222"));
   });
 
-  it("renders the line chart's min/max axis labels", () => {
-    const { canvas, fills } = recordingCanvas();
+  it("renders the line chart's axis labels and polyline path", () => {
+    const rec = recordingCanvas();
     drawLayout(
-      canvas,
+      rec.canvas,
       baseOptions({
         dataChart: {
           position: "top-left",
@@ -577,6 +660,7 @@ describe("drawLayout data blocks (GH #1324)", () => {
             kind: "line",
             points: [
               { index: 0, value: 5 },
+              { index: 1, value: 7 },
               { index: 2, value: 9 },
             ],
             min: 5,
@@ -587,7 +671,12 @@ describe("drawLayout data blocks (GH #1324)", () => {
         },
       }),
     );
-    assert.ok(fills.some((f) => f.text === "9" && f.textAlign === "right"));
-    assert.ok(fills.some((f) => f.text === "5" && f.textAlign === "right"));
+    assert.ok(rec.fills.some((f) => f.text === "9" && f.textAlign === "right"));
+    assert.ok(rec.fills.some((f) => f.text === "5" && f.textAlign === "right"));
+    // The path itself: one stroked polyline with a segment per point pair.
+    assert.ok(
+      rec.polylines.includes(2),
+      "expected a stroked 2-segment polyline for the 3 points",
+    );
   });
 });

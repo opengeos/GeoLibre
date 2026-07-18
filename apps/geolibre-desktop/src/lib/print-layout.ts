@@ -319,6 +319,13 @@ export interface LayoutOptions {
      * dialog when the row limit truncated the source rows.
      */
     note?: string;
+    /**
+     * How many source rows the dialog's row limit already dropped. When the
+     * body height forces the renderer to hide further rows, they are added to
+     * this count in an English fallback note replacing {@link note} (the
+     * translated text cannot be recomputed here).
+     */
+    truncated?: number;
     position: BodyCorner;
   } | null;
   /**
@@ -795,18 +802,26 @@ export function drawLayout(
     }
   }
 
-  // --- Legend (bottom-left inside the map) ------------------------------
+  // --- Legend (top-left inside the map) ---------------------------------
   // Clip to the map body so a legend with many layers cannot overflow onto the
   // footer or off the page.
+  let legendHeight = 0;
   if (opts.showLegend && opts.legend.length > 0) {
     ctx.save();
     ctx.beginPath();
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
-    drawLegend(ctx, bodyX + inset, bodyY + inset, opts.legend, unit, {
-      title: opts.legendTitle,
-      groupByLayer: opts.legendGroupByLayer,
-    });
+    legendHeight = drawLegend(
+      ctx,
+      bodyX + inset,
+      bodyY + inset,
+      opts.legend,
+      unit,
+      {
+        title: opts.legendTitle,
+        groupByLayer: opts.legendGroupByLayer,
+      },
+    );
     ctx.restore();
   }
 
@@ -816,13 +831,15 @@ export function drawLayout(
   // The ledger tracks the vertical space already claimed per corner; the info
   // block still owns the bottom-right, so panels aimed there relocate to the
   // top-right first (the original colorbar rule, GH #522).
+  const stackGap = unit * 1.2;
   const cornerUsed: Record<BodyCorner, number> = {
-    "top-left": 0,
+    // The layer-derived legend always occupies the top-left corner when shown;
+    // seed the ledger so a panel aimed there stacks below it.
+    "top-left": legendHeight > 0 ? legendHeight + stackGap : 0,
     "top-right": 0,
     "bottom-left": 0,
     "bottom-right": 0,
   };
-  const stackGap = unit * 1.2;
   const resolveCorner = (position: BodyCorner): BodyCorner =>
     hasInfoBlock && position === "bottom-right" ? "top-right" : position;
   const drawCornerPanel = (
@@ -1522,7 +1539,26 @@ function drawDataTable(
   const inset = unit * 2; // matches the info block/legend corner inset
   const title = (table.title ?? "").trim();
   const hasTitle = title.length > 0;
-  const note = (table.note ?? "").trim();
+  const titleBlockH = hasTitle ? titleSize + unit : 0;
+
+  // Fit the rows to the body height remaining below/above the stack offset:
+  // a 50-row table on a small page would otherwise clip its title or note
+  // away silently. Rows hidden here join the dialog's own truncation count in
+  // a fallback note (the dialog's translated note text cannot be recomputed).
+  const availH = bodyH - inset * 2 - stackOffset;
+  const chromeH = pad * 2 + titleBlockH + rowH; // padding + title + header row
+  const fitWithoutNote = Math.floor((availH - chromeH) / rowH);
+  let rows = table.rows;
+  let hiddenByHeight = 0;
+  if (rows.length > fitWithoutNote) {
+    const fitWithNote = Math.max(1, fitWithoutNote - 1);
+    rows = rows.slice(0, fitWithNote);
+    hiddenByHeight = table.rows.length - rows.length;
+  }
+  const note =
+    hiddenByHeight > 0
+      ? `+${hiddenByHeight + (table.truncated ?? 0)} more`
+      : (table.note ?? "").trim();
   const hasNote = note.length > 0;
 
   ctx.save();
@@ -1532,7 +1568,7 @@ function drawDataTable(
     ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
     let w = ctx.measureText(header).width;
     ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
-    for (const row of table.rows) {
+    for (const row of rows) {
       w = Math.max(w, ctx.measureText(row[i] ?? "").width);
     }
     return Math.min(w, maxColW);
@@ -1550,13 +1586,9 @@ function drawDataTable(
   ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
   const titleW = hasTitle ? ctx.measureText(title).width : 0;
 
-  const titleBlock = hasTitle ? titleSize + unit : 0;
   const boxW = pad * 2 + Math.max(contentW, Math.min(titleW, availW));
   const boxH =
-    pad * 2 +
-    titleBlock +
-    (1 + table.rows.length) * rowH +
-    (hasNote ? rowH : 0);
+    pad * 2 + titleBlockH + (1 + rows.length) * rowH + (hasNote ? rowH : 0);
   const { x, y } = panelOrigin(
     table.position,
     bodyX,
@@ -1605,7 +1637,7 @@ function drawDataTable(
 
   ctx.fillStyle = INK;
   ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
-  for (const row of table.rows) {
+  for (const row of rows) {
     cy += rowH;
     cx = x + pad;
     table.columns.forEach((_, i) => {
@@ -1866,7 +1898,11 @@ function drawDataChart(
   return boxH;
 }
 
-/** Draw a legend box anchored at its top-left corner. */
+/**
+ * Draw a legend box anchored at its top-left corner.
+ *
+ * @returns The drawn box's height, so corner panels can stack below it.
+ */
 function drawLegend(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -1874,7 +1910,7 @@ function drawLegend(
   entries: LegendEntry[],
   unit: number,
   opts: { title: string; groupByLayer: boolean },
-): void {
+): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.6;
   const swatch = unit * 2;
@@ -1957,6 +1993,7 @@ function drawLegend(
     ctx.fillText(r.text, textX, cy);
   }
   ctx.restore();
+  return boxH;
 }
 
 function roundRect(

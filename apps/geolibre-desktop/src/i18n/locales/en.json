@@ -1114,7 +1114,7 @@
     },
     "dataTable": {
       "columns": "Columns",
-      "columnsHint": "Leave all unchecked to show the layer's first {{count}} fields.",
+      "columnsHint": "The first {{count}} fields are selected by default. Check columns to customize.",
       "maxRows": "Max rows",
       "moreRows_one": "+{{count}} more",
       "moreRows_other": "+{{count}} more",
