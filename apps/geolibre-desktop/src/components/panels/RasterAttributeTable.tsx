@@ -40,6 +40,7 @@ import {
   seedRatRows,
 } from "../../lib/raster-attribute-table";
 import { canExportRasterLayer, rasterExportUrl } from "../../lib/raster-export";
+import { fetchableUrl } from "../../lib/url-utils";
 import {
   PANEL_RESIZE_END_EVENT,
   PANEL_RESIZE_START_EVENT,
@@ -87,8 +88,10 @@ async function fetchGdalRat(
   band: number,
   signal: AbortSignal,
 ): Promise<GdalRatEntry[] | null> {
-  const url = layer.source?.url;
-  if (typeof url !== "string" || !/^https?:\/\//.test(url)) return null;
+  // Resolve through fetchableUrl like the census does, so wrapped URL schemes
+  // (e.g. cog://https://…) also get their sidecar probed.
+  const url = fetchableUrl(layer.source?.url);
+  if (!url || !/^https?:\/\//.test(url)) return null;
   const auxUrl = gdalAuxXmlUrl(url);
   if (!auxUrl) return null;
   try {
@@ -335,10 +338,17 @@ export function RasterAttributeTable({
     if (!current?.classified || current.method !== "manual" || !applied) {
       return false;
     }
+    // Both the edges AND the colors must match what this table produced: if
+    // the user re-colored the classes from the style panel (same breaks,
+    // different ramp), a table color edit must not silently overwrite that
+    // choice — Apply symbology remains the explicit way to retake ownership.
     const breaks = applied.symbology.breaks;
+    const colors = applied.symbology.customColors ?? [];
     return (
       current.breaks.length === breaks.length &&
-      current.breaks.every((edge, i) => edge === breaks[i])
+      current.breaks.every((edge, i) => edge === breaks[i]) &&
+      current.customColors?.length === colors.length &&
+      current.customColors.every((color, i) => color === colors[i])
     );
   }
 
@@ -651,8 +661,19 @@ export function RasterAttributeTable({
           variant="default"
           size="sm"
           className="h-7 px-2"
-          disabled={!record || rows.length === 0 || computing}
-          title={t("rasterAttributeTable.applyTitle")}
+          disabled={
+            !record ||
+            rows.length === 0 ||
+            rows.length > MAX_RAT_SYMBOLOGY_CLASSES ||
+            computing
+          }
+          title={
+            rows.length > MAX_RAT_SYMBOLOGY_CLASSES
+              ? t("rasterAttributeTable.tooManyClasses", {
+                  max: MAX_RAT_SYMBOLOGY_CLASSES,
+                })
+              : t("rasterAttributeTable.applyTitle")
+          }
           onClick={applySymbology}
         >
           <Paintbrush className="h-3.5 w-3.5" />
