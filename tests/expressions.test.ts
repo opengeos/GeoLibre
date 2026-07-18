@@ -105,6 +105,29 @@ describe("validateMapExpression", () => {
     assert.equal(validateMapExpression("[1, 2]").code, "not-operator");
   });
 
+  it("substitutes variables before type-checking", () => {
+    const source = '["+", ["get", "pop"], "@feature_count"]';
+    assert.equal(validateMapExpression(source).ok, false);
+    assert.equal(validateMapExpression(source, { variables }).ok, true);
+  });
+
+  it("enforces an expected result type when given", () => {
+    const filter = { expectedType: "boolean" as const };
+    assert.equal(
+      validateMapExpression('["==", ["get", "a"], 1]', filter).ok,
+      true,
+    );
+    const wrong = validateMapExpression('["concat", "a", "b"]', filter);
+    assert.equal(wrong.ok, false);
+    assert.equal(wrong.code, "compile");
+    assert.equal(
+      validateMapExpression('["concat", "#ff", "0000"]', {
+        expectedType: "color",
+      }).ok,
+      true,
+    );
+  });
+
   it("catches operator misuse the JSON shape checks miss", () => {
     const unknown = validateMapExpression('["frobnicate", 1]');
     assert.equal(unknown.ok, false);
@@ -166,6 +189,22 @@ describe("evaluateMapExpression", () => {
 
   it("returns empty for a blank source", () => {
     assert.equal(evaluateMapExpression("  ").kind, "empty");
+  });
+
+  it("coerces to the expected type when one is given", () => {
+    const preview = evaluateMapExpression('["get", "color"]', {
+      feature: {
+        type: "Feature",
+        properties: { color: "#ff0000" },
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+      expectedType: "color",
+    });
+    assert.equal(preview.kind, "value");
+    assert.equal(
+      formatExpressionPreviewValue(preview.value),
+      "rgba(255, 0, 0, 1)",
+    );
   });
 });
 

@@ -189,6 +189,36 @@ export function removeTrailingJsonCommas(value: string): string {
   return result;
 }
 
+/** Result types the builder can require of a whole expression. */
+export type ExpressionExpectedType = "boolean" | "color" | "string" | "number";
+
+/** Options for {@link validateMapExpression}. */
+export interface ValidateMapExpressionOptions {
+  /**
+   * Variables substituted before compiling, so a numeric `@token` used in a
+   * numeric slot type-checks against its value instead of the raw string.
+   */
+  variables?: ExpressionVariable[];
+  /**
+   * When set, the style spec type-checks the expression's result against
+   * this type (e.g. a filter must produce a boolean), rejecting expressions
+   * that compile but cannot fit the destination.
+   */
+  expectedType?: ExpressionExpectedType;
+}
+
+/**
+ * Builds the minimal property spec that makes `createExpression` enforce a
+ * result type while still allowing zoom- and feature-dependent input.
+ */
+function propertySpecFor(expectedType: ExpressionExpectedType) {
+  return {
+    type: expectedType,
+    "property-type": "data-driven",
+    expression: { parameters: ["zoom", "feature"] },
+  } as unknown as Parameters<typeof createExpression>[1];
+}
+
 /** Outcome of validating an expression source string. */
 export interface ExpressionValidation {
   ok: boolean;
@@ -208,10 +238,16 @@ export interface ExpressionValidation {
  * Validates a user-entered MapLibre expression: tolerant JSON parse, shape
  * checks, then a real compile through the MapLibre style spec so operator
  * misuse (wrong arity, unknown operator, type mismatch) is caught in the
- * dialog instead of silently failing on the map. An empty/blank source is
- * valid (surfaces treat it as "no expression").
+ * dialog instead of silently failing on the map. Variables are substituted
+ * before compiling (so tokens type-check as their values), and
+ * `expectedType` additionally enforces the destination's result type. The
+ * returned `parsed` array is the raw, unsubstituted parse. An empty/blank
+ * source is valid (surfaces treat it as "no expression").
  */
-export function validateMapExpression(source: string): ExpressionValidation {
+export function validateMapExpression(
+  source: string,
+  options: ValidateMapExpressionOptions = {},
+): ExpressionValidation {
   const trimmed = source.trim();
   if (!trimmed) return { ok: true, errors: [] };
 
@@ -232,7 +268,14 @@ export function validateMapExpression(source: string): ExpressionValidation {
     return { ok: false, code: "not-operator", errors: [], parsed };
   }
 
-  const compiled = createExpression(parsed);
+  const substituted = substituteExpressionVariables(
+    parsed,
+    options.variables ?? [],
+  ) as unknown[];
+  const compiled = createExpression(
+    substituted,
+    options.expectedType ? propertySpecFor(options.expectedType) : undefined,
+  );
   if (compiled.result === "error") {
     return {
       ok: false,
@@ -308,6 +351,8 @@ export interface EvaluateMapExpressionOptions {
   zoom?: number;
   /** Variables substituted before compiling. */
   variables?: ExpressionVariable[];
+  /** Enforce the destination's result type, as in validation. */
+  expectedType?: ExpressionExpectedType;
 }
 
 /**
@@ -324,7 +369,10 @@ export function evaluateMapExpression(
   const trimmed = source.trim();
   if (!trimmed) return { kind: "empty" };
 
-  const validation = validateMapExpression(trimmed);
+  const validation = validateMapExpression(trimmed, {
+    variables: options.variables,
+    expectedType: options.expectedType,
+  });
   if (!validation.ok || !validation.parsed) {
     return { kind: "error", errors: validation.errors };
   }
@@ -333,7 +381,10 @@ export function evaluateMapExpression(
     validation.parsed,
     options.variables ?? [],
   );
-  const compiled = createExpression(substituted as unknown[]);
+  const compiled = createExpression(
+    substituted as unknown[],
+    options.expectedType ? propertySpecFor(options.expectedType) : undefined,
+  );
   if (compiled.result === "error") {
     return {
       kind: "error",

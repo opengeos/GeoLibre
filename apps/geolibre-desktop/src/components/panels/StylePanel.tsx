@@ -1259,13 +1259,20 @@ export function StylePanel({
   const [vectorStyleError, setVectorStyleError] = useState<string | null>(null);
   const [extrusionError, setExtrusionError] = useState<string | null>(null);
   // Which expression surface the shared Expression Builder is editing; null
-  // when the builder is closed (GH #1306).
+  // when the builder is closed. Targets carry the owning layer id so an edit
+  // can never be applied to a different layer than the one it was opened for
+  // (GH #1306).
   const [expressionBuilderTarget, setExpressionBuilderTarget] = useState<
-    | { kind: "rule"; ruleId: string; index: number }
-    | { kind: "style" }
-    | { kind: "label" }
+    | { kind: "rule"; ruleId: string; index: number; layerId: string }
+    | { kind: "style"; layerId: string }
+    | { kind: "label"; layerId: string }
     | null
   >(null);
+  // Close the builder when the selected layer changes: its fields, sample
+  // features, and target expression all belong to the previous layer.
+  useEffect(() => {
+    setExpressionBuilderTarget(null);
+  }, [selectedLayerId]);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
 
@@ -2084,6 +2091,10 @@ export function StylePanel({
         : t("style.labels.expression");
   const applyBuilderExpression = (expression: string) => {
     if (!expressionBuilderTarget) return;
+    // Never write through to a different layer than the builder was opened
+    // for (the selection-change effect closes the dialog, this is the guard
+    // against applying across a race).
+    if (expressionBuilderTarget.layerId !== layer.id) return;
     if (expressionBuilderTarget.kind === "rule") {
       updateVectorRule(expressionBuilderTarget.ruleId, { filter: expression });
     } else if (expressionBuilderTarget.kind === "style") {
@@ -2093,14 +2104,23 @@ export function StylePanel({
       updateLabels({ expression });
     }
   };
-  const expressionBuilderDialog = (
+  // Only mounted while open: the dialog memoizes validation/preview work off
+  // props that this panel recreates each render, so keeping it mounted would
+  // rescan the layer's features on every unrelated panel re-render.
+  const expressionBuilderDialog = expressionBuilderTarget ? (
     <ExpressionBuilderDialog
-      open={expressionBuilderTarget !== null}
+      open
       onOpenChange={(nextOpen) => {
         if (!nextOpen) setExpressionBuilderTarget(null);
       }}
       targetLabel={builderTargetLabel}
-      context={expressionBuilderTarget?.kind === "rule" ? "filter" : "value"}
+      context={
+        expressionBuilderTarget.kind === "rule"
+          ? "filter"
+          : expressionBuilderTarget.kind === "style"
+            ? "color"
+            : "value"
+      }
       initialExpression={builderInitialExpression}
       features={builderFeatures}
       fieldNames={getAttributePropertyNames(layer)}
@@ -2108,7 +2128,7 @@ export function StylePanel({
       variables={builderVariables}
       onApply={applyBuilderExpression}
     />
-  );
+  ) : null;
 
   // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
   // geometryFlags is memoized above the early returns.
@@ -2346,7 +2366,9 @@ export function StylePanel({
               className="h-7 w-7"
               title={t("style.expressionBuilder.openBuilder")}
               aria-label={t("style.expressionBuilder.openBuilder")}
-              onClick={() => setExpressionBuilderTarget({ kind: "style" })}
+              onClick={() =>
+                setExpressionBuilderTarget({ kind: "style", layerId: layer.id })
+              }
             >
               <SquareFunction className="h-3.5 w-3.5" />
             </Button>
@@ -2482,6 +2504,7 @@ export function StylePanel({
                       kind: "rule",
                       ruleId: rule.id,
                       index: index + 1,
+                      layerId: layer.id,
                     })
                   }
                 >
@@ -3466,7 +3489,9 @@ export function StylePanel({
                 className="h-7 w-7"
                 title={t("style.expressionBuilder.openBuilder")}
                 aria-label={t("style.expressionBuilder.openBuilder")}
-                onClick={() => setExpressionBuilderTarget({ kind: "label" })}
+                onClick={() =>
+                  setExpressionBuilderTarget({ kind: "label", layerId: layer.id })
+                }
               >
                 <SquareFunction className="h-3.5 w-3.5" />
               </Button>

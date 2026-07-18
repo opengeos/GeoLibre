@@ -2,7 +2,6 @@ import {
   EXPRESSION_FUNCTION_CATEGORIES,
   type ExpressionVariable,
   evaluateMapExpression,
-  expressionUsesVariables,
   formatExpressionPreviewValue,
   inferFieldTypes,
   substituteExpressionVariables,
@@ -34,10 +33,11 @@ export interface ExpressionBuilderDialogProps {
    */
   targetLabel: string;
   /**
-   * "filter" surfaces a matches / does-not-match preview (rule filters);
-   * "value" shows the evaluated value (colors, labels).
+   * "filter" surfaces a matches / does-not-match preview and requires a
+   * boolean result (rule filters); "color" requires a color result (style
+   * expressions); "value" shows the evaluated value untyped (labels).
    */
-  context: "filter" | "value";
+  context: "filter" | "color" | "value";
   initialExpression: string;
   /** The active layer's features; drive the field list and the live preview. */
   features: Feature[];
@@ -95,7 +95,15 @@ export function ExpressionBuilderDialog({
     }
   }, [open, initialExpression]);
 
-  const validation = useMemo(() => validateMapExpression(source), [source]);
+  // The destination's required result type: filters must produce booleans and
+  // style expressions colors; label expressions stay untyped (MapLibre
+  // coerces text-field values).
+  const expectedType =
+    context === "filter" ? "boolean" : context === "color" ? "color" : undefined;
+  const validation = useMemo(
+    () => validateMapExpression(source, { variables, expectedType }),
+    [source, variables, expectedType],
+  );
   const sampleFeature =
     features.length > 0 ? features[Math.min(sampleIndex, features.length - 1)] : null;
   const preview = useMemo(
@@ -104,8 +112,9 @@ export function ExpressionBuilderDialog({
         feature: sampleFeature,
         zoom,
         variables,
+        expectedType,
       }),
-    [source, sampleFeature, zoom, variables],
+    [source, sampleFeature, zoom, variables, expectedType],
   );
   const fieldTypes = useMemo(
     () => inferFieldTypes(features, fieldNames),
@@ -160,19 +169,15 @@ export function ExpressionBuilderDialog({
   }, [validation, targetLabel, t]);
 
   const handleApply = () => {
-    const trimmed = source.trim();
-    let applied = trimmed;
-    // Variables are compile-time: resolve them into the stored expression so
-    // the map render path (which knows nothing about @ tokens) works as-is.
-    if (
-      validation.ok &&
-      validation.parsed &&
-      expressionUsesVariables(trimmed, variables)
-    ) {
-      applied = JSON.stringify(
-        substituteExpressionVariables(validation.parsed, variables),
-      );
-    }
+    // Always re-serialize the parsed expression: variables are compile-time
+    // (the map render path knows nothing about @ tokens), and normalizing
+    // also strips tolerated trailing commas that stricter downstream parsers
+    // (e.g. the label expression check) would reject.
+    const applied = validation.parsed
+      ? JSON.stringify(
+          substituteExpressionVariables(validation.parsed, variables),
+        )
+      : "";
     onApply(applied);
     onOpenChange(false);
   };
@@ -213,7 +218,8 @@ export function ExpressionBuilderDialog({
       typeof value === "object" &&
       "r" in value &&
       "g" in value &&
-      "b" in value;
+      "b" in value &&
+      "a" in value;
     const display = formatExpressionPreviewValue(value);
     return (
       <p className="flex items-center gap-2 break-all font-mono text-xs">
