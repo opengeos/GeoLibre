@@ -2576,6 +2576,7 @@
     "moveLeft": "Pindahkan ke kiri",
     "moveRight": "Pindahkan ke kanan",
     "deleteField": "Hapus bidang",
+    "joinedColumnTitle": "Kolom gabungan, diturunkan dari tabel gabungan. Edit tabel atau definisi gabungan sebagai gantinya.",
     "deleteFieldConfirm": "Ini menghapus bidang \"{{field}}\" secara permanen dari setiap fitur di \"{{layer}}\". Penataan gaya atau label yang mengacu padanya akan dihapus. Ini tidak dapat dibatalkan.",
     "addFieldDescription": "Tambahkan bidang baru ke setiap fitur di \"{{layer}}\".",
     "fieldName": "Nama bidang",

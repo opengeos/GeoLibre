@@ -2681,6 +2681,7 @@
     "moveLeft": "左移",
     "moveRight": "右移",
     "deleteField": "删除字段",
+    "joinedColumnTitle": "连接列，由连接表格派生。请改为编辑连接表格或连接定义。",
     "deleteFieldConfirm": "此操作会从“{{layer}}”中的每个要素永久删除字段“{{field}}”。引用该字段的样式或标签将被清除。此操作无法撤销。",
     "addFieldDescription": "为“{{layer}}”中的每个要素添加一个新字段。",
     "fieldName": "字段名称",

@@ -2576,6 +2576,7 @@
     "moveLeft": "왼쪽으로 이동",
     "moveRight": "오른쪽으로 이동",
     "deleteField": "필드 삭제",
+    "joinedColumnTitle": "조인 테이블에서 파생된 조인 열입니다. 대신 조인 테이블이나 조인 정의를 편집하세요.",
     "deleteFieldConfirm": "이 작업은 \"{{layer}}\"의 모든 피처에서 필드 \"{{field}}\"를 영구적으로 제거합니다. 이를 참조하는 스타일이나 라벨은 지워집니다. 이 작업은 되돌릴 수 없습니다.",
     "addFieldDescription": "\"{{layer}}\"의 모든 피처에 새 필드를 추가합니다.",
     "fieldName": "필드 이름",

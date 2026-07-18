@@ -3070,6 +3070,7 @@
     "moveLeft": "Move left",
     "moveRight": "Move right",
     "deleteField": "Delete field",
+    "joinedColumnTitle": "Joined column, derived from a join table. Edit the join table or the join definition instead.",
     "deleteFieldConfirm": "This permanently removes the field \"{{field}}\" from every feature in \"{{layer}}\". Styling or labels that reference it will be cleared. This cannot be undone.",
     "addFieldDescription": "Add a new field to every feature in \"{{layer}}\".",
     "fieldName": "Field name",

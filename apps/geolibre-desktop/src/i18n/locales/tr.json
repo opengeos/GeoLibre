@@ -2620,6 +2620,7 @@
     "moveLeft": "Sola taşı",
     "moveRight": "Sağa taşı",
     "deleteField": "Alanı sil",
+    "joinedColumnTitle": "Birleştirme tablosundan türetilen birleştirilmiş sütun. Bunun yerine tabloyu veya birleştirme tanımını düzenleyin.",
     "deleteFieldConfirm": "Bu işlem, \"{{field}}\" alanını \"{{layer}}\" katmanındaki her öğeden kalıcı olarak kaldırır. Buna başvuran stil veya etiketler temizlenir. Bu işlem geri alınamaz.",
     "addFieldDescription": "\"{{layer}}\" katmanındaki her öğeye yeni bir alan ekleyin.",
     "fieldName": "Alan adı",

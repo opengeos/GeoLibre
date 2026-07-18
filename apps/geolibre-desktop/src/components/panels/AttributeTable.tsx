@@ -357,6 +357,16 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
+  // Columns materialized by persistent joins are derived data: every save
+  // re-derives them from the join table, so an edit, rename, or delete here
+  // would be silently undone. Render them read-only instead.
+  const joinDerivedColumns = useMemo(
+    () =>
+      new Set(
+        (layer?.joins ?? []).flatMap((join) => join.addedFields ?? []),
+      ),
+    [layer?.joins],
+  );
   const features = layer?.geojson?.features ?? [];
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
   const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
@@ -1274,7 +1284,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => beginColumnRename(col)}>
+            <DropdownMenuItem
+              disabled={joinDerivedColumns.has(col)}
+              onSelect={() => beginColumnRename(col)}
+            >
               <Pencil className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.renameField")}
             </DropdownMenuItem>
@@ -1299,6 +1312,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
+              disabled={joinDerivedColumns.has(col)}
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="me-2 h-3.5 w-3.5" />
@@ -1769,8 +1783,13 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             key={col}
                             data-state={changed ? "edited" : undefined}
                             className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                            title={
+                              joinDerivedColumns.has(col)
+                                ? t("attributeTable.joinedColumnTitle")
+                                : undefined
+                            }
                           >
-                            {isEditing ? (
+                            {isEditing && !joinDerivedColumns.has(col) ? (
                               <Input
                                 className={inputClassName}
                                 aria-invalid={invalid || undefined}

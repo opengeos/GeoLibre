@@ -2620,6 +2620,7 @@
     "moveLeft": "Nach links verschieben",
     "moveRight": "Nach rechts verschieben",
     "deleteField": "Feld löschen",
+    "joinedColumnTitle": "Verknüpfte Spalte, abgeleitet aus einer Verknüpfungstabelle. Bearbeiten Sie stattdessen die Tabelle oder die Verknüpfungsdefinition.",
     "deleteFieldConfirm": "Dadurch wird das Feld „{{field}}“ dauerhaft aus jedem Objekt in „{{layer}}“ entfernt. Darauf verweisende Stile oder Beschriftungen werden gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "addFieldDescription": "Fügen Sie jedem Objekt in „{{layer}}“ ein neues Feld hinzu.",
     "fieldName": "Feldname",

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import {
+  type GeoLibreLayer,
   type GeoLibreProject,
   type LayerJoin,
   applyLayerJoins,
   applyJoinsToLayer,
+  collectTransitiveJoinSourceIds,
   layerJoinKey,
   reapplyLayerJoins,
   stripJoinFields,
@@ -428,5 +430,78 @@ describe("store integration", () => {
     const layers = useAppStore.getState().layers;
     assert.equal(reapplyLayerJoins(layers), layers);
     void targetId;
+  });
+});
+
+function bareLayer(
+  id: string,
+  properties: Record<string, unknown>,
+  joins?: LayerJoin[],
+): GeoLibreLayer {
+  return {
+    id,
+    name: id,
+    type: "geojson",
+    source: { type: "geojson" },
+    visible: true,
+    opacity: 1,
+    style: {},
+    metadata: {},
+    geojson: collection([pointFeature(properties)]),
+    ...(joins ? { joins } : {}),
+  };
+}
+
+describe("join dependency graphs", () => {
+  it("collectTransitiveJoinSourceIds follows chains and includes disabled joins", () => {
+    const layers = [
+      bareLayer("a", { k: 1 }, [
+        { id: "j", joinLayerId: "b", targetField: "k", joinField: "k" },
+      ]),
+      bareLayer("b", { k: 1 }, [
+        {
+          id: "j",
+          joinLayerId: "c",
+          targetField: "k",
+          joinField: "k",
+          enabled: false,
+        },
+      ]),
+      bareLayer("c", { k: 1 }),
+    ];
+    const sources = collectTransitiveJoinSourceIds(layers, "a");
+    assert.ok(sources.has("b"));
+    assert.ok(sources.has("c"));
+    assert.equal(sources.has("a"), false);
+  });
+
+  it("reapplyLayerJoins orders consumers downstream of a cycle after its members", () => {
+    // A <-> B form a hand-edited cycle; C consumes A's pulled-through column.
+    // C sits first in array order, so a naive fallback would refresh it
+    // against A's stale saved output (bval = 1) instead of the fresh 2.
+    const cycleJoin = (
+      id: string,
+      joinLayerId: string,
+      field: string,
+    ): LayerJoin => ({
+      id,
+      joinLayerId,
+      targetField: "k",
+      joinField: "k",
+      fields: [field],
+      addedFields: [field],
+    });
+    const layers = [
+      bareLayer("c", { k: "x", bval: 1 }, [cycleJoin("ca", "a", "bval")]),
+      bareLayer("a", { k: "x", aval: 10, bval: 1 }, [
+        cycleJoin("ab", "b", "bval"),
+      ]),
+      bareLayer("b", { k: "x", bval: 2, aval: 10 }, [
+        cycleJoin("ba", "a", "aval"),
+      ]),
+    ];
+    const result = reapplyLayerJoins(layers);
+    const c = result.find((layer) => layer.id === "c");
+    assert.equal(c?.geojson?.features[0].properties?.bval, 2);
   });
 });

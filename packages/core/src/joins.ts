@@ -271,6 +271,33 @@ export function applyJoinsToLayer(
 }
 
 /**
+ * Ids of every layer whose data (directly or transitively) feeds `layerId`'s
+ * joins, following `joinLayerId` edges through each source's own joins.
+ * Disabled joins count too: re-enabling one must not spring a cycle. The Joins
+ * UI uses this to keep a layer that already consumes the target — however
+ * indirectly — out of the join-source picker, so circular joins cannot be
+ * authored (the refresh cascade still breaks them defensively for hand-edited
+ * projects).
+ */
+export function collectTransitiveJoinSourceIds(
+  layers: GeoLibreLayer[],
+  layerId: string,
+): Set<string> {
+  const byId = new Map(layers.map((layer) => [layer.id, layer]));
+  const visited = new Set<string>();
+  const queue = [layerId];
+  while (queue.length > 0) {
+    const current = byId.get(queue.shift() as string);
+    for (const join of current?.joins ?? []) {
+      if (visited.has(join.joinLayerId)) continue;
+      visited.add(join.joinLayerId);
+      queue.push(join.joinLayerId);
+    }
+  }
+  return visited;
+}
+
+/**
  * Refresh every layer whose joins (directly or transitively) consume the
  * layer identified by `seedId`, after that layer's materialized data changed.
  * Chains re-derive in dependency order (`C joins A, A joins B`: updating B
@@ -320,6 +347,7 @@ export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
   const joinedIds = new Set(joined.map((layer) => layer.id));
   const indegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
+  const sourcesOf = new Map<string, string[]>();
   for (const layer of joined) indegree.set(layer.id, 0);
   for (const layer of joined) {
     for (const join of layer.joins ?? []) {
@@ -334,25 +362,48 @@ export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
       const list = dependents.get(join.joinLayerId) ?? [];
       list.push(layer.id);
       dependents.set(join.joinLayerId, list);
+      const sources = sourcesOf.get(layer.id) ?? [];
+      sources.push(join.joinLayerId);
+      sourcesOf.set(layer.id, sources);
     }
   }
   const order: string[] = [];
+  const orderedSet = new Set<string>();
   const queue = joined
     .filter((layer) => indegree.get(layer.id) === 0)
     .map((layer) => layer.id);
-  while (queue.length > 0) {
+  while (order.length < joined.length) {
+    if (queue.length === 0) {
+      // A cycle blocks progress. Force an actual cycle member through — not
+      // just any unordered layer, or a consumer *downstream* of the cycle
+      // could run before it and keep stale columns. Every unordered layer has
+      // at least one unordered source, so walking unmet-source edges from any
+      // unordered layer must revisit a node, and that node sits on a cycle.
+      // Forcing it decrements its edges normally, so downstream layers still
+      // order after it.
+      const start = joined.find((layer) => !orderedSet.has(layer.id));
+      if (!start) break;
+      let cursor = start.id;
+      const walked = new Set<string>();
+      while (!walked.has(cursor)) {
+        walked.add(cursor);
+        const next = (sourcesOf.get(cursor) ?? []).find(
+          (source) => !orderedSet.has(source),
+        );
+        if (next === undefined) break;
+        cursor = next;
+      }
+      queue.push(cursor);
+    }
     const id = queue.shift() as string;
+    if (orderedSet.has(id)) continue;
+    orderedSet.add(id);
     order.push(id);
     for (const dependent of dependents.get(id) ?? []) {
       const remaining = (indegree.get(dependent) ?? 1) - 1;
       indegree.set(dependent, remaining);
-      if (remaining === 0) queue.push(dependent);
+      if (remaining === 0 && !orderedSet.has(dependent)) queue.push(dependent);
     }
-  }
-  // Cycle members never reach indegree 0; append them in array order.
-  const ordered = new Set(order);
-  for (const layer of joined) {
-    if (!ordered.has(layer.id)) order.push(layer.id);
   }
 
   let current = layers;

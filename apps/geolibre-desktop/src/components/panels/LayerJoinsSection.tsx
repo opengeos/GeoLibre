@@ -1,4 +1,5 @@
 import {
+  collectTransitiveJoinSourceIds,
   type GeoLibreLayer,
   type LayerJoin,
   useAppStore,
@@ -35,13 +36,15 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
   const joins = useMemo(() => layer.joins ?? [], [layer.joins]);
 
   // Any other layer with attribute rows can serve as the join table; its
-  // geometry (if any) is ignored.
+  // geometry (if any) is ignored. A layer whose own joins already consume this
+  // one (however indirectly) is excluded so a circular join cannot be authored.
   const candidateLayers = useMemo(
     () =>
       layers.filter(
         (candidate) =>
           candidate.id !== layer.id &&
-          (candidate.geojson?.features?.length ?? 0) > 0,
+          (candidate.geojson?.features?.length ?? 0) > 0 &&
+          !collectTransitiveJoinSourceIds(layers, candidate.id).has(layer.id),
       ),
     [layers, layer.id],
   );

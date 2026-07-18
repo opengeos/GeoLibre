@@ -2620,6 +2620,7 @@
     "moveLeft": "Mover para a esquerda",
     "moveRight": "Mover para a direita",
     "deleteField": "Excluir campo",
+    "joinedColumnTitle": "Coluna unida, derivada de uma tabela de junção. Edite a tabela ou a definição da junção em vez disso.",
     "deleteFieldConfirm": "Isso remove permanentemente o campo \"{{field}}\" de todas as feições em \"{{layer}}\". O estilo ou os rótulos que fazem referência a ele serão apagados. Isso não pode ser desfeito.",
     "addFieldDescription": "Adicione um novo campo a todas as feições em \"{{layer}}\".",
     "fieldName": "Nome do campo",

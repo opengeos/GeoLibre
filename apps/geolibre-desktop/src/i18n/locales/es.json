@@ -2620,6 +2620,7 @@
     "moveLeft": "Mover a la izquierda",
     "moveRight": "Mover a la derecha",
     "deleteField": "Eliminar campo",
+    "joinedColumnTitle": "Columna unida, derivada de una tabla de unión. Edita la tabla o la definición de la unión en su lugar.",
     "deleteFieldConfirm": "Esto elimina permanentemente el campo \"{{field}}\" de todas las entidades de \"{{layer}}\". El estilo o las etiquetas que lo referencian se borrarán. Esto no se puede deshacer.",
     "addFieldDescription": "Añada un nuevo campo a todas las entidades de \"{{layer}}\".",
     "fieldName": "Nombre del campo",

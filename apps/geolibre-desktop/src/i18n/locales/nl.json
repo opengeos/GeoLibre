@@ -2620,6 +2620,7 @@
     "moveLeft": "Naar links verplaatsen",
     "moveRight": "Naar rechts verplaatsen",
     "deleteField": "Veld verwijderen",
+    "joinedColumnTitle": "Gekoppelde kolom, afgeleid uit een koppelingstabel. Bewerk in plaats daarvan de tabel of de koppelingsdefinitie.",
     "deleteFieldConfirm": "Hiermee wordt het veld \"{{field}}\" permanent verwijderd uit elk object in \"{{layer}}\". Stijlen of labels die ernaar verwijzen, worden gewist. Dit kan niet ongedaan worden gemaakt.",
     "addFieldDescription": "Voeg een nieuw veld toe aan elk object in \"{{layer}}\".",
     "fieldName": "Veldnaam",

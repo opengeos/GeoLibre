@@ -2620,6 +2620,7 @@
     "moveLeft": "Déplacer à gauche",
     "moveRight": "Déplacer à droite",
     "deleteField": "Supprimer le champ",
+    "joinedColumnTitle": "Colonne jointe, dérivée d'une table de jointure. Modifiez plutôt la table ou la définition de la jointure.",
     "deleteFieldConfirm": "Cela supprime définitivement le champ « {{field}} » de toutes les entités de « {{layer}} ». Le style ou les étiquettes qui le référencent seront effacés. Cette action est irréversible.",
     "addFieldDescription": "Ajoutez un nouveau champ à toutes les entités de « {{layer}} ».",
     "fieldName": "Nom du champ",
