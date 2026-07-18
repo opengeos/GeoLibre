@@ -37,6 +37,7 @@
 *.geojson.gz binary
 *.pbf binary
 *.pmtiles binary
+*.nc binary
 *.snap binary
 *.deb  binary
 *.rpm  binary
