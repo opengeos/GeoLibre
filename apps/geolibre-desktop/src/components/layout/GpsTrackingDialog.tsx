@@ -323,15 +323,26 @@ export function GpsTrackingDialog({
   }, [tracking, handleFix, t]);
 
   // Manual panning turns follow mode off, QGIS-style, so the map stays where
-  // the user dragged it instead of snapping back on the next fix.
+  // the user dragged it instead of snapping back on the next fix. The map may
+  // not be mounted yet when tracking starts, so retry until it is rather than
+  // silently skipping the subscription for the whole session.
   useEffect(() => {
     if (!tracking) return;
-    const map = getMap();
-    if (!map) return;
     const onDragStart = () => setFollow(false);
-    map.on("dragstart", onDragStart);
+    let map: maplibregl.Map | null = null;
+    let timer: number | undefined;
+    const attach = () => {
+      map = getMap();
+      if (map) {
+        map.on("dragstart", onDragStart);
+        return;
+      }
+      timer = window.setTimeout(attach, 500);
+    };
+    attach();
     return () => {
-      map.off("dragstart", onDragStart);
+      if (timer !== undefined) window.clearTimeout(timer);
+      map?.off("dragstart", onDragStart);
     };
   }, [tracking, getMap]);
 
@@ -724,7 +735,7 @@ function FixReadout({ fix }: { fix: GpsFix | null }) {
   return (
     <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md bg-muted p-2 text-sm tabular-nums">
       <span>
-        {fix.lat.toFixed(5)}, {fix.lng.toFixed(5)}
+        {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)}
       </span>
       <span>±{Math.round(fix.accuracy)} m</span>
       {fix.altitude != null && <span>{Math.round(fix.altitude)} m ASL</span>}
@@ -797,7 +808,7 @@ function FloatingPanel({
         <LocateFixed className="h-4 w-4 shrink-0 text-primary" />
         {fix ? (
           <span>
-            {fix.lat.toFixed(5)}, {fix.lng.toFixed(5)} ±
+            {fix.lng.toFixed(5)}, {fix.lat.toFixed(5)} ±
             {Math.round(fix.accuracy)} m
           </span>
         ) : (
