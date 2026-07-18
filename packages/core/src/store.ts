@@ -146,6 +146,23 @@ export type RasterToolKind =
   | "mosaic"
   | "focal";
 
+/**
+ * Latest live device-GPS fix published by the GPS Tracking tool (issue #1316),
+ * read by the status bar readout. Device state, not project state: excluded
+ * from undo history (partialize never lists it) and from project files, and
+ * deliberately left untouched on project switches.
+ */
+export interface GpsStatusFix {
+  lng: number;
+  lat: number;
+  /** Horizontal accuracy radius in meters. */
+  accuracy: number;
+  /** Ground speed in m/s, or null when the device doesn't report one. */
+  speed: number | null;
+  /** Fix time in epoch milliseconds. */
+  timestamp: number;
+}
+
 export interface AppState {
   projectName: string;
   projectPath: string | null;
@@ -205,6 +222,8 @@ export interface AppState {
   selectedFeatureIds: string[];
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
+  /** Live GPS fix for the status bar, or null while GPS tracking is off. */
+  gpsStatus: GpsStatusFix | null;
   metadata: Record<string, unknown>;
   recentProjects: RecentProjectEntry[];
   attributeFilter: string;
@@ -270,6 +289,7 @@ export interface AppState {
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
+  setGpsStatus: (fix: GpsStatusFix | null) => void;
   setCollaboration: (patch: Partial<CollaborationState>) => void;
   updateCollaborationPresence: (
     clientId: string,
@@ -726,6 +746,7 @@ export const useAppStore = create<AppState>()(
       selectedFeatureIds: [],
       identifyLayerId: null,
       pointerCoords: null,
+      gpsStatus: null,
       metadata: {},
       recentProjects: [],
       attributeFilter: "",
@@ -764,6 +785,7 @@ export const useAppStore = create<AppState>()(
       },
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
+      setGpsStatus: (fix) => set({ gpsStatus: fix }),
       setCollaboration: (patch) =>
         set((s) => ({ collaboration: { ...s.collaboration, ...patch } })),
       // Add or remove a single remote participant's presence without rebuilding

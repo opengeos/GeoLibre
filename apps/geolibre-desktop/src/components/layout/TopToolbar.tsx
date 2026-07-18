@@ -117,6 +117,7 @@ import { SetViewDialog } from "./SetViewDialog";
 import { PrintLayoutDialog } from "./PrintLayoutDialog";
 import { LoadFeaturesIntoEditorDialog } from "./LoadFeaturesIntoEditorDialog";
 import { FieldCollectionDialog } from "./FieldCollectionDialog";
+import { GpsTrackingDialog } from "./GpsTrackingDialog";
 import { RecordTourDialog } from "./RecordTourDialog";
 import { RecordVideoDialog } from "./RecordVideoDialog";
 import { GeoreferencerDialog } from "./GeoreferencerDialog";
@@ -509,6 +510,7 @@ export function TopToolbar({
   const [aboutOpen, setAboutOpen] = useState(false);
   const [printLayoutOpen, setPrintLayoutOpen] = useState(false);
   const [fieldCollectionOpen, setFieldCollectionOpen] = useState(false);
+  const [gpsTrackingOpen, setGpsTrackingOpen] = useState(false);
   const [recordTourOpen, setRecordTourOpen] = useState(false);
   const [recordVideoOpen, setRecordVideoOpen] = useState(false);
   const [georeferencerOpen, setGeoreferencerOpen] = useState(false);
@@ -1251,6 +1253,7 @@ export function TopToolbar({
           onToggleClouds={() => toggle(CLOUDS_PLUGIN_ID, appApi)}
           onTogglePrecipitation={() => toggle(PRECIPITATION_PLUGIN_ID, appApi)}
           onOpenFieldCollection={() => setFieldCollectionOpen(true)}
+          onOpenGpsTracking={() => setGpsTrackingOpen(true)}
           onOpenRecordTour={() => setRecordTourOpen(true)}
           onOpenRecordVideo={() => setRecordVideoOpen(true)}
         />
@@ -1295,6 +1298,11 @@ export function TopToolbar({
       <FieldCollectionDialog
         open={fieldCollectionOpen}
         onOpenChange={setFieldCollectionOpen}
+        mapControllerRef={mapControllerRef}
+      />
+      <GpsTrackingDialog
+        open={gpsTrackingOpen}
+        onOpenChange={setGpsTrackingOpen}
         mapControllerRef={mapControllerRef}
       />
       <RecordTourDialog

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useAppStore } from "@geolibre/core";
 import { cn } from "@geolibre/ui";
 import { Bug } from "lucide-react";
@@ -16,8 +17,31 @@ export function StatusBar({
   onOpenDiagnostics,
 }: StatusBarProps) {
   const pointerCoords = useAppStore((s) => s.pointerCoords);
+  const gpsStatus = useAppStore((s) => s.gpsStatus);
   const mapView = useAppStore((s) => s.mapView);
   const diagnosticsCount = diagnosticsErrorCount + diagnosticsWarningCount;
+
+  // Re-render every few seconds while a GPS fix is shown so its age stays live.
+  const [, setGpsTick] = useState(0);
+  const gpsActive = gpsStatus != null;
+  useEffect(() => {
+    if (!gpsActive) return;
+    const id = setInterval(() => setGpsTick((n) => n + 1), 5000);
+    return () => clearInterval(id);
+  }, [gpsActive]);
+
+  const gpsAgeS = gpsStatus
+    ? Math.max(0, Math.round((Date.now() - gpsStatus.timestamp) / 1000))
+    : 0;
+  const gpsText = gpsStatus
+    ? `${gpsStatus.lng.toFixed(5)}, ${gpsStatus.lat.toFixed(5)} ±${Math.round(
+        gpsStatus.accuracy,
+      )}m` +
+      (gpsStatus.speed != null
+        ? ` ${(gpsStatus.speed * 3.6).toFixed(1)}km/h`
+        : "") +
+      (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
+    : null;
 
   const coordText = pointerCoords
     ? `${pointerCoords[0].toFixed(5)}, ${pointerCoords[1].toFixed(5)}`
@@ -37,6 +61,7 @@ export function StatusBar({
       <span className="shrink-0">
         {compact ? "XY" : "Coords"}: {coordText}
       </span>
+      {gpsText && <span className="shrink-0">GPS: {gpsText}</span>}
       <span className="shrink-0">Zoom: {mapView.zoom.toFixed(2)}</span>
       <span className="shrink-0">
         Bearing: {mapView.bearing.toFixed(1)}°

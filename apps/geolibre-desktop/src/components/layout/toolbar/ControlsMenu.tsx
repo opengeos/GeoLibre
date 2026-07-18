@@ -39,6 +39,7 @@ import {
 import {
   Clapperboard,
   ClipboardList,
+  LocateFixed,
   SlidersHorizontal,
   Video,
 } from "lucide-react";
@@ -74,6 +75,7 @@ interface ControlsMenuProps {
   onToggleClouds: () => void;
   onTogglePrecipitation: () => void;
   onOpenFieldCollection: () => void;
+  onOpenGpsTracking: () => void;
   onOpenRecordTour: () => void;
   onOpenRecordVideo: () => void;
 }
@@ -100,6 +102,7 @@ export function ControlsMenu({
   onToggleClouds,
   onTogglePrecipitation,
   onOpenFieldCollection,
+  onOpenGpsTracking,
   onOpenRecordTour,
   onOpenRecordVideo,
 }: ControlsMenuProps) {
@@ -309,12 +312,19 @@ export function ControlsMenu({
           )}
           {anyMiddleControls &&
             (show("controls.fieldCollection") ||
+              show("controls.gpsTracking") ||
               show("controls.recordTour") ||
               show("controls.recordVideo")) && <DropdownMenuSeparator />}
           {show("controls.fieldCollection") && (
             <DropdownMenuItem onSelect={onOpenFieldCollection}>
               <ClipboardList className="me-2 h-3.5 w-3.5" />
               {t("toolbar.item.fieldCollection")}
+            </DropdownMenuItem>
+          )}
+          {show("controls.gpsTracking") && (
+            <DropdownMenuItem onSelect={onOpenGpsTracking}>
+              <LocateFixed className="me-2 h-3.5 w-3.5" />
+              {t("toolbar.item.gpsTracking")}
             </DropdownMenuItem>
           )}
           {show("controls.recordTour") && (
