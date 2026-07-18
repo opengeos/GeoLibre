@@ -110,6 +110,56 @@ describe("sanitizeLayerStylePatch", () => {
     ]);
   });
 
+  it("carries the extended per-rule fields and drops malformed ones", () => {
+    const patch = sanitizeLayerStylePatch({
+      vectorRules: [
+        {
+          id: "r1",
+          label: "A",
+          filter: "[]",
+          color: "#111111",
+          isElse: false,
+          enabled: false,
+          minZoom: 5,
+          maxZoom: 12,
+          parentId: "r0",
+          strokeColor: "#222222",
+          strokeWidth: 3,
+          fillOpacity: 0.4,
+          circleRadius: 9,
+        },
+        {
+          id: "r2",
+          label: "B",
+          filter: "[]",
+          color: "#333333",
+          isElse: false,
+          minZoom: "ten",
+          strokeWidth: Number.NaN,
+          parentId: 7,
+        },
+      ],
+    });
+    assert.deepEqual(patch.vectorRules, [
+      {
+        id: "r1",
+        label: "A",
+        filter: "[]",
+        color: "#111111",
+        isElse: false,
+        enabled: false,
+        minZoom: 5,
+        maxZoom: 12,
+        parentId: "r0",
+        strokeColor: "#222222",
+        strokeWidth: 3,
+        fillOpacity: 0.4,
+        circleRadius: 9,
+      },
+      { id: "r2", label: "B", filter: "[]", color: "#333333", isElse: false },
+    ]);
+  });
+
   it("rejects out-of-domain enum values and non-finite numbers", () => {
     const patch = sanitizeLayerStylePatch({
       vectorStyleMode: "hologram",

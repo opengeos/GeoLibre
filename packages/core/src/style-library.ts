@@ -243,6 +243,22 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
           ) {
             return [];
           }
+          // Optional per-rule fields (enabled toggle, zoom range, nesting,
+          // symbol overrides) carry through only when well-typed; a malformed
+          // optional field is dropped rather than the whole rule.
+          const optionalNumber = (value: unknown) =>
+            typeof value === "number" && Number.isFinite(value)
+              ? value
+              : undefined;
+          const optionalString = (value: unknown) =>
+            typeof value === "string" ? value : undefined;
+          const minZoom = optionalNumber(rule.minZoom);
+          const maxZoom = optionalNumber(rule.maxZoom);
+          const parentId = optionalString(rule.parentId);
+          const strokeColor = optionalString(rule.strokeColor);
+          const strokeWidth = optionalNumber(rule.strokeWidth);
+          const fillOpacity = optionalNumber(rule.fillOpacity);
+          const circleRadius = optionalNumber(rule.circleRadius);
           return [
             {
               id: rule.id,
@@ -250,6 +266,14 @@ export function sanitizeLayerStylePatch(value: unknown): Partial<LayerStyle> {
               filter: rule.filter,
               color: rule.color,
               isElse: rule.isElse,
+              ...(rule.enabled === false ? { enabled: false } : {}),
+              ...(minZoom !== undefined ? { minZoom } : {}),
+              ...(maxZoom !== undefined ? { maxZoom } : {}),
+              ...(parentId !== undefined ? { parentId } : {}),
+              ...(strokeColor !== undefined ? { strokeColor } : {}),
+              ...(strokeWidth !== undefined ? { strokeWidth } : {}),
+              ...(fillOpacity !== undefined ? { fillOpacity } : {}),
+              ...(circleRadius !== undefined ? { circleRadius } : {}),
             },
           ];
         });

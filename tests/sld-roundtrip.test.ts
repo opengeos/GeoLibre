@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type LayerStyle,
+  type VectorRule,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { buildSld, type SldExportableLayer } from "../packages/map/src/sld-export";
 import { applySldImport, parseSld } from "../packages/map/src/sld-import";
@@ -310,5 +314,126 @@ describe("SLD round-trip (style → SLD → style)", () => {
     const out = roundTrip(input, "polygon");
     assert.equal(out.minZoom, 5);
     assert.equal(out.maxZoom, 14);
+  });
+});
+
+describe("SLD round-trip of extended rule-based symbology (#1305)", () => {
+  it("preserves per-rule zoom ranges and symbol overrides (flattened nesting)", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "g",
+        label: "Roads",
+        filter: '["==", ["get", "class"], "road"]',
+        color: "#111111",
+        isElse: false,
+      },
+      {
+        id: "hw",
+        label: "Highway",
+        filter: '["==", ["get", "type"], "hw"]',
+        color: "#ff0000",
+        isElse: false,
+        parentId: "g",
+        minZoom: 5,
+        maxZoom: 12,
+        strokeWidth: 5,
+      },
+      { id: "e", label: "Other", filter: "", color: "#cccccc", isElse: true },
+    ];
+    const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });
+    const { sld, warnings } = buildSld(layer(input), fc("polygon"));
+    // Nesting has no SLD representation; the exporter reports the flattening.
+    assert.ok(
+      warnings.some((warning) => warning.includes("flattened")),
+      warnings.join("; "),
+    );
+    const out = applySldImport(DEFAULT_LAYER_STYLE, parseSld(sld));
+    assert.equal(out.vectorStyleMode, "rule-based");
+    const concrete = out.vectorRules.filter((rule) => !rule.isElse);
+    // The group itself does not draw; only the flattened leaf comes back, with
+    // its parent's filter ANDed in.
+    assert.equal(concrete.length, 1);
+    const [hw] = concrete;
+    assert.deepEqual(JSON.parse(hw.filter), [
+      "all",
+      ["==", ["get", "class"], "road"],
+      ["==", ["get", "type"], "hw"],
+    ]);
+    assert.equal(hw.color, "#ff0000");
+    assert.equal(hw.minZoom, 5);
+    assert.equal(hw.maxZoom, 12);
+    // The single rule's stroke width became the layer's flat width; the else
+    // rule recovers the original width as an override. Rendered output is
+    // identical to the input.
+    assert.equal(out.strokeWidth, 5);
+    assert.equal(hw.strokeWidth, undefined);
+    const elseRule = out.vectorRules.find((rule) => rule.isElse);
+    assert.equal(elseRule?.color, "#cccccc");
+    assert.equal(elseRule?.strokeWidth, 2);
+    // The layer window stays full-range even though one rule is zoom-bounded.
+    assert.equal(out.minZoom, 0);
+    assert.equal(out.maxZoom, 24);
+  });
+
+  it("preserves per-rule outline color and opacity on a polygon layer", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "a",
+        label: "Zoned",
+        filter: '["==", ["get", "zoned"], true]',
+        color: "#ff0000",
+        isElse: false,
+        strokeColor: "#00ffff",
+        fillOpacity: 0.3,
+      },
+      {
+        id: "b",
+        label: "Open",
+        filter: '["==", ["get", "zoned"], false]',
+        color: "#00ff00",
+        isElse: false,
+      },
+      { id: "e", label: "", filter: "", color: "#cccccc", isElse: true },
+    ];
+    const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });
+    const out = roundTrip(input, "polygon");
+    const [zoned, open] = out.vectorRules.filter((rule) => !rule.isElse);
+    // First rule's symbol defines the flat layer style; the second and else
+    // rules carry overrides restoring their original look.
+    assert.equal(out.strokeColor, "#00ffff");
+    assert.ok(Math.abs(out.fillOpacity - 0.3) < 1e-9);
+    assert.equal(open.strokeColor, "#1e40af");
+    assert.ok(Math.abs((open.fillOpacity ?? 0) - 0.6) < 1e-9);
+    const elseRule = out.vectorRules.find((rule) => rule.isElse);
+    assert.equal(elseRule?.strokeColor, "#1e40af");
+    assert.ok(Math.abs((elseRule?.fillOpacity ?? 0) - 0.6) < 1e-9);
+  });
+
+  it("skips disabled rules on export with a warning", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "a",
+        label: "On",
+        filter: '["all", ["==", ["get", "a"], 1], ["==", ["get", "b"], 2]]',
+        color: "#ff0000",
+        isElse: false,
+      },
+      {
+        id: "b",
+        label: "Off",
+        filter: '["==", ["get", "b"], 2]',
+        color: "#00ff00",
+        isElse: false,
+        enabled: false,
+      },
+      { id: "e", label: "", filter: "", color: "#cccccc", isElse: true },
+    ];
+    const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });
+    const { sld, warnings } = buildSld(layer(input), fc("polygon"));
+    assert.ok(warnings.some((warning) => warning.includes("Disabled rules")));
+    const out = applySldImport(DEFAULT_LAYER_STYLE, parseSld(sld));
+    const concrete = out.vectorRules.filter((rule) => !rule.isElse);
+    assert.equal(concrete.length, 1);
+    assert.equal(concrete[0].label, "On");
   });
 });

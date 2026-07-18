@@ -33,6 +33,66 @@ function makeLayer(overrides: Partial<GeoLibreLayer>): GeoLibreLayer {
   } as unknown as GeoLibreLayer;
 }
 
+describe("buildLegend rule-based swatches", () => {
+  it("lists drawable rules plus the else rule, skipping disabled and group rules", () => {
+    const legend = buildLegend([
+      makeLayer({
+        id: "a",
+        name: "Zones",
+        style: {
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "g",
+              label: "Group",
+              filter: '["==", ["get", "class"], "zone"]',
+              color: "#111111",
+              isElse: false,
+            },
+            {
+              id: "parks",
+              label: "Parks",
+              filter: '["==", ["get", "TYPE"], "park"]',
+              color: "#00ff00",
+              isElse: false,
+              parentId: "g",
+            },
+            {
+              id: "off",
+              label: "Hidden",
+              filter: '["==", ["get", "TYPE"], "x"]',
+              color: "#0000ff",
+              isElse: false,
+              enabled: false,
+            },
+            { id: "e", label: "", filter: "", color: "#cccccc", isElse: true },
+          ],
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.equal(legend.length, 1);
+    assert.deepEqual(legend[0].swatches, [
+      { color: "#00ff00", label: "Parks" },
+      { color: "#cccccc", label: "Other" },
+    ]);
+  });
+
+  it("falls back to the single fill swatch when no rule draws", () => {
+    const legend = buildLegend([
+      makeLayer({
+        id: "a",
+        name: "Zones",
+        style: {
+          vectorStyleMode: "rule-based",
+          fillColor: "#123456",
+          vectorRules: [],
+        } as unknown as LayerStyle,
+      }),
+    ]);
+    assert.deepEqual(legend[0].swatches, [{ color: "#123456" }]);
+  });
+});
+
 describe("buildLegend", () => {
   it("omits hidden layers", () => {
     const legend = buildLegend([

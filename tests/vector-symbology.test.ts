@@ -3,10 +3,16 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_LAYER_STYLE,
   circleRadiusValue,
+  effectiveVectorRules,
   lineWidthValue,
   ruleBasedColorExpression,
   vectorColorExpression,
+  mapZoomStepOutputs,
   vectorFillColorValue,
+  vectorFillOpacityValue,
+  vectorLineColorValue,
+  vectorOutlineColorValue,
+  vectorStrokeWidthValue,
   type LayerStyle,
   type VectorRule,
 } from "@geolibre/core";
@@ -22,6 +28,9 @@ function rule(patch: Partial<VectorRule>): VectorRule {
     filter: patch.filter ?? "",
     color: patch.color ?? "#3b82f6",
     isElse: patch.isElse ?? false,
+    // Optional extended fields (enabled, zoom range, nesting, symbol
+    // overrides) pass through as given.
+    ...patch,
   };
 }
 
@@ -230,4 +239,340 @@ describe("lineWidthValue proportional sizing", () => {
   it("keeps the constant pixel width when proportional is off", () => {
     assert.equal(lineWidthValue(style({ strokeWidth: 3 })), 3);
   });
+});
+
+describe("rule-based extensions (#1305)", () => {
+  const parkFilter = '["==", ["get", "TYPE"], "park"]';
+  const parkParsed = ["==", ["get", "TYPE"], "park"];
+  const roadFilter = '["==", ["get", "class"], "road"]';
+  const roadParsed = ["==", ["get", "class"], "road"];
+
+  it("skips disabled rules", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", enabled: false }),
+      rule({ id: "2", filter: roadFilter, color: "#0000ff" }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      ["case", roadParsed, "#0000ff", "#cccccc"],
+    );
+  });
+
+  it("a disabled group disables its whole subtree", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "g", filter: roadFilter, color: "#111111", enabled: false }),
+      rule({ id: "c", filter: parkFilter, color: "#00ff00", parentId: "g" }),
+    ];
+    assert.equal(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      "#000000",
+    );
+  });
+
+  it("nested rules AND their ancestors' filters and only leaves draw", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "g", filter: roadFilter, color: "#111111" }),
+      rule({ id: "c", filter: parkFilter, color: "#00ff00", parentId: "g" }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      ["case", ["all", roadParsed, parkParsed], "#00ff00", "#cccccc"],
+    );
+  });
+
+  it("a blank group filter adds no constraint", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "g", filter: "", color: "#111111" }),
+      rule({ id: "c", filter: parkFilter, color: "#00ff00", parentId: "g" }),
+    ];
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      ["case", parkParsed, "#00ff00", "#000000"],
+    );
+  });
+
+  it("drops rules trapped in a parentId cycle", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "a", filter: parkFilter, color: "#00ff00", parentId: "b" }),
+      rule({ id: "b", filter: roadFilter, color: "#0000ff", parentId: "a" }),
+    ];
+    // Both rules are groups (each is the other's parent), so neither is a
+    // drawable leaf and the fallback color remains.
+    assert.equal(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      "#000000",
+    );
+  });
+
+  it("intersects nested zoom ranges and drops empty intersections", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "g", filter: roadFilter, color: "#111111", maxZoom: 10 }),
+      rule({
+        id: "c",
+        filter: parkFilter,
+        color: "#00ff00",
+        parentId: "g",
+        minZoom: 12,
+      }),
+    ];
+    assert.equal(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      "#000000",
+    );
+  });
+
+  it("wraps a zoom-ranged rule in a step-on-zoom expression", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", minZoom: 10 }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      [
+        "step",
+        ["zoom"],
+        "#cccccc",
+        10,
+        ["case", parkParsed, "#00ff00", "#cccccc"],
+      ],
+    );
+  });
+
+  it("rebuilds the case per zoom segment for a bounded range", () => {
+    const rules: VectorRule[] = [
+      rule({
+        id: "1",
+        filter: parkFilter,
+        color: "#00ff00",
+        minZoom: 8,
+        maxZoom: 12,
+      }),
+      rule({ id: "2", filter: roadFilter, color: "#0000ff" }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      [
+        "step",
+        ["zoom"],
+        ["case", roadParsed, "#0000ff", "#cccccc"],
+        8,
+        [
+          "case",
+          parkParsed,
+          "#00ff00",
+          roadParsed,
+          "#0000ff",
+          "#cccccc",
+        ],
+        12,
+        ["case", roadParsed, "#0000ff", "#cccccc"],
+      ],
+    );
+  });
+
+  it("compiles per-rule stroke widths with the layer width as fallback", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", strokeWidth: 5 }),
+      rule({ id: "2", filter: roadFilter, color: "#0000ff" }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      lineWidthValue(
+        style({ vectorStyleMode: "rule-based", vectorRules: rules, strokeWidth: 2 }),
+      ),
+      ["case", parkParsed, 5, roadParsed, 2, 2],
+    );
+  });
+
+  it("keeps the flat width when no rule overrides it", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00" }),
+    ];
+    assert.equal(
+      lineWidthValue(
+        style({ vectorStyleMode: "rule-based", vectorRules: rules, strokeWidth: 3 }),
+      ),
+      3,
+    );
+  });
+
+  it("compiles per-rule outline colors for polygons and circle strokes", () => {
+    const rules: VectorRule[] = [
+      rule({
+        id: "1",
+        filter: parkFilter,
+        color: "#00ff00",
+        strokeColor: "#ff00ff",
+      }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    const styled = style({
+      vectorStyleMode: "rule-based",
+      vectorRules: rules,
+      strokeColor: "#123456",
+    });
+    assert.deepEqual(vectorOutlineColorValue(styled), [
+      "case",
+      parkParsed,
+      "#ff00ff",
+      "#123456",
+    ]);
+    // Without any strokeColor override the flat layer stroke is kept.
+    assert.equal(
+      vectorOutlineColorValue(
+        style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [rule({ id: "1", filter: parkFilter, color: "#00ff00" })],
+          strokeColor: "#123456",
+        }),
+      ),
+      "#123456",
+    );
+  });
+
+  it("compiles per-rule fill opacity and honors an else-rule override", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", fillOpacity: 0.2 }),
+      rule({ id: "e", isElse: true, color: "#cccccc", fillOpacity: 0.9 }),
+    ];
+    assert.deepEqual(
+      vectorFillOpacityValue(
+        style({ vectorStyleMode: "rule-based", vectorRules: rules }),
+        0.6,
+      ),
+      ["case", parkParsed, 0.2, 0.9],
+    );
+  });
+
+  it("compiles per-rule circle radii over the layer radius", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", circleRadius: 12 }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      circleRadiusValue(
+        style({
+          vectorStyleMode: "rule-based",
+          vectorRules: rules,
+          circleRadius: 6,
+        }),
+      ),
+      ["case", parkParsed, 12, 6],
+    );
+  });
+
+
+  it("per-rule overrides only apply in rule-based mode", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", strokeWidth: 9 }),
+    ];
+    assert.equal(
+      vectorStrokeWidthValue(
+        style({ vectorStyleMode: "single", vectorRules: rules }),
+        2,
+      ),
+      2,
+    );
+  });
+
+
+  it("builds one shared zoom step for the line color's outline and color channels", () => {
+    // Composing two independently zoom-stepped expressions in a single case
+    // would nest ["zoom"] below the top level, which MapLibre rejects; the
+    // line color must come out as a single top-level step.
+    const rules: VectorRule[] = [
+      rule({
+        id: "1",
+        filter: parkFilter,
+        color: "#00ff00",
+        strokeColor: "#ff00ff",
+        minZoom: 10,
+      }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    const value = vectorLineColorValue(
+      style({
+        vectorStyleMode: "rule-based",
+        vectorRules: rules,
+        strokeColor: "#123456",
+      }),
+    );
+    assert.deepEqual(value, [
+      "step",
+      ["zoom"],
+      ["case", ["==", ["geometry-type"], "Polygon"], "#123456", "#cccccc"],
+      10,
+      [
+        "case",
+        ["==", ["geometry-type"], "Polygon"],
+        ["case", parkParsed, "#ff00ff", "#123456"],
+        ["case", parkParsed, "#00ff00", "#cccccc"],
+      ],
+    ]);
+  });
+
+  it("mapZoomStepOutputs transforms inside a zoom step and directly otherwise", () => {
+    assert.deepEqual(
+      mapZoomStepOutputs(
+        ["step", ["zoom"], 0.5, 10, ["case", parkParsed, 0.2, 0.5]],
+        (output) => (typeof output === "number" ? output * 2 : ["*", output, 2]),
+      ),
+      [
+        "step",
+        ["zoom"],
+        1,
+        10,
+        ["*", ["case", parkParsed, 0.2, 0.5], 2],
+      ],
+    );
+    assert.equal(
+      mapZoomStepOutputs(0.5, (output) => (output as number) * 2),
+      1,
+    );
+  });
+
+  it("meters-unit widths ignore per-rule pixel width overrides", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "1", filter: parkFilter, color: "#00ff00", strokeWidth: 5 }),
+    ];
+    const value = lineWidthValue(
+      style({
+        vectorStyleMode: "rule-based",
+        vectorRules: rules,
+        strokeWidth: 2,
+        strokeWidthUnit: "meters",
+      }),
+    );
+    // The meters interpolation survives untouched (a zoom expression cannot
+    // be nested inside a per-rule case).
+    assert.ok(Array.isArray(value) && value[0] === "interpolate");
+  });
+
+  it("effectiveVectorRules resolves nesting, zoom, and overrides", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "g", filter: roadFilter, color: "#111111", minZoom: 4, maxZoom: 14 }),
+      rule({
+        id: "c",
+        filter: parkFilter,
+        color: "#00ff00",
+        parentId: "g",
+        minZoom: 6,
+        strokeWidth: 5,
+      }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    const { rules: effective, elseRule } = effectiveVectorRules(
+      style({ vectorRules: rules }),
+    );
+    assert.equal(effective.length, 1);
+    assert.deepEqual(effective[0].filter, ["all", roadParsed, parkParsed]);
+    assert.equal(effective[0].minZoom, 6);
+    assert.equal(effective[0].maxZoom, 14);
+    assert.equal(effective[0].strokeWidth, 5);
+    assert.equal(elseRule?.id, "e");
+  });
+
 });

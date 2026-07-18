@@ -105,6 +105,54 @@ export interface VectorRule {
   color: string;
   /** When true this is the catch-all "else" rule and {@link filter} is unused. */
   isElse: boolean;
+  /**
+   * Whether the rule participates in rendering. `false` temporarily disables
+   * the rule (and, for a group, its whole subtree) without deleting it,
+   * mirroring the QGIS rule checkbox. Absent means enabled.
+   */
+  enabled?: boolean;
+  /**
+   * Lowest zoom (inclusive) the rule applies at, mirroring MapLibre's layer
+   * `minzoom` convention. Absent means no lower bound.
+   */
+  minZoom?: number;
+  /**
+   * Zoom the rule stops applying at (exclusive, like MapLibre's layer
+   * `maxzoom`). Absent means no upper bound. Together with {@link minZoom}
+   * this is the QGIS per-rule "scale range".
+   */
+  maxZoom?: number;
+  /**
+   * The id of the parent rule when this rule is nested inside a group (QGIS
+   * rule tree). A child rule matches only features that also match every
+   * ancestor's filter, and inherits the intersection of the ancestors' zoom
+   * ranges and enabled state. A rule that has children acts as a group: its
+   * own symbol is not rendered; only leaf rules draw. Absent or dangling
+   * means a top-level rule.
+   */
+  parentId?: string;
+  /**
+   * Per-rule stroke/outline color override (6-digit hex): the polygon outline
+   * and circle stroke color for matching features. Absent inherits the layer
+   * {@link LayerStyle.strokeColor}.
+   */
+  strokeColor?: string;
+  /**
+   * Per-rule stroke width override in pixels: the line width (lines and
+   * polygon outlines) and circle stroke width for matching features. Absent
+   * inherits the layer {@link LayerStyle.strokeWidth}.
+   */
+  strokeWidth?: number;
+  /**
+   * Per-rule fill/circle opacity override (0..1) for matching features.
+   * Absent inherits the layer {@link LayerStyle.fillOpacity}.
+   */
+  fillOpacity?: number;
+  /**
+   * Per-rule circle radius override in pixels for matching point features.
+   * Absent inherits the layer {@link LayerStyle.circleRadius}.
+   */
+  circleRadius?: number;
 }
 
 /**

@@ -11,6 +11,7 @@ import {
 } from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { detectGeometryProfile, type GeometryProfile } from "./geojson-loader";
+import { OGC_SCALE_DENOMINATOR_AT_ZOOM_0 } from "./sld-export";
 
 /** Default font family written to exported QML label text-styles. */
 const DEFAULT_FONT_FAMILY = "Open Sans";
@@ -473,7 +474,67 @@ function graduatedRenderer(
   )}</ranges><symbols>${symbols.join("")}</symbols></renderer-v2>`;
 }
 
-/** The rule-based renderer (one rule per translatable filter, plus an ELSE). */
+/**
+ * One rule's symbol paint: the layer's base paint with the rule's per-rule
+ * overrides (outline color/width, opacity, size, dash) folded in. A per-rule
+ * circle radius only overrides the marker size when the layer renders plain
+ * circles (a shape marker's size is its own setting the rule cannot change).
+ */
+function rulePaintFor(
+  entry: VectorRule,
+  paint: SymbolPaint,
+  style: LayerStyle,
+): SymbolPaint {
+  return {
+    ...paint,
+    strokeColor: isHexColor(entry.strokeColor)
+      ? (entry.strokeColor as string)
+      : paint.strokeColor,
+    strokeWidth:
+      typeof entry.strokeWidth === "number" && Number.isFinite(entry.strokeWidth)
+        ? entry.strokeWidth
+        : paint.strokeWidth,
+    fillOpacity:
+      typeof entry.fillOpacity === "number" && Number.isFinite(entry.fillOpacity)
+        ? entry.fillOpacity
+        : paint.fillOpacity,
+    markerSize:
+      typeof entry.circleRadius === "number" &&
+      Number.isFinite(entry.circleRadius) &&
+      !styleValue(style, "markerEnabled")
+        ? entry.circleRadius * 2
+        : paint.markerSize,
+  };
+}
+
+/**
+ * A rule's `scalemindenom`/`scalemaxdenom` attributes from its zoom range.
+ * Higher zoom means a smaller scale denominator, so the rule's `maxZoom`
+ * becomes the minimum denominator and its `minZoom` the maximum.
+ */
+function ruleScaleAttributes(rule: VectorRule): string {
+  let out = "";
+  if (typeof rule.maxZoom === "number" && Number.isFinite(rule.maxZoom)) {
+    out += ` scalemindenom="${num(
+      OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** rule.maxZoom,
+    )}"`;
+  }
+  if (typeof rule.minZoom === "number" && Number.isFinite(rule.minZoom)) {
+    out += ` scalemaxdenom="${num(
+      OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / 2 ** rule.minZoom,
+    )}"`;
+  }
+  return out;
+}
+
+/**
+ * The rule-based renderer. Nested rules (a rule naming another as its
+ * `parentId`) are written as QGIS's native rule tree; per-rule scale ranges
+ * become `scalemindenom`/`scalemaxdenom`; a disabled rule keeps its subtree but
+ * gets `checkstate="0"` (the QGIS rule checkbox); per-rule symbol overrides
+ * (outline color/width, opacity, size, dash) are folded into each rule's
+ * symbol. The ELSE rule stays a top-level catch-all.
+ */
 function ruleRenderer(
   geometry: SymbolGeometry,
   style: LayerStyle,
@@ -482,34 +543,82 @@ function ruleRenderer(
   warnings: string[],
 ): string {
   const paint = basePaint(style);
-  const ruleXml: string[] = [];
   const symbols: string[] = [];
   const elseRule = rules.find((entry) => entry.isElse);
-  let index = 0;
-  for (const entry of rules) {
-    if (entry.isElse) continue;
-    if (!isHexColor(entry.color)) {
-      warnings.push(
-        `The rule "${entry.label || entry.filter}" has an invalid color and was skipped.`,
-      );
-      continue;
+  const concrete = rules.filter((entry) => !entry.isElse);
+  const byId = new Map(concrete.map((entry) => [entry.id, entry]));
+  const childrenOf = new Map<string, VectorRule[]>();
+  const roots: VectorRule[] = [];
+  for (const entry of concrete) {
+    const parent =
+      entry.parentId && entry.parentId !== entry.id
+        ? byId.get(entry.parentId)
+        : undefined;
+    if (parent) {
+      const siblings = childrenOf.get(parent.id);
+      if (siblings) siblings.push(entry);
+      else childrenOf.set(parent.id, [entry]);
+    } else {
+      roots.push(entry);
     }
-    const parsed = parseJsonExpression(entry.filter);
-    const filter = parsed ? mapboxFilterToQgis(parsed) : null;
-    if (filter === null) {
-      warnings.push(
-        `The rule "${entry.label || entry.filter}" uses a filter with no QGIS equivalent and was skipped.`,
-      );
-      continue;
-    }
-    ruleXml.push(
-      `<rule filter="${xmlEscape(filter)}" symbol="${index}" label="${xmlEscape(
-        entry.label || "",
-      )}" key="rule${index}"/>`,
-    );
-    symbols.push(symbolXml(geometry, String(index), entry.color, paint, opacity, warnings));
-    index += 1;
   }
+
+  const emitted = new Set<string>();
+  const emitRule = (entry: VectorRule): string => {
+    if (emitted.has(entry.id)) return "";
+    emitted.add(entry.id);
+    const kids = childrenOf.get(entry.id) ?? [];
+    const isGroup = kids.length > 0;
+    // A rule's own filter only (QGIS ANDs ancestor filters natively). A group
+    // may have a blank filter (no extra constraint); a blank leaf filter is an
+    // authoring error the live map also skips. Validated before the children
+    // are emitted so a dropped group does not leave orphan symbols behind.
+    let filterAttribute = "";
+    if (entry.filter.trim() || !isGroup) {
+      const parsed = parseJsonExpression(entry.filter);
+      const filter = parsed ? mapboxFilterToQgis(parsed) : null;
+      if (filter === null) {
+        warnings.push(
+          `The rule "${entry.label || entry.filter}" uses a filter with no QGIS equivalent and was skipped.`,
+        );
+        return "";
+      }
+      filterAttribute = ` filter="${xmlEscape(filter)}"`;
+    }
+    const children = kids.map(emitRule).join("");
+    let symbolAttribute = "";
+    if (!isGroup) {
+      if (!isHexColor(entry.color)) {
+        warnings.push(
+          `The rule "${entry.label || entry.filter}" has an invalid color and was skipped.`,
+        );
+        return "";
+      }
+      const rulePaint = rulePaintFor(entry, paint, style);
+      symbolAttribute = ` symbol="${symbols.length}"`;
+      symbols.push(
+        symbolXml(
+          geometry,
+          String(symbols.length),
+          entry.color,
+          rulePaint,
+          opacity,
+          warnings,
+        ),
+      );
+    }
+    const checkstate = entry.enabled === false ? ' checkstate="0"' : "";
+    const attributes = `${filterAttribute}${symbolAttribute}${ruleScaleAttributes(
+      entry,
+    )}${checkstate} label="${xmlEscape(entry.label || "")}" key="rule-${xmlEscape(
+      entry.id,
+    )}"`;
+    return children.length > 0
+      ? `<rule${attributes}>${children}</rule>`
+      : `<rule${attributes}/>`;
+  };
+
+  const ruleXml = roots.map(emitRule).join("");
   // The ELSE rule catches features no other rule matched; its color falls back
   // to the layer's single-symbol color for the geometry when the else rule has
   // no valid color.
@@ -517,15 +626,22 @@ function ruleRenderer(
     elseRule && isHexColor(elseRule.color)
       ? elseRule.color
       : singleColor(style, geometry);
-  ruleXml.push(
-    `<rule filter="ELSE" symbol="${index}" label="${xmlEscape(
-      elseRule?.label || "",
-    )}" key="ruleelse"/>`,
+  const elseXml = `<rule filter="ELSE" symbol="${symbols.length}" label="${xmlEscape(
+    elseRule?.label || "",
+  )}" key="ruleelse"/>`;
+  symbols.push(
+    symbolXml(
+      geometry,
+      String(symbols.length),
+      elseColor,
+      elseRule ? rulePaintFor(elseRule, paint, style) : paint,
+      opacity,
+      warnings,
+    ),
   );
-  symbols.push(symbolXml(geometry, String(index), elseColor, paint, opacity, warnings));
-  return `<renderer-v2 type="RuleRenderer" forceraster="0" symbollevels="0" enableorderby="0"><rules key="root">${ruleXml.join(
+  return `<renderer-v2 type="RuleRenderer" forceraster="0" symbollevels="0" enableorderby="0"><rules key="root">${ruleXml}${elseXml}</rules><symbols>${symbols.join(
     "",
-  )}</rules><symbols>${symbols.join("")}</symbols></renderer-v2>`;
+  )}</symbols></renderer-v2>`;
 }
 
 /**

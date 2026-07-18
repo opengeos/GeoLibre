@@ -4,6 +4,8 @@
  */
 import {
   diagramsSuppressedByPointRenderer,
+  effectiveVectorRules,
+  isHexColor,
   styleValue,
   type GeoLibreLayer,
   type LayerType,
@@ -77,6 +79,17 @@ export function buildLegend(layers: GeoLibreLayer[]): LegendEntry[] {
           swatches: [...rampSwatches(stops, mode), ...diagrams],
         });
         continue;
+      }
+      if (mode === "rule-based") {
+        const swatches = ruleSwatches(layer);
+        if (swatches.length > 0) {
+          entries.push({
+            id: layer.id,
+            name: layer.name,
+            swatches: [...swatches, ...diagrams],
+          });
+          continue;
+        }
       }
       entries.push({
         id: layer.id,
@@ -360,6 +373,30 @@ function diagramSwatches(
   return styleValue(layer.style, "diagramFields")
     .filter((field) => field.property !== "")
     .map((field) => ({ color: field.color, label: field.property }));
+}
+
+/**
+ * Rule-based renderer swatches: one per drawable rule (disabled rules and
+ * group rules are resolved away by {@link effectiveVectorRules}, mirroring the
+ * live map), plus the catch-all else rule when it has a valid color. Labels
+ * fall back to the rule's filter text so unlabeled rules stay identifiable.
+ */
+function ruleSwatches(
+  layer: GeoLibreLayer,
+): { color: string; label: string }[] {
+  const { rules, elseRule } = effectiveVectorRules(layer.style);
+  const limited =
+    rules.length > MAX_RAMP_SWATCHES
+      ? sampleEvenly(rules, MAX_RAMP_SWATCHES)
+      : rules;
+  const swatches = limited.map((rule) => ({
+    color: rule.color,
+    label: rule.label || JSON.stringify(rule.filter),
+  }));
+  if (elseRule && isHexColor(elseRule.color)) {
+    swatches.push({ color: elseRule.color, label: elseRule.label || "Other" });
+  }
+  return swatches;
 }
 
 function rampSwatches(

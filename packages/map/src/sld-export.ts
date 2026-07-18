@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  effectiveVectorRules,
   isHexColor,
   parseJsonExpression,
   styleValue,
@@ -93,6 +94,14 @@ function cssParam(name: string, value: string): string {
 function scaleDenominators(style: LayerStyle): string[] {
   const minZoom = clampZoom(styleValue(style, "minZoom"), MIN_LAYER_ZOOM);
   const maxZoom = clampZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
+  return scaleDenominatorsForWindow(minZoom, maxZoom);
+}
+
+/** `Min`/`MaxScaleDenominator` lines for an explicit zoom window. */
+function scaleDenominatorsForWindow(
+  minZoom: number,
+  maxZoom: number,
+): string[] {
   const low = Math.min(minZoom, maxZoom);
   const high = Math.max(minZoom, maxZoom);
   const lines: string[] = [];
@@ -127,6 +136,8 @@ interface SymbolPaint {
   strokeColor: string;
   strokeWidth: number;
   strokeOpacity: number;
+  /** Per-rule circle radius override (pixels); pointSymbolizer doubles it. */
+  circleRadius?: number;
 }
 
 /** Build the flat (single-symbol) paint from a style, folding in layer opacity. */
@@ -181,7 +192,7 @@ function pointSymbolizer(
 ): string {
   let wellKnownName = "circle";
   let markPaint = paint;
-  let size = styleValue(style, "circleRadius") * 2;
+  let size = (paint.circleRadius ?? styleValue(style, "circleRadius")) * 2;
   let shapeMarker = false;
 
   if (styleValue(style, "markerEnabled")) {
@@ -634,7 +645,15 @@ function graduatedRules(
   return rules.join("");
 }
 
-/** Build the rule-based renderer's rules, translating each rule's filter. */
+/**
+ * Build the rule-based renderer's rules. Uses the shared
+ * {@link effectiveVectorRules} resolver so disabled rules are dropped and
+ * nested rules are flattened (ancestor filters ANDed into each leaf), exactly
+ * as the live map draws them; SLD has no rule tree of its own. Per-rule zoom
+ * ranges intersect the layer window into per-rule scale denominators, and
+ * per-rule symbol overrides (outline color/width, opacity, size, dash) are
+ * folded into each rule's symbolizers.
+ */
 function ruleBasedRules(
   style: LayerStyle,
   opacity: number,
@@ -645,32 +664,60 @@ function ruleBasedRules(
 ): string {
   const base = basePaint(style, opacity);
   const out: string[] = [];
-  const elseRule = rules.find((entry) => entry.isElse);
-  for (const entry of rules) {
-    // Skip else rules and rules with an invalid color, mirroring
-    // ruleBasedColorExpression, so the SLD only contains rules the map draws.
-    if (entry.isElse || !isHexColor(entry.color)) continue;
-    const parsed = parseJsonExpression(entry.filter);
-    const filter = parsed ? mapboxFilterToOgc(parsed) : null;
+  const { rules: effective, elseRule } = effectiveVectorRules(style);
+  if (rules.some((entry) => entry.enabled === false)) {
+    warnings.push(
+      "Disabled rules are not part of the rendered style and were not exported.",
+    );
+  }
+  if (rules.some((entry) => entry.parentId)) {
+    warnings.push(
+      "Nested rules were flattened for SLD: each rule's filter was combined with its parents' filters.",
+    );
+  }
+  const layerMinZoom = clampZoom(styleValue(style, "minZoom"), MIN_LAYER_ZOOM);
+  const layerMaxZoom = clampZoom(styleValue(style, "maxZoom"), MAX_LAYER_ZOOM);
+  for (const entry of effective) {
+    const filter = mapboxFilterToOgc(entry.filter);
     if (filter === null) {
       warnings.push(
-        `The rule "${entry.label || entry.filter}" uses a filter with no SLD equivalent and was skipped.`,
+        `The rule "${entry.label || JSON.stringify(entry.filter)}" uses a filter with no SLD equivalent and was skipped.`,
       );
       continue;
     }
+    // The rule's scale window is its zoom range intersected with the layer's.
+    const ruleMinZoom = Math.max(
+      layerMinZoom,
+      clampZoom(entry.minZoom ?? layerMinZoom, MIN_LAYER_ZOOM),
+    );
+    const ruleMaxZoom = Math.min(
+      layerMaxZoom,
+      clampZoom(entry.maxZoom ?? layerMaxZoom, MAX_LAYER_ZOOM),
+    );
+    const ruleScale =
+      entry.minZoom !== undefined || entry.maxZoom !== undefined
+        ? scaleDenominatorsForWindow(ruleMinZoom, ruleMaxZoom)
+        : scale;
+    const paint: SymbolPaint = {
+      ...base,
+      fillColor: entry.color,
+      strokeColor: entry.strokeColor ?? base.strokeColor,
+      strokeWidth: entry.strokeWidth ?? base.strokeWidth,
+      fillOpacity:
+        entry.fillOpacity !== undefined
+          ? entry.fillOpacity * opacity
+          : base.fillOpacity,
+      ...(entry.circleRadius !== undefined
+        ? { circleRadius: entry.circleRadius }
+        : {}),
+    };
     out.push(
       rule(
         entry.label || "rule",
         entry.label || null,
         `<ogc:Filter>${filter}</ogc:Filter>`,
-        scale,
-        renderSymbolizers(
-          style,
-          { ...base, fillColor: entry.color },
-          profile,
-          warnings,
-          entry.color,
-        ),
+        ruleScale,
+        renderSymbolizers(style, paint, profile, warnings, entry.color),
       ),
     );
   }
@@ -689,19 +736,35 @@ function ruleBasedRules(
     elseRule && isHexColor(elseRule.color)
       ? elseRule.color
       : styleValue(style, "strokeColor");
+  // The else rule can carry its own symbol overrides, like any other rule.
+  const elsePaint: SymbolPaint = {
+    ...base,
+    fillColor: elseFillColor,
+    strokeColor: isHexColor(elseRule?.strokeColor)
+      ? (elseRule!.strokeColor as string)
+      : base.strokeColor,
+    strokeWidth:
+      typeof elseRule?.strokeWidth === "number" &&
+      Number.isFinite(elseRule.strokeWidth)
+        ? elseRule.strokeWidth
+        : base.strokeWidth,
+    fillOpacity:
+      typeof elseRule?.fillOpacity === "number" &&
+      Number.isFinite(elseRule.fillOpacity)
+        ? elseRule.fillOpacity * opacity
+        : base.fillOpacity,
+    ...(typeof elseRule?.circleRadius === "number" &&
+    Number.isFinite(elseRule.circleRadius)
+      ? { circleRadius: elseRule.circleRadius }
+      : {}),
+  };
   out.push(
     rule(
       "Other",
       elseRule?.label || null,
       "<ElseFilter/>",
       scale,
-      renderSymbolizers(
-        style,
-        { ...base, fillColor: elseFillColor },
-        profile,
-        warnings,
-        elseLineColor,
-      ),
+      renderSymbolizers(style, elsePaint, profile, warnings, elseLineColor),
     ),
   );
   return out.join("");

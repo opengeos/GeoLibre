@@ -4,10 +4,14 @@ import {
   extrusionColorValue,
   extrusionHeightValue,
   lineWidthValue,
+  mapZoomStepOutputs,
   simpleStyleNumberValue,
   vectorCircleColorValue,
   vectorFillColorValue,
+  vectorFillOpacityValue,
   vectorLineColorValue,
+  vectorOutlineColorValue,
+  vectorStrokeWidthValue,
   type LayerStyle,
 } from "@geolibre/core";
 import type {
@@ -23,13 +27,17 @@ function styleValue<K extends keyof LayerStyle>(
 }
 
 // Fold the layer's opacity multiplier into a paint value that may itself be a
-// data-driven (simplestyle) expression rather than a plain number.
+// data-driven (simplestyle or per-rule) expression rather than a plain number.
+// A zoom-stepped value (per-rule scale ranges) keeps its step outermost: the
+// multiplication is applied inside each step output, since MapLibre only
+// allows ["zoom"] as the input of a top-level step/interpolate.
 function scaleByOpacity(
   value: number | unknown[],
   opacity: number,
 ): PropertyValueSpecification<number> {
-  if (typeof value === "number") return value * opacity;
-  return ["*", value, opacity] as unknown as PropertyValueSpecification<number>;
+  return mapZoomStepOutputs(value, (output) =>
+    typeof output === "number" ? output * opacity : ["*", output, opacity],
+  ) as PropertyValueSpecification<number>;
 }
 
 export function fillPaint(style: LayerStyle, opacity: number) {
@@ -38,7 +46,14 @@ export function fillPaint(style: LayerStyle, opacity: number) {
       style,
     ) as PropertyValueSpecification<string>,
     "fill-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "fill-opacity", styleValue(style, "fillOpacity")),
+      vectorFillOpacityValue(
+        style,
+        simpleStyleNumberValue(
+          style,
+          "fill-opacity",
+          styleValue(style, "fillOpacity"),
+        ),
+      ),
       opacity,
     ),
     // vectorLineColorValue honors simpleStyle's per-feature stroke property; in
@@ -98,11 +113,23 @@ export function circlePaint(style: LayerStyle, opacity: number) {
       style,
     ) as PropertyValueSpecification<number>,
     "circle-opacity": scaleByOpacity(
-      simpleStyleNumberValue(style, "marker-opacity", styleValue(style, "fillOpacity")),
+      vectorFillOpacityValue(
+        style,
+        simpleStyleNumberValue(
+          style,
+          "marker-opacity",
+          styleValue(style, "fillOpacity"),
+        ),
+      ),
       opacity,
     ),
-    "circle-stroke-color": styleValue(style, "strokeColor"),
-    "circle-stroke-width": styleValue(style, "strokeWidth"),
+    "circle-stroke-color": vectorOutlineColorValue(
+      style,
+    ) as PropertyValueSpecification<string>,
+    "circle-stroke-width": vectorStrokeWidthValue(
+      style,
+      styleValue(style, "strokeWidth"),
+    ) as PropertyValueSpecification<number>,
     // Fade the outline with the layer opacity (and let it be set explicitly)
     // so story playback can fully hide a point instead of leaving a hollow
     // ring, and so the stroke is restored when playback ends (#934).

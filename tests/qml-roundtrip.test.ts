@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_LAYER_STYLE, type LayerStyle } from "@geolibre/core";
+import {
+  DEFAULT_LAYER_STYLE,
+  type LayerStyle,
+  type VectorRule,
+} from "@geolibre/core";
 import type { FeatureCollection } from "geojson";
 import { buildQml, type QmlExportableLayer } from "../packages/map/src/qml-export";
 import { applyQmlImport, parseQml } from "../packages/map/src/qml-import";
@@ -223,5 +227,98 @@ describe("QML round-trip (style → QML → style)", () => {
     assert.equal(out.labels.color, "#202020");
     assert.equal(out.labels.haloColor, "#fefefe");
     assert.equal(out.labels.haloWidth, 2);
+  });
+});
+
+describe("QML round-trip of extended rule-based symbology (#1305)", () => {
+  it("preserves nesting, zoom ranges, toggles, and symbol overrides", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "g",
+        label: "Roads",
+        filter: '["==", ["get", "class"], "road"]',
+        color: "#111111",
+        isElse: false,
+      },
+      {
+        id: "hw",
+        label: "Highway",
+        filter: '["==", ["get", "type"], "hw"]',
+        color: "#ff0000",
+        isElse: false,
+        parentId: "g",
+        minZoom: 5,
+        maxZoom: 12,
+        strokeWidth: 5,
+        strokeColor: "#00ffff",
+      },
+      {
+        id: "minor",
+        label: "Minor",
+        filter: '["==", ["get", "type"], "minor"]',
+        color: "#00ff00",
+        isElse: false,
+        parentId: "g",
+        enabled: false,
+      },
+      { id: "e", label: "Other", filter: "", color: "#cccccc", isElse: true },
+    ];
+    const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });
+    const out = roundTrip(input, "polygon");
+    assert.equal(out.vectorStyleMode, "rule-based");
+    const concrete = out.vectorRules.filter((rule) => !rule.isElse);
+    assert.equal(concrete.length, 3);
+    const [group, hw, minor] = concrete;
+    assert.equal(group.label, "Roads");
+    assert.equal(hw.parentId, group.id);
+    assert.equal(minor.parentId, group.id);
+    assert.equal(hw.color, "#ff0000");
+    assert.equal(hw.minZoom, 5);
+    assert.equal(hw.maxZoom, 12);
+    // The first leaf's symbol becomes the layer's flat style, so its own
+    // overrides normalize away while the other rules (and the else rule)
+    // recover the original layer stroke as per-rule overrides. The rendered
+    // result is identical to the input.
+    assert.equal(out.strokeWidth, 5);
+    assert.equal(out.strokeColor, "#00ffff");
+    assert.equal(hw.strokeWidth, undefined);
+    assert.equal(hw.strokeColor, undefined);
+    assert.equal(minor.enabled, false);
+    assert.equal(minor.strokeWidth, 2);
+    assert.equal(minor.strokeColor, "#1e40af");
+    const elseRule = out.vectorRules.find((rule) => rule.isElse);
+    assert.equal(elseRule?.color, "#cccccc");
+    assert.equal(elseRule?.label, "Other");
+    assert.equal(elseRule?.strokeWidth, 2);
+    assert.equal(elseRule?.strokeColor, "#1e40af");
+  });
+
+
+  it("preserves a per-rule circle size override on a point layer", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "a",
+        label: "Capital",
+        filter: '["==", ["get", "capital"], true]',
+        color: "#ff0000",
+        isElse: false,
+        circleRadius: 12,
+        fillOpacity: 0.4,
+      },
+      { id: "b", label: "City", filter: '["==", ["get", "capital"], false]', color: "#00ff00", isElse: false },
+      { id: "e", label: "", filter: "", color: "#cccccc", isElse: true },
+    ];
+    const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });
+    const out = roundTrip(input, "point");
+    const [capital, city] = out.vectorRules.filter((rule) => !rule.isElse);
+    // The first rule's symbol becomes the layer's flat style, so its own
+    // values import override-free while the second rule and the else rule pick
+    // up overrides that restore their original look.
+    assert.equal(out.circleRadius, 12);
+    assert.equal(capital.circleRadius, undefined);
+    assert.equal(city.circleRadius, 6);
+    const elseRule = out.vectorRules.find((rule) => rule.isElse);
+    assert.equal(elseRule?.circleRadius, 6);
+    assert.ok(Math.abs((elseRule?.fillOpacity ?? 0) - 0.6) <= 1 / 255 + 1e-9);
   });
 });

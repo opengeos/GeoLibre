@@ -49,6 +49,7 @@ import { RasterSymbologySection } from "./RasterSymbologySection";
 import {
   ChevronDown,
   ChevronUp,
+  CornerDownRight,
   Info,
   Palette,
   PanelRightClose,
@@ -286,6 +287,112 @@ function createVectorRule(isElse: boolean, color: string): VectorRule {
     color,
     isElse,
   };
+}
+
+/** One row of the rule editor's tree-ordered rule list. */
+interface RuleTreeRow {
+  rule: VectorRule;
+  depth: number;
+  /** True when other rules name this rule as their parent (a group). */
+  isGroup: boolean;
+}
+
+/**
+ * Order the concrete (non-else) rules as a depth-first tree walk following
+ * `parentId`, so children render indented under their parent. Rules with a
+ * dangling parent id render as roots; rules trapped in a `parentId` cycle are
+ * appended at the end so they stay visible and editable.
+ */
+function ruleTreeRows(rules: VectorRule[]): RuleTreeRow[] {
+  const concrete = rules.filter((rule) => !rule.isElse);
+  const byId = new Map(concrete.map((rule) => [rule.id, rule]));
+  const childrenOf = new Map<string, VectorRule[]>();
+  const roots: VectorRule[] = [];
+  for (const rule of concrete) {
+    const parent =
+      rule.parentId && rule.parentId !== rule.id
+        ? byId.get(rule.parentId)
+        : undefined;
+    if (parent) {
+      const siblings = childrenOf.get(parent.id);
+      if (siblings) siblings.push(rule);
+      else childrenOf.set(parent.id, [rule]);
+    } else {
+      roots.push(rule);
+    }
+  }
+  const rows: RuleTreeRow[] = [];
+  const seen = new Set<string>();
+  const visit = (rule: VectorRule, depth: number) => {
+    if (seen.has(rule.id)) return;
+    seen.add(rule.id);
+    const children = childrenOf.get(rule.id) ?? [];
+    rows.push({ rule, depth, isGroup: children.length > 0 });
+    for (const child of children) visit(child, depth + 1);
+  };
+  for (const root of roots) visit(root, 0);
+  for (const rule of concrete) visit(rule, 0);
+  return rows;
+}
+
+/** Ids of a rule and all rules nested (transitively) under it. */
+function ruleSubtreeIds(rules: VectorRule[], id: string): Set<string> {
+  const ids = new Set([id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const rule of rules) {
+      if (rule.isElse || ids.has(rule.id)) continue;
+      if (rule.parentId && ids.has(rule.parentId)) {
+        ids.add(rule.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
+}
+
+interface RuleNumberInputProps {
+  label: string;
+  value: number | undefined;
+  min: number;
+  step: number;
+  placeholder: string;
+  onChange: (value: number | undefined) => void;
+}
+
+/** A compact numeric input where a blank value means "inherit the layer value". */
+function RuleNumberInput({
+  label,
+  value,
+  min,
+  step,
+  placeholder,
+  onChange,
+}: RuleNumberInputProps) {
+  return (
+    <label className="space-y-1 text-xs text-muted-foreground">
+      <span>{label}</span>
+      <Input
+        type="number"
+        min={min}
+        step={step}
+        className="h-8"
+        placeholder={placeholder}
+        value={value ?? ""}
+        aria-label={label}
+        onChange={(event) => {
+          const raw = event.target.value.trim();
+          if (raw === "") {
+            onChange(undefined);
+            return;
+          }
+          const next = Number(raw);
+          if (Number.isFinite(next)) onChange(next);
+        }}
+      />
+    </label>
+  );
 }
 
 function getMetadataFieldNames(metadata: Record<string, unknown>): string[] {
@@ -1876,6 +1983,7 @@ export function StylePanel({
   // --- Rule-based renderer (immediate writes to style.vectorRules) ---
   const currentRules = styleValue(style, "vectorRules");
   const concreteRules = currentRules.filter((rule) => !rule.isElse);
+  const ruleRows = ruleTreeRows(currentRules);
   const elseRule = currentRules.find((rule) => rule.isElse) ?? null;
   const setVectorRules = (rules: VectorRule[]) =>
     setLayerStyle(layer.id, { vectorRules: rules });
@@ -1885,6 +1993,22 @@ export function StylePanel({
         rule.id === id ? { ...rule, ...patch } : rule,
       ),
     );
+  const addChildVectorRule = (parentId: string) => {
+    const child = {
+      ...createVectorRule(false, nextStopColor(concreteRules.length)),
+      parentId,
+    };
+    // Insert after the parent's whole subtree so the child lands last among
+    // its siblings in the tree walk and the else rule stays at the end.
+    const subtree = ruleSubtreeIds(currentRules, parentId);
+    let insertAt = currentRules.length;
+    for (let index = 0; index < currentRules.length; index += 1) {
+      if (subtree.has(currentRules[index].id)) insertAt = index + 1;
+    }
+    const next = [...currentRules];
+    next.splice(insertAt, 0, child);
+    setVectorRules(next);
+  };
   const addVectorRule = () => {
     const next = createVectorRule(false, nextStopColor(concreteRules.length));
     // Keep the catch-all else rule last so it reads as the fallback.
@@ -1892,8 +2016,12 @@ export function StylePanel({
       elseRule ? [...concreteRules, next, elseRule] : [...concreteRules, next],
     );
   };
-  const removeVectorRule = (id: string) =>
-    setVectorRules(currentRules.filter((rule) => rule.id !== id));
+  const removeVectorRule = (id: string) => {
+    // Removing a group removes its whole subtree; orphaned children would
+    // otherwise silently become top-level rules and change what draws.
+    const doomed = ruleSubtreeIds(currentRules, id);
+    setVectorRules(currentRules.filter((rule) => !doomed.has(rule.id)));
+  };
   const setElseRuleColor = (color: string) => {
     if (elseRule) {
       updateVectorRule(elseRule.id, { color });
@@ -2165,12 +2293,32 @@ export function StylePanel({
               {t("style.symbology.noRulesSuffix")}
             </p>
           ) : null}
-          {concreteRules.map((rule, index) => (
+          {ruleRows.map(({ rule, depth, isGroup }, index) => (
             <div
               key={rule.id}
               className="space-y-2 rounded-md border border-input p-2"
+              style={
+                depth > 0
+                  ? { marginInlineStart: `${Math.min(depth, 4) * 12}px` }
+                  : undefined
+              }
             >
-              <div className="grid grid-cols-[auto_1fr_2rem] items-center gap-2">
+              <div className="grid grid-cols-[auto_auto_1fr_2rem_2rem] items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rule.enabled !== false}
+                  title={t("style.symbology.ruleEnabled", {
+                    index: index + 1,
+                  })}
+                  aria-label={t("style.symbology.ruleEnabled", {
+                    index: index + 1,
+                  })}
+                  onChange={(event) =>
+                    updateVectorRule(rule.id, {
+                      enabled: event.target.checked ? undefined : false,
+                    })
+                  }
+                />
                 <ColorField
                   fill={false}
                   aria-label={t("style.symbology.ruleColor", {
@@ -2199,6 +2347,17 @@ export function StylePanel({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8"
+                  title={t("style.symbology.ruleAddChild")}
+                  aria-label={t("style.symbology.ruleAddChild")}
+                  onClick={() => addChildVectorRule(rule.id)}
+                >
+                  <CornerDownRight className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   title={t("style.symbology.removeRule")}
                   aria-label={t("style.symbology.removeRule")}
                   onClick={() => removeVectorRule(rule.id)}
@@ -2222,6 +2381,108 @@ export function StylePanel({
                   {t("style.symbology.filterInvalid")}
                 </p>
               ) : null}
+              {isGroup ? (
+                <p className="text-xs text-muted-foreground">
+                  {t("style.symbology.ruleGroupNote")}
+                </p>
+              ) : null}
+              <details>
+                <summary className="cursor-pointer text-xs text-muted-foreground">
+                  {t("style.symbology.ruleOptions")}
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <RuleNumberInput
+                      label={t("style.symbology.ruleMinZoom")}
+                      value={rule.minZoom}
+                      min={0}
+                      step={1}
+                      placeholder={t("style.symbology.ruleInherit")}
+                      onChange={(minZoom) =>
+                        updateVectorRule(rule.id, { minZoom })
+                      }
+                    />
+                    <RuleNumberInput
+                      label={t("style.symbology.ruleMaxZoom")}
+                      value={rule.maxZoom}
+                      min={0}
+                      step={1}
+                      placeholder={t("style.symbology.ruleInherit")}
+                      onChange={(maxZoom) =>
+                        updateVectorRule(rule.id, { maxZoom })
+                      }
+                    />
+                  </div>
+                  {!isGroup ? (
+                    <>
+                      <div className="grid grid-cols-3 gap-2">
+                        <RuleNumberInput
+                          label={t("style.symbology.ruleStrokeWidth")}
+                          value={rule.strokeWidth}
+                          min={0}
+                          step={0.5}
+                          placeholder={t("style.symbology.ruleInherit")}
+                          onChange={(strokeWidth) =>
+                            updateVectorRule(rule.id, { strokeWidth })
+                          }
+                        />
+                        <RuleNumberInput
+                          label={t("style.symbology.ruleFillOpacity")}
+                          value={rule.fillOpacity}
+                          min={0}
+                          step={0.1}
+                          placeholder={t("style.symbology.ruleInherit")}
+                          onChange={(fillOpacity) =>
+                            updateVectorRule(rule.id, { fillOpacity })
+                          }
+                        />
+                        <RuleNumberInput
+                          label={t("style.symbology.ruleCircleSize")}
+                          value={rule.circleRadius}
+                          min={0}
+                          step={1}
+                          placeholder={t("style.symbology.ruleInherit")}
+                          onChange={(circleRadius) =>
+                            updateVectorRule(rule.id, { circleRadius })
+                          }
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={rule.strokeColor !== undefined}
+                            onChange={(event) =>
+                              updateVectorRule(rule.id, {
+                                strokeColor: event.target.checked
+                                  ? styleValue(style, "strokeColor")
+                                  : undefined,
+                              })
+                            }
+                          />
+                          {t("style.symbology.ruleOutlineColor")}
+                        </label>
+                        {rule.strokeColor !== undefined ? (
+                          <ColorField
+                            fill={false}
+                            aria-label={t("style.symbology.ruleOutlineColor")}
+                            eyedropperLabel={t(
+                              "style.symbology.ruleOutlineColorPick",
+                              { index: index + 1 },
+                            )}
+                            className="h-8 w-8 p-1"
+                            buttonClassName="h-8 w-8"
+                            value={rule.strokeColor}
+                            onChange={(strokeColor) =>
+                              updateVectorRule(rule.id, { strokeColor })
+                            }
+                          />
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              </details>
             </div>
           ))}
           <div className="grid grid-cols-[auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
