@@ -8,21 +8,13 @@ import {
   matchFeaturesByLocation,
   type SelectLocationPredicate,
 } from "@geolibre/processing";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Label,
-  Select,
-} from "@geolibre/ui";
+import { Button, Label, Select } from "@geolibre/ui";
 import type { ParseKeys } from "i18next";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import { applyMatchedSelection } from "../../lib/selection-actions";
 import {
+  SelectionFloatingPanel,
   SelectionModeField,
   selectableVectorLayers,
 } from "./selection-dialog-shared";
@@ -49,8 +41,8 @@ interface SelectionSummary {
  * selection based on their spatial relationship to a second layer, using the
  * same Turf predicate engine as the Select by location processing tool — but
  * selecting in place instead of extracting a new layer. Like Select by
- * Expression, the dialog stays open after a run and the four modes combine
- * with the current selection.
+ * Expression, this is a floating, non-modal panel: the map stays interactive
+ * between runs, and the four modes combine with the current selection.
  */
 export function SelectByLocationDialog(): ReactElement | null {
   const { t } = useTranslation();
@@ -146,14 +138,16 @@ export function SelectByLocationDialog(): ReactElement | null {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(next) => setOpen(next)}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("selection.byLocationTitle")}</DialogTitle>
-          <DialogDescription>
-            {t("selection.byLocationDescription")}
-          </DialogDescription>
-        </DialogHeader>
+    <SelectionFloatingPanel
+      open={open}
+      title={t("selection.byLocationTitle")}
+      onClose={() => setOpen(false)}
+      defaultPositionClass="start-10 top-24"
+    >
+      <div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          {t("selection.byLocationDescription")}
+        </p>
         {eligibleLayers.length < 2 ? (
           <p className="text-sm text-muted-foreground">
             {t("selection.needTwoLayers")}
@@ -250,17 +244,14 @@ export function SelectByLocationDialog(): ReactElement | null {
                 )}
               </p>
             )}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                {t("common.close")}
-              </Button>
+            <div className="flex justify-end">
               <Button onClick={runSelection} disabled={!canSelect}>
                 {t("selection.select")}
               </Button>
             </div>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </SelectionFloatingPanel>
   );
 }

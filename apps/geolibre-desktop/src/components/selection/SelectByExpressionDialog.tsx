@@ -4,17 +4,7 @@ import {
   useAppStore,
   validateMapExpression,
 } from "@geolibre/core";
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Label,
-  Select,
-  Textarea,
-} from "@geolibre/ui";
+import { Button, Label, Select, Textarea } from "@geolibre/ui";
 import { SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +15,7 @@ import {
 import { applyMatchedSelection } from "../../lib/selection-actions";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
+  SelectionFloatingPanel,
   SelectionModeField,
   selectableVectorLayers,
 } from "./selection-dialog-shared";
@@ -40,9 +31,10 @@ interface SelectionSummary {
 /**
  * Select by Expression (#1314): evaluates a boolean MapLibre expression
  * against every feature of a vector layer and turns the matches into the
- * live selection (highlighted on the map, rows in the attribute table). The
- * dialog stays open after selecting so the expression can be refined, QGIS
- * style; the four modes combine each run with the current selection.
+ * live selection (highlighted on the map, rows in the attribute table).
+ * Rendered as a floating, non-modal panel so the map and attribute table
+ * stay interactive: run a selection, pan to inspect it, refine, re-run —
+ * QGIS style. The four modes combine each run with the current selection.
  */
 export function SelectByExpressionDialog(): ReactElement | null {
   const { t } = useTranslation();
@@ -99,8 +91,11 @@ export function SelectByExpressionDialog(): ReactElement | null {
     () => (targetLayer ? getAttributePropertyNames(targetLayer) : []),
     [targetLayer],
   );
-  // Snapshot the camera when the dialog opens instead of subscribing: both
-  // dialogs are modal, so the map cannot move underneath them.
+  // Camera snapshot for the (modal) Expression Builder's props and for
+  // validation, taken at open instead of subscribing — a mapView
+  // subscription would re-render on every pan and thrash the builder's
+  // prop-identity memoization. The panel itself is non-modal, so
+  // runSelection re-snapshots fresh values per run (below).
   const { zoom, variables } = useMemo(() => {
     const { zoom: mapZoom, center } = useAppStore.getState().mapView;
     return {
@@ -133,9 +128,18 @@ export function SelectByExpressionDialog(): ReactElement | null {
 
   const runSelection = () => {
     if (!targetLayer) return;
+    // The panel is non-modal, so the camera may have moved since open:
+    // evaluate ["zoom"] and the @map_* variables against the live view.
+    const { zoom: liveZoom, center } = useAppStore.getState().mapView;
     const result = matchFeaturesByExpression(features, source, {
-      zoom,
-      variables,
+      zoom: liveZoom,
+      variables: standardExpressionVariables({
+        projectName,
+        layerName: targetLayer.name,
+        featureCount: features.length,
+        zoom: liveZoom,
+        centerLat: center[1],
+      }),
     });
     if (!result.ok) return;
     const selected = applyMatchedSelection(
@@ -153,14 +157,16 @@ export function SelectByExpressionDialog(): ReactElement | null {
 
   return (
     <>
-      <Dialog open={open} onOpenChange={(next) => setOpen(next)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{t("selection.byExpressionTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("selection.byExpressionDescription")}
-            </DialogDescription>
-          </DialogHeader>
+      <SelectionFloatingPanel
+        open={open}
+        title={t("selection.byExpressionTitle")}
+        onClose={() => setOpen(false)}
+        defaultPositionClass="start-4 top-16"
+      >
+        <div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            {t("selection.byExpressionDescription")}
+          </p>
           {eligibleLayers.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {t("selection.noLayers")}
@@ -242,18 +248,15 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   )}
                 </p>
               )}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  {t("common.close")}
-                </Button>
+              <div className="flex justify-end">
                 <Button onClick={runSelection} disabled={!canSelect}>
                   {t("selection.select")}
                 </Button>
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
+        </div>
+      </SelectionFloatingPanel>
       {builderOpen && targetLayer && (
         <ExpressionBuilderDialog
           open
