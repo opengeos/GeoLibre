@@ -149,7 +149,9 @@ uploads its report as an artifact on failure.
     formats and lints (`ruff.toml`, line length 100, rules `F`/`I`/`W`/`E`).
   - **JS/TS/JSON/CSS/YAML/TOML** — [oxfmt](https://github.com/oxc-project/oxc)
     (npm, NAPI bindings) formats (`.oxfmtrc.json`, 2-space indent, double
-    quotes, semicolons, width 100).
+    quotes, semicolons, width 100). Note that oxfmt also sorts `package.json`
+    keys into its conventional order (e.g. `scripts` before `dependencies`), so
+    expect key reordering, not just whitespace changes, when editing those.
     `ignorePatterns` in `.oxfmtrc.json` keeps oxfmt off paths that either belong
     to another tool or churn on every build: Jupyter notebooks and Python source
     (owned by ruff), lockfiles (`package-lock.json`, `pnpm-lock.yaml`,
