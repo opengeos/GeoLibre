@@ -617,6 +617,30 @@ describe("drawLayout data blocks (GH #1324)", () => {
     assert.ok(ca.w > or.w, "expected the larger value to draw a wider bar");
   });
 
+  it("draws a truncation note for bar categories past the top-N cap", () => {
+    const rec = recordingCanvas();
+    drawLayout(
+      rec.canvas,
+      baseOptions({
+        dataChart: {
+          position: "top-right",
+          data: {
+            kind: "bar",
+            bars: [{ label: "CA", value: 12, color: "#111111" }],
+            maxValue: 12,
+            minValue: 0,
+            truncated: 7,
+          },
+          formatNote: (count) => `+${count} more`,
+        },
+      }),
+    );
+    assert.ok(
+      rec.fills.some((f) => f.text === "+7 more"),
+      "expected the dropped-category note to be drawn",
+    );
+  });
+
   it("renders pie slice labels, percentages, and slice arcs", () => {
     const rec = recordingCanvas();
     const before = rec.arcs;

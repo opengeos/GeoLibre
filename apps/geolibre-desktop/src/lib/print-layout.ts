@@ -166,6 +166,12 @@ export type DataChartData =
       maxValue: number;
       /** Smallest bar value; negative when sum/mean produce negatives. */
       minValue: number;
+      /**
+       * Categories dropped past the top-N cap, drawn as a "+N more" note so
+       * the chart is never silently incomplete (the pie folds its remainder
+       * into an "(other)" slice instead).
+       */
+      truncated?: number;
     }
   | {
       kind: "pie";
@@ -338,6 +344,11 @@ export interface LayoutOptions {
     title?: string;
     position: BodyCorner;
     data: DataChartData;
+    /**
+     * Translated formatter for the bar chart's "+N more" truncation note;
+     * falls back to English when omitted (like the table's formatter).
+     */
+    formatNote?: (count: number) => string;
   } | null;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
@@ -1698,6 +1709,13 @@ function drawDataChart(
   if (data.kind === "bar") {
     const labelCap = unit * 18;
     const barAreaW = unit * 20;
+    // Categories the top-N cap dropped are surfaced as a note row, so the
+    // chart is never silently incomplete.
+    const barNote =
+      (data.truncated ?? 0) > 0
+        ? (chart.formatNote?.(data.truncated ?? 0) ??
+          `+${data.truncated} more`)
+        : "";
     let labelW = 0;
     let valueW = 0;
     for (const bar of data.bars) {
@@ -1711,7 +1729,7 @@ function drawDataChart(
       );
     }
     contentW = labelW + gap + barAreaW + gap + valueW;
-    contentH = data.bars.length * rowH;
+    contentH = (data.bars.length + (barNote ? 1 : 0)) * rowH;
     drawContent = (cx0, cy0) => {
       // Scale across the full value range so negative sums/means keep a truthful
       // zero baseline (bars extend left of it).
@@ -1735,6 +1753,12 @@ function drawDataChart(
           cx0 + labelW + gap + barAreaW + gap,
           cy,
         );
+      }
+      if (barNote) {
+        cy += rowH;
+        ctx.fillStyle = MUTED;
+        ctx.textAlign = "left";
+        ctx.fillText(truncateToWidth(ctx, barNote, contentW), cx0, cy);
       }
     };
   } else if (data.kind === "pie") {

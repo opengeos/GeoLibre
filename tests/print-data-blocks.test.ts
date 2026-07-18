@@ -10,6 +10,7 @@ import {
   MAX_TABLE_ROWS,
   rowsWithinBounds,
 } from "../apps/geolibre-desktop/src/lib/print-data-blocks";
+import { collectAtlasFeatures } from "../apps/geolibre-desktop/src/lib/print-atlas";
 import type { ChartRow } from "../apps/geolibre-desktop/src/lib/attribute-charts";
 
 function point(
@@ -67,8 +68,12 @@ describe("rowsWithinBounds", () => {
     ],
   };
 
+  // The dialog precomputes per-feature bounds once per layer (the atlas
+  // pattern) and hands those to the filter.
+  const infos = collectAtlasFeatures(collection);
+
   it("keeps only features whose bounds intersect the extent", () => {
-    const result = rowsWithinBounds(collection, [0, 0, 10, 10]);
+    const result = rowsWithinBounds(infos, [0, 0, 10, 10]);
     assert.deepEqual(
       result.map((r) => r.properties.name),
       ["inside"],
@@ -76,7 +81,7 @@ describe("rowsWithinBounds", () => {
   });
 
   it("returns no rows for a fully disjoint extent", () => {
-    assert.equal(rowsWithinBounds(collection, [-30, -30, -20, -20]).length, 0);
+    assert.equal(rowsWithinBounds(infos, [-30, -30, -20, -20]).length, 0);
   });
 });
 
@@ -199,6 +204,20 @@ describe("buildChartBlock", () => {
     );
     assert.equal(chart.maxValue, 2);
     assert.ok(chart.bars.every((b) => /^#/.test(b.color)));
+  });
+
+  it("reports bar categories dropped past the top-N cap", () => {
+    const many = rows(
+      ...Array.from({ length: 25 }, (_, i) => ({ kind: `k${i}` })),
+    );
+    const chart = buildChartBlock(many, {
+      type: "bar",
+      categoryField: "kind",
+      aggregation: "count",
+    });
+    assert.ok(chart && chart.kind === "bar");
+    assert.equal(chart.bars.length, 20);
+    assert.equal(chart.truncated, 5);
   });
 
   it("builds a sum-aggregated pie whose slices carry the total", () => {

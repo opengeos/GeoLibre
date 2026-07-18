@@ -15,7 +15,7 @@ import {
   type BarAggregation,
   type ChartRow,
 } from "./attribute-charts";
-import { geometryBounds, type AtlasBounds } from "./print-atlas";
+import { type AtlasBounds, type AtlasFeatureInfo } from "./print-atlas";
 import { paletteColor } from "../components/panels/charts/chart-colors";
 import type { DataChartData } from "./print-layout";
 
@@ -54,21 +54,21 @@ export function boundsIntersect(a: AtlasBounds, b: AtlasBounds): boolean {
 
 /**
  * The rows of the features whose geometry bounding box intersects `bounds` —
- * the per-page filter for atlas data blocks. A bbox test (not an exact
- * intersection) matches how atlas pages themselves are framed, and features
- * without a usable geometry are excluded (they are nowhere on the page).
+ * the per-page filter for atlas data blocks. Takes {@link AtlasFeatureInfo}s
+ * (from `collectAtlasFeatures`) rather than raw features so the per-vertex
+ * geometry walk runs once per layer, not once per atlas page; features
+ * without a usable geometry were already dropped there (they are nowhere on
+ * the page). A bbox test (not an exact intersection) matches how atlas pages
+ * themselves are framed.
  */
 export function rowsWithinBounds(
-  collection: Pick<FeatureCollection, "features">,
+  features: readonly AtlasFeatureInfo[],
   bounds: AtlasBounds,
 ): ChartRow[] {
   const rows: ChartRow[] = [];
-  for (const feature of collection.features) {
-    const b = geometryBounds(feature.geometry);
-    if (!b || !boundsIntersect(b, bounds)) continue;
-    rows.push({
-      properties: (feature.properties ?? {}) as Record<string, unknown>,
-    });
+  for (const info of features) {
+    if (!boundsIntersect(info.bounds, bounds)) continue;
+    rows.push({ properties: info.properties });
   }
   return rows;
 }
@@ -211,5 +211,6 @@ export function buildChartBlock(
     })),
     maxValue: bar.maxValue,
     minValue: bar.minValue,
+    truncated: bar.truncated,
   };
 }

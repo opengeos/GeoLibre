@@ -109,6 +109,7 @@ import {
   stripAtlasTokens,
   substituteAtlasTokens,
   type AtlasBounds,
+  type AtlasFeatureInfo,
   type AtlasPage,
   type AtlasTokenContext,
 } from "../../lib/print-atlas";
@@ -963,6 +964,19 @@ export function PrintLayoutDialog({
     () => (chartLayer?.geojson ? layerRows(chartLayer.geojson) : []),
     [chartLayer],
   );
+  // Per-feature bounds for the page-extent filter, walked once per layer so
+  // stepping/exporting an N-page atlas does not redo the vertex walk N times
+  // (the same precompute pattern the atlas page builder uses).
+  const tableFeatureInfos = useMemo(
+    () =>
+      tableLayer?.geojson ? collectAtlasFeatures(tableLayer.geojson) : [],
+    [tableLayer],
+  );
+  const chartFeatureInfos = useMemo(
+    () =>
+      chartLayer?.geojson ? collectAtlasFeatures(chartLayer.geojson) : [],
+    [chartLayer],
+  );
   const chartCategoricalFields = useMemo(
     () => categoricalColumns(chartAllRows, chartFields),
     [chartAllRows, chartFields],
@@ -1020,16 +1034,12 @@ export function PrintLayoutDialog({
   // it only re-runs when the layer, filter toggle, or bounds change.
   const rowsForBlock = useCallback(
     (
-      layer: (typeof atlasLayers)[number] | null,
+      features: readonly AtlasFeatureInfo[],
       allRows: ChartRow[],
       filterOn: boolean,
       bounds: AtlasBounds | null,
-    ): ChartRow[] => {
-      if (!layer?.geojson) return [];
-      return filterOn && bounds
-        ? rowsWithinBounds(layer.geojson, bounds)
-        : allRows;
-    },
+    ): ChartRow[] =>
+      filterOn && bounds ? rowsWithinBounds(features, bounds) : allRows,
     [],
   );
 
@@ -1076,6 +1086,9 @@ export function PrintLayoutDialog({
             title: chartTitle.trim() || undefined,
             position: chartPosition,
             data,
+            // Translated "+N more" for bar categories past the top-N cap.
+            formatNote: (count) =>
+              t("printLayout.dataTable.moreRows", { count }),
           };
         }
       }
@@ -1115,7 +1128,7 @@ export function PrintLayoutDialog({
     () =>
       showDataTable
         ? rowsForBlock(
-            tableLayer,
+            tableFeatureInfos,
             tableAllRows,
             tableFilterToPage,
             displayFilterBounds,
@@ -1124,7 +1137,7 @@ export function PrintLayoutDialog({
     [
       showDataTable,
       rowsForBlock,
-      tableLayer,
+      tableFeatureInfos,
       tableAllRows,
       tableFilterToPage,
       displayFilterBounds,
@@ -1134,7 +1147,7 @@ export function PrintLayoutDialog({
     () =>
       showDataChart
         ? rowsForBlock(
-            chartLayer,
+            chartFeatureInfos,
             chartAllRows,
             chartFilterToPage,
             displayFilterBounds,
@@ -1143,7 +1156,7 @@ export function PrintLayoutDialog({
     [
       showDataChart,
       rowsForBlock,
-      chartLayer,
+      chartFeatureInfos,
       chartAllRows,
       chartFilterToPage,
       displayFilterBounds,
@@ -1687,13 +1700,13 @@ export function PrintLayoutDialog({
             // capture actually shows (not just the nominal feature bounds).
             ...buildBlocksFromRows(
               rowsForBlock(
-                tableLayer,
+                tableFeatureInfos,
                 tableAllRows,
                 tableFilterToPage,
                 viewBounds,
               ),
               rowsForBlock(
-                chartLayer,
+                chartFeatureInfos,
                 chartAllRows,
                 chartFilterToPage,
                 viewBounds,
