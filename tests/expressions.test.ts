@@ -7,9 +7,9 @@ import {
   EXPRESSION_FUNCTION_CATEGORIES,
   type ExpressionVariable,
   evaluateMapExpression,
-  expressionUsesVariables,
   formatExpressionPreviewValue,
   inferFieldTypes,
+  isStyleSpecColor,
   parseJsonExpression,
   removeTrailingJsonCommas,
   substituteExpressionVariables,
@@ -223,12 +223,12 @@ describe("variables", () => {
     );
   });
 
-  it("detects token usage in a source string", () => {
-    assert.equal(
-      expressionUsesVariables('["get", "@project_name"]', variables),
-      true,
-    );
-    assert.equal(expressionUsesVariables('["get", "name"]', variables), false);
+  it("recognizes style-spec color shapes", () => {
+    const preview = evaluateMapExpression('["to-color", "#ff0000"]', {});
+    assert.equal(isStyleSpecColor(preview.value), true);
+    assert.equal(isStyleSpecColor("#ff0000"), false);
+    assert.equal(isStyleSpecColor(null), false);
+    assert.equal(isStyleSpecColor({ r: 1, g: 1, b: 1 }), false);
   });
 });
 

@@ -1,4 +1,5 @@
 import { createExpression } from "@maplibre/maplibre-gl-style-spec";
+import type { StyleExpression } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
 
 /**
@@ -248,24 +249,41 @@ export function validateMapExpression(
   source: string,
   options: ValidateMapExpressionOptions = {},
 ): ExpressionValidation {
+  return compileMapExpression(source, options).validation;
+}
+
+/**
+ * The single parse + substitute + compile pass shared by validation and
+ * preview evaluation, so a preview never compiles the same source twice.
+ * `expression` is set only when the validation succeeded on a non-empty
+ * source.
+ */
+function compileMapExpression(
+  source: string,
+  options: ValidateMapExpressionOptions,
+): { validation: ExpressionValidation; expression?: StyleExpression } {
   const trimmed = source.trim();
-  if (!trimmed) return { ok: true, errors: [] };
+  if (!trimmed) return { validation: { ok: true, errors: [] } };
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(removeTrailingJsonCommas(trimmed));
   } catch (error) {
     return {
-      ok: false,
-      code: "not-json",
-      errors: [error instanceof Error ? error.message : "Invalid JSON"],
+      validation: {
+        ok: false,
+        code: "not-json",
+        errors: [error instanceof Error ? error.message : "Invalid JSON"],
+      },
     };
   }
   if (!Array.isArray(parsed)) {
-    return { ok: false, code: "not-array", errors: [] };
+    return { validation: { ok: false, code: "not-array", errors: [] } };
   }
   if (typeof parsed[0] !== "string") {
-    return { ok: false, code: "not-operator", errors: [], parsed };
+    return {
+      validation: { ok: false, code: "not-operator", errors: [], parsed },
+    };
   }
 
   const substituted = substituteExpressionVariables(
@@ -278,15 +296,17 @@ export function validateMapExpression(
   );
   if (compiled.result === "error") {
     return {
-      ok: false,
-      code: "compile",
-      errors: compiled.value.map((issue) =>
-        issue.key ? `${issue.key}: ${issue.message}` : issue.message,
-      ),
-      parsed,
+      validation: {
+        ok: false,
+        code: "compile",
+        errors: compiled.value.map((issue) =>
+          issue.key ? `${issue.key}: ${issue.message}` : issue.message,
+        ),
+        parsed,
+      },
     };
   }
-  return { ok: true, errors: [], parsed };
+  return { validation: { ok: true, errors: [], parsed }, expression: compiled.value };
 }
 
 /** A named `@` variable with its current value. */
@@ -324,16 +344,6 @@ export function substituteExpressionVariables(
   return node;
 }
 
-/** True when the expression source contains at least one known `@token`. */
-export function expressionUsesVariables(
-  source: string,
-  variables: ExpressionVariable[],
-): boolean {
-  return variables.some((variable) =>
-    source.includes(`"${variable.token}"`),
-  );
-}
-
 /** Result of a live preview evaluation. */
 export interface ExpressionPreview {
   kind: "empty" | "error" | "value";
@@ -369,33 +379,18 @@ export function evaluateMapExpression(
   const trimmed = source.trim();
   if (!trimmed) return { kind: "empty" };
 
-  const validation = validateMapExpression(trimmed, {
+  const { validation, expression } = compileMapExpression(trimmed, {
     variables: options.variables,
     expectedType: options.expectedType,
   });
-  if (!validation.ok || !validation.parsed) {
+  if (!validation.ok || !expression) {
     return { kind: "error", errors: validation.errors };
-  }
-
-  const substituted = substituteExpressionVariables(
-    validation.parsed,
-    options.variables ?? [],
-  );
-  const compiled = createExpression(
-    substituted as unknown[],
-    options.expectedType ? propertySpecFor(options.expectedType) : undefined,
-  );
-  if (compiled.result === "error") {
-    return {
-      kind: "error",
-      errors: compiled.value.map((issue) => issue.message),
-    };
   }
 
   const feature = options.feature ?? null;
   const geometryType = feature?.geometry?.type ?? "Unknown";
   try {
-    const value = compiled.value.evaluate(
+    const value = expression.evaluate(
       { zoom: options.zoom ?? 0 },
       {
         type: geometryType,
@@ -414,20 +409,33 @@ export function evaluateMapExpression(
 }
 
 /**
+ * True when a preview value is shaped like a style-spec `Color` (its
+ * evaluated color representation: premultiplied r/g/b/a floats). Shared by
+ * the preview formatter and the dialog's color-swatch rendering so the two
+ * checks cannot drift apart.
+ */
+export function isStyleSpecColor(
+  value: unknown,
+): value is { r: number; g: number; b: number; a: number } {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "r" in value &&
+    "g" in value &&
+    "b" in value &&
+    "a" in value
+  );
+}
+
+/**
  * Renders a preview value as a short display string: style-spec Color
  * instances become rgba() strings, plain values render as JSON, and
  * `null`/`undefined` render as "null".
  */
 export function formatExpressionPreviewValue(value: unknown): string {
   if (value === null || value === undefined) return "null";
-  if (
-    typeof value === "object" &&
-    "r" in value &&
-    "g" in value &&
-    "b" in value &&
-    "a" in value
-  ) {
-    const color = value as { r: number; g: number; b: number; a: number };
+  if (isStyleSpecColor(value)) {
+    const color = value;
     // Style-spec colors are premultiplied floats in [0, 1]; undo the
     // premultiplication so the displayed rgba matches the authored color.
     const alpha = color.a;

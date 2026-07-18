@@ -4,6 +4,7 @@ import {
   evaluateMapExpression,
   formatExpressionPreviewValue,
   inferFieldTypes,
+  isStyleSpecColor,
   substituteExpressionVariables,
   validateMapExpression,
 } from "@geolibre/core";
@@ -213,13 +214,7 @@ export function ExpressionBuilderDialog({
       );
     }
     const value = preview.value;
-    const colorish =
-      value !== null &&
-      typeof value === "object" &&
-      "r" in value &&
-      "g" in value &&
-      "b" in value &&
-      "a" in value;
+    const colorish = isStyleSpecColor(value);
     const display = formatExpressionPreviewValue(value);
     return (
       <p className="flex items-center gap-2 break-all font-mono text-xs">
