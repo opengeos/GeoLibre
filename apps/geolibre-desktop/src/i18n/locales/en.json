@@ -3306,7 +3306,7 @@
         "priorityTarget": "Label priority expression",
         "notSet": "Not set",
         "clear": "Clear expression",
-        "hint": "Per-feature MapLibre expressions. Size, opacity, and priority produce numbers (labels with lower priority values are placed first), color a color, visibility true/false. Ignored while duplicate-label collapsing is active."
+        "hint": "Per-feature MapLibre expressions. Size, opacity, and priority produce numbers (labels with lower priority values are placed first), color a color, visibility true/false. Ignored while duplicate-label collapsing is active. An opacity expression replaces the layer opacity for labels."
       }
     },
     "elevation3d": {

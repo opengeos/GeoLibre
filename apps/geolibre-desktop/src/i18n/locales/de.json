@@ -2767,7 +2767,7 @@
         "priorityTarget": "Ausdruck für Beschriftungspriorität",
         "notSet": "Nicht gesetzt",
         "clear": "Ausdruck löschen",
-        "hint": "MapLibre-Ausdrücke pro Feature. Größe, Deckkraft und Priorität ergeben Zahlen (Beschriftungen mit niedrigeren Prioritätswerten werden zuerst platziert), Farbe eine Farbe, Sichtbarkeit wahr/falsch. Wird ignoriert, solange das Zusammenfassen doppelter Beschriftungen aktiv ist."
+        "hint": "MapLibre-Ausdrücke pro Feature. Größe, Deckkraft und Priorität ergeben Zahlen (Beschriftungen mit niedrigeren Prioritätswerten werden zuerst platziert), Farbe eine Farbe, Sichtbarkeit wahr/falsch. Wird ignoriert, solange das Zusammenfassen doppelter Beschriftungen aktiv ist. Ein Deckkraft-Ausdruck ersetzt die Ebenendeckkraft für Beschriftungen."
       }
     },
     "elevation3d": {

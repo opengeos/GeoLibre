@@ -2767,7 +2767,7 @@
         "priorityTarget": "Espressione priorità etichetta",
         "notSet": "Non impostato",
         "clear": "Cancella espressione",
-        "hint": "Espressioni MapLibre per elemento. Dimensione, opacità e priorità producono numeri (le etichette con valori di priorità più bassi vengono posizionate per prime), colore un colore, visibilità vero/falso. Ignorate mentre l'unione delle etichette duplicate è attiva."
+        "hint": "Espressioni MapLibre per elemento. Dimensione, opacità e priorità producono numeri (le etichette con valori di priorità più bassi vengono posizionate per prime), colore un colore, visibilità vero/falso. Ignorate mentre l'unione delle etichette duplicate è attiva. Un'espressione di opacità sostituisce l'opacità del layer per le etichette."
       }
     },
     "elevation3d": {

@@ -2767,7 +2767,7 @@
         "priorityTarget": "Etiket önceliği ifadesi",
         "notSet": "Ayarlanmadı",
         "clear": "İfadeyi temizle",
-        "hint": "Öğe başına MapLibre ifadeleri. Boyut, opaklık ve öncelik sayı üretir (öncelik değeri düşük etiketler önce yerleştirilir), renk bir renk, görünürlük doğru/yanlış üretir. Yinelenen etiket birleştirme etkinken yok sayılır."
+        "hint": "Öğe başına MapLibre ifadeleri. Boyut, opaklık ve öncelik sayı üretir (öncelik değeri düşük etiketler önce yerleştirilir), renk bir renk, görünürlük doğru/yanlış üretir. Yinelenen etiket birleştirme etkinken yok sayılır. Opaklık ifadesi, etiketler için katman opaklığının yerine geçer."
       }
     },
     "elevation3d": {

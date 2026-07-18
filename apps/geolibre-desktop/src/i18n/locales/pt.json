@@ -2767,7 +2767,7 @@
         "priorityTarget": "Expressão de prioridade do rótulo",
         "notSet": "Não definido",
         "clear": "Limpar expressão",
-        "hint": "Expressões MapLibre por feição. Tamanho, opacidade e prioridade produzem números (rótulos com valores de prioridade mais baixos são posicionados primeiro), cor uma cor e visibilidade verdadeiro/falso. Ignoradas enquanto o agrupamento de rótulos duplicados está ativo."
+        "hint": "Expressões MapLibre por feição. Tamanho, opacidade e prioridade produzem números (rótulos com valores de prioridade mais baixos são posicionados primeiro), cor uma cor e visibilidade verdadeiro/falso. Ignoradas enquanto o agrupamento de rótulos duplicados está ativo. Uma expressão de opacidade substitui a opacidade da camada para os rótulos."
       }
     },
     "elevation3d": {

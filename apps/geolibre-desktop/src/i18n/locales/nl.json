@@ -2767,7 +2767,7 @@
         "priorityTarget": "Expressie voor labelprioriteit",
         "notSet": "Niet ingesteld",
         "clear": "Expressie wissen",
-        "hint": "MapLibre-expressies per feature. Grootte, dekking en prioriteit leveren getallen op (labels met lagere prioriteitswaarden worden eerst geplaatst), kleur een kleur, zichtbaarheid waar/onwaar. Genegeerd zolang het samenvoegen van dubbele labels actief is."
+        "hint": "MapLibre-expressies per feature. Grootte, dekking en prioriteit leveren getallen op (labels met lagere prioriteitswaarden worden eerst geplaatst), kleur een kleur, zichtbaarheid waar/onwaar. Genegeerd zolang het samenvoegen van dubbele labels actief is. Een dekkingsexpressie vervangt de laagdekking voor labels."
       }
     },
     "elevation3d": {

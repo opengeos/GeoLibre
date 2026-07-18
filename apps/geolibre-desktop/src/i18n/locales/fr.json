@@ -2767,7 +2767,7 @@
         "priorityTarget": "Expression de priorité d'étiquette",
         "notSet": "Non défini",
         "clear": "Effacer l'expression",
-        "hint": "Expressions MapLibre par entité. La taille, l'opacité et la priorité produisent des nombres (les étiquettes aux valeurs de priorité les plus basses sont placées en premier), la couleur une couleur, la visibilité vrai/faux. Ignorées tant que le regroupement des étiquettes en double est actif."
+        "hint": "Expressions MapLibre par entité. La taille, l'opacité et la priorité produisent des nombres (les étiquettes aux valeurs de priorité les plus basses sont placées en premier), la couleur une couleur, la visibilité vrai/faux. Ignorées tant que le regroupement des étiquettes en double est actif. Une expression d'opacité remplace l'opacité de la couche pour les étiquettes."
       }
     },
     "elevation3d": {

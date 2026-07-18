@@ -3779,14 +3779,26 @@ export function StylePanel({
             <Label>{t("style.labels.dataDefined.heading")}</Label>
             {LABEL_OVERRIDE_PROPERTIES.map((property) => {
               const value = labels[property.field].trim();
+              // The builder's Apply is disabled for invalid expressions, but a
+              // hand-edited project file can still carry one; flag it here so
+              // the renderer's silent fallback to the literal control is
+              // visible in the panel.
+              const invalid = value !== "" && !parseJsonExpression(value);
               return (
                 <div key={property.key} className="flex items-center gap-2">
                   <span className="w-20 shrink-0 text-xs">
                     {t(`style.labels.dataDefined.${property.key}`)}
                   </span>
                   <code
-                    className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
-                    title={value || undefined}
+                    className={[
+                      "min-w-0 flex-1 truncate font-mono text-xs",
+                      invalid ? "text-destructive" : "text-muted-foreground",
+                    ].join(" ")}
+                    title={
+                      invalid
+                        ? t("style.labels.expressionInvalid")
+                        : value || undefined
+                    }
                   >
                     {value || t("style.labels.dataDefined.notSet")}
                   </code>
@@ -3831,6 +3843,14 @@ export function StylePanel({
                 </div>
               );
             })}
+            {LABEL_OVERRIDE_PROPERTIES.some((property) => {
+              const value = labels[property.field].trim();
+              return value !== "" && !parseJsonExpression(value);
+            }) ? (
+              <p className="text-xs text-destructive">
+                {t("style.labels.expressionInvalid")}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               {t("style.labels.dataDefined.hint")}
             </p>

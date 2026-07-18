@@ -2767,7 +2767,7 @@
         "priorityTarget": "Expresión de prioridad de etiqueta",
         "notSet": "Sin definir",
         "clear": "Borrar expresión",
-        "hint": "Expresiones MapLibre por entidad. Tamaño, opacidad y prioridad producen números (las etiquetas con valores de prioridad más bajos se colocan primero), color un color y visibilidad verdadero/falso. Se ignoran mientras la combinación de etiquetas duplicadas está activa."
+        "hint": "Expresiones MapLibre por entidad. Tamaño, opacidad y prioridad producen números (las etiquetas con valores de prioridad más bajos se colocan primero), color un color y visibilidad verdadero/falso. Se ignoran mientras la combinación de etiquetas duplicadas está activa. Una expresión de opacidad reemplaza la opacidad de la capa para las etiquetas."
       }
     },
     "elevation3d": {
