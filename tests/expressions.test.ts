@@ -187,6 +187,22 @@ describe("evaluateMapExpression", () => {
     assert.ok((preview.errors ?? []).length > 0);
   });
 
+  it("surfaces coercion failures as errors, not console warnings", () => {
+    // The plain evaluate() would swallow this into console.warn (which the
+    // app's diagnostics interceptor turns into re-renders); the preview must
+    // get the message instead (GH #1306 freeze regression).
+    const preview = evaluateMapExpression('["get", "city"]', {
+      feature: {
+        type: "Feature",
+        properties: { city: "New York" },
+        geometry: { type: "Point", coordinates: [0, 0] },
+      },
+      expectedType: "color",
+    });
+    assert.equal(preview.kind, "error");
+    assert.match((preview.errors ?? []).join(" "), /parse color/i);
+  });
+
   it("returns empty for a blank source", () => {
     assert.equal(evaluateMapExpression("  ").kind, "empty");
   });

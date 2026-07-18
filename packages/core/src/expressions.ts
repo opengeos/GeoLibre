@@ -398,7 +398,12 @@ export function evaluateMapExpression(
   const feature = options.feature ?? null;
   const geometryType = feature?.geometry?.type ?? "Unknown";
   try {
-    const value = expression.evaluate(
+    // evaluateWithoutErrorHandling: the plain evaluate() swallows runtime
+    // failures into console.warn, which (a) hides the error from the preview
+    // and (b) feeds the app's diagnostics console interceptor from inside a
+    // React render, which can re-render the panel and re-evaluate in an
+    // endless loop. Throwing lets the catch below surface the message.
+    const value = expression.evaluateWithoutErrorHandling(
       { zoom: options.zoom ?? 0 },
       {
         type: geometryType,

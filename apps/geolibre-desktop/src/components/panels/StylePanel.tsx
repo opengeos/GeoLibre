@@ -1397,6 +1397,34 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
+  // Expression Builder inputs, memoized for stable identities: the dialog
+  // memoizes its validation/preview/field-type work off these props, so fresh
+  // arrays on every panel render would defeat that memoization while the
+  // dialog is open (and, combined with the diagnostics console interceptor,
+  // could re-render in a loop). Kept before the early returns below so the
+  // hook order stays stable.
+  const builderFeatures = useMemo(
+    () => layer?.geojson?.features ?? [],
+    [layer],
+  );
+  const builderFieldNames = useMemo(
+    () => (layer ? getAttributePropertyNames(layer) : []),
+    [layer],
+  );
+  const builderVariables = useMemo<ExpressionVariable[]>(() => {
+    // Approximate scale denominator at the map center (96 dpi Web Mercator).
+    const mapScaleDenominator = Math.round(
+      (559082264.028 / Math.pow(2, mapZoom)) *
+        Math.cos((mapCenterLat * Math.PI) / 180),
+    );
+    return [
+      { token: "@project_name", value: projectName },
+      { token: "@layer_name", value: layer?.name ?? "" },
+      { token: "@feature_count", value: builderFeatures.length },
+      { token: "@map_zoom", value: Math.round(mapZoom * 100) / 100 },
+      { token: "@map_scale", value: mapScaleDenominator },
+    ];
+  }, [projectName, layer, builderFeatures, mapZoom, mapCenterLat]);
   // Diagram-loss notices: whether the feature cap truncates the drawable
   // dataset (derived from the real scan — features without an anchor or a
   // positive value don't consume the cap, so the raw count alone would
@@ -2060,19 +2088,8 @@ export function StylePanel({
   };
 
   // --- Shared Expression Builder (GH #1306) ---
-  const builderFeatures = layer.geojson?.features ?? [];
-  // Approximate scale denominator at the map center (96 dpi Web Mercator).
-  const mapScaleDenominator = Math.round(
-    (559082264.028 / Math.pow(2, mapZoom)) *
-      Math.cos((mapCenterLat * Math.PI) / 180),
-  );
-  const builderVariables: ExpressionVariable[] = [
-    { token: "@project_name", value: projectName },
-    { token: "@layer_name", value: layer.name },
-    { token: "@feature_count", value: builderFeatures.length },
-    { token: "@map_zoom", value: Math.round(mapZoom * 100) / 100 },
-    { token: "@map_scale", value: mapScaleDenominator },
-  ];
+  // builderFeatures / builderFieldNames / builderVariables are memoized above
+  // the early returns so the dialog's props keep stable identities.
   const builderRule =
     expressionBuilderTarget?.kind === "rule"
       ? currentRules.find((rule) => rule.id === expressionBuilderTarget.ruleId)
@@ -2123,7 +2140,7 @@ export function StylePanel({
       }
       initialExpression={builderInitialExpression}
       features={builderFeatures}
-      fieldNames={getAttributePropertyNames(layer)}
+      fieldNames={builderFieldNames}
       zoom={mapZoom}
       variables={builderVariables}
       onApply={applyBuilderExpression}
