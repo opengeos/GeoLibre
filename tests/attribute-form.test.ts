@@ -97,6 +97,20 @@ describe("widget value coercion", () => {
       valueMap: [{ value: "1" }, { value: "res" }],
     });
     assert.equal(coerceAttributeFormValue(mixed, "1"), "1");
+    // Zero-padded codes are identifiers, not numbers: they stay strings so a
+    // listed selection ("01") keeps matching its entry in validation.
+    const padded = fieldConfig({
+      field: "fips",
+      widget: "valueMap",
+      valueMap: [{ value: "01" }, { value: "02" }],
+    });
+    assert.equal(coerceAttributeFormValue(padded, "01"), "01");
+    assert.equal(
+      validateAttributeFormField(padded, {
+        fips: coerceAttributeFormValue(padded, "01"),
+      }),
+      null,
+    );
   });
 
   it("stores text and date strings trimmed, empty as null", () => {

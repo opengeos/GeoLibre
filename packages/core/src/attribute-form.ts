@@ -135,13 +135,17 @@ export function coerceAttributeFormValue(
     if (normalized === "false") return false;
     return raw;
   }
-  // A value map whose entries are all numeric codes stores numbers, so an
-  // edited row keeps the same property type as untouched rows (strict-equality
-  // style/filter expressions would otherwise silently miss edited features).
+  // A value map whose entries are all canonical numeric codes stores numbers,
+  // so an edited row keeps the same property type as untouched rows (strict-
+  // equality style/filter expressions would otherwise silently miss edited
+  // features). Canonical means the string round-trips through Number ("1",
+  // "-2", "3.5") — zero-padded or exotic forms like "01" or "1e3" are
+  // identifiers, not numbers, and stay strings so the membership check in
+  // validateAttributeFormField keeps matching the entry verbatim.
   if (
     config.widget === "valueMap" &&
     config.valueMap?.length &&
-    config.valueMap.every((entry) => Number.isFinite(Number(entry.value)))
+    config.valueMap.every((entry) => String(Number(entry.value)) === entry.value)
   ) {
     const parsed = Number(trimmed);
     if (Number.isFinite(parsed)) return parsed;
