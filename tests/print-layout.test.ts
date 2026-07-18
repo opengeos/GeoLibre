@@ -468,3 +468,126 @@ describe("drawLayout map frame border (GH #749)", () => {
     );
   });
 });
+
+describe("drawLayout data blocks (GH #1324)", () => {
+  it("renders the table title, headers, cells, and truncation note", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        dataTable: {
+          title: "Cities",
+          columns: ["name", "pop"],
+          rows: [
+            ["Springfield", "42000"],
+            ["Shelbyville", "39000"],
+          ],
+          note: "+3 more",
+          position: "bottom-left",
+        },
+      }),
+    );
+    for (const text of [
+      "Cities",
+      "name",
+      "pop",
+      "Springfield",
+      "42000",
+      "+3 more",
+    ]) {
+      const fill = fills.find((f) => f.text === text);
+      assert.ok(fill, `expected "${text}" to be drawn`);
+      assert.equal(fill.textAlign, "left");
+    }
+  });
+
+  it("skips a table with no rows or no columns", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        dataTable: {
+          columns: ["name"],
+          rows: [],
+          position: "bottom-left",
+        },
+      }),
+    );
+    assert.ok(!fills.some((f) => f.text === "name"));
+  });
+
+  it("renders bar chart labels and values", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        dataChart: {
+          title: "Population",
+          position: "top-right",
+          data: {
+            kind: "bar",
+            bars: [
+              { label: "CA", value: 12, color: "#111111" },
+              { label: "OR", value: 4, color: "#222222" },
+            ],
+            maxValue: 12,
+            minValue: 0,
+          },
+        },
+      }),
+    );
+    for (const text of ["Population", "CA", "OR", "12", "4"]) {
+      assert.ok(
+        fills.some((f) => f.text === text),
+        `expected "${text}" to be drawn`,
+      );
+    }
+  });
+
+  it("renders pie slice labels with their percentage share", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        dataChart: {
+          position: "bottom-right",
+          data: {
+            kind: "pie",
+            slices: [
+              { label: "a", value: 3, color: "#111111" },
+              { label: "b", value: 1, color: "#222222" },
+            ],
+            total: 4,
+          },
+        },
+      }),
+    );
+    assert.ok(fills.some((f) => f.text === "a (75%)"));
+    assert.ok(fills.some((f) => f.text === "b (25%)"));
+  });
+
+  it("renders the line chart's min/max axis labels", () => {
+    const { canvas, fills } = recordingCanvas();
+    drawLayout(
+      canvas,
+      baseOptions({
+        dataChart: {
+          position: "top-left",
+          data: {
+            kind: "line",
+            points: [
+              { index: 0, value: 5 },
+              { index: 2, value: 9 },
+            ],
+            min: 5,
+            max: 9,
+            length: 3,
+            color: "#111111",
+          },
+        },
+      }),
+    );
+    assert.ok(fills.some((f) => f.text === "9" && f.textAlign === "right"));
+    assert.ok(fills.some((f) => f.text === "5" && f.textAlign === "right"));
+  });
+});

@@ -1101,7 +1101,38 @@
       "pageBorder": "Page border",
       "infoBlock": "Info block (title block)",
       "colorbar": "Colorbar",
-      "customLegend": "Custom legend"
+      "customLegend": "Custom legend",
+      "dataTable": "Attribute table",
+      "dataChart": "Chart"
+    },
+    "dataBlocks": {
+      "layer": "Layer",
+      "titleLabel": "Heading",
+      "position": "Position",
+      "filterToPage": "Only features in the page extent",
+      "filterToPageHint": "Applies to atlas pages and a drawn print extent; otherwise the whole layer is used."
+    },
+    "dataTable": {
+      "columns": "Columns",
+      "columnsHint": "Leave all unchecked to show the layer's first {{count}} fields.",
+      "maxRows": "Max rows",
+      "moreRows_one": "+{{count}} more",
+      "moreRows_other": "+{{count}} more",
+      "noRows": "No rows to show with the current settings."
+    },
+    "dataChart": {
+      "type": "Chart type",
+      "typeBar": "Bar",
+      "typePie": "Pie",
+      "typeLine": "Line",
+      "categoryField": "Category field",
+      "aggregation": "Aggregate",
+      "aggCount": "Count",
+      "aggSum": "Sum",
+      "aggMean": "Mean",
+      "valueField": "Value field",
+      "noNumericFields": "This layer has no numeric field to aggregate.",
+      "noData": "No chart data with the current settings."
     },
     "customLegend": {
       "title": "Legend title",

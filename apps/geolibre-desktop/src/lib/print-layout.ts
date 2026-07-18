@@ -146,6 +146,44 @@ export interface LegendEntry {
   swatches: LegendSwatch[];
 }
 
+/** Corner of the map body a composed panel is anchored to. */
+export type BodyCorner =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+
+/**
+ * Resolved, drawable data for the chart block (GH #1324). Like the colorbar's
+ * `colors`, everything here is already computed by the dialog (aggregation,
+ * top-N capping, colors) so this drawing code stays data-only.
+ */
+export type DataChartData =
+  | {
+      kind: "bar";
+      bars: { label: string; value: number; color: string }[];
+      /** Largest bar value (>= 0), for scaling. */
+      maxValue: number;
+      /** Smallest bar value; negative when sum/mean produce negatives. */
+      minValue: number;
+    }
+  | {
+      kind: "pie";
+      slices: { label: string; value: number; color: string }[];
+      /** Sum of every slice value (> 0). */
+      total: number;
+    }
+  | {
+      kind: "line";
+      /** Finite values plotted against original row order (gaps skipped). */
+      points: { index: number; value: number }[];
+      min: number;
+      max: number;
+      /** Total row count, so x spans the full feature order. */
+      length: number;
+      color: string;
+    };
+
 export interface LayoutOptions {
   title: string;
   subtitle: string;
@@ -262,6 +300,36 @@ export interface LayoutOptions {
     title?: string;
     entries: { label: string; color: string }[];
     position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  } | null;
+  /**
+   * An attribute-table block composed in the Print Layout (GH #1324): rows of a
+   * vector layer's attributes drawn as a bordered panel at the chosen corner.
+   * Cell text is already resolved to display strings (and, for an atlas page,
+   * already filtered to the page extent) by the dialog, so this drawing code
+   * stays data-only.
+   */
+  dataTable?: {
+    title?: string;
+    /** Column headers, in display order. */
+    columns: string[];
+    /** Row cells as display strings, aligned with {@link columns}. */
+    rows: string[][];
+    /**
+     * Note drawn under the rows (e.g. "+12 more"), supplied translated by the
+     * dialog when the row limit truncated the source rows.
+     */
+    note?: string;
+    position: BodyCorner;
+  } | null;
+  /**
+   * A chart block composed in the Print Layout (GH #1324): a bar, pie, or line
+   * chart of a vector layer's attributes, drawn crisply at export resolution
+   * at the chosen corner.
+   */
+  dataChart?: {
+    title?: string;
+    position: BodyCorner;
+    data: DataChartData;
   } | null;
   legend: LegendEntry[];
   /** Heading drawn above the legend entries. */
@@ -765,6 +833,39 @@ export function drawLayout(
     ctx.rect(bodyX, bodyY, bodyW, bodyH);
     ctx.clip();
     drawCustomLegend(ctx, opts.customLegend, bodyX, bodyY, bodyW, bodyH, unit);
+    ctx.restore();
+  }
+
+  // --- Attribute table block (user-chosen corner inside the map) --------
+  if (
+    opts.dataTable &&
+    opts.dataTable.columns.length > 0 &&
+    opts.dataTable.rows.length > 0
+  ) {
+    // The info block owns the bottom-right corner; relocate like the colorbar.
+    const table =
+      hasInfoBlock && opts.dataTable.position === "bottom-right"
+        ? { ...opts.dataTable, position: "top-right" as const }
+        : opts.dataTable;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    drawDataTable(ctx, table, bodyX, bodyY, bodyW, bodyH, unit);
+    ctx.restore();
+  }
+
+  // --- Chart block (user-chosen corner inside the map) ------------------
+  if (opts.dataChart) {
+    const chart =
+      hasInfoBlock && opts.dataChart.position === "bottom-right"
+        ? { ...opts.dataChart, position: "top-right" as const }
+        : opts.dataChart;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    drawDataChart(ctx, chart, bodyX, bodyY, bodyW, bodyH, unit);
     ctx.restore();
   }
 
@@ -1285,6 +1386,408 @@ function drawCustomLegend(
     ctx.fillStyle = INK;
     ctx.fillText(e.label, x + pad + swatch + gap, cy, boxW - pad * 2 - swatch - gap);
   }
+  ctx.restore();
+}
+
+/** Top-left origin of a panel of `boxW`×`boxH` anchored at a body corner. */
+function panelOrigin(
+  position: BodyCorner,
+  bodyX: number,
+  bodyY: number,
+  bodyW: number,
+  bodyH: number,
+  inset: number,
+  boxW: number,
+  boxH: number,
+): { x: number; y: number } {
+  return {
+    x: position.endsWith("left") ? bodyX + inset : bodyX + bodyW - inset - boxW,
+    y: position.startsWith("top") ? bodyY + inset : bodyY + bodyH - inset - boxH,
+  };
+}
+
+/**
+ * Truncate text to fit `maxWidth` with a trailing ellipsis, using the context's
+ * current font. Returns the text unchanged when it already fits.
+ */
+function truncateToWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let lo = 0;
+  let hi = text.length;
+  // Largest prefix whose "prefix…" still fits (binary search on length).
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (ctx.measureText(`${text.slice(0, mid)}…`).width <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return `${text.slice(0, lo)}…`;
+}
+
+type DataTableSpec = NonNullable<LayoutOptions["dataTable"]>;
+
+/**
+ * Draw the attribute-table block as a bordered panel anchored at one of the
+ * four body corners: an optional title, a bold header row over a hairline, one
+ * row per feature, and an optional "+N more" note. Column widths come from the
+ * widest cell, capped per column and scaled down together when the full table
+ * would overrun the body width. GH #1324.
+ */
+function drawDataTable(
+  ctx: CanvasRenderingContext2D,
+  table: DataTableSpec,
+  bodyX: number,
+  bodyY: number,
+  bodyW: number,
+  bodyH: number,
+  unit: number,
+): void {
+  const pad = unit * 1.4;
+  const rowH = unit * 2.4;
+  const labelSize = unit * 1.7;
+  const titleSize = unit * 2;
+  const colGap = unit * 1.6;
+  const maxColW = unit * 26;
+  const inset = unit * 2; // matches the info block/legend corner inset
+  const title = (table.title ?? "").trim();
+  const hasTitle = title.length > 0;
+  const note = (table.note ?? "").trim();
+  const hasNote = note.length > 0;
+
+  ctx.save();
+  // Measure each column: the widest of its header (bold) and cells (regular),
+  // capped so one long text field cannot swallow the page.
+  const colW = table.columns.map((header, i) => {
+    ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
+    let w = ctx.measureText(header).width;
+    ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+    for (const row of table.rows) {
+      w = Math.max(w, ctx.measureText(row[i] ?? "").width);
+    }
+    return Math.min(w, maxColW);
+  });
+  let contentW =
+    colW.reduce((sum, w) => sum + w, 0) + colGap * (table.columns.length - 1);
+  // Shrink every column proportionally if the table would overrun the body;
+  // cell text is ellipsis-truncated to its final column width below.
+  const availW = bodyW - inset * 2 - pad * 2;
+  if (contentW > availW && contentW > 0) {
+    const scale = availW / contentW;
+    for (let i = 0; i < colW.length; i++) colW[i] *= scale;
+    contentW = availW;
+  }
+  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+  const titleW = hasTitle ? ctx.measureText(title).width : 0;
+
+  const titleBlock = hasTitle ? titleSize + unit : 0;
+  const boxW = pad * 2 + Math.max(contentW, Math.min(titleW, availW));
+  const boxH =
+    pad * 2 +
+    titleBlock +
+    (1 + table.rows.length) * rowH +
+    (hasNote ? rowH : 0);
+  const { x, y } = panelOrigin(
+    table.position,
+    bodyX,
+    bodyY,
+    bodyW,
+    bodyH,
+    inset,
+    boxW,
+    boxH,
+  );
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, unit * 0.15);
+  roundRect(ctx, x, y, boxW, boxH, unit);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  let cy = y + pad;
+  if (hasTitle) {
+    cy += titleSize;
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+    ctx.fillText(truncateToWidth(ctx, title, boxW - pad * 2), x + pad, cy);
+    cy += unit;
+  }
+
+  // Header row, with a hairline separating it from the data rows.
+  cy += rowH;
+  ctx.fillStyle = INK;
+  ctx.font = `600 ${labelSize}px system-ui, sans-serif`;
+  let cx = x + pad;
+  table.columns.forEach((header, i) => {
+    ctx.fillText(truncateToWidth(ctx, header, colW[i]), cx, cy);
+    cx += colW[i] + colGap;
+  });
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, unit * 0.12);
+  ctx.beginPath();
+  ctx.moveTo(x + pad, cy + unit * 0.7);
+  ctx.lineTo(x + boxW - pad, cy + unit * 0.7);
+  ctx.stroke();
+
+  ctx.fillStyle = INK;
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  for (const row of table.rows) {
+    cy += rowH;
+    cx = x + pad;
+    table.columns.forEach((_, i) => {
+      ctx.fillText(truncateToWidth(ctx, row[i] ?? "", colW[i]), cx, cy);
+      cx += colW[i] + colGap;
+    });
+  }
+
+  if (hasNote) {
+    cy += rowH;
+    ctx.fillStyle = MUTED;
+    ctx.fillText(truncateToWidth(ctx, note, boxW - pad * 2), x + pad, cy);
+  }
+  ctx.restore();
+}
+
+type DataChartSpec = NonNullable<LayoutOptions["dataChart"]>;
+
+/**
+ * Draw the chart block as a bordered panel anchored at one of the four body
+ * corners. Bars render horizontally (label, bar, value per row — long category
+ * names stay readable), the pie renders as a disc with a swatch legend, and the
+ * line renders as a framed sparkline with min/max labels. GH #1324.
+ */
+function drawDataChart(
+  ctx: CanvasRenderingContext2D,
+  chart: DataChartSpec,
+  bodyX: number,
+  bodyY: number,
+  bodyW: number,
+  bodyH: number,
+  unit: number,
+): void {
+  const pad = unit * 1.4;
+  const rowH = unit * 2.4;
+  const labelSize = unit * 1.7;
+  const titleSize = unit * 2;
+  const gap = unit;
+  const inset = unit * 2; // matches the info block/legend corner inset
+  const title = (chart.title ?? "").trim();
+  const hasTitle = title.length > 0;
+  const titleBlock = hasTitle ? titleSize + unit : 0;
+  const data = chart.data;
+
+  ctx.save();
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+
+  // Content size + a deferred content draw at (cx0, cy0), so panel sizing and
+  // anchoring are computed once for all three chart kinds.
+  let contentW = 0;
+  let contentH = 0;
+  let drawContent: (cx0: number, cy0: number) => void = () => {};
+
+  if (data.kind === "bar") {
+    const labelCap = unit * 18;
+    const barAreaW = unit * 20;
+    let labelW = 0;
+    let valueW = 0;
+    for (const bar of data.bars) {
+      labelW = Math.max(
+        labelW,
+        Math.min(ctx.measureText(bar.label).width, labelCap),
+      );
+      valueW = Math.max(
+        valueW,
+        ctx.measureText(formatColorbarTick(bar.value)).width,
+      );
+    }
+    contentW = labelW + gap + barAreaW + gap + valueW;
+    contentH = data.bars.length * rowH;
+    drawContent = (cx0, cy0) => {
+      // Scale across the full value range so negative sums/means keep a truthful
+      // zero baseline (bars extend left of it).
+      const lo = Math.min(0, data.minValue);
+      const hi = Math.max(0, data.maxValue);
+      const span = hi - lo || 1;
+      const zeroX = cx0 + labelW + gap + ((0 - lo) / span) * barAreaW;
+      let cy = cy0;
+      for (const bar of data.bars) {
+        cy += rowH;
+        ctx.fillStyle = INK;
+        ctx.textAlign = "left";
+        ctx.fillText(truncateToWidth(ctx, bar.label, labelCap), cx0, cy);
+        const barW = (Math.abs(bar.value) / span) * barAreaW;
+        const barX = bar.value < 0 ? zeroX - barW : zeroX;
+        ctx.fillStyle = bar.color;
+        ctx.fillRect(barX, cy - labelSize * 0.85, barW, labelSize);
+        ctx.fillStyle = INK;
+        ctx.fillText(
+          formatColorbarTick(bar.value),
+          cx0 + labelW + gap + barAreaW + gap,
+          cy,
+        );
+      }
+    };
+  } else if (data.kind === "pie") {
+    const diameter = unit * 14;
+    const swatch = unit * 2;
+    let legendW = 0;
+    for (const slice of data.slices) {
+      const pct = Math.round((slice.value / data.total) * 100);
+      legendW = Math.max(
+        legendW,
+        swatch +
+          gap +
+          Math.min(
+            ctx.measureText(`${slice.label} (${pct}%)`).width,
+            unit * 22,
+          ),
+      );
+    }
+    contentW = diameter + gap * 2 + legendW;
+    contentH = Math.max(diameter, data.slices.length * rowH);
+    drawContent = (cx0, cy0) => {
+      const cx = cx0 + diameter / 2;
+      const cyMid = cy0 + contentH / 2;
+      const r = diameter / 2;
+      let angle = -Math.PI / 2;
+      for (const slice of data.slices) {
+        const sweep = (slice.value / data.total) * Math.PI * 2;
+        ctx.fillStyle = slice.color;
+        ctx.beginPath();
+        ctx.moveTo(cx, cyMid);
+        ctx.arc(cx, cyMid, r, angle, angle + sweep);
+        ctx.closePath();
+        ctx.fill();
+        angle += sweep;
+      }
+      ctx.strokeStyle = BORDER;
+      ctx.lineWidth = Math.max(1, unit * 0.12);
+      ctx.beginPath();
+      ctx.arc(cx, cyMid, r, 0, Math.PI * 2);
+      ctx.stroke();
+      // Swatch legend, vertically centred beside the disc.
+      let cy = cy0 + (contentH - data.slices.length * rowH) / 2;
+      ctx.textAlign = "left";
+      for (const slice of data.slices) {
+        cy += rowH;
+        ctx.fillStyle = slice.color;
+        ctx.fillRect(
+          cx0 + diameter + gap * 2,
+          cy - swatch * 0.85,
+          swatch,
+          swatch,
+        );
+        ctx.strokeStyle = BORDER;
+        ctx.strokeRect(
+          cx0 + diameter + gap * 2,
+          cy - swatch * 0.85,
+          swatch,
+          swatch,
+        );
+        const pct = Math.round((slice.value / data.total) * 100);
+        ctx.fillStyle = INK;
+        ctx.fillText(
+          truncateToWidth(ctx, `${slice.label} (${pct}%)`, unit * 22),
+          cx0 + diameter + gap * 2 + swatch + gap,
+          cy,
+        );
+      }
+    };
+  } else {
+    const plotW = unit * 24;
+    const plotH = unit * 12;
+    const maxLabel = formatColorbarTick(data.max);
+    const minLabel = formatColorbarTick(data.min);
+    const axisW = Math.max(
+      ctx.measureText(maxLabel).width,
+      ctx.measureText(minLabel).width,
+    );
+    contentW = axisW + gap + plotW;
+    contentH = plotH;
+    drawContent = (cx0, cy0) => {
+      const plotX = cx0 + axisW + gap;
+      ctx.strokeStyle = BORDER;
+      ctx.lineWidth = Math.max(1, unit * 0.12);
+      ctx.strokeRect(plotX, cy0, plotW, plotH);
+      ctx.fillStyle = MUTED;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillText(maxLabel, plotX - gap * 0.6, cy0);
+      ctx.textBaseline = "bottom";
+      ctx.fillText(minLabel, plotX - gap * 0.6, cy0 + plotH);
+      ctx.textBaseline = "alphabetic";
+      const spanY = data.max - data.min || 1;
+      const spanX = Math.max(1, data.length - 1);
+      const px = (index: number) => plotX + (index / spanX) * plotW;
+      const py = (value: number) =>
+        cy0 + plotH - ((value - data.min) / spanY) * plotH;
+      ctx.strokeStyle = data.color;
+      ctx.lineWidth = Math.max(1, unit * 0.25);
+      if (data.points.length === 1) {
+        // A single sample has no path to stroke; mark it with a dot instead.
+        ctx.fillStyle = data.color;
+        ctx.beginPath();
+        ctx.arc(
+          px(data.points[0].index),
+          py(data.points[0].value),
+          unit * 0.5,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fill();
+      } else if (data.points.length > 1) {
+        ctx.beginPath();
+        data.points.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(px(p.index), py(p.value));
+          else ctx.lineTo(px(p.index), py(p.value));
+        });
+        ctx.stroke();
+      }
+    };
+  }
+
+  ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+  const titleW = hasTitle ? ctx.measureText(title).width : 0;
+  const boxW = pad * 2 + Math.max(contentW, Math.min(titleW, unit * 40));
+  const boxH = pad * 2 + titleBlock + contentH;
+  const { x, y } = panelOrigin(
+    chart.position,
+    bodyX,
+    bodyY,
+    bodyW,
+    bodyH,
+    inset,
+    boxW,
+    boxH,
+  );
+
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.strokeStyle = BORDER;
+  ctx.lineWidth = Math.max(1, unit * 0.15);
+  roundRect(ctx, x, y, boxW, boxH, unit);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  let topY = y + pad;
+  if (hasTitle) {
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${titleSize}px system-ui, sans-serif`;
+    ctx.fillText(
+      truncateToWidth(ctx, title, boxW - pad * 2),
+      x + pad,
+      topY + titleSize,
+    );
+    topY += titleBlock;
+  }
+  ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
+  drawContent(x + pad, topY);
   ctx.restore();
 }
 
