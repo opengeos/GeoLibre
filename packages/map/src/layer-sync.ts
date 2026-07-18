@@ -2347,10 +2347,13 @@ function applyVectorDataRenderLayers(
       // only the aggregated label value. A typo'd or non-array value parses
       // to null and falls back to the literal control instead of breaking
       // the layer.
+      // The `|| ""` guards against a hand-edited project file storing null
+      // for an expression field (the type says string, but the value comes
+      // from untrusted JSON).
       const labelOverride = (source: string) =>
         dedupedLabelFc
           ? null
-          : (parseJsonExpression(source) as
+          : (parseJsonExpression(source || "") as
               | maplibregl.ExpressionSpecification
               | null);
       const sizeOverride = labelOverride(labels.sizeExpression);

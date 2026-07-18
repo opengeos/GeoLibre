@@ -3778,7 +3778,10 @@ export function StylePanel({
           <div className="space-y-2">
             <Label>{t("style.labels.dataDefined.heading")}</Label>
             {LABEL_OVERRIDE_PROPERTIES.map((property) => {
-              const value = labels[property.field].trim();
+              // The `|| ""` guards against a hand-edited project file storing
+              // null for an expression field (the type says string, but the
+              // value comes from untrusted JSON).
+              const value = (labels[property.field] || "").trim();
               // The builder's Apply is disabled for invalid expressions, but a
               // hand-edited project file can still carry one; flag it here so
               // the renderer's silent fallback to the literal control is
@@ -3844,7 +3847,7 @@ export function StylePanel({
               );
             })}
             {LABEL_OVERRIDE_PROPERTIES.some((property) => {
-              const value = labels[property.field].trim();
+              const value = (labels[property.field] || "").trim();
               return value !== "" && !parseJsonExpression(value);
             }) ? (
               <p className="text-xs text-destructive">
