@@ -21,7 +21,7 @@ import {
 } from "@geolibre/ui";
 import type { Feature } from "geojson";
 import type { ParseKeys } from "i18next";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eraser } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -239,9 +239,26 @@ export function ExpressionBuilderDialog({
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="expressionBuilderSource">
-              {t("style.expressionBuilder.expressionLabel")}
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="expressionBuilderSource">
+                {t("style.expressionBuilder.expressionLabel")}
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                disabled={!source}
+                title={t("style.expressionBuilder.clear")}
+                aria-label={t("style.expressionBuilder.clear")}
+                onClick={() => {
+                  setSource("");
+                  textareaRef.current?.focus();
+                }}
+              >
+                <Eraser className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             <textarea
               id="expressionBuilderSource"
               ref={textareaRef}

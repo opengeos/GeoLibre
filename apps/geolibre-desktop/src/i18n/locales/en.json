@@ -3377,6 +3377,7 @@
       "openBuilder": "Open expression builder",
       "openBuilderForRule": "Open expression builder for rule {{index}}",
       "expressionLabel": "Expression",
+      "clear": "Clear expression",
       "valid": "Valid expression.",
       "apply": "Apply",
       "preview": "Preview",
