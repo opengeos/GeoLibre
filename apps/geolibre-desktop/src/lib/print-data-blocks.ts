@@ -67,10 +67,15 @@ function cellText(value: unknown): string {
   return String(value);
 }
 
+/** Whether an attribute value counts as missing for sorting purposes. */
+function isMissing(value: unknown): boolean {
+  return value === null || value === undefined || value === "";
+}
+
 /** Numeric-aware attribute comparison; missing values sort last. */
 function compareCells(a: unknown, b: unknown): number {
-  const aMissing = a === null || a === undefined || a === "";
-  const bMissing = b === null || b === undefined || b === "";
+  const aMissing = isMissing(a);
+  const bMissing = isMissing(b);
   if (aMissing && bMissing) return 0;
   if (aMissing) return 1;
   if (bMissing) return -1;
@@ -114,22 +119,12 @@ export function buildTableBlock(
   if (sortField) {
     const sign = config.sortDescending ? -1 : 1;
     ordered = [...rows].sort((a, b) => {
-      const cmp = compareCells(
-        a.properties[sortField],
-        b.properties[sortField],
-      );
+      const av = a.properties[sortField];
+      const bv = b.properties[sortField];
+      const cmp = compareCells(av, bv);
       // Missing values stay last in both directions (same convention as the
-      // atlas page sort).
-      const aMissing =
-        a.properties[sortField] === null ||
-        a.properties[sortField] === undefined ||
-        a.properties[sortField] === "";
-      const bMissing =
-        b.properties[sortField] === null ||
-        b.properties[sortField] === undefined ||
-        b.properties[sortField] === "";
-      if (aMissing || bMissing) return cmp;
-      return cmp * sign;
+      // atlas page sort), so only present-vs-present flips with the sign.
+      return isMissing(av) || isMissing(bv) ? cmp : cmp * sign;
     });
   }
   const requested = Math.trunc(config.maxRows ?? DEFAULT_TABLE_ROWS);

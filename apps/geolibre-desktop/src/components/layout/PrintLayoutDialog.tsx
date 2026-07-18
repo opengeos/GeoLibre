@@ -356,6 +356,14 @@ export function PrintLayoutDialog({
   // Set when the last atlas capture had to clamp a fixed scale to the map's
   // zoom limits, mirroring the manual scale flow's out-of-range notice.
   const [atlasScaleNotice, setAtlasScaleNotice] = useState<string | null>(null);
+  // The map's actual visible bounds after the last atlas capture, keyed by
+  // page index. The data blocks' page-extent filter prefers this over the
+  // page's nominal bounds: in fixed-scale mode the zoom correction changes
+  // the rendered extent away from the fitted feature box (GH #1324).
+  const [atlasViewBounds, setAtlasViewBounds] = useState<{
+    index: number;
+    bounds: AtlasBounds;
+  } | null>(null);
   // Mirror of atlasActive (derived further down) for the dialog-open effect,
   // which is declared before those derivations exist.
   const atlasActiveRef = useRef(false);
@@ -946,6 +954,10 @@ export function PrintLayoutDialog({
       chartLayer?.geojson ? listAtlasFields(chartLayer.geojson.features) : [],
     [chartLayer],
   );
+  const tableAllRows = useMemo(
+    () => (tableLayer?.geojson ? layerRows(tableLayer.geojson) : []),
+    [tableLayer],
+  );
   const chartAllRows = useMemo(
     () => (chartLayer?.geojson ? layerRows(chartLayer.geojson) : []),
     [chartLayer],
@@ -982,8 +994,12 @@ export function PrintLayoutDialog({
   }, [tableColumns, tableFields]);
 
   // The extent a data block's "only features on the page" filter tests
-  // against: the atlas page's fitted bounds, or the drawn print extent when
-  // that is what the capture clips to. Plain viewport captures don't filter.
+  // against, before the page's real capture is available: the atlas page's
+  // fitted bounds, or the drawn print extent when that is what the capture
+  // clips to. Plain viewport captures don't filter. Once a page has actually
+  // been captured, the map's true visible bounds override this approximation
+  // (see buildDataBlocksFor's viewBounds) — the fit expands the box on one
+  // axis for the page aspect, and fixed-scale mode re-zooms after fitting.
   const dataFilterBounds = useCallback(
     (page: AtlasPage | null): AtlasBounds | null => {
       if (page) {
@@ -1001,15 +1017,22 @@ export function PrintLayoutDialog({
   // Resolve both data blocks for one atlas page (or the non-atlas layout when
   // null). Used for the live preview/current page and again per page during
   // an atlas export, so each page's table/chart reflects its own extent.
+  // `viewBounds` is the map's actual visible extent from that page's capture;
+  // when provided it replaces the nominal page-bounds approximation.
   const buildDataBlocksFor = useCallback(
-    (page: AtlasPage | null): Pick<LayoutOptions, "dataTable" | "dataChart"> => {
+    (
+      page: AtlasPage | null,
+      viewBounds?: AtlasBounds | null,
+    ): Pick<LayoutOptions, "dataTable" | "dataChart"> => {
       let dataTable: LayoutOptions["dataTable"] = null;
       let dataChart: LayoutOptions["dataChart"] = null;
+      const filterBounds = () =>
+        (page && viewBounds) || dataFilterBounds(page);
       if (showDataTable && tableLayer?.geojson) {
-        const bounds = tableFilterToPage ? dataFilterBounds(page) : null;
+        const bounds = tableFilterToPage ? filterBounds() : null;
         const rows = bounds
           ? rowsWithinBounds(tableLayer.geojson, bounds)
-          : layerRows(tableLayer.geojson);
+          : tableAllRows;
         const data = buildTableBlock(rows, {
           columns: effectiveTableColumns,
           sortField: tableSortField || undefined,
@@ -1032,7 +1055,7 @@ export function PrintLayoutDialog({
         }
       }
       if (showDataChart && chartLayer?.geojson) {
-        const bounds = chartFilterToPage ? dataFilterBounds(page) : null;
+        const bounds = chartFilterToPage ? filterBounds() : null;
         const rows = bounds
           ? rowsWithinBounds(chartLayer.geojson, bounds)
           : chartAllRows;
@@ -1055,6 +1078,7 @@ export function PrintLayoutDialog({
     [
       showDataTable,
       tableLayer,
+      tableAllRows,
       tableFilterToPage,
       dataFilterBounds,
       effectiveTableColumns,
@@ -1077,8 +1101,17 @@ export function PrintLayoutDialog({
     ],
   );
   const displayDataBlocks = useMemo(
-    () => buildDataBlocksFor(currentAtlasPage),
-    [buildDataBlocksFor, currentAtlasPage],
+    () =>
+      buildDataBlocksFor(
+        currentAtlasPage,
+        // The captured view bounds only apply to the page they were taken on;
+        // while a newly selected page is still capturing, fall back to its
+        // nominal bounds until the auto-drive refresh lands.
+        atlasViewBounds && atlasViewBounds.index === clampedAtlasIndex
+          ? atlasViewBounds.bounds
+          : null,
+      ),
+    [buildDataBlocksFor, currentAtlasPage, atlasViewBounds, clampedAtlasIndex],
   );
 
   // Options with this page's atlas tokens resolved, fed to the preview, the
@@ -1121,9 +1154,12 @@ export function PrintLayoutDialog({
   // Drive the live map to one atlas page's extent and capture it. Margin mode
   // grows the feature's box before fitting; fixed-scale mode fits first, then
   // corrects the zoom by the log2 ratio difference (like applyScale) and
-  // recaptures.
+  // recaptures. Returns the capture plus the map's final visible bounds, so
+  // the data blocks can filter to what the page actually shows.
   const captureAtlasPage = useCallback(
-    async (page: AtlasPage): Promise<CapturedMap> => {
+    async (
+      page: AtlasPage,
+    ): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
       const map = mapControllerRef.current?.getMap();
       if (!map) throw new Error("Map is not ready");
       const [w, s, e, n] = expandBounds(
@@ -1199,7 +1235,11 @@ export function PrintLayoutDialog({
       } else {
         setAtlasScaleNotice(null);
       }
-      return cap;
+      const b = map.getBounds();
+      return {
+        cap,
+        viewBounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+      };
     },
     [
       mapControllerRef,
@@ -1220,8 +1260,9 @@ export function PrintLayoutDialog({
       setAtlasBusy(true);
       setError(null);
       try {
-        const cap = await captureAtlasPage(page);
+        const { cap, viewBounds } = await captureAtlasPage(page);
         setCaptured(cap);
+        setAtlasViewBounds({ index, bounds: viewBounds });
         setAtlasIndex(index);
       } catch {
         setError(t("printLayout.errors.captureFailed"));
@@ -1594,15 +1635,17 @@ export function PrintLayoutDialog({
         onProgress: (current: number, totalPages: number) =>
           setAtlasProgress({ current, total: totalPages }),
         optionsForPage: async (i: number): Promise<LayoutOptions> => {
-          const cap = await captureAtlasPage(pages[i]);
+          const { cap, viewBounds } = await captureAtlasPage(pages[i]);
           // Mirror progress into the dialog preview as pages are produced.
           setCaptured(cap);
+          setAtlasViewBounds({ index: i, bounds: viewBounds });
           setAtlasIndex(i);
           const ctx = ctxFor(i);
           return {
             ...options,
-            // Each page's table/chart re-filters to that page's own extent.
-            ...buildDataBlocksFor(pages[i]),
+            // Each page's table/chart re-filters to the extent the page's
+            // capture actually shows (not just the nominal feature bounds).
+            ...buildDataBlocksFor(pages[i], viewBounds),
             title: substituteAtlasTokens(options.title, ctx),
             subtitle: substituteAtlasTokens(options.subtitle, ctx),
             footerText: substituteAtlasTokens(options.footerText, ctx),

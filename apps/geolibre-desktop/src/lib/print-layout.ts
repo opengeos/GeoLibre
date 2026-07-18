@@ -810,63 +810,101 @@ export function drawLayout(
     ctx.restore();
   }
 
-  // --- Colorbar (user-chosen corner inside the map) ---------------------
+  // --- Corner panels (colorbar, custom legend, table, chart) ------------
+  // Panels sharing a corner stack toward the body centre instead of drawing
+  // on top of each other (e.g. colorbar + chart, both defaulting top-right).
+  // The ledger tracks the vertical space already claimed per corner; the info
+  // block still owns the bottom-right, so panels aimed there relocate to the
+  // top-right first (the original colorbar rule, GH #522).
+  const cornerUsed: Record<BodyCorner, number> = {
+    "top-left": 0,
+    "top-right": 0,
+    "bottom-left": 0,
+    "bottom-right": 0,
+  };
+  const stackGap = unit * 1.2;
+  const resolveCorner = (position: BodyCorner): BodyCorner =>
+    hasInfoBlock && position === "bottom-right" ? "top-right" : position;
+  const drawCornerPanel = (
+    position: BodyCorner,
+    draw: (corner: BodyCorner, stackOffset: number) => number,
+  ) => {
+    const corner = resolveCorner(position);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(bodyX, bodyY, bodyW, bodyH);
+    ctx.clip();
+    const height = draw(corner, cornerUsed[corner]);
+    ctx.restore();
+    cornerUsed[corner] += height + stackGap;
+  };
+
   if (opts.colorbar && opts.colorbar.colors.length >= 2) {
-    // The info block ("stempel") always occupies the bottom-right corner; move a
-    // bottom-right colorbar to the top-right so the two never overlap.
-    const colorbar =
-      hasInfoBlock && opts.colorbar.position === "bottom-right"
-        ? { ...opts.colorbar, position: "top-right" as const }
-        : opts.colorbar;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, bodyY, bodyW, bodyH);
-    ctx.clip();
-    drawColorbar(ctx, colorbar, bodyX, bodyY, bodyW, bodyH, unit);
-    ctx.restore();
+    const colorbar = opts.colorbar;
+    drawCornerPanel(colorbar.position, (corner, stackOffset) =>
+      drawColorbar(
+        ctx,
+        { ...colorbar, position: corner },
+        bodyX,
+        bodyY,
+        bodyW,
+        bodyH,
+        unit,
+        stackOffset,
+      ),
+    );
   }
 
-  // --- Custom legend (user-chosen corner inside the map) ----------------
   if (opts.customLegend && opts.customLegend.entries.length > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, bodyY, bodyW, bodyH);
-    ctx.clip();
-    drawCustomLegend(ctx, opts.customLegend, bodyX, bodyY, bodyW, bodyH, unit);
-    ctx.restore();
+    const customLegend = opts.customLegend;
+    drawCornerPanel(customLegend.position, (corner, stackOffset) =>
+      drawCustomLegend(
+        ctx,
+        { ...customLegend, position: corner },
+        bodyX,
+        bodyY,
+        bodyW,
+        bodyH,
+        unit,
+        stackOffset,
+      ),
+    );
   }
 
-  // --- Attribute table block (user-chosen corner inside the map) --------
   if (
     opts.dataTable &&
     opts.dataTable.columns.length > 0 &&
     opts.dataTable.rows.length > 0
   ) {
-    // The info block owns the bottom-right corner; relocate like the colorbar.
-    const table =
-      hasInfoBlock && opts.dataTable.position === "bottom-right"
-        ? { ...opts.dataTable, position: "top-right" as const }
-        : opts.dataTable;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, bodyY, bodyW, bodyH);
-    ctx.clip();
-    drawDataTable(ctx, table, bodyX, bodyY, bodyW, bodyH, unit);
-    ctx.restore();
+    const table = opts.dataTable;
+    drawCornerPanel(table.position, (corner, stackOffset) =>
+      drawDataTable(
+        ctx,
+        { ...table, position: corner },
+        bodyX,
+        bodyY,
+        bodyW,
+        bodyH,
+        unit,
+        stackOffset,
+      ),
+    );
   }
 
-  // --- Chart block (user-chosen corner inside the map) ------------------
   if (opts.dataChart) {
-    const chart =
-      hasInfoBlock && opts.dataChart.position === "bottom-right"
-        ? { ...opts.dataChart, position: "top-right" as const }
-        : opts.dataChart;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(bodyX, bodyY, bodyW, bodyH);
-    ctx.clip();
-    drawDataChart(ctx, chart, bodyX, bodyY, bodyW, bodyH, unit);
-    ctx.restore();
+    const chart = opts.dataChart;
+    drawCornerPanel(chart.position, (corner, stackOffset) =>
+      drawDataChart(
+        ctx,
+        { ...chart, position: corner },
+        bodyX,
+        bodyY,
+        bodyW,
+        bodyH,
+        unit,
+        stackOffset,
+      ),
+    );
   }
 
   // --- Page border -------------------------------------------------------
@@ -1150,6 +1188,9 @@ type ColorbarSpec = NonNullable<LayoutOptions["colorbar"]>;
  * panel anchored at one of the four body corners. Rendered with the canvas at
  * full output resolution, so it stays crisp in the export (unlike a rasterized
  * on-map control).
+ *
+ * @returns The drawn panel's height, so a later panel sharing the corner can
+ *   stack below/above it instead of overlapping.
  */
 function drawColorbar(
   ctx: CanvasRenderingContext2D,
@@ -1159,7 +1200,8 @@ function drawColorbar(
   bodyW: number,
   bodyH: number,
   unit: number,
-): void {
+  stackOffset = 0,
+): number {
   const vertical = cb.orientation === "vertical";
   const pad = unit * 1.4;
   const barThick = unit * 2.2;
@@ -1217,12 +1259,17 @@ function drawColorbar(
     panelH = pad * 2 + titleStrip + barThick + tickLen + tickGap + labelSize;
   }
 
-  const px = cb.position.endsWith("left")
-    ? bodyX + inset
-    : bodyX + bodyW - inset - panelW;
-  const py = cb.position.startsWith("top")
-    ? bodyY + inset
-    : bodyY + bodyH - inset - panelH;
+  const { x: px, y: py } = panelOrigin(
+    cb.position,
+    bodyX,
+    bodyY,
+    bodyW,
+    bodyH,
+    inset,
+    panelW,
+    panelH,
+    stackOffset,
+  );
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -1311,6 +1358,7 @@ function drawColorbar(
     }
   }
   ctx.restore();
+  return panelH;
 }
 
 type CustomLegendSpec = NonNullable<LayoutOptions["customLegend"]>;
@@ -1319,6 +1367,8 @@ type CustomLegendSpec = NonNullable<LayoutOptions["customLegend"]>;
  * Draw a user-defined legend (title + colour/label rows) as a bordered panel
  * anchored at one of the four body corners. Crisp at export resolution, the
  * native equivalent of a Controls -> Legend control.
+ *
+ * @returns The drawn panel's height, for corner stacking.
  */
 function drawCustomLegend(
   ctx: CanvasRenderingContext2D,
@@ -1328,7 +1378,8 @@ function drawCustomLegend(
   bodyW: number,
   bodyH: number,
   unit: number,
-): void {
+  stackOffset = 0,
+): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.6;
   const swatch = unit * 2;
@@ -1351,12 +1402,17 @@ function drawCustomLegend(
   const titleBlock = hasTitle ? titleSize + unit : 0;
   const boxW = pad * 2 + maxText;
   const boxH = pad * 2 + titleBlock + cl.entries.length * rowH;
-  const x = cl.position.endsWith("left")
-    ? bodyX + inset
-    : bodyX + bodyW - inset - boxW;
-  const y = cl.position.startsWith("top")
-    ? bodyY + inset
-    : bodyY + bodyH - inset - boxH;
+  const { x, y } = panelOrigin(
+    cl.position,
+    bodyX,
+    bodyY,
+    bodyW,
+    bodyH,
+    inset,
+    boxW,
+    boxH,
+    stackOffset,
+  );
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.strokeStyle = BORDER;
@@ -1387,9 +1443,15 @@ function drawCustomLegend(
     ctx.fillText(e.label, x + pad + swatch + gap, cy, boxW - pad * 2 - swatch - gap);
   }
   ctx.restore();
+  return boxH;
 }
 
-/** Top-left origin of a panel of `boxW`×`boxH` anchored at a body corner. */
+/**
+ * Top-left origin of a panel of `boxW`×`boxH` anchored at a body corner.
+ * `stackOffset` shifts the panel toward the body centre (down from a top
+ * corner, up from a bottom one) past panels already drawn in that corner, so
+ * two panels sharing a corner stack instead of overlapping.
+ */
 function panelOrigin(
   position: BodyCorner,
   bodyX: number,
@@ -1399,10 +1461,13 @@ function panelOrigin(
   inset: number,
   boxW: number,
   boxH: number,
+  stackOffset = 0,
 ): { x: number; y: number } {
   return {
     x: position.endsWith("left") ? bodyX + inset : bodyX + bodyW - inset - boxW,
-    y: position.startsWith("top") ? bodyY + inset : bodyY + bodyH - inset - boxH,
+    y: position.startsWith("top")
+      ? bodyY + inset + stackOffset
+      : bodyY + bodyH - inset - boxH - stackOffset,
   };
 }
 
@@ -1435,6 +1500,8 @@ type DataTableSpec = NonNullable<LayoutOptions["dataTable"]>;
  * row per feature, and an optional "+N more" note. Column widths come from the
  * widest cell, capped per column and scaled down together when the full table
  * would overrun the body width. GH #1324.
+ *
+ * @returns The drawn panel's height, for corner stacking.
  */
 function drawDataTable(
   ctx: CanvasRenderingContext2D,
@@ -1444,7 +1511,8 @@ function drawDataTable(
   bodyW: number,
   bodyH: number,
   unit: number,
-): void {
+  stackOffset = 0,
+): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
   const labelSize = unit * 1.7;
@@ -1498,6 +1566,7 @@ function drawDataTable(
     inset,
     boxW,
     boxH,
+    stackOffset,
   );
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
@@ -1551,6 +1620,7 @@ function drawDataTable(
     ctx.fillText(truncateToWidth(ctx, note, boxW - pad * 2), x + pad, cy);
   }
   ctx.restore();
+  return boxH;
 }
 
 type DataChartSpec = NonNullable<LayoutOptions["dataChart"]>;
@@ -1560,6 +1630,8 @@ type DataChartSpec = NonNullable<LayoutOptions["dataChart"]>;
  * corners. Bars render horizontally (label, bar, value per row — long category
  * names stay readable), the pie renders as a disc with a swatch legend, and the
  * line renders as a framed sparkline with min/max labels. GH #1324.
+ *
+ * @returns The drawn panel's height, for corner stacking.
  */
 function drawDataChart(
   ctx: CanvasRenderingContext2D,
@@ -1569,7 +1641,8 @@ function drawDataChart(
   bodyW: number,
   bodyH: number,
   unit: number,
-): void {
+  stackOffset = 0,
+): number {
   const pad = unit * 1.4;
   const rowH = unit * 2.4;
   const labelSize = unit * 1.7;
@@ -1764,6 +1837,7 @@ function drawDataChart(
     inset,
     boxW,
     boxH,
+    stackOffset,
   );
 
   ctx.fillStyle = "rgba(255,255,255,0.85)";
@@ -1789,6 +1863,7 @@ function drawDataChart(
   ctx.font = `400 ${labelSize}px system-ui, sans-serif`;
   drawContent(x + pad, topY);
   ctx.restore();
+  return boxH;
 }
 
 /** Draw a legend box anchored at its top-left corner. */
