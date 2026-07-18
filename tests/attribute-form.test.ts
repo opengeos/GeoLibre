@@ -122,6 +122,19 @@ describe("field validation", () => {
     assert.equal(validateAttributeFormField(config, { population: 5 }), null);
   });
 
+  it("does not require a value for checkbox widgets (unchecked is valid)", () => {
+    const config = fieldConfig({
+      field: "verified",
+      widget: "checkbox",
+      required: true,
+    });
+    assert.equal(validateAttributeFormField(config, {}), null);
+    assert.equal(
+      validateAttributeFormField(config, { verified: false }),
+      null,
+    );
+  });
+
   it("flags non-numeric values under number widgets", () => {
     assert.deepEqual(
       validateAttributeFormField(fieldConfig(), { population: "abc" }),

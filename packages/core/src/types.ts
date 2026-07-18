@@ -742,7 +742,10 @@ export interface AttributeFormFieldConfig {
   widget: AttributeFormWidget;
   /** Display label override shown in forms instead of the raw field name. */
   alias?: string;
-  /** When true, a null/empty value fails validation. */
+  /**
+   * When true, a null/empty value fails validation. Checkbox widgets are
+   * exempt: unchecked is a valid state, not a missing value.
+   */
   required?: boolean;
   /** Dropdown entries for the `valueMap` widget. */
   valueMap?: AttributeFormValueMapEntry[];

@@ -253,29 +253,31 @@ function applyDraftsToFeatures(
  * Validate drafted rows against the layer's Attribute Form config. Only edits
  * that introduce (or keep, on an edited field) a violation are reported —
  * pre-existing violations on untouched fields never block an unrelated edit.
- * Returns featureId → field → error for every blocking violation.
+ * Iterates the drafts (few rows), not the whole table; `featureById` is the
+ * memoized feature index so no per-keystroke full scan happens here. Returns
+ * featureId → field → error for every blocking violation.
  */
 function computeFormDraftErrors(
   form: AttributeFormConfig | undefined,
-  rows: AttributeTableRow[],
   drafts: AttributeDrafts,
-  features: Feature[],
+  featureById: Map<string, Feature> | null,
 ): Record<string, Record<string, AttributeFormFieldError>> {
   const result: Record<string, Record<string, AttributeFormFieldError>> = {};
-  if (!form?.fields.length || !hasDraftEdits(drafts)) return result;
+  if (!form?.fields.length || !featureById || !hasDraftEdits(drafts)) {
+    return result;
+  }
 
   const formFields = new Map(form.fields.map((entry) => [entry.field, entry]));
-  const featureById = new Map(
-    features.map((feature, index) => [String(feature.id ?? index), feature]),
-  );
 
-  for (const row of rows) {
-    const rowDrafts = drafts[row.featureId];
-    if (!rowDrafts || Object.keys(rowDrafts).length === 0) continue;
+  for (const [featureId, rowDrafts] of Object.entries(drafts)) {
+    if (Object.keys(rowDrafts).length === 0) continue;
+    const feature = featureById.get(featureId);
+    if (!feature) continue;
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
 
-    const candidate = { ...row.properties };
+    const candidate = { ...properties };
     for (const [column, draft] of Object.entries(rowDrafts)) {
-      const previousValue = row.properties[column];
+      const previousValue = properties[column];
       if (isInvalidObjectDraft(draft, previousValue)) continue;
       const config = formFields.get(column);
       candidate[column] = config
@@ -283,13 +285,12 @@ function computeFormDraftErrors(
         : parseAttributeDraft(draft, previousValue);
     }
 
-    const feature = featureById.get(row.featureId);
     const validation = validateAttributeFormValues(form, candidate, {
       feature,
     });
     if (validation.ok) continue;
 
-    const baseline = validateAttributeFormValues(form, row.properties, {
+    const baseline = validateAttributeFormValues(form, properties, {
       feature,
     });
     const rowErrors: Record<string, AttributeFormFieldError> = {};
@@ -298,7 +299,7 @@ function computeFormDraftErrors(
         rowErrors[field] = error;
       }
     }
-    if (Object.keys(rowErrors).length > 0) result[row.featureId] = rowErrors;
+    if (Object.keys(rowErrors).length > 0) result[featureId] = rowErrors;
   }
   return result;
 }
@@ -531,11 +532,21 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       ),
     [attributeForm],
   );
-  const formDraftErrors = computeFormDraftErrors(
-    attributeForm,
-    attributeRows,
-    drafts,
-    features,
+  // Feature index for validation, rebuilt only when the layer data (not a
+  // draft keystroke) changes; null when no form config is active.
+  const formFeatureIndex = useMemo(() => {
+    if (!attributeForm?.fields.length) return null;
+    const geojsonFeatures = layer?.geojson?.features ?? [];
+    return new Map(
+      geojsonFeatures.map((feature, index): [string, Feature] => [
+        String(feature.id ?? index),
+        feature,
+      ]),
+    );
+  }, [attributeForm, layer?.geojson]);
+  const formDraftErrors = useMemo(
+    () => computeFormDraftErrors(attributeForm, drafts, formFeatureIndex),
+    [attributeForm, drafts, formFeatureIndex],
   );
   const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 

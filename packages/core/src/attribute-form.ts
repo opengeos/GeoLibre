@@ -186,21 +186,17 @@ export function validateAttributeFormField(
   const empty = value == null || value === "";
 
   if (empty) {
-    if (config.required) return { code: "required" };
+    // An unchecked checkbox is a valid false-like state, not a missing value —
+    // requiring it would block every save with a confusing "value required".
+    if (config.required && config.widget !== "checkbox")
+      return { code: "required" };
   } else {
-    if (
-      (config.widget === "number" || config.widget === "range") &&
-      typeof value !== "number"
-    ) {
-      const parsed = Number(value);
-      if (!Number.isFinite(parsed)) return { code: "number" };
-    }
     if (config.widget === "number" || config.widget === "range") {
       const numeric = typeof value === "number" ? value : Number(value);
+      if (!Number.isFinite(numeric)) return { code: "number" };
       if (
-        Number.isFinite(numeric) &&
-        ((config.min != null && numeric < config.min) ||
-          (config.max != null && numeric > config.max))
+        (config.min != null && numeric < config.min) ||
+        (config.max != null && numeric > config.max)
       ) {
         return { code: "range", min: config.min, max: config.max };
       }
