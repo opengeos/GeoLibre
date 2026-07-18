@@ -2651,7 +2651,8 @@
     "invalidExpression": "Geçersiz ifade.",
     "calcCouldNotApply": "Hesaplama bu katmana uygulanamadı.",
     "calcAppliedWithErrors": "Uygulandı, ancak {{evaluated}} öğeden {{errors}} tanesi hata verdi ve null olarak yazıldı.",
-    "exportFailed": "Seçili katman dışa aktarılamadı."
+    "exportFailed": "Seçili katman dışa aktarılamadı.",
+    "saveTitleFormErrors": "Kaydetmeden önce öznitelik formu ihlallerini düzeltin"
   },
   "style": {
     "panelLabel": "Katman stili",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "Kontur genişliği (px)",
       "opacity": "Dolgu saydamlığı",
       "circleRadius": "Nokta yarıçapı (px)"
+    },
+    "attributeForm": {
+      "heading": "Öznitelik Formu",
+      "empty": "Yapılandırılmış alan yok. Bir alana düzenleme aracı, kısıtlama veya görünürlük kuralı atayın.",
+      "configureField": "Alanı yapılandır",
+      "field": "Alan",
+      "selectField": "Alan seçin…",
+      "widgetLabel": "Düzenleme aracı",
+      "widget": {
+        "text": "Metin",
+        "number": "Sayı",
+        "range": "Aralık",
+        "checkbox": "Onay kutusu",
+        "date": "Tarih",
+        "valueMap": "Değer haritası"
+      },
+      "alias": "Takma ad",
+      "required": "Zorunlu",
+      "requiredTag": "zorunlu",
+      "constraintTag": "kısıtlama",
+      "visibilityTag": "görünürlük",
+      "valueMap": "Değer haritası girdileri",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Her satıra bir girdi: değer veya değer=Etiket.",
+      "min": "Min",
+      "max": "Maks",
+      "step": "Adım",
+      "constraintExpression": "Kısıtlama ifadesi",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Kısıtlama açıklaması",
+      "constraintDescriptionPlaceholder": "Kısıtlama sağlanmadığında gösterilir",
+      "visibilityExpression": "Görünürlük ifadesi",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Geçersiz ifade",
+      "openBuilder": "İfade oluşturucuyu aç",
+      "edit": "Alan yapılandırmasını düzenle",
+      "remove": "Alan yapılandırmasını kaldır",
+      "cancel": "İptal",
+      "save": "Kaydet",
+      "noFields": "Katmanda yapılandırılacak öznitelik alanı yok."
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "\"{{name}}\" bir Bulut Optimizeli GeoTIFF'e dönüştürülemedi. gdal_translate veya rio cogeo ile dönüştürmeyi deneyin, ardından sonucu yükleyin.",
     "rasterDownloadFailed": "\"{{name}}\" indirilemedi. Sunucu yavaş, erişilemez olabilir, çapraz kaynak isteklerini engelliyor olabilir, ya da dosya bellekte tutulamayacak kadar büyük olabilir. URL'yi kontrol edip tekrar deneyin.",
     "rasterNotGeotiff": "\"{{name}}\" bir GeoTIFF döndürmedi. Sunucu, bunun yerine bir hata veya oturum açma sayfası göndermiş olabilir. URL'yi kontrol edip tekrar deneyin."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Bir değer gerekli",
+      "number": "Bir sayı olmalı",
+      "range": "{{min}} ile {{max}} arasında olmalı",
+      "rangeMin": "En az {{min}} olmalı",
+      "rangeMax": "En fazla {{max}} olmalı",
+      "valueMap": "Değer izin verilen listede değil",
+      "constraint": "Kısıtlama sağlanmadı"
+    }
   }
 }

@@ -2651,7 +2651,8 @@
     "invalidExpression": "अमान्य एक्सप्रेशन।",
     "calcCouldNotApply": "इस लेयर पर गणना लागू नहीं की जा सकी।",
     "calcAppliedWithErrors": "लागू किया गया, लेकिन {{evaluated}} में से {{errors}} फ़ीचर में त्रुटि हुई और उन्हें null के रूप में लिखा गया।",
-    "exportFailed": "चयनित लेयर निर्यात नहीं की जा सकी।"
+    "exportFailed": "चयनित लेयर निर्यात नहीं की जा सकी।",
+    "saveTitleFormErrors": "सहेजने से पहले विशेषता फ़ॉर्म के उल्लंघन ठीक करें"
   },
   "style": {
     "panelLabel": "लेयर शैली",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "रूपरेखा चौड़ाई (px)",
       "opacity": "भराव अपारदर्शिता",
       "circleRadius": "बिंदु त्रिज्या (px)"
+    },
+    "attributeForm": {
+      "heading": "विशेषता फ़ॉर्म",
+      "empty": "कोई फ़ील्ड कॉन्फ़िगर नहीं है। किसी फ़ील्ड को संपादन विजेट, बाधा या दृश्यता नियम असाइन करें।",
+      "configureField": "फ़ील्ड कॉन्फ़िगर करें",
+      "field": "फ़ील्ड",
+      "selectField": "फ़ील्ड चुनें…",
+      "widgetLabel": "संपादन विजेट",
+      "widget": {
+        "text": "पाठ",
+        "number": "संख्या",
+        "range": "सीमा",
+        "checkbox": "चेकबॉक्स",
+        "date": "दिनांक",
+        "valueMap": "मान मैप"
+      },
+      "alias": "उपनाम",
+      "required": "आवश्यक",
+      "requiredTag": "आवश्यक",
+      "constraintTag": "बाधा",
+      "visibilityTag": "दृश्यता",
+      "valueMap": "मान मैप प्रविष्टियाँ",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "प्रति पंक्ति एक प्रविष्टि: मान या मान=लेबल।",
+      "min": "न्यूनतम",
+      "max": "अधिकतम",
+      "step": "चरण",
+      "constraintExpression": "बाधा अभिव्यक्ति",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "बाधा का विवरण",
+      "constraintDescriptionPlaceholder": "बाधा विफल होने पर दिखाया जाता है",
+      "visibilityExpression": "दृश्यता अभिव्यक्ति",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "अमान्य अभिव्यक्ति",
+      "openBuilder": "अभिव्यक्ति निर्माता खोलें",
+      "edit": "फ़ील्ड कॉन्फ़िगरेशन संपादित करें",
+      "remove": "फ़ील्ड कॉन्फ़िगरेशन हटाएँ",
+      "cancel": "रद्द करें",
+      "save": "सहेजें",
+      "noFields": "परत में कॉन्फ़िगर करने के लिए कोई विशेषता फ़ील्ड नहीं है।"
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "\"{{name}}\" को Cloud-Optimized GeoTIFF में नहीं बदला जा सका। gdal_translate या rio cogeo से बदलने का प्रयास करें, फिर परिणाम लोड करें।",
     "rasterDownloadFailed": "\"{{name}}\" डाउनलोड नहीं की जा सकी। सर्वर धीमा, अनुपलब्ध, या क्रॉस-ओरिजिन रिक्वेस्ट ब्लॉक कर रहा हो सकता है, या फ़ाइल मेमोरी में रखने के लिए बहुत बड़ी हो सकती है। URL जांचें और पुनः प्रयास करें।",
     "rasterNotGeotiff": "\"{{name}}\" ने GeoTIFF नहीं लौटाई। सर्वर ने इसके बजाय एक त्रुटि या लॉगिन पेज भेजा हो सकता है। URL जांचें और पुनः प्रयास करें।"
+  },
+  "attributeForm": {
+    "error": {
+      "required": "मान आवश्यक है",
+      "number": "संख्या होनी चाहिए",
+      "range": "{{min}} और {{max}} के बीच होना चाहिए",
+      "rangeMin": "कम से कम {{min}} होना चाहिए",
+      "rangeMax": "अधिकतम {{max}} होना चाहिए",
+      "valueMap": "मान अनुमत सूची में नहीं है",
+      "constraint": "बाधा पूरी नहीं हुई"
+    }
   }
 }

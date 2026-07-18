@@ -3147,7 +3147,8 @@
     "invalidExpression": "Invalid expression.",
     "calcCouldNotApply": "Could not apply the calculation to this layer.",
     "calcAppliedWithErrors": "Applied, but {{errors}} of {{evaluated}} feature(s) errored and were written as null.",
-    "exportFailed": "Could not export the selected layer."
+    "exportFailed": "Could not export the selected layer.",
+    "saveTitleFormErrors": "Fix attribute form violations before saving"
   },
   "styleManager": {
     "title": "Style Manager",
@@ -3587,6 +3588,46 @@
       "strokeWidth": "Outline width (px)",
       "opacity": "Fill opacity",
       "circleRadius": "Point radius (px)"
+    },
+    "attributeForm": {
+      "heading": "Attributes Form",
+      "empty": "No fields configured. Assign an edit widget, constraint, or visibility rule to a field.",
+      "configureField": "Configure field",
+      "field": "Field",
+      "selectField": "Select field…",
+      "widgetLabel": "Edit widget",
+      "widget": {
+        "text": "Text",
+        "number": "Number",
+        "range": "Range",
+        "checkbox": "Checkbox",
+        "date": "Date",
+        "valueMap": "Value map"
+      },
+      "alias": "Alias",
+      "required": "Required",
+      "requiredTag": "required",
+      "constraintTag": "constraint",
+      "visibilityTag": "visibility",
+      "valueMap": "Value map entries",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "One entry per line: value or value=Label.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Step",
+      "constraintExpression": "Constraint expression",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Constraint description",
+      "constraintDescriptionPlaceholder": "Shown when the constraint fails",
+      "visibilityExpression": "Visibility expression",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Invalid expression",
+      "openBuilder": "Open expression builder",
+      "edit": "Edit field configuration",
+      "remove": "Remove field configuration",
+      "cancel": "Cancel",
+      "save": "Save",
+      "noFields": "The layer has no attribute fields to configure."
     }
   },
   "layers": {
@@ -3812,5 +3853,16 @@
     "cogConvertFailed": "Could not convert \"{{name}}\" to a Cloud-Optimized GeoTIFF. Try converting it with gdal_translate or rio cogeo, then load the result.",
     "rasterDownloadFailed": "Could not download \"{{name}}\". The server may be slow, unreachable, or blocking cross-origin requests, or the file may be too large to hold in memory. Check the URL and try again.",
     "rasterNotGeotiff": "\"{{name}}\" did not return a GeoTIFF. The server may have sent an error or login page instead. Check the URL and try again."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "A value is required",
+      "number": "Must be a number",
+      "range": "Must be between {{min}} and {{max}}",
+      "rangeMin": "Must be at least {{min}}",
+      "rangeMax": "Must be at most {{max}}",
+      "valueMap": "Value is not in the allowed list",
+      "constraint": "Constraint not satisfied"
+    }
   }
 }

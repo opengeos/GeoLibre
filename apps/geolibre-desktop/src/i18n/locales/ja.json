@@ -2607,7 +2607,8 @@
     "invalidExpression": "無効な式です。",
     "calcCouldNotApply": "この計算をレイヤーに適用できませんでした。",
     "calcAppliedWithErrors": "適用しましたが、{{evaluated}}件中{{errors}}件のフィーチャでエラーが発生し、nullとして書き込まれました。",
-    "exportFailed": "選択したレイヤーをエクスポートできませんでした。"
+    "exportFailed": "選択したレイヤーをエクスポートできませんでした。",
+    "saveTitleFormErrors": "保存する前に属性フォームの違反を修正してください"
   },
   "style": {
     "panelLabel": "レイヤースタイル",
@@ -2916,6 +2917,46 @@
       "strokeWidth": "輪郭幅 (px)",
       "opacity": "塗りつぶし不透明度",
       "circleRadius": "ポイント半径 (px)"
+    },
+    "attributeForm": {
+      "heading": "属性フォーム",
+      "empty": "フィールドが設定されていません。フィールドに編集ウィジェット、制約、または表示ルールを割り当ててください。",
+      "configureField": "フィールドを設定",
+      "field": "フィールド",
+      "selectField": "フィールドを選択…",
+      "widgetLabel": "編集ウィジェット",
+      "widget": {
+        "text": "テキスト",
+        "number": "数値",
+        "range": "範囲",
+        "checkbox": "チェックボックス",
+        "date": "日付",
+        "valueMap": "値マップ"
+      },
+      "alias": "別名",
+      "required": "必須",
+      "requiredTag": "必須",
+      "constraintTag": "制約",
+      "visibilityTag": "表示",
+      "valueMap": "値マップの項目",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "1 行に 1 項目: 値 または 値=ラベル。",
+      "min": "最小",
+      "max": "最大",
+      "step": "ステップ",
+      "constraintExpression": "制約式",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "制約の説明",
+      "constraintDescriptionPlaceholder": "制約を満たさない場合に表示されます",
+      "visibilityExpression": "表示式",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "無効な式",
+      "openBuilder": "式ビルダーを開く",
+      "edit": "フィールド設定を編集",
+      "remove": "フィールド設定を削除",
+      "cancel": "キャンセル",
+      "save": "保存",
+      "noFields": "レイヤーに設定できる属性フィールドがありません。"
     }
   },
   "layers": {
@@ -3135,5 +3176,16 @@
     "cogConvertFailed": "「{{name}}」をCloud-Optimized GeoTIFFに変換できませんでした。gdal_translateまたはrio cogeoで変換してから、その結果を読み込んでみてください。",
     "rasterDownloadFailed": "「{{name}}」をダウンロードできませんでした。サーバーの応答が遅い、到達できない、クロスオリジンリクエストをブロックしている、またはファイルが大きすぎてメモリに保持できない可能性があります。URLを確認して再試行してください。",
     "rasterNotGeotiff": "「{{name}}」はGeoTIFFを返しませんでした。サーバーがエラーページやログインページを返した可能性があります。URLを確認して再試行してください。"
+  },
+  "attributeForm": {
+    "error": {
+      "required": "値が必要です",
+      "number": "数値である必要があります",
+      "range": "{{min}} から {{max}} の間である必要があります",
+      "rangeMin": "{{min}} 以上である必要があります",
+      "rangeMax": "{{max}} 以下である必要があります",
+      "valueMap": "値が許可リストにありません",
+      "constraint": "制約を満たしていません"
+    }
   }
 }

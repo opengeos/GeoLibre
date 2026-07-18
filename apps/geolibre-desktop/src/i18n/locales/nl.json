@@ -2651,7 +2651,8 @@
     "invalidExpression": "Ongeldige expressie.",
     "calcCouldNotApply": "Kon de berekening niet toepassen op deze laag.",
     "calcAppliedWithErrors": "Toegepast, maar {{errors}} van {{evaluated}} object(en) gaven een fout en zijn als null geschreven.",
-    "exportFailed": "Kon de geselecteerde laag niet exporteren."
+    "exportFailed": "Kon de geselecteerde laag niet exporteren.",
+    "saveTitleFormErrors": "Los schendingen van het attributenformulier op voordat u opslaat"
   },
   "style": {
     "panelLabel": "Laagstijl",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "Omtrekbreedte (px)",
       "opacity": "Vuldekking",
       "circleRadius": "Puntstraal (px)"
+    },
+    "attributeForm": {
+      "heading": "Attributenformulier",
+      "empty": "Geen velden geconfigureerd. Wijs een bewerkingswidget, beperking of zichtbaarheidsregel toe aan een veld.",
+      "configureField": "Veld configureren",
+      "field": "Veld",
+      "selectField": "Veld selecteren…",
+      "widgetLabel": "Bewerkingswidget",
+      "widget": {
+        "text": "Tekst",
+        "number": "Getal",
+        "range": "Bereik",
+        "checkbox": "Selectievakje",
+        "date": "Datum",
+        "valueMap": "Waardetoewijzing"
+      },
+      "alias": "Alias",
+      "required": "Verplicht",
+      "requiredTag": "verplicht",
+      "constraintTag": "beperking",
+      "visibilityTag": "zichtbaarheid",
+      "valueMap": "Items van de waardetoewijzing",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Eén item per regel: waarde of waarde=Label.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Stap",
+      "constraintExpression": "Beperkingsexpressie",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Beschrijving van de beperking",
+      "constraintDescriptionPlaceholder": "Getoond wanneer de beperking faalt",
+      "visibilityExpression": "Zichtbaarheidsexpressie",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Ongeldige expressie",
+      "openBuilder": "Expressiebouwer openen",
+      "edit": "Veldconfiguratie bewerken",
+      "remove": "Veldconfiguratie verwijderen",
+      "cancel": "Annuleren",
+      "save": "Opslaan",
+      "noFields": "De laag heeft geen attribuutvelden om te configureren."
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "\"{{name}}\" kon niet worden omgezet naar een Cloud-Optimized GeoTIFF. Probeer het te converteren met gdal_translate of rio cogeo en laad vervolgens het resultaat.",
     "rasterDownloadFailed": "\"{{name}}\" kon niet worden gedownload. De server is mogelijk traag, onbereikbaar of blokkeert cross-origin-verzoeken, of het bestand is te groot om in het geheugen te laden. Controleer de URL en probeer het opnieuw.",
     "rasterNotGeotiff": "\"{{name}}\" leverde geen GeoTIFF op. De server heeft mogelijk een foutmelding of inlogpagina teruggestuurd. Controleer de URL en probeer het opnieuw."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Een waarde is vereist",
+      "number": "Moet een getal zijn",
+      "range": "Moet tussen {{min}} en {{max}} liggen",
+      "rangeMin": "Moet minimaal {{min}} zijn",
+      "rangeMax": "Mag maximaal {{max}} zijn",
+      "valueMap": "Waarde staat niet in de toegestane lijst",
+      "constraint": "Beperking niet voldaan"
+    }
   }
 }

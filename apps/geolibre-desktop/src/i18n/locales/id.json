@@ -2607,7 +2607,8 @@
     "invalidExpression": "Ekspresi tidak valid.",
     "calcCouldNotApply": "Tidak dapat menerapkan perhitungan ke layer ini.",
     "calcAppliedWithErrors": "Diterapkan, tetapi {{errors}} dari {{evaluated}} fitur bermasalah dan ditulis sebagai null.",
-    "exportFailed": "Tidak dapat mengekspor layer yang dipilih."
+    "exportFailed": "Tidak dapat mengekspor layer yang dipilih.",
+    "saveTitleFormErrors": "Perbaiki pelanggaran formulir atribut sebelum menyimpan"
   },
   "style": {
     "panelLabel": "Gaya layer",
@@ -2916,6 +2917,46 @@
       "strokeWidth": "Lebar garis luar (px)",
       "opacity": "Opasitas isian",
       "circleRadius": "Radius titik (px)"
+    },
+    "attributeForm": {
+      "heading": "Formulir Atribut",
+      "empty": "Belum ada bidang yang dikonfigurasi. Tetapkan widget penyuntingan, batasan, atau aturan visibilitas ke sebuah bidang.",
+      "configureField": "Konfigurasikan bidang",
+      "field": "Bidang",
+      "selectField": "Pilih bidang…",
+      "widgetLabel": "Widget penyuntingan",
+      "widget": {
+        "text": "Teks",
+        "number": "Angka",
+        "range": "Rentang",
+        "checkbox": "Kotak centang",
+        "date": "Tanggal",
+        "valueMap": "Peta nilai"
+      },
+      "alias": "Alias",
+      "required": "Wajib",
+      "requiredTag": "wajib",
+      "constraintTag": "batasan",
+      "visibilityTag": "visibilitas",
+      "valueMap": "Entri peta nilai",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Satu entri per baris: nilai atau nilai=Label.",
+      "min": "Min",
+      "max": "Maks",
+      "step": "Langkah",
+      "constraintExpression": "Ekspresi batasan",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Deskripsi batasan",
+      "constraintDescriptionPlaceholder": "Ditampilkan saat batasan gagal",
+      "visibilityExpression": "Ekspresi visibilitas",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Ekspresi tidak valid",
+      "openBuilder": "Buka pembuat ekspresi",
+      "edit": "Edit konfigurasi bidang",
+      "remove": "Hapus konfigurasi bidang",
+      "cancel": "Batal",
+      "save": "Simpan",
+      "noFields": "Lapisan tidak memiliki bidang atribut untuk dikonfigurasi."
     }
   },
   "layers": {
@@ -3135,5 +3176,16 @@
     "cogConvertFailed": "Tidak dapat mengonversi \"{{name}}\" menjadi Cloud-Optimized GeoTIFF. Coba konversi dengan gdal_translate atau rio cogeo, lalu muat hasilnya.",
     "rasterDownloadFailed": "Tidak dapat mengunduh \"{{name}}\". Server mungkin lambat, tidak dapat dijangkau, atau memblokir permintaan lintas asal, atau file mungkin terlalu besar untuk disimpan dalam memori. Periksa URL dan coba lagi.",
     "rasterNotGeotiff": "\"{{name}}\" tidak mengembalikan GeoTIFF. Server mungkin mengirim halaman kesalahan atau login sebagai gantinya. Periksa URL dan coba lagi."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Nilai diperlukan",
+      "number": "Harus berupa angka",
+      "range": "Harus antara {{min}} dan {{max}}",
+      "rangeMin": "Harus minimal {{min}}",
+      "rangeMax": "Harus maksimal {{max}}",
+      "valueMap": "Nilai tidak ada dalam daftar yang diizinkan",
+      "constraint": "Batasan tidak terpenuhi"
+    }
   }
 }

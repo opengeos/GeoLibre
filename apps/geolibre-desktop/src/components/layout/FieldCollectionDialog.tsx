@@ -2,7 +2,14 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next";
 import maplibregl from "maplibre-gl";
 import type { MapController } from "@geolibre/map";
-import { type GeoLibreLayer, useAppStore } from "@geolibre/core";
+import {
+  getAttributeFormField,
+  isAttributeFormFieldVisible,
+  useAppStore,
+  validateAttributeFormValues,
+  type AttributeFormConfig,
+  type GeoLibreLayer,
+} from "@geolibre/core";
 import {
   Button,
   Dialog,
@@ -34,7 +41,7 @@ import {
 import {
   appendFeature,
   buildGeometryFeature,
-  buildProperties,
+  buildPropertiesWithForm,
   buildSchema,
   collectionMetadata,
   type CollectionSchema,
@@ -52,6 +59,7 @@ import {
   validateForm,
   type Vertex,
 } from "../../lib/field-collection";
+import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { releaseBodyPointerEvents } from "../../lib/radix-compat";
 
 interface FieldCollectionDialogProps {
@@ -213,6 +221,16 @@ export function FieldCollectionDialog({
   const activeGeometry: GeometryType = activeLayer
     ? getGeometryType(activeLayer)
     : geometry;
+  // The layer's Attribute Form designer config, narrowed to the collection
+  // schema's own fields: a config for a field this form does not capture must
+  // not block a save (its required/constraint rules have nothing to bind to).
+  const attributeForm: AttributeFormConfig | undefined = (() => {
+    const form = activeLayer?.attributeForm;
+    if (!form || !schema) return undefined;
+    const keys = new Set(schema.fields.map((field) => field.key));
+    const fields = form.fields.filter((field) => keys.has(field.field));
+    return fields.length > 0 ? { fields } : undefined;
+  })();
 
   const getMap = useCallback(
     () => mapControllerRef.current?.getMap() ?? null,
@@ -560,14 +578,30 @@ export function FieldCollectionDialog({
 
   const handleSave = useCallback(() => {
     if (!activeLayer || !schema || !pending) return;
-    const result = validateForm(schema, values);
-    if (!result.ok) {
-      setErrors(result.errors);
+    // Fields hidden by a visibility expression never block a save, so the
+    // schema's own required/type checks run against the visible subset only.
+    const candidate = buildPropertiesWithForm(schema, values, attributeForm);
+    const visibleSchema: CollectionSchema = {
+      fields: schema.fields.filter((field) => {
+        const config = getAttributeFormField(attributeForm, field.key);
+        return !config || isAttributeFormFieldVisible(config, candidate);
+      }),
+    };
+    const result = validateForm(visibleSchema, values);
+    const formResult = validateAttributeFormValues(attributeForm, candidate);
+    const mergedErrors: Record<string, string> = { ...result.errors };
+    for (const [key, error] of Object.entries(formResult.errors)) {
+      // Stored pre-localized; errorText surfaces unknown codes verbatim.
+      if (!mergedErrors[key])
+        mergedErrors[key] = attributeFormErrorMessage(t, error);
+    }
+    if (Object.keys(mergedErrors).length > 0) {
+      setErrors(mergedErrors);
       return;
     }
     const extra: Record<string, unknown> = {};
     if (photo) extra[PHOTO_PROPERTY] = photo;
-    const props = buildProperties(schema, values, extra);
+    const props = buildPropertiesWithForm(schema, values, attributeForm, extra);
     const feature = buildGeometryFeature(activeGeometry, pending, props);
 
     const current = useAppStore
@@ -599,6 +633,7 @@ export function FieldCollectionDialog({
   }, [
     activeLayer,
     schema,
+    attributeForm,
     pending,
     values,
     photo,
@@ -721,6 +756,7 @@ export function FieldCollectionDialog({
                 <CaptureStep
                   geometry={activeGeometry}
                   schema={schema!}
+                  attributeForm={attributeForm}
                   pending={pending}
                   values={values}
                   setValue={setValue}
@@ -1007,6 +1043,8 @@ function SetupStep({
 interface CaptureStepProps {
   geometry: GeometryType;
   schema: CollectionSchema;
+  /** Attribute Form designer config narrowed to this schema's fields. */
+  attributeForm?: AttributeFormConfig;
   pending: Vertex[] | null;
   values: Record<string, string>;
   setValue: (key: string, value: string) => void;
@@ -1025,6 +1063,7 @@ interface CaptureStepProps {
 function CaptureStep({
   geometry,
   schema,
+  attributeForm,
   pending,
   values,
   setValue,
@@ -1098,16 +1137,70 @@ function CaptureStep({
           </div>
 
           {schema.fields.map((field) => {
+            const config = getAttributeFormField(attributeForm, field.key);
+            // Conditional visibility: a hidden field disappears from the form
+            // (and its validation is skipped by handleSave). Evaluated against
+            // the current candidate values so it updates as the user types.
+            if (
+              config &&
+              !isAttributeFormFieldVisible(
+                config,
+                buildPropertiesWithForm(schema, values, attributeForm),
+              )
+            ) {
+              return null;
+            }
             const err = errorText(errors[field.key]);
             return (
               <div key={field.key} className="space-y-1.5">
                 <Label htmlFor={`fc-${field.key}`}>
-                  {field.label}
-                  {field.required && (
+                  {config?.alias?.trim() || field.label}
+                  {(field.required || config?.required) && (
                     <span className="ms-0.5 text-destructive">*</span>
                   )}
                 </Label>
-                {field.type === "choice" && field.options?.length ? (
+                {config?.widget === "valueMap" && config.valueMap?.length ? (
+                  <Select
+                    id={`fc-${field.key}`}
+                    value={values[field.key] ?? ""}
+                    onChange={(e) => setValue(field.key, e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {config.valueMap.map((entry) => (
+                      <option key={entry.value} value={entry.value}>
+                        {entry.label ?? entry.value}
+                      </option>
+                    ))}
+                  </Select>
+                ) : config?.widget === "checkbox" ? (
+                  <div className="flex h-9 items-center">
+                    <input
+                      id={`fc-${field.key}`}
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={values[field.key] === "true"}
+                      onChange={(e) =>
+                        setValue(field.key, e.target.checked ? "true" : "false")
+                      }
+                    />
+                  </div>
+                ) : config ? (
+                  <Input
+                    id={`fc-${field.key}`}
+                    type={
+                      config.widget === "number" || config.widget === "range"
+                        ? "number"
+                        : config.widget === "date"
+                          ? "date"
+                          : "text"
+                    }
+                    min={config.min}
+                    max={config.max}
+                    step={config.step}
+                    value={values[field.key] ?? ""}
+                    onChange={(e) => setValue(field.key, e.target.value)}
+                  />
+                ) : field.type === "choice" && field.options?.length ? (
                   <Select
                     id={`fc-${field.key}`}
                     value={values[field.key] ?? ""}

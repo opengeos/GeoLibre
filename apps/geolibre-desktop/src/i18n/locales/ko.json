@@ -2607,7 +2607,8 @@
     "invalidExpression": "잘못된 표현식입니다.",
     "calcCouldNotApply": "이 레이어에 계산을 적용할 수 없습니다.",
     "calcAppliedWithErrors": "적용했지만 {{evaluated}}개 피처 중 {{errors}}개에서 오류가 발생하여 null로 기록되었습니다.",
-    "exportFailed": "선택한 레이어를 내보낼 수 없습니다."
+    "exportFailed": "선택한 레이어를 내보낼 수 없습니다.",
+    "saveTitleFormErrors": "저장하기 전에 속성 폼 위반을 수정하세요"
   },
   "style": {
     "panelLabel": "레이어 스타일",
@@ -2916,6 +2917,46 @@
       "strokeWidth": "윤곽선 너비 (px)",
       "opacity": "채우기 불투명도",
       "circleRadius": "점 반지름 (px)"
+    },
+    "attributeForm": {
+      "heading": "속성 폼",
+      "empty": "구성된 필드가 없습니다. 필드에 편집 위젯, 제약 조건 또는 표시 규칙을 지정하세요.",
+      "configureField": "필드 구성",
+      "field": "필드",
+      "selectField": "필드 선택…",
+      "widgetLabel": "편집 위젯",
+      "widget": {
+        "text": "텍스트",
+        "number": "숫자",
+        "range": "범위",
+        "checkbox": "체크박스",
+        "date": "날짜",
+        "valueMap": "값 맵"
+      },
+      "alias": "별칭",
+      "required": "필수",
+      "requiredTag": "필수",
+      "constraintTag": "제약",
+      "visibilityTag": "표시",
+      "valueMap": "값 맵 항목",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "한 줄에 한 항목: 값 또는 값=레이블.",
+      "min": "최소",
+      "max": "최대",
+      "step": "단계",
+      "constraintExpression": "제약 조건 표현식",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "제약 조건 설명",
+      "constraintDescriptionPlaceholder": "제약 조건이 충족되지 않을 때 표시됩니다",
+      "visibilityExpression": "표시 표현식",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "잘못된 표현식",
+      "openBuilder": "표현식 빌더 열기",
+      "edit": "필드 구성 편집",
+      "remove": "필드 구성 제거",
+      "cancel": "취소",
+      "save": "저장",
+      "noFields": "레이어에 구성할 속성 필드가 없습니다."
     }
   },
   "layers": {
@@ -3135,5 +3176,16 @@
     "cogConvertFailed": "\"{{name}}\"을(를) Cloud-Optimized GeoTIFF로 변환할 수 없습니다. gdal_translate 또는 rio cogeo로 변환한 후 결과를 불러오세요.",
     "rasterDownloadFailed": "\"{{name}}\"을(를) 다운로드할 수 없습니다. 서버가 느리거나 응답하지 않거나 교차 출처 요청을 차단하고 있을 수 있으며, 또는 파일이 너무 커서 메모리에 담을 수 없을 수 있습니다. URL을 확인한 후 다시 시도하세요.",
     "rasterNotGeotiff": "\"{{name}}\"이(가) GeoTIFF를 반환하지 않았습니다. 서버가 대신 오류 또는 로그인 페이지를 보냈을 수 있습니다. URL을 확인한 후 다시 시도하세요."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "값이 필요합니다",
+      "number": "숫자여야 합니다",
+      "range": "{{min}}에서 {{max}} 사이여야 합니다",
+      "rangeMin": "{{min}} 이상이어야 합니다",
+      "rangeMax": "{{max}} 이하여야 합니다",
+      "valueMap": "값이 허용 목록에 없습니다",
+      "constraint": "제약 조건이 충족되지 않았습니다"
+    }
   }
 }

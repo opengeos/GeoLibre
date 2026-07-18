@@ -49,6 +49,7 @@ import {
 import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
@@ -4546,6 +4547,15 @@ export function StylePanel({
               {/* Keyed by layer so the add-join draft never survives a layer
                   switch (a stale draft could reference the new target itself). */}
               <LayerJoinsSection key={layer.id} layer={layer} />
+            </>
+          ) : null}
+          {/* The Attribute Form designer configures how attribute values are
+              edited, so it needs the layer's features in the store too. Keyed
+              like Joins so an open field draft never survives a layer switch. */}
+          {layer.geojson ? (
+            <>
+              <Separator />
+              <AttributeFormSection key={`af-${layer.id}`} layer={layer} />
             </>
           ) : null}
         </div>

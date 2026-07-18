@@ -2722,7 +2722,8 @@
       "perimeter": "周长",
       "area": "面积"
     },
-    "geomInsert": "插入"
+    "geomInsert": "插入",
+    "saveTitleFormErrors": "保存前请修复属性表单违规"
   },
   "style": {
     "panelLabel": "图层样式",
@@ -3031,6 +3032,46 @@
       "strokeWidth": "轮廓宽度 (px)",
       "opacity": "填充不透明度",
       "circleRadius": "点半径 (px)"
+    },
+    "attributeForm": {
+      "heading": "属性表单",
+      "empty": "尚未配置字段。为字段指定编辑控件、约束或可见性规则。",
+      "configureField": "配置字段",
+      "field": "字段",
+      "selectField": "选择字段…",
+      "widgetLabel": "编辑控件",
+      "widget": {
+        "text": "文本",
+        "number": "数字",
+        "range": "范围",
+        "checkbox": "复选框",
+        "date": "日期",
+        "valueMap": "值映射"
+      },
+      "alias": "别名",
+      "required": "必填",
+      "requiredTag": "必填",
+      "constraintTag": "约束",
+      "visibilityTag": "可见性",
+      "valueMap": "值映射条目",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "每行一个条目：值 或 值=标签。",
+      "min": "最小值",
+      "max": "最大值",
+      "step": "步长",
+      "constraintExpression": "约束表达式",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "约束说明",
+      "constraintDescriptionPlaceholder": "约束不满足时显示",
+      "visibilityExpression": "可见性表达式",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "表达式无效",
+      "openBuilder": "打开表达式构建器",
+      "edit": "编辑字段配置",
+      "remove": "移除字段配置",
+      "cancel": "取消",
+      "save": "保存",
+      "noFields": "该图层没有可配置的属性字段。"
     }
   },
   "layers": {
@@ -3460,5 +3501,16 @@
     "loadError": "无法加载此图像。",
     "coverageLines": "Mapillary 序列",
     "coveragePoints": "Mapillary 图像"
+  },
+  "attributeForm": {
+    "error": {
+      "required": "必须提供值",
+      "number": "必须是数字",
+      "range": "必须介于 {{min}} 和 {{max}} 之间",
+      "rangeMin": "必须至少为 {{min}}",
+      "rangeMax": "不得超过 {{max}}",
+      "valueMap": "值不在允许列表中",
+      "constraint": "不满足约束条件"
+    }
   }
 }

@@ -1,5 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
+import {
+  coerceAttributeFormValue,
+  isDuckDBQueryLayer,
+  useAppStore,
+  validateAttributeFormValues,
+  type AttributeFormConfig,
+  type AttributeFormFieldConfig,
+  type AttributeFormFieldError,
+} from "@geolibre/core";
 import {
   getDuckDBLayerRows,
   getGeometryEditTargetLayerId,
@@ -92,6 +100,7 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { computeRowSelection } from "../../lib/attribute-selection";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
@@ -214,6 +223,7 @@ function hasDraftEdits(drafts: AttributeDrafts): boolean {
 function applyDraftsToFeatures(
   features: Feature[],
   drafts: AttributeDrafts,
+  formFields?: Map<string, AttributeFormFieldConfig>,
 ): Feature[] {
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
@@ -226,11 +236,71 @@ function applyDraftsToFeatures(
       // Skip drafts that are invalid JSON for an object-typed cell so we never
       // persist or export a type-corrupted value; the existing value is kept.
       if (isInvalidObjectDraft(draft, previousValue)) continue;
-      properties[column] = parseAttributeDraft(draft, previousValue);
+      // A column with an Attribute Form widget coerces by widget type (a
+      // number widget stores a number even into a previously-null cell);
+      // unconfigured columns keep the previous-value type inference.
+      const config = formFields?.get(column);
+      properties[column] = config
+        ? coerceAttributeFormValue(config, draft)
+        : parseAttributeDraft(draft, previousValue);
     }
 
     return { ...feature, properties };
   });
+}
+
+/**
+ * Validate drafted rows against the layer's Attribute Form config. Only edits
+ * that introduce (or keep, on an edited field) a violation are reported —
+ * pre-existing violations on untouched fields never block an unrelated edit.
+ * Returns featureId → field → error for every blocking violation.
+ */
+function computeFormDraftErrors(
+  form: AttributeFormConfig | undefined,
+  rows: AttributeTableRow[],
+  drafts: AttributeDrafts,
+  features: Feature[],
+): Record<string, Record<string, AttributeFormFieldError>> {
+  const result: Record<string, Record<string, AttributeFormFieldError>> = {};
+  if (!form?.fields.length || !hasDraftEdits(drafts)) return result;
+
+  const formFields = new Map(form.fields.map((entry) => [entry.field, entry]));
+  const featureById = new Map(
+    features.map((feature, index) => [String(feature.id ?? index), feature]),
+  );
+
+  for (const row of rows) {
+    const rowDrafts = drafts[row.featureId];
+    if (!rowDrafts || Object.keys(rowDrafts).length === 0) continue;
+
+    const candidate = { ...row.properties };
+    for (const [column, draft] of Object.entries(rowDrafts)) {
+      const previousValue = row.properties[column];
+      if (isInvalidObjectDraft(draft, previousValue)) continue;
+      const config = formFields.get(column);
+      candidate[column] = config
+        ? coerceAttributeFormValue(config, draft)
+        : parseAttributeDraft(draft, previousValue);
+    }
+
+    const feature = featureById.get(row.featureId);
+    const validation = validateAttributeFormValues(form, candidate, {
+      feature,
+    });
+    if (validation.ok) continue;
+
+    const baseline = validateAttributeFormValues(form, row.properties, {
+      feature,
+    });
+    const rowErrors: Record<string, AttributeFormFieldError> = {};
+    for (const [field, error] of Object.entries(validation.errors)) {
+      if (rowDrafts[field] !== undefined || !baseline.errors[field]) {
+        rowErrors[field] = error;
+      }
+    }
+    if (Object.keys(rowErrors).length > 0) result[row.featureId] = rowErrors;
+  }
+  return result;
 }
 
 function duckDBRowsToAttributeRows(
@@ -450,6 +520,24 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       isInvalidObjectDraft(draft, row.properties[column]),
     );
   });
+  // Attribute Form designer config: per-column edit widgets plus constraint
+  // validation of drafted rows. DuckDB layers keep the plain text editor —
+  // the designer is only offered for store-backed geojson layers.
+  const attributeForm = isDuckDBLayer ? undefined : layer?.attributeForm;
+  const formFields = useMemo(
+    () =>
+      new Map(
+        (attributeForm?.fields ?? []).map((entry) => [entry.field, entry]),
+      ),
+    [attributeForm],
+  );
+  const formDraftErrors = computeFormDraftErrors(
+    attributeForm,
+    attributeRows,
+    drafts,
+    features,
+  );
+  const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
     setIsEditing(false);
@@ -763,6 +851,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     );
   };
 
+  // Localize an Attribute Form validation error for a cell tooltip.
+  const formErrorText = (error: AttributeFormFieldError): string =>
+    attributeFormErrorMessage(t, error);
+
   const updateCellDraft = (
     featureId: string,
     column: string,
@@ -806,7 +898,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   const saveDrafts = () => {
-    if (!layer || !hasEdits || hasInvalidDrafts) return;
+    if (!layer || !hasEdits || hasInvalidDrafts || hasFormErrors) return;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(
@@ -822,7 +914,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     const geojson = {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
     };
 
     updateLayer(layer.id, { geojson });
@@ -835,7 +927,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     return {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
     };
   };
 
@@ -1431,12 +1523,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           title={
             hasInvalidDrafts
               ? t("attributeTable.saveTitleInvalid")
-              : isDuckDBLayer
-                ? t("attributeTable.saveTitleDuckdb")
-                : t("attributeTable.saveEdits")
+              : hasFormErrors
+                ? t("attributeTable.saveTitleFormErrors")
+                : isDuckDBLayer
+                  ? t("attributeTable.saveTitleDuckdb")
+                  : t("attributeTable.saveEdits")
           }
           aria-label={t("attributeTable.saveEdits")}
-          disabled={!isEditing || !hasEdits || hasInvalidDrafts}
+          disabled={!isEditing || !hasEdits || hasInvalidDrafts || hasFormErrors}
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
@@ -1777,14 +1871,29 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                         const value = properties[col];
                         const draft = drafts[featureId]?.[col];
                         const changed = draft !== undefined;
+                        const formError = formDraftErrors[featureId]?.[col];
                         const invalid =
-                          draft !== undefined &&
-                          isInvalidObjectDraft(draft, value);
+                          (draft !== undefined &&
+                            isInvalidObjectDraft(draft, value)) ||
+                          formError !== undefined;
                         const inputClassName = invalid
                           ? "h-7 min-w-0 border-destructive bg-destructive/10 px-2 text-xs"
                           : changed
                             ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
                             : "h-7 min-w-0 px-2 text-xs";
+                        const config = formFields.get(col);
+                        const current = draft ?? formatAttributeValue(value);
+                        const invalidTitle = invalid
+                          ? formError
+                            ? formErrorText(formError)
+                            : t("attributeTable.invalidJson")
+                          : undefined;
+                        const cellAria = t("attributeTable.editCellAria", {
+                          col,
+                          featureId,
+                        });
+                        const commitDraft = (next: string) =>
+                          updateCellDraft(featureId, col, next, value);
                         return (
                           <TableCell
                             key={col}
@@ -1797,29 +1906,74 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                             }
                           >
                             {isEditing && !joinDerivedColumns.has(col) ? (
-                              <Input
-                                className={inputClassName}
-                                aria-invalid={invalid || undefined}
-                                title={
-                                  invalid
-                                    ? t("attributeTable.invalidJson")
-                                    : undefined
-                                }
-                                aria-label={t("attributeTable.editCellAria", {
-                                  col,
-                                  featureId,
-                                })}
-                                value={draft ?? formatAttributeValue(value)}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) =>
-                                  updateCellDraft(
-                                    featureId,
-                                    col,
-                                    event.target.value,
-                                    value,
-                                  )
-                                }
-                              />
+                              config?.widget === "valueMap" &&
+                              config.valueMap?.length ? (
+                                <Select
+                                  className={inputClassName}
+                                  aria-invalid={invalid || undefined}
+                                  title={invalidTitle}
+                                  aria-label={cellAria}
+                                  value={current}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    commitDraft(event.target.value)
+                                  }
+                                >
+                                  <option value="">—</option>
+                                  {/* Keep an out-of-map current value listed so
+                                      the select shows it instead of silently
+                                      snapping to the first entry. */}
+                                  {current !== "" &&
+                                    !config.valueMap.some(
+                                      (entry) => entry.value === current,
+                                    ) && (
+                                      <option value={current}>{current}</option>
+                                    )}
+                                  {config.valueMap.map((entry) => (
+                                    <option key={entry.value} value={entry.value}>
+                                      {entry.label ?? entry.value}
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : config?.widget === "checkbox" ? (
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4"
+                                  aria-invalid={invalid || undefined}
+                                  title={invalidTitle}
+                                  aria-label={cellAria}
+                                  checked={current === "true"}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    commitDraft(
+                                      event.target.checked ? "true" : "false",
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Input
+                                  className={inputClassName}
+                                  type={
+                                    config?.widget === "number" ||
+                                    config?.widget === "range"
+                                      ? "number"
+                                      : config?.widget === "date"
+                                        ? "date"
+                                        : "text"
+                                  }
+                                  min={config?.min}
+                                  max={config?.max}
+                                  step={config?.step}
+                                  aria-invalid={invalid || undefined}
+                                  title={invalidTitle}
+                                  aria-label={cellAria}
+                                  value={current}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    commitDraft(event.target.value)
+                                  }
+                                />
+                              )
                             ) : (
                               formatAttributeValue(value)
                             )}

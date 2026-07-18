@@ -2651,7 +2651,8 @@
     "invalidExpression": "Expresión no válida.",
     "calcCouldNotApply": "No se pudo aplicar el cálculo a esta capa.",
     "calcAppliedWithErrors": "Aplicado, pero {{errors}} de {{evaluated}} entidad(es) generaron un error y se escribieron como null.",
-    "exportFailed": "No se pudo exportar la capa seleccionada."
+    "exportFailed": "No se pudo exportar la capa seleccionada.",
+    "saveTitleFormErrors": "Corrija las infracciones del formulario de atributos antes de guardar"
   },
   "style": {
     "panelLabel": "Estilo de capa",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "Ancho de contorno (px)",
       "opacity": "Opacidad de relleno",
       "circleRadius": "Radio de punto (px)"
+    },
+    "attributeForm": {
+      "heading": "Formulario de atributos",
+      "empty": "No hay campos configurados. Asigne un widget de edición, una restricción o una regla de visibilidad a un campo.",
+      "configureField": "Configurar campo",
+      "field": "Campo",
+      "selectField": "Seleccionar campo…",
+      "widgetLabel": "Widget de edición",
+      "widget": {
+        "text": "Texto",
+        "number": "Número",
+        "range": "Rango",
+        "checkbox": "Casilla de verificación",
+        "date": "Fecha",
+        "valueMap": "Mapa de valores"
+      },
+      "alias": "Alias",
+      "required": "Obligatorio",
+      "requiredTag": "obligatorio",
+      "constraintTag": "restricción",
+      "visibilityTag": "visibilidad",
+      "valueMap": "Entradas del mapa de valores",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Una entrada por línea: valor o valor=Etiqueta.",
+      "min": "Mín",
+      "max": "Máx",
+      "step": "Paso",
+      "constraintExpression": "Expresión de restricción",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Descripción de la restricción",
+      "constraintDescriptionPlaceholder": "Se muestra cuando la restricción falla",
+      "visibilityExpression": "Expresión de visibilidad",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Expresión no válida",
+      "openBuilder": "Abrir el generador de expresiones",
+      "edit": "Editar configuración del campo",
+      "remove": "Eliminar configuración del campo",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "noFields": "La capa no tiene campos de atributos para configurar."
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "No se pudo convertir «{{name}}» a un GeoTIFF optimizado para la nube. Intente convertirlo con gdal_translate o rio cogeo y luego cargue el resultado.",
     "rasterDownloadFailed": "No se pudo descargar «{{name}}». Es posible que el servidor esté lento, no esté disponible o bloquee solicitudes entre orígenes, o que el archivo sea demasiado grande para mantenerlo en memoria. Compruebe la URL e inténtelo de nuevo.",
     "rasterNotGeotiff": "«{{name}}» no devolvió un GeoTIFF. Es posible que el servidor haya enviado una página de error o de inicio de sesión en su lugar. Compruebe la URL e inténtelo de nuevo."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Se requiere un valor",
+      "number": "Debe ser un número",
+      "range": "Debe estar entre {{min}} y {{max}}",
+      "rangeMin": "Debe ser al menos {{min}}",
+      "rangeMax": "Debe ser como máximo {{max}}",
+      "valueMap": "El valor no está en la lista permitida",
+      "constraint": "Restricción no satisfecha"
+    }
   }
 }

@@ -2739,7 +2739,8 @@
     "invalidExpression": "Недопустимое выражение.",
     "calcCouldNotApply": "Не удалось применить вычисление к этому слою.",
     "calcAppliedWithErrors": "Применено, но {{errors}} из {{evaluated}} объект(ов) вызвали ошибку и были записаны как null.",
-    "exportFailed": "Не удалось экспортировать выбранный слой."
+    "exportFailed": "Не удалось экспортировать выбранный слой.",
+    "saveTitleFormErrors": "Исправьте нарушения формы атрибутов перед сохранением"
   },
   "style": {
     "panelLabel": "Стиль слоя",
@@ -3054,6 +3055,46 @@
       "strokeWidth": "Ширина контура (px)",
       "opacity": "Непрозрачность заливки",
       "circleRadius": "Радиус точки (px)"
+    },
+    "attributeForm": {
+      "heading": "Форма атрибутов",
+      "empty": "Поля не настроены. Назначьте полю виджет редактирования, ограничение или правило видимости.",
+      "configureField": "Настроить поле",
+      "field": "Поле",
+      "selectField": "Выберите поле…",
+      "widgetLabel": "Виджет редактирования",
+      "widget": {
+        "text": "Текст",
+        "number": "Число",
+        "range": "Диапазон",
+        "checkbox": "Флажок",
+        "date": "Дата",
+        "valueMap": "Карта значений"
+      },
+      "alias": "Псевдоним",
+      "required": "Обязательное",
+      "requiredTag": "обязательное",
+      "constraintTag": "ограничение",
+      "visibilityTag": "видимость",
+      "valueMap": "Записи карты значений",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Одна запись на строку: значение или значение=Метка.",
+      "min": "Мин",
+      "max": "Макс",
+      "step": "Шаг",
+      "constraintExpression": "Выражение ограничения",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Описание ограничения",
+      "constraintDescriptionPlaceholder": "Показывается при нарушении ограничения",
+      "visibilityExpression": "Выражение видимости",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Недопустимое выражение",
+      "openBuilder": "Открыть конструктор выражений",
+      "edit": "Изменить настройку поля",
+      "remove": "Удалить настройку поля",
+      "cancel": "Отмена",
+      "save": "Сохранить",
+      "noFields": "У слоя нет атрибутивных полей для настройки."
     }
   },
   "layers": {
@@ -3273,5 +3314,16 @@
     "cogConvertFailed": "Не удалось преобразовать «{{name}}» в Cloud-Optimized GeoTIFF. Попробуйте преобразовать его с помощью gdal_translate или rio cogeo, затем загрузите результат.",
     "rasterDownloadFailed": "Не удалось скачать «{{name}}». Сервер может быть медленным, недоступным или блокировать межсайтовые запросы, либо файл может быть слишком большим для памяти. Проверьте URL и повторите попытку.",
     "rasterNotGeotiff": "«{{name}}» не вернул GeoTIFF. Возможно, сервер отправил страницу с ошибкой или входом вместо файла. Проверьте URL и повторите попытку."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Требуется значение",
+      "number": "Должно быть числом",
+      "range": "Должно быть между {{min}} и {{max}}",
+      "rangeMin": "Должно быть не менее {{min}}",
+      "rangeMax": "Должно быть не более {{max}}",
+      "valueMap": "Значение отсутствует в списке допустимых",
+      "constraint": "Ограничение не выполнено"
+    }
   }
 }

@@ -2651,7 +2651,8 @@
     "invalidExpression": "Espressione non valida.",
     "calcCouldNotApply": "Impossibile applicare il calcolo a questo livello.",
     "calcAppliedWithErrors": "Applicato, ma {{errors}} di {{evaluated}} elemento/i hanno generato un errore e sono stati scritti come null.",
-    "exportFailed": "Impossibile esportare il livello selezionato."
+    "exportFailed": "Impossibile esportare il livello selezionato.",
+    "saveTitleFormErrors": "Correggi le violazioni del modulo attributi prima di salvare"
   },
   "style": {
     "panelLabel": "Stile del livello",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "Larghezza contorno (px)",
       "opacity": "Opacità riempimento",
       "circleRadius": "Raggio punto (px)"
+    },
+    "attributeForm": {
+      "heading": "Modulo attributi",
+      "empty": "Nessun campo configurato. Assegna a un campo un widget di modifica, un vincolo o una regola di visibilità.",
+      "configureField": "Configura campo",
+      "field": "Campo",
+      "selectField": "Seleziona campo…",
+      "widgetLabel": "Widget di modifica",
+      "widget": {
+        "text": "Testo",
+        "number": "Numero",
+        "range": "Intervallo",
+        "checkbox": "Casella di controllo",
+        "date": "Data",
+        "valueMap": "Mappa valori"
+      },
+      "alias": "Alias",
+      "required": "Obbligatorio",
+      "requiredTag": "obbligatorio",
+      "constraintTag": "vincolo",
+      "visibilityTag": "visibilità",
+      "valueMap": "Voci della mappa valori",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Una voce per riga: valore o valore=Etichetta.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Passo",
+      "constraintExpression": "Espressione di vincolo",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Descrizione del vincolo",
+      "constraintDescriptionPlaceholder": "Mostrata quando il vincolo non è soddisfatto",
+      "visibilityExpression": "Espressione di visibilità",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Espressione non valida",
+      "openBuilder": "Apri il generatore di espressioni",
+      "edit": "Modifica configurazione del campo",
+      "remove": "Rimuovi configurazione del campo",
+      "cancel": "Annulla",
+      "save": "Salva",
+      "noFields": "Il layer non ha campi attributo da configurare."
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "Impossibile convertire \"{{name}}\" in un Cloud-Optimized GeoTIFF. Prova a convertirlo con gdal_translate o rio cogeo, quindi carica il risultato.",
     "rasterDownloadFailed": "Impossibile scaricare \"{{name}}\". Il server potrebbe essere lento, irraggiungibile o potrebbe bloccare le richieste cross-origin, oppure il file potrebbe essere troppo grande per essere mantenuto in memoria. Controlla l'URL e riprova.",
     "rasterNotGeotiff": "\"{{name}}\" non ha restituito un GeoTIFF. Il server potrebbe aver inviato una pagina di errore o di accesso al suo posto. Controlla l'URL e riprova."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "È richiesto un valore",
+      "number": "Deve essere un numero",
+      "range": "Deve essere compreso tra {{min}} e {{max}}",
+      "rangeMin": "Deve essere almeno {{min}}",
+      "rangeMax": "Deve essere al massimo {{max}}",
+      "valueMap": "Il valore non è nell'elenco consentito",
+      "constraint": "Vincolo non soddisfatto"
+    }
   }
 }

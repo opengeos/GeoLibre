@@ -3064,7 +3064,8 @@
     "invalidExpression": "تعبير غير صالح.",
     "calcCouldNotApply": "تعذر تطبيق الحساب على هذه الطبقة.",
     "calcAppliedWithErrors": "تم التطبيق، لكن حدث خطأ في {{errors}} من أصل {{evaluated}} من المعالم فكُتبت قيمها null.",
-    "exportFailed": "تعذر تصدير الطبقة المحددة."
+    "exportFailed": "تعذر تصدير الطبقة المحددة.",
+    "saveTitleFormErrors": "أصلح مخالفات نموذج السمات قبل الحفظ"
   },
   "style": {
     "panelLabel": "نمط الطبقة",
@@ -3383,6 +3384,46 @@
       "strokeWidth": "عرض الحد (px)",
       "opacity": "عتامة التعبئة",
       "circleRadius": "نصف قطر النقطة (px)"
+    },
+    "attributeForm": {
+      "heading": "نموذج السمات",
+      "empty": "لم يتم تكوين أي حقول. عيّن أداة تحرير أو قيدًا أو قاعدة رؤية لحقل.",
+      "configureField": "تكوين الحقل",
+      "field": "الحقل",
+      "selectField": "اختر حقلاً…",
+      "widgetLabel": "أداة التحرير",
+      "widget": {
+        "text": "نص",
+        "number": "رقم",
+        "range": "نطاق",
+        "checkbox": "خانة اختيار",
+        "date": "تاريخ",
+        "valueMap": "خريطة القيم"
+      },
+      "alias": "اسم مستعار",
+      "required": "مطلوب",
+      "requiredTag": "مطلوب",
+      "constraintTag": "قيد",
+      "visibilityTag": "رؤية",
+      "valueMap": "إدخالات خريطة القيم",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "إدخال واحد في كل سطر: قيمة أو قيمة=تسمية.",
+      "min": "الحد الأدنى",
+      "max": "الحد الأقصى",
+      "step": "الخطوة",
+      "constraintExpression": "تعبير القيد",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "وصف القيد",
+      "constraintDescriptionPlaceholder": "يُعرض عند فشل القيد",
+      "visibilityExpression": "تعبير الرؤية",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "تعبير غير صالح",
+      "openBuilder": "فتح منشئ التعبيرات",
+      "edit": "تحرير تكوين الحقل",
+      "remove": "إزالة تكوين الحقل",
+      "cancel": "إلغاء",
+      "save": "حفظ",
+      "noFields": "لا تحتوي الطبقة على حقول سمات للتكوين."
     }
   },
   "layers": {
@@ -3603,5 +3644,16 @@
     "cogConvertFailed": "تعذر تحويل \"{{name}}\" إلى Cloud-Optimized GeoTIFF. جرّب تحويله باستخدام gdal_translate أو rio cogeo، ثم حمّل الناتج.",
     "rasterDownloadFailed": "تعذر تنزيل \"{{name}}\". قد يكون الخادم بطيئًا أو يتعذر الوصول إليه أو يحظر الطلبات عابرة المصادر، أو قد يكون الملف أكبر من أن يُحفظ في الذاكرة. تحقق من عنوان URL وحاول مرة أخرى.",
     "rasterNotGeotiff": "لم يُرجع \"{{name}}\" ملف GeoTIFF. ربما أرسل الخادم صفحة خطأ أو صفحة تسجيل دخول بدلًا منه. تحقق من عنوان URL وحاول مرة أخرى."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "القيمة مطلوبة",
+      "number": "يجب أن تكون رقمًا",
+      "range": "يجب أن تكون بين {{min}} و {{max}}",
+      "rangeMin": "يجب ألا تقل عن {{min}}",
+      "rangeMax": "يجب ألا تزيد عن {{max}}",
+      "valueMap": "القيمة ليست في القائمة المسموح بها",
+      "constraint": "القيد غير مستوفى"
+    }
   }
 }

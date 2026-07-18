@@ -2651,7 +2651,8 @@
     "invalidExpression": "Ungültiger Ausdruck.",
     "calcCouldNotApply": "Die Berechnung konnte nicht auf diese Ebene angewendet werden.",
     "calcAppliedWithErrors": "Angewendet, aber bei {{errors}} von {{evaluated}} Objekt(en) trat ein Fehler auf; sie wurden als null geschrieben.",
-    "exportFailed": "Die ausgewählte Ebene konnte nicht exportiert werden."
+    "exportFailed": "Die ausgewählte Ebene konnte nicht exportiert werden.",
+    "saveTitleFormErrors": "Beheben Sie Verstöße im Attributformular vor dem Speichern"
   },
   "style": {
     "panelLabel": "Ebenenstil",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "Umrissbreite (px)",
       "opacity": "Fülldeckkraft",
       "circleRadius": "Punktradius (px)"
+    },
+    "attributeForm": {
+      "heading": "Attributformular",
+      "empty": "Keine Felder konfiguriert. Weisen Sie einem Feld ein Bearbeitungs-Widget, eine Einschränkung oder eine Sichtbarkeitsregel zu.",
+      "configureField": "Feld konfigurieren",
+      "field": "Feld",
+      "selectField": "Feld auswählen…",
+      "widgetLabel": "Bearbeitungs-Widget",
+      "widget": {
+        "text": "Text",
+        "number": "Zahl",
+        "range": "Bereich",
+        "checkbox": "Kontrollkästchen",
+        "date": "Datum",
+        "valueMap": "Wertezuordnung"
+      },
+      "alias": "Alias",
+      "required": "Erforderlich",
+      "requiredTag": "erforderlich",
+      "constraintTag": "Einschränkung",
+      "visibilityTag": "Sichtbarkeit",
+      "valueMap": "Einträge der Wertezuordnung",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Ein Eintrag pro Zeile: Wert oder Wert=Beschriftung.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Schritt",
+      "constraintExpression": "Einschränkungsausdruck",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Beschreibung der Einschränkung",
+      "constraintDescriptionPlaceholder": "Wird angezeigt, wenn die Einschränkung fehlschlägt",
+      "visibilityExpression": "Sichtbarkeitsausdruck",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Ungültiger Ausdruck",
+      "openBuilder": "Ausdruckseditor öffnen",
+      "edit": "Feldkonfiguration bearbeiten",
+      "remove": "Feldkonfiguration entfernen",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "noFields": "Die Ebene hat keine Attributfelder zum Konfigurieren."
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "\"{{name}}\" konnte nicht in ein Cloud-Optimized GeoTIFF konvertiert werden. Versuchen Sie, es mit gdal_translate oder rio cogeo zu konvertieren, und laden Sie dann das Ergebnis.",
     "rasterDownloadFailed": "\"{{name}}\" konnte nicht heruntergeladen werden. Der Server ist möglicherweise langsam, nicht erreichbar oder blockiert Cross-Origin-Anfragen, oder die Datei ist zu groß, um im Speicher gehalten zu werden. Überprüfen Sie die URL und versuchen Sie es erneut.",
     "rasterNotGeotiff": "\"{{name}}\" hat kein GeoTIFF zurückgegeben. Der Server hat möglicherweise stattdessen eine Fehler- oder Anmeldeseite gesendet. Überprüfen Sie die URL und versuchen Sie es erneut."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Ein Wert ist erforderlich",
+      "number": "Muss eine Zahl sein",
+      "range": "Muss zwischen {{min}} und {{max}} liegen",
+      "rangeMin": "Muss mindestens {{min}} sein",
+      "rangeMax": "Darf höchstens {{max}} sein",
+      "valueMap": "Wert ist nicht in der zulässigen Liste",
+      "constraint": "Einschränkung nicht erfüllt"
+    }
   }
 }

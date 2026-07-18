@@ -2651,7 +2651,8 @@
     "invalidExpression": "Expression invalide.",
     "calcCouldNotApply": "Impossible d'appliquer le calcul à cette couche.",
     "calcAppliedWithErrors": "Appliqué, mais {{errors}} entité(s) sur {{evaluated}} ont généré une erreur et ont été écrites comme null.",
-    "exportFailed": "Impossible d'exporter la couche sélectionnée."
+    "exportFailed": "Impossible d'exporter la couche sélectionnée.",
+    "saveTitleFormErrors": "Corrigez les violations du formulaire d'attributs avant d'enregistrer"
   },
   "style": {
     "panelLabel": "Style de la couche",
@@ -2962,6 +2963,46 @@
       "strokeWidth": "Largeur de contour (px)",
       "opacity": "Opacité du remplissage",
       "circleRadius": "Rayon de point (px)"
+    },
+    "attributeForm": {
+      "heading": "Formulaire d'attributs",
+      "empty": "Aucun champ configuré. Attribuez un widget d'édition, une contrainte ou une règle de visibilité à un champ.",
+      "configureField": "Configurer le champ",
+      "field": "Champ",
+      "selectField": "Sélectionner un champ…",
+      "widgetLabel": "Widget d'édition",
+      "widget": {
+        "text": "Texte",
+        "number": "Nombre",
+        "range": "Plage",
+        "checkbox": "Case à cocher",
+        "date": "Date",
+        "valueMap": "Carte de valeurs"
+      },
+      "alias": "Alias",
+      "required": "Obligatoire",
+      "requiredTag": "obligatoire",
+      "constraintTag": "contrainte",
+      "visibilityTag": "visibilité",
+      "valueMap": "Entrées de la carte de valeurs",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Une entrée par ligne : valeur ou valeur=Étiquette.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Pas",
+      "constraintExpression": "Expression de contrainte",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Description de la contrainte",
+      "constraintDescriptionPlaceholder": "Affichée lorsque la contrainte échoue",
+      "visibilityExpression": "Expression de visibilité",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Expression non valide",
+      "openBuilder": "Ouvrir le générateur d'expressions",
+      "edit": "Modifier la configuration du champ",
+      "remove": "Supprimer la configuration du champ",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "noFields": "La couche n'a aucun champ d'attribut à configurer."
     }
   },
   "layers": {
@@ -3181,5 +3222,16 @@
     "cogConvertFailed": "Impossible de convertir « {{name}} » en GeoTIFF Cloud-Optimized. Essayez de le convertir avec gdal_translate ou rio cogeo, puis chargez le résultat.",
     "rasterDownloadFailed": "Impossible de télécharger « {{name}} ». Le serveur est peut-être lent, inaccessible ou bloque les requêtes cross-origin, ou le fichier est peut-être trop volumineux pour tenir en mémoire. Vérifiez l'URL et réessayez.",
     "rasterNotGeotiff": "« {{name}} » n'a pas renvoyé de GeoTIFF. Le serveur a peut-être envoyé une erreur ou une page de connexion à la place. Vérifiez l'URL et réessayez."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Une valeur est requise",
+      "number": "Doit être un nombre",
+      "range": "Doit être entre {{min}} et {{max}}",
+      "rangeMin": "Doit être au moins {{min}}",
+      "rangeMax": "Doit être au plus {{max}}",
+      "valueMap": "La valeur ne figure pas dans la liste autorisée",
+      "constraint": "Contrainte non satisfaite"
+    }
   }
 }

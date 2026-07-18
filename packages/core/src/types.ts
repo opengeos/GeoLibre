@@ -711,6 +711,69 @@ export interface LayerJoin {
   stats?: LayerJoinStats;
 }
 
+/** Edit-widget kinds the Attribute Form designer can assign to a field. */
+export type AttributeFormWidget =
+  | "text"
+  | "number"
+  | "range"
+  | "checkbox"
+  | "date"
+  | "valueMap";
+
+/** One selectable entry of a `valueMap` widget (stored value + display label). */
+export interface AttributeFormValueMapEntry {
+  /** The value written to the feature property (compared as a string). */
+  value: string;
+  /** Human-readable label shown in the dropdown; defaults to {@link value}. */
+  label?: string;
+}
+
+/**
+ * Per-field configuration authored in the Attribute Form designer (layer
+ * properties → Attributes Form, QGIS-style): which edit widget the attribute
+ * editing surfaces render for the field, plus optional expression-based
+ * constraints and conditional visibility. Consumed by the attribute table's
+ * inline editor and the Field Collection capture form; helpers live in
+ * `attribute-form.ts`.
+ */
+export interface AttributeFormFieldConfig {
+  /** Feature property key this configuration applies to. */
+  field: string;
+  widget: AttributeFormWidget;
+  /** Display label override shown in forms instead of the raw field name. */
+  alias?: string;
+  /** When true, a null/empty value fails validation. */
+  required?: boolean;
+  /** Dropdown entries for the `valueMap` widget. */
+  valueMap?: AttributeFormValueMapEntry[];
+  /** Lower bound for `number`/`range` widgets (inclusive). */
+  min?: number;
+  /** Upper bound for `number`/`range` widgets (inclusive). */
+  max?: number;
+  /** Step for the `range` widget's input. */
+  step?: number;
+  /**
+   * Boolean MapLibre expression that must evaluate to `true` against the
+   * feature's (candidate) properties for the value to be accepted, e.g.
+   * `[">", ["get", "population"], 0]`. Stored as the expression source string
+   * the Expression Builder edits.
+   */
+  constraintExpression?: string;
+  /** Human-readable message shown when the constraint fails. */
+  constraintDescription?: string;
+  /**
+   * Boolean MapLibre expression controlling whether the field is shown in
+   * attribute forms; `false` hides the field (and skips its validation).
+   * Empty/invalid expressions fail open so a typo cannot hide data entry.
+   */
+  visibilityExpression?: string;
+}
+
+/** The Attribute Form designer's whole per-layer configuration. */
+export interface AttributeFormConfig {
+  fields: AttributeFormFieldConfig[];
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -722,6 +785,13 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Per-field edit-widget, constraint, and visibility configuration authored
+   * in the Attribute Form designer. Applied by the attribute editing surfaces
+   * (attribute table inline editor, Field Collection capture form); persists
+   * with the project like {@link joins}.
+   */
+  attributeForm?: AttributeFormConfig;
   /**
    * Persistent attribute joins applied to this layer's features, in order.
    * The joined columns are materialized into `geojson` feature properties (so

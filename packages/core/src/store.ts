@@ -41,6 +41,7 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
+  type AttributeFormConfig,
   type LayerJoin,
   type LayerStyle,
   type LegendConfig,
@@ -507,6 +508,15 @@ export interface AppState {
    * Pass an empty array to detach every join and restore the base attributes.
    */
   setLayerJoins: (id: string, joins: LayerJoin[]) => void;
+  /**
+   * Replace the layer's Attribute Form designer configuration (per-field edit
+   * widgets, constraints, conditional visibility). Pass `undefined` to remove
+   * the form config entirely.
+   */
+  setLayerAttributeForm: (
+    id: string,
+    attributeForm: AttributeFormConfig | undefined,
+  ) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   addGeoJsonLayer: (
@@ -1418,6 +1428,9 @@ export const useAppStore = create<AppState>()(
           layers = cascadeLayerJoinRefresh(layers, id);
           return { layers, isDirty: true };
         }),
+
+      setLayerAttributeForm: (id, attributeForm) =>
+        get().updateLayer(id, { attributeForm }),
 
       setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 

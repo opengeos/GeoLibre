@@ -1283,6 +1283,46 @@
       "strokeWidth": "კონტურის სიგანე (px)",
       "opacity": "შევსების გაუმჭვირვალობა",
       "circleRadius": "წერტილის რადიუსი (px)"
+    },
+    "attributeForm": {
+      "heading": "ატრიბუტების ფორმა",
+      "empty": "ველები არ არის კონფიგურირებული. მიანიჭეთ ველს რედაქტირების ვიჯეტი, შეზღუდვა ან ხილვადობის წესი.",
+      "configureField": "ველის კონფიგურაცია",
+      "field": "ველი",
+      "selectField": "აირჩიეთ ველი…",
+      "widgetLabel": "რედაქტირების ვიჯეტი",
+      "widget": {
+        "text": "ტექსტი",
+        "number": "რიცხვი",
+        "range": "დიაპაზონი",
+        "checkbox": "მოსანიშნი ველი",
+        "date": "თარიღი",
+        "valueMap": "მნიშვნელობების რუკა"
+      },
+      "alias": "ფსევდონიმი",
+      "required": "აუცილებელი",
+      "requiredTag": "აუცილებელი",
+      "constraintTag": "შეზღუდვა",
+      "visibilityTag": "ხილვადობა",
+      "valueMap": "მნიშვნელობების რუკის ჩანაწერები",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "თითო ჩანაწერი თითო ხაზზე: მნიშვნელობა ან მნიშვნელობა=იარლიყი.",
+      "min": "მინ",
+      "max": "მაქს",
+      "step": "ბიჯი",
+      "constraintExpression": "შეზღუდვის გამოსახულება",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "შეზღუდვის აღწერა",
+      "constraintDescriptionPlaceholder": "ნაჩვენებია, როცა შეზღუდვა ვერ სრულდება",
+      "visibilityExpression": "ხილვადობის გამოსახულება",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "არასწორი გამოსახულება",
+      "openBuilder": "გამოსახულებების კონსტრუქტორის გახსნა",
+      "edit": "ველის კონფიგურაციის რედაქტირება",
+      "remove": "ველის კონფიგურაციის წაშლა",
+      "cancel": "გაუქმება",
+      "save": "შენახვა",
+      "noFields": "ფენას არ აქვს კონფიგურირებადი ატრიბუტის ველები."
     }
   },
   "layers": {
@@ -1487,5 +1527,19 @@
     },
     "rowColor": "ფერი მნიშვნელობისთვის {{value}}",
     "rowLabel": "წარწერა მნიშვნელობისთვის {{value}}"
+  },
+  "attributeForm": {
+    "error": {
+      "required": "მნიშვნელობა აუცილებელია",
+      "number": "უნდა იყოს რიცხვი",
+      "range": "უნდა იყოს {{min}}-სა და {{max}}-ს შორის",
+      "rangeMin": "უნდა იყოს მინიმუმ {{min}}",
+      "rangeMax": "უნდა იყოს მაქსიმუმ {{max}}",
+      "valueMap": "მნიშვნელობა დაშვებულ სიაში არ არის",
+      "constraint": "შეზღუდვა არ არის დაკმაყოფილებული"
+    }
+  },
+  "attributeTable": {
+    "saveTitleFormErrors": "შენახვამდე გაასწორეთ ატრიბუტების ფორმის დარღვევები"
   }
 }
