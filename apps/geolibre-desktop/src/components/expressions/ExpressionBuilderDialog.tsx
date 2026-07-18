@@ -36,9 +36,11 @@ export interface ExpressionBuilderDialogProps {
   /**
    * "filter" surfaces a matches / does-not-match preview and requires a
    * boolean result (rule filters); "color" requires a color result (style
-   * expressions); "value" shows the evaluated value untyped (labels).
+   * expressions); "number" requires a numeric result (data-defined label
+   * size/opacity/priority); "value" shows the evaluated value untyped
+   * (label text).
    */
-  context: "filter" | "color" | "value";
+  context: "filter" | "color" | "value" | "number";
   initialExpression: string;
   /** The active layer's features; drive the field list and the live preview. */
   features: Feature[];
@@ -96,7 +98,13 @@ export function ExpressionBuilderDialog({
   // style expressions colors; label expressions stay untyped (MapLibre
   // coerces text-field values).
   const expectedType =
-    context === "filter" ? "boolean" : context === "color" ? "color" : undefined;
+    context === "filter"
+      ? "boolean"
+      : context === "color"
+        ? "color"
+        : context === "number"
+          ? "number"
+          : undefined;
   const validation = useMemo(
     () => validateMapExpression(source, { variables, expectedType }),
     [source, variables, expectedType],

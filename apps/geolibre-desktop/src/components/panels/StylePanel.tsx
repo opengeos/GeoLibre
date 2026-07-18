@@ -81,6 +81,21 @@ import {
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
 
+/**
+ * Data-defined label overrides (GH #1320): one row per {@link LabelStyle}
+ * expression field, with the Expression Builder context enforcing each
+ * destination's result type (size/opacity/priority are numbers, color a
+ * color, visibility a boolean filter).
+ */
+const LABEL_OVERRIDE_PROPERTIES = [
+  { key: "size", field: "sizeExpression", context: "number" },
+  { key: "color", field: "colorExpression", context: "color" },
+  { key: "opacity", field: "opacityExpression", context: "number" },
+  { key: "visibility", field: "visibilityExpression", context: "filter" },
+  { key: "priority", field: "priorityExpression", context: "number" },
+] as const;
+type LabelOverrideProperty = (typeof LABEL_OVERRIDE_PROPERTIES)[number];
+
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -1216,6 +1231,11 @@ export function StylePanel({
     | { kind: "rule"; ruleId: string; index: number; layerId: string }
     | { kind: "style"; layerId: string }
     | { kind: "label"; layerId: string }
+    | {
+        kind: "labelOverride";
+        property: LabelOverrideProperty;
+        layerId: string;
+      }
     | null
   >(null);
   // Close the builder when the selected layer changes: its fields, sample
@@ -2072,13 +2092,19 @@ export function StylePanel({
       ? (builderRule?.filter ?? "")
       : expressionBuilderTarget?.kind === "style"
         ? draftVectorStyleExpression
-        : labels.expression;
+        : expressionBuilderTarget?.kind === "labelOverride"
+          ? labels[expressionBuilderTarget.property.field]
+          : labels.expression;
   const builderTargetLabel =
     expressionBuilderTarget?.kind === "rule"
       ? t("style.symbology.ruleFilter", { index: expressionBuilderTarget.index })
       : expressionBuilderTarget?.kind === "style"
         ? t("style.symbology.colorExpression")
-        : t("style.labels.expression");
+        : expressionBuilderTarget?.kind === "labelOverride"
+          ? t(
+              `style.labels.dataDefined.${expressionBuilderTarget.property.key}Target`,
+            )
+          : t("style.labels.expression");
   const applyBuilderExpression = (expression: string) => {
     if (!expressionBuilderTarget) return;
     // Never write through to a different layer than the builder was opened
@@ -2090,6 +2116,10 @@ export function StylePanel({
     } else if (expressionBuilderTarget.kind === "style") {
       setDraftVectorStyleExpression(expression);
       setVectorStyleError(null);
+    } else if (expressionBuilderTarget.kind === "labelOverride") {
+      updateLabels({
+        [expressionBuilderTarget.property.field]: expression,
+      } as Partial<LabelStyle>);
     } else {
       updateLabels({ expression });
     }
@@ -2109,7 +2139,9 @@ export function StylePanel({
           ? "filter"
           : expressionBuilderTarget.kind === "style"
             ? "color"
-            : "value"
+            : expressionBuilderTarget.kind === "labelOverride"
+              ? expressionBuilderTarget.property.context
+              : "value"
       }
       initialExpression={builderInitialExpression}
       features={builderFeatures}
@@ -3741,6 +3773,66 @@ export function StylePanel({
               {labelExpressionInvalid
                 ? t("style.labels.expressionInvalid")
                 : t("style.labels.expressionHint")}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>{t("style.labels.dataDefined.heading")}</Label>
+            {LABEL_OVERRIDE_PROPERTIES.map((property) => {
+              const value = labels[property.field].trim();
+              return (
+                <div key={property.key} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs">
+                    {t(`style.labels.dataDefined.${property.key}`)}
+                  </span>
+                  <code
+                    className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
+                    title={value || undefined}
+                  >
+                    {value || t("style.labels.dataDefined.notSet")}
+                  </code>
+                  <Button
+                    type="button"
+                    variant={value ? "secondary" : "outline"}
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    title={t(
+                      `style.labels.dataDefined.${property.key}Target`,
+                    )}
+                    aria-label={t(
+                      `style.labels.dataDefined.${property.key}Target`,
+                    )}
+                    onClick={() =>
+                      setExpressionBuilderTarget({
+                        kind: "labelOverride",
+                        property,
+                        layerId: layer.id,
+                      })
+                    }
+                  >
+                    <SquareFunction className="h-3.5 w-3.5" />
+                  </Button>
+                  {value ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      title={t("style.labels.dataDefined.clear")}
+                      aria-label={t("style.labels.dataDefined.clear")}
+                      onClick={() =>
+                        updateLabels({
+                          [property.field]: "",
+                        } as Partial<LabelStyle>)
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+            <p className="text-xs text-muted-foreground">
+              {t("style.labels.dataDefined.hint")}
             </p>
           </div>
         </>

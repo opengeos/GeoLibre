@@ -2752,7 +2752,23 @@
       "dedupeHint": "Fasst Punkte zusammen, die an derselben Koordinate übereinanderliegen. Verwendet das Beschriftungsfeld bei lokalen Punktebenen.",
       "expression": "Ausdruck (optional)",
       "expressionHint": "Ein MapLibre-Ausdruck (JSON). Überschreibt das Feld, wenn festgelegt.",
-      "expressionInvalid": "Kein gültiger MapLibre-Ausdruck (muss ein JSON-Array sein). Dieser Wert wird ignoriert."
+      "expressionInvalid": "Kein gültiger MapLibre-Ausdruck (muss ein JSON-Array sein). Dieser Wert wird ignoriert.",
+      "dataDefined": {
+        "heading": "Datendefinierte Überschreibungen",
+        "size": "Größe",
+        "color": "Farbe",
+        "opacity": "Deckkraft",
+        "visibility": "Sichtbarkeit",
+        "priority": "Priorität",
+        "sizeTarget": "Ausdruck für Beschriftungsgröße",
+        "colorTarget": "Ausdruck für Beschriftungsfarbe",
+        "opacityTarget": "Ausdruck für Beschriftungsdeckkraft",
+        "visibilityTarget": "Ausdruck für Beschriftungssichtbarkeit",
+        "priorityTarget": "Ausdruck für Beschriftungspriorität",
+        "notSet": "Nicht gesetzt",
+        "clear": "Ausdruck löschen",
+        "hint": "MapLibre-Ausdrücke pro Feature. Größe, Deckkraft und Priorität ergeben Zahlen (Beschriftungen mit niedrigeren Prioritätswerten werden zuerst platziert), Farbe eine Farbe, Sichtbarkeit wahr/falsch. Wird ignoriert, solange das Zusammenfassen doppelter Beschriftungen aktiv ist."
+      }
     },
     "elevation3d": {
       "mode": "3D (Z-Werte)",

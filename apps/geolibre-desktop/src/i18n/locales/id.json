@@ -2706,7 +2706,23 @@
       "dedupeHint": "Menciutkan titik yang bertumpuk pada koordinat yang sama. Menggunakan bidang label pada layer titik lokal.",
       "expression": "Ekspresi (opsional)",
       "expressionHint": "Ekspresi MapLibre (JSON). Mengesampingkan bidang jika diisi.",
-      "expressionInvalid": "Bukan ekspresi MapLibre yang valid (harus berupa array JSON). Nilai ini diabaikan."
+      "expressionInvalid": "Bukan ekspresi MapLibre yang valid (harus berupa array JSON). Nilai ini diabaikan.",
+      "dataDefined": {
+        "heading": "Penggantian berbasis data",
+        "size": "Ukuran",
+        "color": "Warna",
+        "opacity": "Opasitas",
+        "visibility": "Visibilitas",
+        "priority": "Prioritas",
+        "sizeTarget": "Ekspresi ukuran label",
+        "colorTarget": "Ekspresi warna label",
+        "opacityTarget": "Ekspresi opasitas label",
+        "visibilityTarget": "Ekspresi visibilitas label",
+        "priorityTarget": "Ekspresi prioritas label",
+        "notSet": "Belum diatur",
+        "clear": "Hapus ekspresi",
+        "hint": "Ekspresi MapLibre per fitur. Ukuran, opasitas, dan prioritas menghasilkan angka (label dengan nilai prioritas lebih rendah ditempatkan lebih dulu), warna sebuah warna, visibilitas benar/salah. Diabaikan saat penggabungan label duplikat aktif."
+      }
     },
     "elevation3d": {
       "mode": "3D (nilai Z)",

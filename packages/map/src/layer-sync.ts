@@ -3,6 +3,7 @@ import {
   type GeoLibreLayer,
   geojsonHasZCoordinates,
   type LayerStyle,
+  parseJsonExpression,
   proportionalRadiusExpression,
   ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
@@ -2339,6 +2340,34 @@ function applyVectorDataRenderLayers(
         "!",
         textMarkerShapeFilter,
       ] as unknown as maplibregl.FilterSpecification;
+      // Data-defined overrides (GH #1320): expression-driven size / color /
+      // opacity, per-feature placement priority (symbol-sort-key), and
+      // attribute-gated visibility. They read source feature attributes, so
+      // they are skipped on the dedup path, whose synthetic features carry
+      // only the aggregated label value. A typo'd or non-array value parses
+      // to null and falls back to the literal control instead of breaking
+      // the layer.
+      const labelOverride = (source: string) =>
+        dedupedLabelFc
+          ? null
+          : (parseJsonExpression(source) as
+              | maplibregl.ExpressionSpecification
+              | null);
+      const sizeOverride = labelOverride(labels.sizeExpression);
+      const colorOverride = labelOverride(labels.colorExpression);
+      const opacityOverride = labelOverride(labels.opacityExpression);
+      const priorityOverride = labelOverride(labels.priorityExpression);
+      const visibilityOverride = labelOverride(labels.visibilityExpression);
+      // The visibility expression joins the marker exclusion before the
+      // layer-wide feature filters, so a feature evaluating false simply gets
+      // no label.
+      const labelBaseFilter = visibilityOverride
+        ? ([
+            "all",
+            nonMarkerFilter,
+            visibilityOverride,
+          ] as unknown as maplibregl.FilterSpecification)
+        : nonMarkerFilter;
       const sourceRef = dedupedLabelFc
         ? { source: dedupSourceId }
         : sourceSpec;
@@ -2352,11 +2381,11 @@ function applyVectorDataRenderLayers(
           ...labelZoom,
           ...(dedupedLabelFc
             ? {}
-            : { filter: withFeatureFilters(layer, nonMarkerFilter) }),
+            : { filter: withFeatureFilters(layer, labelBaseFilter) }),
           layout: {
             "text-field": textField,
             "text-font": textFontForMapStyle(map),
-            "text-size": Math.max(1, labels.size),
+            "text-size": sizeOverride ?? Math.max(1, labels.size),
             // The dedup source is points, so it cannot use line placement.
             "symbol-placement":
               !dedupedLabelFc && labels.placement === "line"
@@ -2369,13 +2398,21 @@ function applyVectorDataRenderLayers(
             "text-rotate": labels.rotation,
             "text-max-width": Math.max(1, labels.maxWidth),
             "text-transform": labels.transform,
+            // Lower sort keys place first, so they win when space is tight.
+            // `null` resets a previously applied priority (stripped on first
+            // add by ensureLayer).
+            "symbol-sort-key": (priorityOverride ??
+              null) as unknown as PropertyValueSpecification<number>,
             visibility,
           },
           paint: {
-            "text-color": labels.color,
+            "text-color": colorOverride ?? labels.color,
             "text-halo-color": labels.haloColor,
             "text-halo-width": Math.max(0, labels.haloWidth),
-            "text-opacity": opacity,
+            // The opacity override replaces the layer opacity rather than
+            // multiplying into it: wrapping the expression would invalidate
+            // top-level `["zoom"]` interpolations.
+            "text-opacity": opacityOverride ?? opacity,
           },
         },
         beforeId,
@@ -3366,21 +3403,27 @@ function ensureLayer(
   const validBeforeId =
     beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   // MapLibre's addLayer rejects (and silently drops, without throwing) a layer
-  // whose paint carries an explicit `null`. `null` is only valid as a
-  // setPaintProperty reset, which the update branch above uses; on first add it
-  // must be stripped so e.g. `fill-pattern: null` (the "no pattern" reset) does
-  // not blank the whole fill layer. Properties simply absent default correctly.
-  // Scoped to `paint` deliberately: `fill-pattern` is the only reset-via-null in
-  // this file. Extend to `layout` here if a layout property ever uses the same
-  // null-reset pattern.
+  // whose paint or layout carries an explicit `null`. `null` is only valid as
+  // a set*Property reset, which the update branch above uses (`fill-pattern`
+  // in paint, `symbol-sort-key` in layout); on first add it must be stripped
+  // so a reset value does not blank the whole layer. Properties simply absent
+  // default correctly.
+  const stripNulls = (
+    record: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined =>
+    record && Object.values(record).some((value) => value === null)
+      ? Object.fromEntries(
+          Object.entries(record).filter(([, value]) => value !== null),
+        )
+      : record;
+  const strippedPaint = stripNulls(spec.paint);
+  const strippedLayout = stripNulls(spec.layout);
   const addSpec =
-    spec.paint &&
-    Object.values(spec.paint).some((value) => value === null)
+    strippedPaint !== spec.paint || strippedLayout !== spec.layout
       ? {
           ...spec,
-          paint: Object.fromEntries(
-            Object.entries(spec.paint).filter(([, value]) => value !== null),
-          ),
+          ...(strippedPaint ? { paint: strippedPaint } : {}),
+          ...(strippedLayout ? { layout: strippedLayout } : {}),
         }
       : spec;
   map.addLayer(addSpec, validBeforeId);

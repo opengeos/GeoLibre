@@ -2752,7 +2752,23 @@
       "dedupeHint": "Regroupe les points empilés à la même coordonnée. Utilise le champ d'étiquette sur les couches de points locales.",
       "expression": "Expression (facultatif)",
       "expressionHint": "Une expression MapLibre (JSON). Remplace le champ lorsqu'elle est définie.",
-      "expressionInvalid": "Ce n'est pas une expression MapLibre valide (doit être un tableau JSON). Cette valeur est ignorée."
+      "expressionInvalid": "Ce n'est pas une expression MapLibre valide (doit être un tableau JSON). Cette valeur est ignorée.",
+      "dataDefined": {
+        "heading": "Substitutions définies par les données",
+        "size": "Taille",
+        "color": "Couleur",
+        "opacity": "Opacité",
+        "visibility": "Visibilité",
+        "priority": "Priorité",
+        "sizeTarget": "Expression de taille d'étiquette",
+        "colorTarget": "Expression de couleur d'étiquette",
+        "opacityTarget": "Expression d'opacité d'étiquette",
+        "visibilityTarget": "Expression de visibilité d'étiquette",
+        "priorityTarget": "Expression de priorité d'étiquette",
+        "notSet": "Non défini",
+        "clear": "Effacer l'expression",
+        "hint": "Expressions MapLibre par entité. La taille, l'opacité et la priorité produisent des nombres (les étiquettes aux valeurs de priorité les plus basses sont placées en premier), la couleur une couleur, la visibilité vrai/faux. Ignorées tant que le regroupement des étiquettes en double est actif."
+      }
     },
     "elevation3d": {
       "mode": "3D (valeurs Z)",

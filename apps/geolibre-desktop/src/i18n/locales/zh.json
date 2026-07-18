@@ -2821,7 +2821,23 @@
       "dedupeHint": "折叠堆叠在同一坐标处的点。对本地点图层使用标签字段。",
       "expression": "表达式（可选）",
       "expressionHint": "MapLibre 表达式（JSON）。设置后将覆盖字段设置。",
-      "expressionInvalid": "不是有效的 MapLibre 表达式（必须是 JSON 数组）。此值将被忽略。"
+      "expressionInvalid": "不是有效的 MapLibre 表达式（必须是 JSON 数组）。此值将被忽略。",
+      "dataDefined": {
+        "heading": "数据定义覆盖",
+        "size": "大小",
+        "color": "颜色",
+        "opacity": "不透明度",
+        "visibility": "可见性",
+        "priority": "优先级",
+        "sizeTarget": "标注大小表达式",
+        "colorTarget": "标注颜色表达式",
+        "opacityTarget": "标注不透明度表达式",
+        "visibilityTarget": "标注可见性表达式",
+        "priorityTarget": "标注优先级表达式",
+        "notSet": "未设置",
+        "clear": "清除表达式",
+        "hint": "按要素求值的 MapLibre 表达式。大小、不透明度和优先级返回数字(优先级值较小的标注先放置),颜色返回颜色,可见性返回真/假。重复标注合并启用时将被忽略。"
+      }
     },
     "elevation3d": {
       "mode": "3D（Z 值）",

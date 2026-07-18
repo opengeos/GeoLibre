@@ -2752,7 +2752,23 @@
       "dedupeHint": "Combina los puntos apilados en la misma coordenada. Usa el campo de etiqueta en las capas de puntos locales.",
       "expression": "Expresión (opcional)",
       "expressionHint": "Una expresión de MapLibre (JSON). Reemplaza el campo cuando se establece.",
-      "expressionInvalid": "No es una expresión de MapLibre válida (debe ser un array JSON). Este valor se ignora."
+      "expressionInvalid": "No es una expresión de MapLibre válida (debe ser un array JSON). Este valor se ignora.",
+      "dataDefined": {
+        "heading": "Sustituciones definidas por datos",
+        "size": "Tamaño",
+        "color": "Color",
+        "opacity": "Opacidad",
+        "visibility": "Visibilidad",
+        "priority": "Prioridad",
+        "sizeTarget": "Expresión de tamaño de etiqueta",
+        "colorTarget": "Expresión de color de etiqueta",
+        "opacityTarget": "Expresión de opacidad de etiqueta",
+        "visibilityTarget": "Expresión de visibilidad de etiqueta",
+        "priorityTarget": "Expresión de prioridad de etiqueta",
+        "notSet": "Sin definir",
+        "clear": "Borrar expresión",
+        "hint": "Expresiones MapLibre por entidad. Tamaño, opacidad y prioridad producen números (las etiquetas con valores de prioridad más bajos se colocan primero), color un color y visibilidad verdadero/falso. Se ignoran mientras la combinación de etiquetas duplicadas está activa."
+      }
     },
     "elevation3d": {
       "mode": "3D (valores Z)",

@@ -2706,7 +2706,23 @@
       "dedupeHint": "같은 좌표에 겹쳐진 점을 하나로 합칩니다. 로컬 점 레이어에서는 라벨 필드를 사용합니다.",
       "expression": "표현식(선택 사항)",
       "expressionHint": "MapLibre 표현식(JSON)입니다. 설정 시 필드보다 우선합니다.",
-      "expressionInvalid": "유효한 MapLibre 표현식이 아닙니다(JSON 배열이어야 함). 이 값은 무시됩니다."
+      "expressionInvalid": "유효한 MapLibre 표현식이 아닙니다(JSON 배열이어야 함). 이 값은 무시됩니다.",
+      "dataDefined": {
+        "heading": "데이터 정의 재정의",
+        "size": "크기",
+        "color": "색상",
+        "opacity": "불투명도",
+        "visibility": "표시 여부",
+        "priority": "우선순위",
+        "sizeTarget": "라벨 크기 표현식",
+        "colorTarget": "라벨 색상 표현식",
+        "opacityTarget": "라벨 불투명도 표현식",
+        "visibilityTarget": "라벨 표시 표현식",
+        "priorityTarget": "라벨 우선순위 표현식",
+        "notSet": "설정 안 됨",
+        "clear": "표현식 지우기",
+        "hint": "피처별 MapLibre 표현식입니다. 크기·불투명도·우선순위는 숫자(우선순위 값이 낮은 라벨이 먼저 배치됨), 색상은 색상, 표시 여부는 참/거짓을 반환합니다. 중복 라벨 병합이 활성화된 동안에는 무시됩니다."
+      }
     },
     "elevation3d": {
       "mode": "3D(Z 값)",

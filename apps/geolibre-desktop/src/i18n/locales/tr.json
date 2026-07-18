@@ -2752,7 +2752,23 @@
       "dedupeHint": "Aynı koordinatta yığılmış noktaları daraltır. Yerel nokta katmanlarında etiket alanını kullanır.",
       "expression": "İfade (isteğe bağlı)",
       "expressionHint": "Bir MapLibre ifadesi (JSON). Ayarlandığında alanı geçersiz kılar.",
-      "expressionInvalid": "Geçerli bir MapLibre ifadesi değil (bir JSON dizisi olmalıdır). Bu değer yok sayılır."
+      "expressionInvalid": "Geçerli bir MapLibre ifadesi değil (bir JSON dizisi olmalıdır). Bu değer yok sayılır.",
+      "dataDefined": {
+        "heading": "Veri tanımlı geçersiz kılmalar",
+        "size": "Boyut",
+        "color": "Renk",
+        "opacity": "Opaklık",
+        "visibility": "Görünürlük",
+        "priority": "Öncelik",
+        "sizeTarget": "Etiket boyutu ifadesi",
+        "colorTarget": "Etiket rengi ifadesi",
+        "opacityTarget": "Etiket opaklığı ifadesi",
+        "visibilityTarget": "Etiket görünürlüğü ifadesi",
+        "priorityTarget": "Etiket önceliği ifadesi",
+        "notSet": "Ayarlanmadı",
+        "clear": "İfadeyi temizle",
+        "hint": "Öğe başına MapLibre ifadeleri. Boyut, opaklık ve öncelik sayı üretir (öncelik değeri düşük etiketler önce yerleştirilir), renk bir renk, görünürlük doğru/yanlış üretir. Yinelenen etiket birleştirme etkinken yok sayılır."
+      }
     },
     "elevation3d": {
       "mode": "3B (Z değerleri)",
