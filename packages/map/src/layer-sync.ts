@@ -3234,6 +3234,14 @@ export function removeLayerFromMap(
   ]) {
     if (src && map.getSource(src)) map.removeSource(src);
   }
+  // Drop radius-override tracking for the removed layer's native ids so a
+  // later layer reusing an id never inherits a stale restore.
+  const overriddenRadiusIds = overriddenRadiusNativeLayerIds.get(map);
+  if (overriddenRadiusIds) {
+    for (const id of getExternalNativeLayerIds(layer)) {
+      overriddenRadiusIds.delete(id);
+    }
+  }
   // Free any client-side tile index built for this layer's tiled render path.
   unregisterGeoJsonVtSource(layerId);
   // Free an in-memory PMTiles archive (an offline basemap extract) this layer

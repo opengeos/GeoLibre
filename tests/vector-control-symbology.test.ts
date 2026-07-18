@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_LAYER_STYLE, type GeoLibreLayer } from "@geolibre/core";
-import { syncLayer } from "../packages/map/src/layer-sync";
+import { removeLayerFromMap, syncLayer } from "../packages/map/src/layer-sync";
 
 // Records the maplibre calls a layer sync makes so a test can assert which
 // native operations ran. Mirrors the stub in control-owns-paint.test.ts, plus
@@ -199,6 +199,26 @@ describe("vector-control point symbology overlay (#1311)", () => {
       "expected the second map to restore independently",
     );
     assert.equal(typeof secondRadius[1].args[2], "number");
+  });
+
+  it("forgets an overridden radius when the layer is removed outright", () => {
+    // Deleting a layer mid-override must clear its tracking entry; otherwise
+    // a later layer that reuses the native id would inherit a stale restore
+    // and clobber a control-authored radius expression.
+    const { map, calls } = makeVectorControlMapStub("vecd");
+    const overridden = vectorControlLayer("vecd", {
+      style: { ...DEFAULT_LAYER_STYLE, ...proportionalStyle },
+    });
+
+    syncLayer(map as never, overridden);
+    removeLayerFromMap(map as never, "vecd", overridden);
+    // A fresh layer reusing the same native id, proportional off: nothing to
+    // restore, so the control keeps its radius paint untouched.
+    syncLayer(map as never, vectorControlLayer("vecd"));
+
+    const radius = radiusCalls(calls, "vecd");
+    assert.equal(radius.length, 1, "expected the override only — no restore");
+    assert.ok(Array.isArray(radius[0].args[2]));
   });
 
   it("restores an overridden radius when the renderer leaves single mode", () => {
