@@ -21,9 +21,9 @@ import {
 import type { ParseKeys } from "i18next";
 import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { useTranslation } from "react-i18next";
+import { applyMatchedSelection } from "../../lib/selection-actions";
 import {
   SelectionModeField,
-  applyMatchedSelection,
   selectableVectorLayers,
 } from "./selection-dialog-shared";
 
@@ -104,7 +104,16 @@ export function SelectByLocationDialog(): ReactElement | null {
   const referenceFeatures = referenceLayer?.geojson?.features ?? [];
   // The pairwise Turf loop runs on the main thread; past the cap, point the
   // user at the processing tool's sidecar engine instead of freezing the tab.
-  const pairs = targetFeatures.length * referenceFeatures.length;
+  // Counted over geometry-bearing features only, mirroring how the Select by
+  // location processing tool applies the same MAX_CLIENT_PAIRS limit (and how
+  // matchFeaturesByLocation actually iterates).
+  const pairs = useMemo(
+    () =>
+      (targetLayer?.geojson?.features ?? []).filter((f) => f.geometry).length *
+      (referenceLayer?.geojson?.features ?? []).filter((f) => f.geometry)
+        .length,
+    [targetLayer, referenceLayer],
+  );
   const tooManyPairs = pairs > MAX_CLIENT_PAIRS;
   const canSelect = Boolean(targetLayer && referenceLayer) && !tooManyPairs;
 

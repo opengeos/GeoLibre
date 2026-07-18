@@ -6,8 +6,10 @@ import {
   featureSelectionId,
   invertSelection,
   matchFeaturesByExpression,
+  useAppStore,
 } from "@geolibre/core";
 import { matchFeaturesByLocation } from "../packages/processing/src/vector-tools";
+import { applyMatchedSelection } from "../apps/geolibre-desktop/src/lib/selection-actions";
 
 const point = (
   coords: [number, number],
@@ -72,6 +74,17 @@ describe("applySelectionMode", () => {
       "x",
       "y",
     ]);
+  });
+
+  it("deduplicates a degenerate current selection in remove/intersect", () => {
+    assert.deepEqual(
+      applySelectionMode(["a", "a", "b"], ["b"], "remove"),
+      ["a"],
+    );
+    assert.deepEqual(
+      applySelectionMode(["a", "a", "b"], ["a"], "intersect"),
+      ["a"],
+    );
   });
 });
 
@@ -191,6 +204,13 @@ describe("matchFeaturesByLocation", () => {
     assert.deepEqual(matches, [true, false]);
   });
 
+  it("contains is directional: polygon contains point, not the reverse", () => {
+    const { matches } = matchFeaturesByLocation([box], [inside], "contains");
+    assert.deepEqual(matches, [true]);
+    const reversed = matchFeaturesByLocation([inside], [box], "contains");
+    assert.deepEqual(reversed.matches, [false]);
+  });
+
   it("disjoint is the complement of intersects", () => {
     const { matches } = matchFeaturesByLocation(
       [inside, outside],
@@ -229,5 +249,53 @@ describe("matchFeaturesByLocation", () => {
     const result = matchFeaturesByLocation([weird], [box], "disjoint");
     assert.deepEqual(result.matches, [false]);
     assert.equal(result.unevaluableDropped, 1);
+  });
+});
+
+describe("applyMatchedSelection", () => {
+  const seed = (selectedLayerId: string | null, ids: string[]) => {
+    useAppStore.setState({
+      selectedLayerId,
+      selectedFeatureIds: ids,
+      selectedFeatureId: ids.at(-1) ?? null,
+    });
+  };
+
+  it("combines with the current selection when the target layer holds it", () => {
+    seed("L1", ["a"]);
+    const size = applyMatchedSelection("L1", ["b"], "add");
+    assert.equal(size, 2);
+    const state = useAppStore.getState();
+    assert.equal(state.selectedLayerId, "L1");
+    assert.deepEqual(state.selectedFeatureIds, ["a", "b"]);
+    assert.equal(state.selectedFeatureId, "b");
+  });
+
+  it("ignores another layer's selection instead of mixing per-layer ids", () => {
+    seed("L1", ["a", "b"]);
+    const size = applyMatchedSelection("L2", ["b", "c"], "add");
+    // "b" from L1 must not leak into L2's selection: ids are per-layer.
+    assert.equal(size, 2);
+    assert.deepEqual(useAppStore.getState().selectedFeatureIds, ["b", "c"]);
+  });
+
+  it("survives selectLayer's selection-clearing side effect", () => {
+    seed("L1", ["a"]);
+    applyMatchedSelection("L2", ["x"], "new");
+    const state = useAppStore.getState();
+    // selectLayer must run before selectFeatures; a reordering regression
+    // would leave the selection empty here.
+    assert.equal(state.selectedLayerId, "L2");
+    assert.deepEqual(state.selectedFeatureIds, ["x"]);
+  });
+
+  it("remove on another layer yields an empty selection on the target", () => {
+    seed("L1", ["a"]);
+    const size = applyMatchedSelection("L2", ["a"], "remove");
+    assert.equal(size, 0);
+    const state = useAppStore.getState();
+    assert.equal(state.selectedLayerId, "L2");
+    assert.deepEqual(state.selectedFeatureIds, []);
+    assert.equal(state.selectedFeatureId, null);
   });
 });

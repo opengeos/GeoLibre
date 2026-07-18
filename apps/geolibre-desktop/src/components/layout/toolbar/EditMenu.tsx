@@ -62,6 +62,14 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
   const hasSelectableLayer = useAppStore((s) =>
     s.layers.some((layer) => (layer.geojson?.features?.length ?? 0) > 0),
   );
+  // Select by Location needs a second layer to compare against, so it stays
+  // disabled until two selectable layers exist (its dialog would otherwise
+  // open straight to the "needs two vector layers" dead end).
+  const hasTwoSelectableLayers = useAppStore(
+    (s) =>
+      s.layers.filter((layer) => (layer.geojson?.features?.length ?? 0) > 0)
+        .length >= 2,
+  );
   const activeLayerSelectable = useAppStore((s) => {
     const layer = s.layers.find((l) => l.id === s.selectedLayerId);
     return (layer?.geojson?.features?.length ?? 0) > 0;
@@ -130,7 +138,7 @@ export function EditMenu({ chrome, mapControllerRef }: EditMenuProps) {
         )}
         {show("edit.selectByLocation") && (
           <DropdownMenuItem
-            disabled={!hasSelectableLayer}
+            disabled={!hasTwoSelectableLayers}
             onSelect={() => setSelectByLocationOpen(true)}
           >
             <Locate className={iconClass} />

@@ -46,9 +46,9 @@ export function applySelectionMode(
       return Array.from(merged);
     }
     case "remove":
-      return current.filter((id) => !matchedSet.has(id));
+      return Array.from(new Set(current.filter((id) => !matchedSet.has(id))));
     case "intersect":
-      return current.filter((id) => matchedSet.has(id));
+      return Array.from(new Set(current.filter((id) => matchedSet.has(id))));
   }
 }
 

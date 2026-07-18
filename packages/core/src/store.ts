@@ -1661,6 +1661,12 @@ export const useAppStore = create<AppState>()(
             storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
+            // An open selection dialog (and its preselected layer id) belongs
+            // to the previous project's layers.
+            selectByExpressionOpen: false,
+            selectByExpressionLayerId: null,
+            selectByLocationOpen: false,
+            selectByLocationLayerId: null,
           },
         }));
         clearHistory();
@@ -1693,6 +1699,12 @@ export const useAppStore = create<AppState>()(
             storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
+            // An open selection dialog (and its preselected layer id) belongs
+            // to the previous project's layers.
+            selectByExpressionOpen: false,
+            selectByExpressionLayerId: null,
+            selectByLocationOpen: false,
+            selectByLocationLayerId: null,
           },
         }));
         clearHistory();

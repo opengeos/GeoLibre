@@ -1,8 +1,10 @@
 import {
+  applySelectionMode,
   featureSelectionId,
   invertSelection,
   useAppStore,
   type GeoLibreLayer,
+  type SelectionMode,
 } from "@geolibre/core";
 import type { MapController } from "@geolibre/map";
 import type { Feature, FeatureCollection } from "geojson";
@@ -29,6 +31,28 @@ function selectedFeatures(): { layer: GeoLibreLayer; features: Feature[] } | nul
     selected.has(featureSelectionId(feature, index)),
   );
   return { layer, features };
+}
+
+/**
+ * Applies a matched id set to the live selection under the given mode and
+ * returns the resulting selection size. Combines with the current selection
+ * only when the target layer already holds it (ids are per-layer, so a
+ * cross-layer combine would mix unrelated features); otherwise the match
+ * starts a fresh selection on that layer. `selectLayer` runs before
+ * `selectFeatures` because it clears the selection as a side effect.
+ */
+export function applyMatchedSelection(
+  targetLayerId: string,
+  matchedIds: string[],
+  mode: SelectionMode,
+): number {
+  const store = useAppStore.getState();
+  const current =
+    store.selectedLayerId === targetLayerId ? store.selectedFeatureIds : [];
+  const next = applySelectionMode(current, matchedIds, mode);
+  if (store.selectedLayerId !== targetLayerId) store.selectLayer(targetLayerId);
+  store.selectFeatures(next);
+  return next.length;
 }
 
 /**

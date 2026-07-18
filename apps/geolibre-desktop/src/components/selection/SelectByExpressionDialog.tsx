@@ -22,10 +22,10 @@ import {
   getAttributePropertyNames,
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
+import { applyMatchedSelection } from "../../lib/selection-actions";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
   SelectionModeField,
-  applyMatchedSelection,
   selectableVectorLayers,
 } from "./selection-dialog-shared";
 

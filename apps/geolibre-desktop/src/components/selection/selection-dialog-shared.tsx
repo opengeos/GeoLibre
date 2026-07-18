@@ -1,9 +1,7 @@
 import {
-  applySelectionMode,
   type GeoLibreLayer,
   type SelectionMode,
   SELECTION_MODES,
-  useAppStore,
 } from "@geolibre/core";
 import { Label, Select } from "@geolibre/ui";
 import type { ParseKeys } from "i18next";
@@ -53,25 +51,4 @@ export function SelectionModeField({
       </Select>
     </div>
   );
-}
-
-/**
- * Applies a matched id set to the live selection under the given mode and
- * returns the resulting selection size. Combines with the current selection
- * only when the target layer already holds it; otherwise the match starts a
- * fresh selection on that layer. `selectLayer` runs before `selectFeatures`
- * because it clears the selection as a side effect.
- */
-export function applyMatchedSelection(
-  targetLayerId: string,
-  matchedIds: string[],
-  mode: SelectionMode,
-): number {
-  const store = useAppStore.getState();
-  const current =
-    store.selectedLayerId === targetLayerId ? store.selectedFeatureIds : [];
-  const next = applySelectionMode(current, matchedIds, mode);
-  if (store.selectedLayerId !== targetLayerId) store.selectLayer(targetLayerId);
-  store.selectFeatures(next);
-  return next.length;
 }

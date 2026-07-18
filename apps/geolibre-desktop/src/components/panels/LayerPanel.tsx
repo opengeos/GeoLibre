@@ -524,6 +524,12 @@ export function LayerPanel({
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectLayer = useAppStore((s) => s.selectLayer);
   const selectedFeatureCount = useAppStore((s) => s.selectedFeatureIds.length);
+  // Select by Location needs a second layer to compare against (see EditMenu).
+  const hasTwoSelectableLayers = useAppStore(
+    (s) =>
+      s.layers.filter((layer) => (layer.geojson?.features?.length ?? 0) > 0)
+        .length >= 2,
+  );
   const setSelectByExpressionOpen = useAppStore(
     (s) => s.setSelectByExpressionOpen,
   );
@@ -2800,6 +2806,7 @@ export function LayerPanel({
                             {t("toolbar.item.selectByExpressionEllipsis")}
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            disabled={!hasTwoSelectableLayers}
                             onSelect={() =>
                               setSelectByLocationOpen(true, layer.id)
                             }
