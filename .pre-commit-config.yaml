@@ -46,9 +46,9 @@ repos:
         entry: ruff format --config ruff.toml
         language: python
         additional_dependencies: [ruff==0.15.22]
-        files: \.(py|ipynb)$
-        # Explicit so ruff also formats Jupyter notebooks (Python cells),
-        # not just .py files.
+        # types_or alone scopes the hook: pre-commit ANDs it with `files`, so a
+        # `files` regex would only narrow it further. Covers .py, .pyi stubs,
+        # and Jupyter notebooks (ruff formats the Python cells).
         types_or: [python, pyi, jupyter]
         pass_filenames: true
       - id: ruff
@@ -56,7 +56,6 @@ repos:
         entry: ruff check --config ruff.toml --fix
         language: python
         additional_dependencies: [ruff==0.15.22]
-        files: \.(py|ipynb)$
         types_or: [python, pyi, jupyter]
         pass_filenames: true
 
@@ -95,4 +94,4 @@ repos:
   - repo: https://github.com/kynan/nbstripout
     rev: 0.9.1
     hooks:
-        - id: nbstripout
+      - id: nbstripout

@@ -15,6 +15,9 @@ extend-exclude = [
   # Staged into JupyterLite by scripts/build-jupyterlite.mjs; generated copies.
   "apps/geolibre-desktop/jupyterlite",
   "apps/geolibre-desktop/public/jupyterlite",
+  # ruff's own cache directory (kept explicit even though ruff excludes it by
+  # default, so the intent survives any future change to the default list).
+  ".ruff_cache",
 ]
 
 [lint]
@@ -25,9 +28,6 @@ extend-exclude = [
 select = ["F", "I", "W", "E"]
 
 [lint.isort]
-# The codebase consistently uses a blank line between stdlib, third-party, and
-# first-party groups (see python/src/geolibre/geolibre.py, backend/.../vector.py).
-lines-after-imports = -1
 known-first-party = ["geolibre", "geolibre_server"]
 
 [lint.per-file-ignores]

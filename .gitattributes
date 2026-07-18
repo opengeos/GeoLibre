@@ -13,6 +13,7 @@
 *.gif  binary
 *.webp binary
 *.ico  binary
+*.icns binary
 *.svg  binary
 *.tif  binary
 *.tiff binary
@@ -34,6 +35,8 @@
 *.parquet binary
 *.geoparquet binary
 *.geojson.gz binary
+*.pbf binary
+*.pmtiles binary
 *.snap binary
 *.deb  binary
 *.rpm  binary
