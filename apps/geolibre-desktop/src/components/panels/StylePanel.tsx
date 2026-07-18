@@ -44,7 +44,7 @@ import {
   SKETCHES_SOURCE_KIND,
   countAtlasDroppedDiagrams,
 } from "@geolibre/plugins";
-import { OGC_SCALE_DENOMINATOR_AT_ZOOM_0, type MapController } from "@geolibre/map";
+import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { RasterSymbologySection } from "./RasterSymbologySection";
@@ -73,6 +73,10 @@ import {
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { clamp } from "../../lib/clamp";
+import {
+  getAttributePropertyNames,
+  standardExpressionVariables,
+} from "../../lib/expression-inputs";
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -440,61 +444,6 @@ function RuleNumberInput({
         }}
       />
     </label>
-  );
-}
-
-function getMetadataFieldNames(metadata: Record<string, unknown>): string[] {
-  const fieldValues = [
-    metadata.fields,
-    metadata.columns,
-    metadata.properties,
-    metadata.attributeFields,
-  ];
-  const names = new Set<string>();
-
-  for (const value of fieldValues) {
-    if (!Array.isArray(value)) continue;
-    for (const field of value) {
-      if (typeof field === "string") {
-        names.add(field);
-        continue;
-      }
-      if (
-        field &&
-        typeof field === "object" &&
-        "name" in field &&
-        typeof field.name === "string"
-      ) {
-        names.add(field.name);
-      }
-    }
-  }
-
-  return Array.from(names);
-}
-
-function getAttributePropertyNames(layer: {
-  geojson?: {
-    features?: Array<{
-      properties?: Record<string, unknown> | null;
-    }>;
-  };
-  metadata: Record<string, unknown>;
-}): string[] {
-  const names = new Set<string>();
-
-  for (const feature of layer.geojson?.features ?? []) {
-    for (const key of Object.keys(feature.properties ?? {})) {
-      names.add(key);
-    }
-  }
-
-  for (const key of getMetadataFieldNames(layer.metadata)) {
-    names.add(key);
-  }
-
-  return Array.from(names).sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
   );
 }
 
@@ -1418,20 +1367,15 @@ export function StylePanel({
     variables: ExpressionVariable[];
   }>(() => {
     const { zoom, center } = useAppStore.getState().mapView;
-    // Approximate scale denominator at the map center (96 dpi Web Mercator).
-    const mapScaleDenominator = Math.round(
-      (OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / Math.pow(2, zoom)) *
-        Math.cos((center[1] * Math.PI) / 180),
-    );
     return {
       zoom,
-      variables: [
-        { token: "@project_name", value: projectName },
-        { token: "@layer_name", value: layer?.name ?? "" },
-        { token: "@feature_count", value: builderFeatures.length },
-        { token: "@map_zoom", value: Math.round(zoom * 100) / 100 },
-        { token: "@map_scale", value: mapScaleDenominator },
-      ],
+      variables: standardExpressionVariables({
+        projectName,
+        layerName: layer?.name ?? "",
+        featureCount: builderFeatures.length,
+        zoom,
+        centerLat: center[1],
+      }),
     };
     // expressionBuilderTarget is an intentional dep: it re-snapshots the
     // camera each time the builder opens.

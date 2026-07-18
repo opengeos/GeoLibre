@@ -300,6 +300,34 @@ const ProcessingHistoryDialog = lazy(() =>
     }),
 );
 
+const SelectByExpressionDialog = lazy(() =>
+  import("../selection/SelectByExpressionDialog")
+    .then((module) => ({
+      default: module.SelectByExpressionDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load SelectByExpressionDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../selection/SelectByExpressionDialog").SelectByExpressionDialog;
+      return { default: Fallback };
+    }),
+);
+
+const SelectByLocationDialog = lazy(() =>
+  import("../selection/SelectByLocationDialog")
+    .then((module) => ({
+      default: module.SelectByLocationDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load SelectByLocationDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../selection/SelectByLocationDialog").SelectByLocationDialog;
+      return { default: Fallback };
+    }),
+);
+
 const GeocodeDialog = lazy(() =>
   import("../processing/GeocodeDialog")
     .then((module) => ({
@@ -2341,6 +2369,12 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <ProcessingHistoryDialog />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SelectByExpressionDialog />
+      </Suspense>
+      <Suspense fallback={null}>
+        <SelectByLocationDialog />
       </Suspense>
       <Suspense fallback={null}>
         <RasterToolsDialog mapControllerRef={mapControllerRef} />

@@ -1,6 +1,7 @@
 import { Color, createExpression } from "@maplibre/maplibre-gl-style-spec";
 import type { StyleExpression } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
+import { featureSelectionId } from "./selection";
 
 /**
  * Shared Expression Builder logic (GH #1306): a curated MapLibre expression
@@ -419,6 +420,69 @@ export function evaluateMapExpression(
       errors: [error instanceof Error ? error.message : String(error)],
     };
   }
+}
+
+/** Result of matching a feature array against a boolean expression. */
+export interface FeatureExpressionMatches {
+  /** False when the expression failed to parse or compile. */
+  ok: boolean;
+  /** Parse/compile problems when `ok` is false. */
+  errors: string[];
+  /** Selection ids ({@link featureSelectionId}) of the matched features. */
+  ids: string[];
+  /**
+   * Features whose evaluation threw at runtime (e.g. a boolean assertion on
+   * a string field). Counted as non-matches so one bad feature cannot abort
+   * the whole selection, but surfaced so the UI can warn.
+   */
+  errorCount: number;
+}
+
+/**
+ * Evaluates a boolean expression against every feature and returns the
+ * selection ids of the matches (Select by Expression). Unlike
+ * {@link evaluateMapExpression} this compiles the source once and reuses the
+ * compiled expression across the whole array, so it stays fast on large
+ * layers. An empty source is reported as `ok: false` with no errors — there
+ * is nothing to select by.
+ */
+export function matchFeaturesByExpression(
+  features: readonly Feature[],
+  source: string,
+  options: { zoom?: number; variables?: ExpressionVariable[] } = {},
+): FeatureExpressionMatches {
+  const trimmed = source.trim();
+  if (!trimmed) return { ok: false, errors: [], ids: [], errorCount: 0 };
+
+  const { validation, expression } = compileMapExpression(trimmed, {
+    variables: options.variables,
+    expectedType: "boolean",
+  });
+  if (!validation.ok || !expression) {
+    return { ok: false, errors: validation.errors, ids: [], errorCount: 0 };
+  }
+
+  const ids: string[] = [];
+  let errorCount = 0;
+  features.forEach((feature, index) => {
+    try {
+      // Same rationale as evaluateMapExpression: evaluateWithoutErrorHandling
+      // so runtime failures throw instead of feeding console.warn.
+      const value = expression.evaluateWithoutErrorHandling(
+        { zoom: options.zoom ?? 0 },
+        {
+          type: feature.geometry?.type ?? "Unknown",
+          properties: feature.properties ?? {},
+          ...(feature.id !== undefined ? { id: feature.id } : {}),
+          geometry: feature.geometry,
+        } as never,
+      );
+      if (value === true) ids.push(featureSelectionId(feature, index));
+    } catch {
+      errorCount += 1;
+    }
+  });
+  return { ok: true, errors: [], ids, errorCount };
 }
 
 /**

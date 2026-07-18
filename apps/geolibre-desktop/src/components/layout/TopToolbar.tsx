@@ -1159,7 +1159,9 @@ export function TopToolbar({
           onOpenOfflineBasemap={onOpenBasemapExtract}
         />
       )}
-      {isMenuVisible(uiProfile, "edit") && <EditMenu chrome={chrome} />}
+      {isMenuVisible(uiProfile, "edit") && (
+        <EditMenu chrome={chrome} mapControllerRef={mapControllerRef} />
+      )}
       {isMenuVisible(uiProfile, "view") && (
         <ViewMenu
           chrome={chrome}

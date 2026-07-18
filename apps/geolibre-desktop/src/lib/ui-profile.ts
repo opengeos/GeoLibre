@@ -221,6 +221,12 @@ export const MENU_ITEM_CATALOG: readonly MenuItemCatalogEntry[] = [
   // Edit
   { id: "edit.undo", menuId: "edit", labelKey: "toolbar.item.undo", tier: "basic" },
   { id: "edit.redo", menuId: "edit", labelKey: "toolbar.item.redo", tier: "basic" },
+  { id: "edit.selectByExpression", menuId: "edit", labelKey: "toolbar.item.selectByExpressionEllipsis", tier: "intermediate" },
+  { id: "edit.selectByLocation", menuId: "edit", labelKey: "toolbar.item.selectByLocationEllipsis", tier: "intermediate" },
+  { id: "edit.zoomToSelection", menuId: "edit", labelKey: "toolbar.item.zoomToSelection", tier: "basic" },
+  { id: "edit.invertSelection", menuId: "edit", labelKey: "toolbar.item.invertSelection", tier: "intermediate" },
+  { id: "edit.clearSelection", menuId: "edit", labelKey: "toolbar.item.clearSelection", tier: "basic" },
+  { id: "edit.exportSelection", menuId: "edit", labelKey: "toolbar.item.exportSelection", tier: "intermediate" },
   // View
   { id: "view.zoomIn", menuId: "view", labelKey: "toolbar.item.zoomIn", tier: "basic" },
   { id: "view.zoomOut", menuId: "view", labelKey: "toolbar.item.zoomOut", tier: "basic" },

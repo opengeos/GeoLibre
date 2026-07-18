@@ -35,8 +35,8 @@ import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./t
 import { createH3GridTool, binPointsTool } from "./h3-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
 
-/** Upper bound on input×overlay pairs for the main-thread intersection loop. */
-const MAX_CLIENT_PAIRS = 250_000;
+/** Upper bound on input×overlay pairs for the main-thread pairwise loops. */
+export const MAX_CLIENT_PAIRS = 250_000;
 
 function getLayer(
   ctx: ProcessingContext,
@@ -1126,15 +1126,76 @@ export const selectByValueTool: ProcessingAlgorithm = {
 };
 
 /** Select by location adds "disjoint" (the complement of intersects). */
-type SelectLocationPredicate = SpatialPredicate | "disjoint";
+export type SelectLocationPredicate = SpatialPredicate | "disjoint";
 
 /** Spatial predicates for Select by location; kept in sync with the backend. */
-const SELECT_LOCATION_PREDICATES = new Set<SelectLocationPredicate>([
+export const SELECT_LOCATION_PREDICATES = new Set<SelectLocationPredicate>([
   "intersects",
   "within",
   "contains",
   "disjoint",
 ]);
+
+/** Result of {@link matchFeaturesByLocation}. */
+export interface LocationMatches {
+  /** One entry per input feature (aligned by index): did it match? */
+  matches: boolean[];
+  /**
+   * Features excluded from a `disjoint` result only because a pair could not
+   * be evaluated (e.g. a GeometryCollection Turf cannot test). Always 0 for
+   * positive predicates.
+   */
+  unevaluableDropped: number;
+}
+
+/**
+ * Tests every input feature against the filter features under a spatial
+ * predicate, mirroring the sidecar's semantics: "disjoint" matches features
+ * that intersect nothing, the others match features relating to any filter
+ * feature. Features without geometry never match; filter features without
+ * geometry are ignored. Shared by the Select by location processing tool and
+ * the interactive Select by Location dialog (#1314).
+ *
+ * The pairwise test runs on the calling thread — callers should cap
+ * `inputFeatures.length * filterFeatures.length` at {@link MAX_CLIENT_PAIRS}.
+ */
+export function matchFeaturesByLocation(
+  inputFeatures: readonly Feature[],
+  filterFeatures: readonly Feature[],
+  predicate: SelectLocationPredicate,
+): LocationMatches {
+  const evaluableFilters = filterFeatures.filter((f) => f.geometry);
+  // In the false branch TS narrows `predicate` to SpatialPredicate, so this is
+  // checked — no cast — and would error if the "disjoint" guard were removed.
+  const test: SpatialPredicate =
+    predicate === "disjoint" ? "intersects" : predicate;
+  let unevaluableDropped = 0;
+  const matches = inputFeatures.map((f) => {
+    if (!f.geometry) return false;
+    let matchesAny = false;
+    let unevaluable = false;
+    for (const g of evaluableFilters) {
+      try {
+        if (rawPredicate(f, g, test)) {
+          matchesAny = true;
+          break;
+        }
+      } catch {
+        // Turf can't evaluate this pair (e.g. a GeometryCollection).
+        unevaluable = true;
+      }
+    }
+    // For positive predicates an unevaluable pair is just a non-match. For the
+    // complement (disjoint) we must NOT claim "no intersection" when a pair
+    // couldn't be checked, so require every pair to have been evaluable.
+    if (predicate === "disjoint") {
+      if (!matchesAny && unevaluable) unevaluableDropped += 1;
+      return !matchesAny && !unevaluable;
+    }
+    return matchesAny;
+  });
+  return { matches, unevaluableDropped };
+}
 
 export const selectByLocationTool: ProcessingAlgorithm = {
   id: "select-by-location",
@@ -1201,37 +1262,12 @@ export const selectByLocationTool: ProcessingAlgorithm = {
     // features matching the predicate against any filter feature. With an empty
     // filter layer nothing matches, so disjoint keeps everything and the rest
     // keep nothing — matching the backend.
-    // In the else branch TS narrows `predicate` to SpatialPredicate, so this is
-    // checked — no cast — and would error if the "disjoint" guard were removed.
-    const test: SpatialPredicate =
-      predicate === "disjoint" ? "intersects" : predicate;
-    // For disjoint, a feature dropped only because a pair was unevaluable is not
-    // a confident result; count those to warn the user (the sidecar, via
-    // GeoPandas, can evaluate geometries Turf cannot, e.g. GeometryCollections).
-    let unevaluableDropped = 0;
-    const selected = inputFeatures.filter((f) => {
-      let matchesAny = false;
-      let unevaluable = false;
-      for (const g of filterFeatures) {
-        try {
-          if (rawPredicate(f, g, test)) {
-            matchesAny = true;
-            break;
-          }
-        } catch {
-          // Turf can't evaluate this pair (e.g. a GeometryCollection).
-          unevaluable = true;
-        }
-      }
-      // For positive predicates an unevaluable pair is just a non-match. For the
-      // complement (disjoint) we must NOT claim "no intersection" when a pair
-      // couldn't be checked, so require every pair to have been evaluable.
-      if (predicate === "disjoint") {
-        if (!matchesAny && unevaluable) unevaluableDropped += 1;
-        return !matchesAny && !unevaluable;
-      }
-      return matchesAny;
-    });
+    const { matches, unevaluableDropped } = matchFeaturesByLocation(
+      inputFeatures,
+      filterFeatures,
+      predicate,
+    );
+    const selected = inputFeatures.filter((_, index) => matches[index]);
     // Report the total the user sees in the layer list; note any geometry-less
     // features that were skipped (the sidecar drops them too).
     const skipped = input.features.length - inputFeatures.length;

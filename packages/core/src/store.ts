@@ -256,6 +256,17 @@ export interface AppState {
     styleManagerOpen: boolean;
     /** Processing History panel visibility (#1292). */
     processingHistoryOpen: boolean;
+    /** Select by Expression dialog visibility (#1314). */
+    selectByExpressionOpen: boolean;
+    // Layer preselected in the Select by Expression dialog when it is opened
+    // from a layer's context menu, or null when opened without a target.
+    // Deliberately not selectLayer(): that would clear the live selection the
+    // dialog's add/remove/intersect modes need to combine with.
+    selectByExpressionLayerId: string | null;
+    /** Select by Location dialog visibility (#1314). */
+    selectByLocationOpen: boolean;
+    /** Same contract as `selectByExpressionLayerId`, for Select by Location. */
+    selectByLocationLayerId: string | null;
     /**
      * Pending "re-run from History" request. Written by the History panel just
      * before it opens the target processing dialog; consumed and cleared by
@@ -375,6 +386,10 @@ export interface AppState {
   setStorymapComposing: (chapterId: string | null) => void;
   setModelBuilderOpen: (open: boolean) => void;
   setProcessingHistoryOpen: (open: boolean) => void;
+  /** Open/close Select by Expression, optionally preselecting a target layer. */
+  setSelectByExpressionOpen: (open: boolean, layerId?: string | null) => void;
+  /** Open/close Select by Location, optionally preselecting a target layer. */
+  setSelectByLocationOpen: (open: boolean, layerId?: string | null) => void;
   setProcessingRerun: (request: ProcessingRerunRequest | null) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
@@ -758,6 +773,10 @@ export const useAppStore = create<AppState>()(
         modelBuilderOpen: false,
         styleManagerOpen: false,
         processingHistoryOpen: false,
+        selectByExpressionOpen: false,
+        selectByExpressionLayerId: null,
+        selectByLocationOpen: false,
+        selectByLocationLayerId: null,
         processingRerun: null,
         zoomToSelectedFeature: false,
         collaborateDialogOpen: false,
@@ -1053,6 +1072,22 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, processingHistoryOpen: open } })),
       setProcessingRerun: (request) =>
         set((s) => ({ ui: { ...s.ui, processingRerun: request } })),
+      setSelectByExpressionOpen: (open, layerId) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            selectByExpressionOpen: open,
+            selectByExpressionLayerId: open ? (layerId ?? null) : null,
+          },
+        })),
+      setSelectByLocationOpen: (open, layerId) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            selectByLocationOpen: open,
+            selectByLocationLayerId: open ? (layerId ?? null) : null,
+          },
+        })),
       setCollaborateDialogOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, collaborateDialogOpen: open } })),
       setZoomToSelectedFeature: (enabled) =>
