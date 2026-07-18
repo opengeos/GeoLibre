@@ -524,7 +524,8 @@ describe("drawLayout data blocks (GH #1324)", () => {
             ["Springfield", "42000"],
             ["Shelbyville", "39000"],
           ],
-          note: "+3 more",
+          truncated: 3,
+          formatNote: (count) => `+${count} more`,
           position: "bottom-left",
         },
       }),
@@ -552,7 +553,6 @@ describe("drawLayout data blocks (GH #1324)", () => {
         dataTable: {
           columns: ["name"],
           rows,
-          note: "+5 more",
           truncated: 5,
           position: "bottom-left",
         },

@@ -1044,13 +1044,11 @@ export function PrintLayoutDialog({
             title: tableTitle.trim() || undefined,
             columns: data.columns,
             rows: data.rows,
-            note:
-              data.truncated > 0
-                ? t("printLayout.dataTable.moreRows", {
-                    count: data.truncated,
-                  })
-                : undefined,
             truncated: data.truncated,
+            // The final hidden-row count depends on how many rows fit the
+            // page, which only the renderer knows; hand it the translation.
+            formatNote: (count) =>
+              t("printLayout.dataTable.moreRows", { count }),
             position: tablePosition,
           };
         }

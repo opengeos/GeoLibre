@@ -315,17 +315,18 @@ export interface LayoutOptions {
     /** Row cells as display strings, aligned with {@link columns}. */
     rows: string[][];
     /**
-     * Note drawn under the rows (e.g. "+12 more"), supplied translated by the
-     * dialog when the row limit truncated the source rows.
-     */
-    note?: string;
-    /**
-     * How many source rows the dialog's row limit already dropped. When the
-     * body height forces the renderer to hide further rows, they are added to
-     * this count in an English fallback note replacing {@link note} (the
-     * translated text cannot be recomputed here).
+     * How many source rows the dialog's row limit already dropped. Rows the
+     * renderer additionally hides to fit the body height are added to this
+     * count in a "+N more" note under the table.
      */
     truncated?: number;
+    /**
+     * Translated formatter for the note (e.g. `(n) => t("moreRows", {count:
+     * n})`). A function rather than preformatted text because the final count
+     * depends on the canvas geometry; falls back to English "+N more" when
+     * omitted, like the drawing code's other i18n fallbacks.
+     */
+    formatNote?: (count: number) => string;
     position: BodyCorner;
   } | null;
   /**
@@ -1543,22 +1544,21 @@ function drawDataTable(
 
   // Fit the rows to the body height remaining below/above the stack offset:
   // a 50-row table on a small page would otherwise clip its title or note
-  // away silently. Rows hidden here join the dialog's own truncation count in
-  // a fallback note (the dialog's translated note text cannot be recomputed).
-  const availH = bodyH - inset * 2 - stackOffset;
-  const chromeH = pad * 2 + titleBlockH + rowH; // padding + title + header row
-  const fitWithoutNote = Math.floor((availH - chromeH) / rowH);
+  // away silently. The note row is part of the same budget, so a table whose
+  // rows exactly fill the space still has room for a dialog-truncation note.
+  const budget = bodyH - inset * 2 - stackOffset - (pad * 2 + titleBlockH + rowH);
   let rows = table.rows;
-  let hiddenByHeight = 0;
-  if (rows.length > fitWithoutNote) {
-    const fitWithNote = Math.max(1, fitWithoutNote - 1);
-    rows = rows.slice(0, fitWithNote);
-    hiddenByHeight = table.rows.length - rows.length;
+  let hidden = table.truncated ?? 0;
+  if (rows.length * rowH + (hidden > 0 ? rowH : 0) > budget) {
+    // Reserve one row of the budget for the note the truncation produces.
+    const fitRows = Math.max(1, Math.floor((budget - rowH) / rowH));
+    if (fitRows < rows.length) {
+      hidden += rows.length - fitRows;
+      rows = rows.slice(0, fitRows);
+    }
   }
   const note =
-    hiddenByHeight > 0
-      ? `+${hiddenByHeight + (table.truncated ?? 0)} more`
-      : (table.note ?? "").trim();
+    hidden > 0 ? (table.formatNote?.(hidden) ?? `+${hidden} more`) : "";
   const hasNote = note.length > 0;
 
   ctx.save();
