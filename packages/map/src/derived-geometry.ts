@@ -25,6 +25,11 @@ import { styleValue } from "@geolibre/core";
 
 const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
 
+// Bound the per-collection generator cache: buffer distances are free-typed,
+// so every distinct value would otherwise pin a full derived collection for
+// the lifetime of the source geojson object.
+const MAX_GENERATOR_CACHE_ENTRIES = 8;
+
 // One cache entry per (collection, params) pair. The params key is tiny
 // (renderer type + buffer distance), so per-collection Maps stay small.
 const maskCache = new WeakMap<
@@ -120,6 +125,13 @@ export function buildGeneratedGeometry(
   const cached = byKey.get(key);
   if (cached) return cached;
   const result = computeGeneratedGeometry(collection, type, distance);
+  // The buffer key space is user-typed and unbounded, so cap the
+  // per-collection cache (oldest evicted first) — unlike the sibling caches
+  // whose key cardinality is naturally small.
+  if (byKey.size >= MAX_GENERATOR_CACHE_ENTRIES) {
+    const oldest = byKey.keys().next().value;
+    if (oldest !== undefined) byKey.delete(oldest);
+  }
   byKey.set(key, result);
   return result;
 }

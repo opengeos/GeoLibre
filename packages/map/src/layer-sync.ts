@@ -2240,7 +2240,13 @@ function applyGeometryGeneratorLayers(
   opacity: number,
   beforeId?: string,
 ): void {
-  const generatorType = styleValue(layer.style, "geometryGenerator");
+  // Match inverted fill and line decorations: no flat companion symbology
+  // while the layer renders as a 3D extrusion. The Style Panel hides the
+  // generator controls in extrusion mode without resetting the setting, so
+  // this guard is what actually turns the layers off.
+  const generatorType = layer.style.extrusionEnabled
+    ? "none"
+    : styleValue(layer.style, "geometryGenerator");
   const generated =
     generatorType !== "none" && layer.geojson
       ? buildGeneratedGeometry(

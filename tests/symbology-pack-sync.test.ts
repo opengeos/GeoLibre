@@ -224,6 +224,23 @@ describe("geometry generator sync", () => {
     assert.ok(!layers.has("layer-poly-generator-circle"));
   });
 
+  it("suppresses generator layers while the layer renders as an extrusion", () => {
+    const { map, layers, sources } = makeMap();
+    syncLayer(map as never, polygonLayer({ geometryGenerator: "centroid" }));
+    assert.ok(layers.has("layer-poly-generator-circle"));
+
+    // Turning on extrusion must tear the flat companion symbology down even
+    // though geometryGenerator is still set (the Style Panel hides the
+    // controls without resetting the value).
+    syncLayer(
+      map as never,
+      polygonLayer({ geometryGenerator: "centroid", extrusionEnabled: true }),
+    );
+    assert.ok(layers.has("layer-poly-extrusion"));
+    assert.ok(!layers.has("layer-poly-generator-circle"));
+    assert.ok(!sources.has("source-poly-generator"));
+  });
+
   it("tears companion layers and source down when set back to none", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({ geometryGenerator: "centroid" }));
