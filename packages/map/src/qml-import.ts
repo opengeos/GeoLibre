@@ -752,7 +752,13 @@ function symbolOverrides(
       : undefined;
   const strokeWidth = numberOverride(info?.strokeWidth, base?.strokeWidth);
   const fillOpacity = numberOverride(info?.opacity, base?.opacity);
-  const markerSize = numberOverride(info?.markerSize, base?.markerSize);
+  // A size difference only maps onto circleRadius for a plain circle mark: a
+  // shape marker (square/triangle/…) is sized by the layer's markerSize, which
+  // circleRadius does not affect (mirrors rulePaintFor in the exporter).
+  const markerSize =
+    info?.markerName && info.markerName !== "circle"
+      ? undefined
+      : numberOverride(info?.markerSize, base?.markerSize);
   return {
     ...(strokeColor !== undefined ? { strokeColor } : {}),
     ...(strokeWidth !== undefined ? { strokeWidth } : {}),
@@ -780,6 +786,7 @@ function classifyRules(
   let elseColor: string | undefined;
   let elseLabel = "";
   let elseInfo: SymbolInfo | undefined;
+  let elseDisabled = false;
   let index = 0;
   let matched = 0;
   const walk = (nodes: unknown[], parentId: string | undefined): void => {
@@ -801,6 +808,7 @@ function classifyRules(
           elseColor = color;
           elseLabel = label;
           elseInfo = info;
+          elseDisabled = attr(rule, "checkstate") === "0";
           matched += 1;
           continue;
         }
@@ -863,6 +871,7 @@ function classifyRules(
     filter: "",
     color: fallback,
     isElse: true,
+    ...(elseDisabled ? { enabled: false } : {}),
     // The else symbol keeps its own look (as overrides) when it differs from
     // the first symbol, whose flat values were applied to the layer.
     ...symbolOverrides(elseInfo, base),

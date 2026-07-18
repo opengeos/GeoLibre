@@ -626,7 +626,8 @@ function ruleRenderer(
     elseRule && isHexColor(elseRule.color)
       ? elseRule.color
       : singleColor(style, geometry);
-  const elseXml = `<rule filter="ELSE" symbol="${symbols.length}" label="${xmlEscape(
+  const elseCheckstate = elseRule?.enabled === false ? ' checkstate="0"' : "";
+  const elseXml = `<rule filter="ELSE" symbol="${symbols.length}"${elseCheckstate} label="${xmlEscape(
     elseRule?.label || "",
   )}" key="ruleelse"/>`;
   symbols.push(

@@ -2859,6 +2859,7 @@
       "ruleOptions": "符号与可见性",
       "ruleMinZoom": "最小缩放级别",
       "ruleMaxZoom": "最大缩放级别",
+      "ruleZoomInvalid": "最小缩放必须小于最大缩放 - 范围为空时此规则永远不会生效。",
       "ruleStrokeWidth": "描边宽度",
       "ruleFillOpacity": "填充不透明度",
       "ruleCircleSize": "圆半径",

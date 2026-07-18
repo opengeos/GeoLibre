@@ -2788,6 +2788,7 @@
       "ruleOptions": "Símbolo y visibilidad",
       "ruleMinZoom": "Zoom mínimo",
       "ruleMaxZoom": "Zoom máximo",
+      "ruleZoomInvalid": "El zoom mínimo debe ser menor que el máximo: esta regla nunca se aplica mientras el rango esté vacío.",
       "ruleStrokeWidth": "Ancho de trazo",
       "ruleFillOpacity": "Opacidad del relleno",
       "ruleCircleSize": "Radio del círculo",

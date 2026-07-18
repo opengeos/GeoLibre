@@ -2744,6 +2744,7 @@
       "ruleOptions": "シンボルと表示",
       "ruleMinZoom": "最小ズーム",
       "ruleMaxZoom": "最大ズーム",
+      "ruleZoomInvalid": "最小ズームは最大ズームより小さくする必要があります。範囲が空の間、このルールは適用されません。",
       "ruleStrokeWidth": "線の太さ",
       "ruleFillOpacity": "塗りつぶしの不透明度",
       "ruleCircleSize": "円の半径",

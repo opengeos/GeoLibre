@@ -216,7 +216,10 @@ export function lineWidthValue(style: LayerStyle): number | unknown[] {
       Number.isFinite(minRadius) &&
       Number.isFinite(maxRadius)
     ) {
-      return [
+      // Per-rule widths still override the proportional base for matched
+      // features (the property-driven interpolate nests legally inside a
+      // case), mirroring circleRadiusValue.
+      return vectorStrokeWidthValue(style, [
         "interpolate",
         ["linear"],
         ["to-number", ["get", property], minValue],
@@ -224,7 +227,7 @@ export function lineWidthValue(style: LayerStyle): number | unknown[] {
         minRadius,
         maxValue,
         maxRadius,
-      ];
+      ]);
     }
   }
   if (styleValue(style, "strokeWidthUnit") === "meters") {
@@ -448,10 +451,18 @@ export function effectiveVectorRules(style: LayerStyle): {
   for (const rule of all) {
     if (!rule.isElse) byId.set(rule.id, rule);
   }
-  // A rule other rules point at is a group; only leaves draw.
+  // A rule other rules point at is a group; only leaves draw. A rule naming
+  // itself as its parent is treated as top-level (mirroring the editor and
+  // the QML exporter), not as its own group.
   const groupIds = new Set<string>();
   for (const rule of byId.values()) {
-    if (rule.parentId && byId.has(rule.parentId)) groupIds.add(rule.parentId);
+    if (
+      rule.parentId &&
+      rule.parentId !== rule.id &&
+      byId.has(rule.parentId)
+    ) {
+      groupIds.add(rule.parentId);
+    }
   }
 
   const rules: EffectiveVectorRule[] = [];
@@ -469,7 +480,12 @@ export function effectiveVectorRules(style: LayerStyle): {
     let maxZoom = ruleZoom(rule.maxZoom);
     let dropped = false;
     const seen = new Set([rule.id]);
-    let parent = rule.parentId ? byId.get(rule.parentId) : undefined;
+    // A self-referencing parentId means "no parent" (a normal top-level
+    // rule), matching the editor's tree walk and the QML exporter.
+    let parent =
+      rule.parentId && rule.parentId !== rule.id
+        ? byId.get(rule.parentId)
+        : undefined;
     while (parent) {
       if (seen.has(parent.id) || parent.enabled === false) {
         dropped = true;

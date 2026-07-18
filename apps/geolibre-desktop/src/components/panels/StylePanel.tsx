@@ -356,6 +356,7 @@ interface RuleNumberInputProps {
   label: string;
   value: number | undefined;
   min: number;
+  max?: number;
   step: number;
   placeholder: string;
   onChange: (value: number | undefined) => void;
@@ -366,6 +367,7 @@ function RuleNumberInput({
   label,
   value,
   min,
+  max,
   step,
   placeholder,
   onChange,
@@ -376,6 +378,7 @@ function RuleNumberInput({
       <Input
         type="number"
         min={min}
+        max={max}
         step={step}
         className="h-8"
         placeholder={placeholder}
@@ -388,7 +391,10 @@ function RuleNumberInput({
             return;
           }
           const next = Number(raw);
-          if (Number.isFinite(next)) onChange(next);
+          if (!Number.isFinite(next)) return;
+          // Clamp into the field's domain before it reaches the store, so an
+          // out-of-range typed value (e.g. a negative width) never persists.
+          onChange(clamp(next, min, max ?? Number.POSITIVE_INFINITY));
         }}
       />
     </label>
@@ -2396,6 +2402,7 @@ export function StylePanel({
                       label={t("style.symbology.ruleMinZoom")}
                       value={rule.minZoom}
                       min={0}
+                      max={24}
                       step={1}
                       placeholder={t("style.symbology.ruleInherit")}
                       onChange={(minZoom) =>
@@ -2406,6 +2413,7 @@ export function StylePanel({
                       label={t("style.symbology.ruleMaxZoom")}
                       value={rule.maxZoom}
                       min={0}
+                      max={24}
                       step={1}
                       placeholder={t("style.symbology.ruleInherit")}
                       onChange={(maxZoom) =>
@@ -2413,6 +2421,13 @@ export function StylePanel({
                       }
                     />
                   </div>
+                  {rule.minZoom !== undefined &&
+                  rule.maxZoom !== undefined &&
+                  rule.minZoom >= rule.maxZoom ? (
+                    <p className="text-xs text-destructive">
+                      {t("style.symbology.ruleZoomInvalid")}
+                    </p>
+                  ) : null}
                   {!isGroup ? (
                     <>
                       <div className="grid grid-cols-3 gap-2">
@@ -2430,22 +2445,25 @@ export function StylePanel({
                           label={t("style.symbology.ruleFillOpacity")}
                           value={rule.fillOpacity}
                           min={0}
+                          max={1}
                           step={0.1}
                           placeholder={t("style.symbology.ruleInherit")}
                           onChange={(fillOpacity) =>
                             updateVectorRule(rule.id, { fillOpacity })
                           }
                         />
-                        <RuleNumberInput
-                          label={t("style.symbology.ruleCircleSize")}
-                          value={rule.circleRadius}
-                          min={0}
-                          step={1}
-                          placeholder={t("style.symbology.ruleInherit")}
-                          onChange={(circleRadius) =>
-                            updateVectorRule(rule.id, { circleRadius })
-                          }
-                        />
+                        {!markerEnabled ? (
+                          <RuleNumberInput
+                            label={t("style.symbology.ruleCircleSize")}
+                            value={rule.circleRadius}
+                            min={0}
+                            step={1}
+                            placeholder={t("style.symbology.ruleInherit")}
+                            onChange={(circleRadius) =>
+                              updateVectorRule(rule.id, { circleRadius })
+                            }
+                          />
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2">
                         <label className="flex items-center gap-2 text-xs text-muted-foreground">

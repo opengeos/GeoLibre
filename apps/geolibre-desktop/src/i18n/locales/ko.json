@@ -2744,6 +2744,7 @@
       "ruleOptions": "심볼 및 가시성",
       "ruleMinZoom": "최소 줌",
       "ruleMaxZoom": "최대 줌",
+      "ruleZoomInvalid": "최소 줌은 최대 줌보다 작아야 합니다. 범위가 비어 있는 동안 이 규칙은 적용되지 않습니다.",
       "ruleStrokeWidth": "선 굵기",
       "ruleFillOpacity": "채우기 불투명도",
       "ruleCircleSize": "원 반지름",

@@ -103,7 +103,12 @@ export interface VectorRule {
   filter: string;
   /** The symbol fill/circle color for features this rule matches (6-digit hex). */
   color: string;
-  /** When true this is the catch-all "else" rule and {@link filter} is unused. */
+  /**
+   * When true this is the catch-all "else" rule: {@link filter} is unused and
+   * the rule is an unconditional fallback for features no other rule matched,
+   * so the {@link minZoom}/{@link maxZoom} and {@link parentId} fields are
+   * ignored on it. Its symbol overrides and {@link enabled} toggle do apply.
+   */
   isElse: boolean;
   /**
    * Whether the rule participates in rendering. `false` temporarily disables

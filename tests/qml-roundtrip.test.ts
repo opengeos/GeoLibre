@@ -321,4 +321,28 @@ describe("QML round-trip of extended rule-based symbology (#1305)", () => {
     assert.equal(elseRule?.circleRadius, 6);
     assert.ok(Math.abs((elseRule?.fillOpacity ?? 0) - 0.6) <= 1 / 255 + 1e-9);
   });
+
+  it("round-trips a disabled else rule via checkstate", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "a",
+        label: "A",
+        filter: '["==", ["get", "x"], 1]',
+        color: "#ff0000",
+        isElse: false,
+      },
+      {
+        id: "e",
+        label: "",
+        filter: "",
+        color: "#cccccc",
+        isElse: true,
+        enabled: false,
+      },
+    ];
+    const input = style({ vectorStyleMode: "rule-based", vectorRules: rules });
+    const out = roundTrip(input, "polygon");
+    const elseRule = out.vectorRules.find((rule) => rule.isElse);
+    assert.equal(elseRule?.enabled, false);
+  });
 });

@@ -2788,6 +2788,7 @@
       "ruleOptions": "प्रतीक और दृश्यता",
       "ruleMinZoom": "न्यूनतम ज़ूम",
       "ruleMaxZoom": "अधिकतम ज़ूम",
+      "ruleZoomInvalid": "न्यूनतम ज़ूम अधिकतम ज़ूम से कम होना चाहिए - सीमा खाली रहने तक यह नियम कभी लागू नहीं होगा।",
       "ruleStrokeWidth": "स्ट्रोक चौड़ाई",
       "ruleFillOpacity": "भराव अपारदर्शिता",
       "ruleCircleSize": "वृत्त त्रिज्या",

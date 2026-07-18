@@ -2788,6 +2788,7 @@
       "ruleOptions": "Symbol und Sichtbarkeit",
       "ruleMinZoom": "Min. Zoom",
       "ruleMaxZoom": "Max. Zoom",
+      "ruleZoomInvalid": "Min. Zoom muss unter Max. Zoom liegen - diese Regel gilt nie, solange der Bereich leer ist.",
       "ruleStrokeWidth": "Strichbreite",
       "ruleFillOpacity": "Deckkraft der Füllung",
       "ruleCircleSize": "Kreisradius",

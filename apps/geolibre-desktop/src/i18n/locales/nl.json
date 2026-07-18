@@ -2788,6 +2788,7 @@
       "ruleOptions": "Symbool en zichtbaarheid",
       "ruleMinZoom": "Min. zoom",
       "ruleMaxZoom": "Max. zoom",
+      "ruleZoomInvalid": "Min. zoom moet lager zijn dan max. zoom - deze regel is nooit van toepassing zolang het bereik leeg is.",
       "ruleStrokeWidth": "Lijndikte",
       "ruleFillOpacity": "Dekking van vulling",
       "ruleCircleSize": "Cirkelstraal",

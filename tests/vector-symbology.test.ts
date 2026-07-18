@@ -297,12 +297,29 @@ describe("rule-based extensions (#1305)", () => {
     const rules: VectorRule[] = [
       rule({ id: "a", filter: parkFilter, color: "#00ff00", parentId: "b" }),
       rule({ id: "b", filter: roadFilter, color: "#0000ff", parentId: "a" }),
+      // A drawable leaf under the cycle exercises the ancestor-walk guard:
+      // its chain (a -> b -> a) never terminates at a root, so it is dropped.
+      rule({ id: "c", filter: parkFilter, color: "#ff0000", parentId: "a" }),
     ];
-    // Both rules are groups (each is the other's parent), so neither is a
-    // drawable leaf and the fallback color remains.
+    // The cycle members are groups and the leaf's ancestry is broken, so
+    // nothing draws and the fallback color remains.
     assert.equal(
       ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
       "#000000",
+    );
+  });
+
+
+  it("treats a self-referencing parentId as a top-level rule", () => {
+    const rules: VectorRule[] = [
+      rule({ id: "a", filter: parkFilter, color: "#00ff00", parentId: "a" }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    // Mirrors the editor and the QML exporter: a rule naming itself as its
+    // parent is a normal top-level rule, not its own (undrawable) group.
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      ["case", parkParsed, "#00ff00", "#cccccc"],
     );
   });
 

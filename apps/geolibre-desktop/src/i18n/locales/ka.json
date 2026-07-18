@@ -1110,6 +1110,7 @@
       "ruleOptions": "სიმბოლო და ხილვადობა",
       "ruleMinZoom": "მინ. zoom",
       "ruleMaxZoom": "მაქს. zoom",
+      "ruleZoomInvalid": "მინ. zoom უნდა იყოს მაქს. zoom-ზე ნაკლები - ეს წესი არასდროს მოქმედებს, სანამ დიაპაზონი ცარიელია.",
       "ruleStrokeWidth": "ხაზის სისქე",
       "ruleFillOpacity": "შევსების გაუმჭვირვალობა",
       "ruleCircleSize": "წრის რადიუსი",

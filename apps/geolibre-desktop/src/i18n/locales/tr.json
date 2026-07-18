@@ -2788,6 +2788,7 @@
       "ruleOptions": "Sembol ve görünürlük",
       "ruleMinZoom": "Minimum yakınlaştırma",
       "ruleMaxZoom": "Maksimum yakınlaştırma",
+      "ruleZoomInvalid": "Min. yakınlaştırma, maks. yakınlaştırmadan küçük olmalıdır - aralık boş olduğu sürece bu kural hiç uygulanmaz.",
       "ruleStrokeWidth": "Çizgi kalınlığı",
       "ruleFillOpacity": "Dolgu opaklığı",
       "ruleCircleSize": "Daire yarıçapı",

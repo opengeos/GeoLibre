@@ -3251,6 +3251,7 @@
       "ruleOptions": "Symbol and visibility",
       "ruleMinZoom": "Min zoom",
       "ruleMaxZoom": "Max zoom",
+      "ruleZoomInvalid": "Min zoom must be below max zoom - this rule never applies while the range is empty.",
       "ruleStrokeWidth": "Stroke width",
       "ruleFillOpacity": "Fill opacity",
       "ruleCircleSize": "Circle radius",

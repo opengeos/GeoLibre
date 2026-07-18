@@ -2744,6 +2744,7 @@
       "ruleOptions": "Simbol dan visibilitas",
       "ruleMinZoom": "Zoom minimum",
       "ruleMaxZoom": "Zoom maksimum",
+      "ruleZoomInvalid": "Zoom minimum harus lebih kecil dari zoom maksimum - aturan ini tidak pernah berlaku selama rentangnya kosong.",
       "ruleStrokeWidth": "Lebar garis",
       "ruleFillOpacity": "Opasitas isian",
       "ruleCircleSize": "Radius lingkaran",
