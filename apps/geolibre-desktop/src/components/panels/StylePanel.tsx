@@ -3478,6 +3478,21 @@ export function StylePanel({
     </div>
   );
 
+  // One pass over the override fields for both the rows and the invalid
+  // banner, so each expression is parsed once per render. The `|| ""` guards
+  // against a hand-edited project file storing null for an expression field
+  // (the type says string, but the value comes from untrusted JSON); the
+  // invalid flag surfaces the renderer's silent fallback to the literal
+  // control (the builder's Apply is disabled for invalid expressions, but a
+  // hand-edited file can still carry one).
+  const labelOverrideStates = LABEL_OVERRIDE_PROPERTIES.map((property) => {
+    const value = (labels[property.field] || "").trim();
+    return {
+      property,
+      value,
+      invalid: value !== "" && !parseJsonExpression(value),
+    };
+  });
   const labelControls = (
     <div className="space-y-3">
       <label
@@ -3777,16 +3792,7 @@ export function StylePanel({
           </div>
           <div className="space-y-2">
             <Label>{t("style.labels.dataDefined.heading")}</Label>
-            {LABEL_OVERRIDE_PROPERTIES.map((property) => {
-              // The `|| ""` guards against a hand-edited project file storing
-              // null for an expression field (the type says string, but the
-              // value comes from untrusted JSON).
-              const value = (labels[property.field] || "").trim();
-              // The builder's Apply is disabled for invalid expressions, but a
-              // hand-edited project file can still carry one; flag it here so
-              // the renderer's silent fallback to the literal control is
-              // visible in the panel.
-              const invalid = value !== "" && !parseJsonExpression(value);
+            {labelOverrideStates.map(({ property, value, invalid }) => {
               return (
                 <div key={property.key} className="flex items-center gap-2">
                   <span className="w-20 shrink-0 text-xs">
@@ -3846,10 +3852,7 @@ export function StylePanel({
                 </div>
               );
             })}
-            {LABEL_OVERRIDE_PROPERTIES.some((property) => {
-              const value = (labels[property.field] || "").trim();
-              return value !== "" && !parseJsonExpression(value);
-            }) ? (
+            {labelOverrideStates.some((state) => state.invalid) ? (
               <p className="text-xs text-destructive">
                 {t("style.labels.expressionInvalid")}
               </p>
