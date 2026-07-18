@@ -51,6 +51,13 @@ import { sanitizeExportFileName } from "../../lib/vector-export";
 const DEFAULT_PANEL_HEIGHT = 260;
 const MIN_PANEL_HEIGHT = 140;
 
+/**
+ * Upper bound on a fetched `.aux.xml` sidecar (8 MB). Real PAM files are tiny;
+ * the cap keeps a huge or hostile response from being buffered and regex-
+ * scanned in full.
+ */
+const MAX_AUX_XML_BYTES = 8 * 1024 * 1024;
+
 /** The layer types the table can census (a downloadable single GeoTIFF). */
 function isRatLayer(layer: GeoLibreLayer | undefined): layer is GeoLibreLayer {
   return !!layer && canExportRasterLayer(layer);
@@ -97,7 +104,11 @@ async function fetchGdalRat(
   try {
     const response = await fetch(auxUrl, { signal });
     if (!response.ok) return null;
-    return parseGdalRat(await response.text(), band);
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_AUX_XML_BYTES) return null;
+    const text = await response.text();
+    if (text.length > MAX_AUX_XML_BYTES) return null;
+    return parseGdalRat(text, band);
   } catch {
     return null;
   }
@@ -151,8 +162,12 @@ export function RasterAttributeTable({
   const colorFlushRef = useRef<number | null>(null);
   // Pending color edits buffered per row value, so rapid edits across
   // multiple rows inside one throttle window all persist (a single-slot
-  // buffer would drop all but the last row's edit).
-  const pendingColorsRef = useRef<Map<number, string>>(new Map());
+  // buffer would drop all but the last row's edit). The target layer id is
+  // captured with them so a flush always writes to the layer that was edited.
+  const pendingColorsRef = useRef<{
+    layerId: string;
+    colors: Map<number, string>;
+  } | null>(null);
   // The last decoded raster, so a band switch recounts the already-decoded
   // bands instead of re-downloading and re-decoding the whole file. Held only
   // while the panel is open on the same layer/source.
@@ -160,16 +175,48 @@ export function RasterAttributeTable({
     null,
   );
 
-  /** Drops in-progress edits and any pending throttled color commit. */
-  const resetEditBuffers = useCallback(() => {
-    setLabelDrafts({});
-    setColorDrafts({});
+  /**
+   * Commits any buffered color edits immediately, in one store write against
+   * the layer they were made on, and cancels the trailing flush timer. Reads
+   * only refs and stable store APIs, so the empty dependency list is safe.
+   */
+  const flushPendingColors = useCallback(() => {
     if (colorFlushRef.current !== null) {
       window.clearTimeout(colorFlushRef.current);
       colorFlushRef.current = null;
     }
-    pendingColorsRef.current.clear();
+    const pending = pendingColorsRef.current;
+    pendingColorsRef.current = null;
+    if (!pending || pending.colors.size === 0) return;
+    const live = liveLayer(pending.layerId);
+    const current = live ? savedRasterAttributeTable(live) : null;
+    if (!current) return;
+    const rows = current.rows.map((row) => {
+      const pendingColor = pending.colors.get(row.value);
+      return pendingColor ? { ...row, color: pendingColor } : row;
+    });
+    commitRows(pending.layerId, current, rows, { colorsChanged: true });
+    setColorDrafts((drafts) => {
+      const next = { ...drafts };
+      for (const pendingValue of pending.colors.keys()) {
+        delete next[pendingValue];
+      }
+      return next;
+    });
+    // commitRows/liveLayer close over only stable store APIs and their args.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Settles in-progress edits before the table is replaced or the layer
+   * switches: pending colors are committed (to the layer they were edited
+   * on), then the draft state is cleared.
+   */
+  const resetEditBuffers = useCallback(() => {
+    flushPendingColors();
+    setLabelDrafts({});
+    setColorDrafts({});
+  }, [flushPendingColors]);
 
   // Reset transient state when the target layer changes, and abort any
   // in-flight computation so its result can't land on the wrong layer. The
@@ -186,8 +233,8 @@ export function RasterAttributeTable({
         computeAbortRef.current = null;
         setComputing(false);
       }
-      // Drop edits/commits aimed at the previous layer, and the previous
-      // layer's decoded raster.
+      // Settle edits aimed at the previous layer (pending colors are
+      // committed to it, not dropped) and release its decoded raster.
       resetEditBuffers();
       rasterCacheRef.current = null;
     };
@@ -406,27 +453,15 @@ export function RasterAttributeTable({
    * flushing every buffered row edit in that single write.
    */
   function scheduleColorCommit(value: number, color: string) {
-    pendingColorsRef.current.set(value, color);
-    if (colorFlushRef.current !== null || !ratLayer) return;
-    const layerId = ratLayer.id;
+    if (!ratLayer) return;
+    if (pendingColorsRef.current?.layerId !== ratLayer.id) {
+      pendingColorsRef.current = { layerId: ratLayer.id, colors: new Map() };
+    }
+    pendingColorsRef.current.colors.set(value, color);
+    if (colorFlushRef.current !== null) return;
     colorFlushRef.current = window.setTimeout(() => {
       colorFlushRef.current = null;
-      const pending = new Map(pendingColorsRef.current);
-      pendingColorsRef.current.clear();
-      if (pending.size === 0) return;
-      const live = liveLayer(layerId);
-      const current = live ? savedRasterAttributeTable(live) : null;
-      if (!current) return;
-      const rows = current.rows.map((row) => {
-        const pendingColor = pending.get(row.value);
-        return pendingColor ? { ...row, color: pendingColor } : row;
-      });
-      commitRows(layerId, current, rows, { colorsChanged: true });
-      setColorDrafts((drafts) => {
-        const next = { ...drafts };
-        for (const pendingValue of pending.keys()) delete next[pendingValue];
-        return next;
-      });
+      flushPendingColors();
     }, 200);
   }
 
