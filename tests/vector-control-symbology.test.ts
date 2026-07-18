@@ -6,14 +6,16 @@ import { syncLayer } from "../packages/map/src/layer-sync";
 // Records the maplibre calls a layer sync makes so a test can assert which
 // native operations ran. Mirrors the stub in control-owns-paint.test.ts, plus
 // the style/paint getters the vector-control symbology overlay reads.
+//
+// Each test uses a distinct layer id: the overlay tracks overridden radii in
+// a module-level set (like managedZoomRangeLayerIds), so sharing ids across
+// tests would leak state between them.
 interface MapCall {
   method: string;
   args: unknown[];
 }
 
-function makeVectorControlMapStub(
-  options: { circleRadiusPaint?: unknown } = {},
-) {
+function makeVectorControlMapStub(layerId: string) {
   const calls: MapCall[] = [];
   const record =
     (method: string) =>
@@ -21,19 +23,18 @@ function makeVectorControlMapStub(
       calls.push({ method, args });
     };
   const circleSpec = {
-    id: "vec1-circle",
+    id: `${layerId}-circle`,
     type: "circle",
-    source: "vec1-source",
+    source: `${layerId}-source`,
     filter: ["==", ["geometry-type"], "Point"],
   };
   const map = {
     getStyle: () => ({ layers: [circleSpec] }),
     getLayer: (id: string) =>
-      id === "vec1-circle" ? { id, type: "circle" } : undefined,
+      id === circleSpec.id ? { id, type: "circle" } : undefined,
     getSource: () => undefined,
     getFilter: () => circleSpec.filter,
-    getPaintProperty: (_id: string, _prop: string) =>
-      options.circleRadiusPaint,
+    getPaintProperty: () => undefined,
     setLayoutProperty: record("setLayoutProperty"),
     setPaintProperty: record("setPaintProperty"),
     setFilter: record("setFilter"),
@@ -46,9 +47,12 @@ function makeVectorControlMapStub(
   return { map, calls };
 }
 
-function vectorControlLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
+function vectorControlLayer(
+  layerId: string,
+  patch: Partial<GeoLibreLayer> = {},
+): GeoLibreLayer {
   return {
-    id: "vec1",
+    id: layerId,
     name: "us_cities",
     type: "geojson",
     source: { type: "geojson" },
@@ -60,8 +64,8 @@ function vectorControlLayer(patch: Partial<GeoLibreLayer> = {}): GeoLibreLayer {
       externalNativeLayer: true,
       controlOwnsPaint: true,
       sourceKind: "maplibre-gl-vector",
-      nativeLayerIds: ["vec1-circle"],
-      sourceIds: ["vec1-source"],
+      nativeLayerIds: [`${layerId}-circle`],
+      sourceIds: [`${layerId}-source`],
     },
     ...patch,
   };
@@ -76,10 +80,19 @@ const proportionalStyle = {
   proportionalSizeMaxRadius: 24,
 } as const;
 
+function radiusCalls(calls: MapCall[], layerId: string): MapCall[] {
+  return calls.filter(
+    (c) =>
+      c.method === "setPaintProperty" &&
+      c.args[0] === `${layerId}-circle` &&
+      c.args[1] === "circle-radius",
+  );
+}
+
 describe("vector-control point symbology overlay (#1311)", () => {
   it("renders a GeoLibre marker symbol layer and hides the control's circle", () => {
-    const { map, calls } = makeVectorControlMapStub();
-    const layer = vectorControlLayer({
+    const { map, calls } = makeVectorControlMapStub("vecm");
+    const layer = vectorControlLayer("vecm", {
       style: { ...DEFAULT_LAYER_STYLE, markerEnabled: true },
     });
 
@@ -93,16 +106,16 @@ describe("vector-control point symbology overlay (#1311)", () => {
       source: string;
       layout: Record<string, unknown>;
     };
-    assert.equal(spec.id, "layer-vec1-marker");
+    assert.equal(spec.id, "layer-vecm-marker");
     assert.equal(spec.type, "symbol");
-    assert.equal(spec.source, "vec1-source");
+    assert.equal(spec.source, "vecm-source");
     assert.match(String(spec.layout["icon-image"]), /^geolibre-marker-/);
 
     assert.ok(
       calls.some(
         (c) =>
           c.method === "setLayoutProperty" &&
-          c.args[0] === "vec1-circle" &&
+          c.args[0] === "vecm-circle" &&
           c.args[1] === "visibility" &&
           c.args[2] === "none",
       ),
@@ -111,8 +124,8 @@ describe("vector-control point symbology overlay (#1311)", () => {
   });
 
   it("drives the marker overlay's icon-size from proportional sizing", () => {
-    const { map, calls } = makeVectorControlMapStub();
-    const layer = vectorControlLayer({
+    const { map, calls } = makeVectorControlMapStub("vecms");
+    const layer = vectorControlLayer("vecms", {
       style: {
         ...DEFAULT_LAYER_STYLE,
         markerEnabled: true,
@@ -133,45 +146,97 @@ describe("vector-control point symbology overlay (#1311)", () => {
   });
 
   it("overrides the control circle's radius while proportional sizing is on", () => {
-    const { map, calls } = makeVectorControlMapStub();
-    const layer = vectorControlLayer({
+    const { map, calls } = makeVectorControlMapStub("vecp");
+    const layer = vectorControlLayer("vecp", {
       style: { ...DEFAULT_LAYER_STYLE, ...proportionalStyle },
     });
 
     syncLayer(map as never, layer);
 
-    const radius = calls.find(
-      (c) =>
-        c.method === "setPaintProperty" &&
-        c.args[0] === "vec1-circle" &&
-        c.args[1] === "circle-radius",
-    );
-    assert.ok(radius, "expected circle-radius to be overridden");
-    assert.ok(Array.isArray(radius.args[2]), "expected an interpolate");
+    const radius = radiusCalls(calls, "vecp");
+    assert.equal(radius.length, 1, "expected circle-radius to be overridden");
+    assert.ok(Array.isArray(radius[0].args[2]), "expected an interpolate");
   });
 
   it("restores the flat radius when proportional sizing turns off", () => {
-    // The map still carries a stale expression from a previous override.
-    const { map, calls } = makeVectorControlMapStub({
-      circleRadiusPaint: ["interpolate", ["linear"], ["get", "pop_max"]],
+    const { map, calls } = makeVectorControlMapStub("vecr");
+
+    syncLayer(
+      map as never,
+      vectorControlLayer("vecr", {
+        style: { ...DEFAULT_LAYER_STYLE, ...proportionalStyle },
+      }),
+    );
+    syncLayer(map as never, vectorControlLayer("vecr"));
+
+    const radius = radiusCalls(calls, "vecr");
+    assert.equal(radius.length, 2, "expected override then restore");
+    assert.ok(Array.isArray(radius[0].args[2]));
+    assert.equal(typeof radius[1].args[2], "number");
+  });
+
+  it("restores an overridden radius when the renderer leaves single mode", () => {
+    // If the control reused the same circle id across a mode switch, a stale
+    // proportional interpolate must not bleed into the new renderer.
+    const { map, calls } = makeVectorControlMapStub("vecc");
+
+    syncLayer(
+      map as never,
+      vectorControlLayer("vecc", {
+        style: { ...DEFAULT_LAYER_STYLE, ...proportionalStyle },
+      }),
+    );
+    syncLayer(
+      map as never,
+      vectorControlLayer("vecc", {
+        style: {
+          ...DEFAULT_LAYER_STYLE,
+          ...proportionalStyle,
+          pointRenderer: "cluster",
+        },
+      }),
+    );
+
+    const radius = radiusCalls(calls, "vecc");
+    assert.equal(radius.length, 2, "expected override then restore");
+    assert.equal(typeof radius[1].args[2], "number");
+  });
+
+  it("only applies proportional sizing, never rule-based radius overrides", () => {
+    // Rule-based per-rule sizes are a store-managed-layer feature; on a
+    // control-owned layer none of the other rule paint applies, so smuggling
+    // just the radius through would be a half-applied rule experience.
+    const { map, calls } = makeVectorControlMapStub("vecrb");
+    const layer = vectorControlLayer("vecrb", {
+      style: {
+        ...DEFAULT_LAYER_STYLE,
+        vectorStyleMode: "rule-based",
+        vectorRules: [
+          {
+            id: "r1",
+            label: "big",
+            filter: '[">", ["get", "pop_max"], 1000000]',
+            color: "#ff0000",
+            isElse: false,
+            circleRadius: 12,
+          },
+        ],
+      },
     });
 
-    syncLayer(map as never, vectorControlLayer());
+    syncLayer(map as never, layer);
 
-    const radius = calls.find(
-      (c) =>
-        c.method === "setPaintProperty" &&
-        c.args[0] === "vec1-circle" &&
-        c.args[1] === "circle-radius",
+    assert.equal(
+      radiusCalls(calls, "vecrb").length,
+      0,
+      "expected rule-based radius to be left to store-managed layers",
     );
-    assert.ok(radius, "expected the stale expression to be replaced");
-    assert.equal(typeof radius.args[2], "number");
   });
 
   it("leaves the control's paint alone when neither option is active", () => {
-    const { map, calls } = makeVectorControlMapStub();
+    const { map, calls } = makeVectorControlMapStub("vecn");
 
-    syncLayer(map as never, vectorControlLayer());
+    syncLayer(map as never, vectorControlLayer("vecn"));
 
     assert.ok(
       !calls.some((c) => c.method === "setPaintProperty"),
@@ -184,8 +249,8 @@ describe("vector-control point symbology overlay (#1311)", () => {
   });
 
   it("keeps the cluster renderer untouched", () => {
-    const { map, calls } = makeVectorControlMapStub();
-    const layer = vectorControlLayer({
+    const { map, calls } = makeVectorControlMapStub("veck");
+    const layer = vectorControlLayer("veck", {
       style: {
         ...DEFAULT_LAYER_STYLE,
         markerEnabled: true,
@@ -200,11 +265,9 @@ describe("vector-control point symbology overlay (#1311)", () => {
       !calls.some((c) => c.method === "addLayer"),
       "expected no overlay layer in cluster mode",
     );
-    assert.ok(
-      !calls.some(
-        (c) =>
-          c.method === "setPaintProperty" && c.args[1] === "circle-radius",
-      ),
+    assert.equal(
+      radiusCalls(calls, "veck").length,
+      0,
       "expected the cluster radius paint to be left alone",
     );
   });

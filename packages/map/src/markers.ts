@@ -1,5 +1,6 @@
 import {
   normalizeHexColor,
+  proportionalSizeRange,
   styleValue,
   type LayerStyle,
   type MarkerShape,
@@ -179,34 +180,10 @@ function loadSvgMarker(
 }
 
 /**
- * The proportional-size radius range for a marker layer, or `null` when
- * proportional sizing does not apply (disabled, no field chosen, degenerate or
- * non-finite value range, non-finite radii). The guards mirror the layer-level
- * base of `circleRadiusValue` in `@geolibre/core` (`baseCircleRadiusValue`) so
- * a configuration that leaves circles at their constant radius also leaves
- * markers unscaled. Shared by {@link prepareMarker} (bake size) and
- * {@link markerIconSizeValue} (scale expression) so both always agree on
- * whether proportional sizing is active.
- */
-function proportionalRadiusRange(
-  style: LayerStyle,
-): { property: string; minValue: number; maxValue: number; minRadius: number; maxRadius: number } | null {
-  if (!styleValue(style, "proportionalSizeEnabled")) return null;
-  const property = styleValue(style, "proportionalSizeProperty").trim();
-  if (!property) return null;
-  const minValue = styleValue(style, "proportionalSizeMinValue");
-  const maxValue = styleValue(style, "proportionalSizeMaxValue");
-  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return null;
-  if (maxValue <= minValue) return null;
-  const minRadius = styleValue(style, "proportionalSizeMinRadius");
-  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
-  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return null;
-  return { property, minValue, maxValue, minRadius, maxRadius };
-}
-
-/**
  * The pixel size the marker sprite is baked at. Normally the configured
- * `markerSize`, but with proportional sizing active the bake grows to cover
+ * `markerSize`, but with proportional sizing active (the shared
+ * `proportionalSizeRange` guard from `@geolibre/core`, so marker activation
+ * can never drift from circle-radius activation) the bake grows to cover
  * the largest proportional diameter (clamped to the canvas-safety maximum), so
  * `icon-size` mostly scales the sprite *down* instead of blowing a small bake
  * up ~10x into a blurry icon. Downscaling stays crisp; the residual upscale
@@ -215,7 +192,7 @@ function proportionalRadiusRange(
  */
 function markerBakedSize(style: LayerStyle): number {
   const base = markerSize(style);
-  const range = proportionalRadiusRange(style);
+  const range = proportionalSizeRange(style);
   if (!range) return base;
   const maxDiameter = 2 * Math.max(range.minRadius, range.maxRadius);
   if (maxDiameter <= base) return base;
@@ -226,10 +203,10 @@ function markerBakedSize(style: LayerStyle): number {
  * Builds the `icon-size` layout value for a marker symbol layer, honoring
  * proportional (graduated) symbol sizing. The marker sprite is baked at
  * {@link markerBakedSize}, so the constant value is `1`; when proportional
- * sizing applies (see {@link proportionalRadiusRange}), returns an
- * `interpolate` whose outputs scale the sprite so its on-screen width matches
- * the diameter a proportional circle of the same radius would span
- * (`2 * radius / bakedSize`).
+ * sizing applies (the shared `proportionalSizeRange` guard from
+ * `@geolibre/core`), returns an `interpolate` whose outputs scale the sprite
+ * so its on-screen width matches the diameter a proportional circle of the
+ * same radius would span (`2 * radius / bakedSize`).
  *
  * Note: per-rule symbol-size overrides (rule-based mode) apply only to circle
  * rendering (`circleRadiusValue`'s `ruleOverrideValue` wrapper); marker
@@ -239,7 +216,7 @@ function markerBakedSize(style: LayerStyle): number {
  * @returns `1`, or a MapLibre `interpolate` expression for `icon-size`.
  */
 export function markerIconSizeValue(style: LayerStyle): number | unknown[] {
-  const range = proportionalRadiusRange(style);
+  const range = proportionalSizeRange(style);
   if (!range) return 1;
   const size = markerBakedSize(style);
   // icon-size must not go negative; clamp so a hand-edited project with a

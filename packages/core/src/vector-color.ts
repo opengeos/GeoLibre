@@ -203,33 +203,12 @@ export function metersWidthExpression(meters: number): unknown[] {
 export function lineWidthValue(style: LayerStyle): number | unknown[] {
   // Proportional (graduated) sizing takes precedence: width is driven by a
   // numeric field, reusing the circle-radius output range as the width range.
-  if (styleValue(style, "proportionalSizeEnabled")) {
-    const property = styleValue(style, "proportionalSizeProperty").trim();
-    const minValue = styleValue(style, "proportionalSizeMinValue");
-    const maxValue = styleValue(style, "proportionalSizeMaxValue");
-    const minRadius = styleValue(style, "proportionalSizeMinRadius");
-    const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
-    if (
-      property &&
-      Number.isFinite(minValue) &&
-      Number.isFinite(maxValue) &&
-      maxValue > minValue &&
-      Number.isFinite(minRadius) &&
-      Number.isFinite(maxRadius)
-    ) {
-      // Per-rule widths still override the proportional base for matched
-      // features (the property-driven interpolate nests legally inside a
-      // case), mirroring circleRadiusValue.
-      return vectorStrokeWidthValue(style, [
-        "interpolate",
-        ["linear"],
-        ["to-number", ["get", property], minValue],
-        minValue,
-        minRadius,
-        maxValue,
-        maxRadius,
-      ]);
-    }
+  const proportionalWidth = proportionalRadiusExpression(style);
+  if (proportionalWidth) {
+    // Per-rule widths still override the proportional base for matched
+    // features (the property-driven interpolate nests legally inside a
+    // case), mirroring circleRadiusValue.
+    return vectorStrokeWidthValue(style, proportionalWidth);
   }
   if (styleValue(style, "strokeWidthUnit") === "meters") {
     // The meters width is itself a zoom-driven interpolation; embedding it
@@ -740,6 +719,67 @@ export function vectorFillOpacityValue(
 }
 
 
+/** The validated proportional (graduated) size configuration of a layer. */
+export interface ProportionalSizeRange {
+  property: string;
+  minValue: number;
+  maxValue: number;
+  minRadius: number;
+  maxRadius: number;
+}
+
+/**
+ * The proportional-size configuration, or `null` when proportional sizing
+ * does not apply: disabled, no field chosen, non-finite or degenerate
+ * (`maxValue <= minValue`) value range, or non-finite radii. This is the
+ * single validation chain for every proportional consumer — circle radius,
+ * line width, and marker icon-size (`@geolibre/map`) — so their notion of
+ * "active" can never drift apart.
+ *
+ * @param style - The layer style.
+ * @returns The validated range, or `null` when proportional sizing is off.
+ */
+export function proportionalSizeRange(
+  style: LayerStyle,
+): ProportionalSizeRange | null {
+  if (!styleValue(style, "proportionalSizeEnabled")) return null;
+  const property = styleValue(style, "proportionalSizeProperty").trim();
+  if (!property) return null;
+  const minValue = styleValue(style, "proportionalSizeMinValue");
+  const maxValue = styleValue(style, "proportionalSizeMaxValue");
+  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return null;
+  if (maxValue <= minValue) return null;
+  const minRadius = styleValue(style, "proportionalSizeMinRadius");
+  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
+  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return null;
+  return { property, minValue, maxValue, minRadius, maxRadius };
+}
+
+/**
+ * The proportional `interpolate` expression mapping
+ * `proportionalSizeMinValue..proportionalSizeMaxValue` onto
+ * `proportionalSizeMinRadius..proportionalSizeMaxRadius`, or `null` when
+ * proportional sizing does not apply (see {@link proportionalSizeRange}).
+ *
+ * @param style - The layer style.
+ * @returns The `interpolate` expression, or `null`.
+ */
+export function proportionalRadiusExpression(
+  style: LayerStyle,
+): unknown[] | null {
+  const range = proportionalSizeRange(style);
+  if (!range) return null;
+  return [
+    "interpolate",
+    ["linear"],
+    ["to-number", ["get", range.property], range.minValue],
+    range.minValue,
+    range.minRadius,
+    range.maxValue,
+    range.maxRadius,
+  ];
+}
+
 /**
  * Builds the `circle-radius` paint value, honoring proportional (graduated)
  * symbol sizing. When {@link LayerStyle.proportionalSizeEnabled} is set with a
@@ -761,28 +801,9 @@ export function circleRadiusValue(style: LayerStyle): number | unknown[] {
 
 /** The layer-level circle radius before per-rule overrides. */
 function baseCircleRadiusValue(style: LayerStyle): number | unknown[] {
-  const constant = styleValue(style, "circleRadius");
-  if (!styleValue(style, "proportionalSizeEnabled")) return constant;
-  const property = styleValue(style, "proportionalSizeProperty").trim();
-  if (!property) return constant;
-  const minValue = styleValue(style, "proportionalSizeMinValue");
-  const maxValue = styleValue(style, "proportionalSizeMaxValue");
-  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return constant;
-  if (maxValue <= minValue) return constant;
-  const minRadius = styleValue(style, "proportionalSizeMinRadius");
-  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
-  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) {
-    return constant;
-  }
-  return [
-    "interpolate",
-    ["linear"],
-    ["to-number", ["get", property], minValue],
-    minValue,
-    minRadius,
-    maxValue,
-    maxRadius,
-  ];
+  return (
+    proportionalRadiusExpression(style) ?? styleValue(style, "circleRadius")
+  );
 }
 
 /** Fill color value for a polygon layer (fallback: the layer fill color). */
