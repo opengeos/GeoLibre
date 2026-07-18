@@ -173,7 +173,8 @@ export function syncRasterLayersToStoreWithOptions(
         continue;
       }
 
-      // rasterSymbology (discrete classification) and localBytesUrl (a blob URL
+      // rasterSymbology (discrete classification), rasterAttributeTable (the
+      // categorical class table, #1307) and localBytesUrl (a blob URL
       // retaining a File-loaded raster's bytes for in-browser tools) are
       // GeoLibre-owned and absent from RasterLayerInfo, so carry them forward
       // across the wholesale metadata rebuild instead of letting every control
@@ -181,6 +182,9 @@ export function syncRasterLayersToStoreWithOptions(
       const preserved = {
         ...(existing.metadata.rasterSymbology !== undefined
           ? { rasterSymbology: existing.metadata.rasterSymbology }
+          : {}),
+        ...(existing.metadata.rasterAttributeTable !== undefined
+          ? { rasterAttributeTable: existing.metadata.rasterAttributeTable }
           : {}),
         ...(existing.metadata.localBytesUrl !== undefined
           ? { localBytesUrl: existing.metadata.localBytesUrl }

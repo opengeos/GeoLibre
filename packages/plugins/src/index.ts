@@ -176,6 +176,7 @@ export {
 } from "./plugins/maplibre-raster";
 export {
   RASTER_MAX_CLASSES,
+  RASTER_MAX_STORED_CLASSES,
   RASTER_MIN_CLASSES,
   RASTER_MIN_CUSTOM_COLORS,
   type RasterBandStats,

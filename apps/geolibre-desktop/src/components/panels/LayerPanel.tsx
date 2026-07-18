@@ -546,6 +546,9 @@ export function LayerPanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const setAttributeTableOpen = useAppStore((s) => s.setAttributeTableOpen);
+  const setRasterAttributeTableOpen = useAppStore(
+    (s) => s.setRasterAttributeTableOpen,
+  );
   const setLoadEditorFeaturesOpen = useAppStore(
     (s) => s.setLoadEditorFeaturesOpen,
   );
@@ -2906,6 +2909,17 @@ export function LayerPanel({
                         >
                           <Palette className="me-2 h-3.5 w-3.5" />
                           {t("layers.openRasterStylePanel")}
+                        </DropdownMenuItem>
+                      )}
+                      {canExportRaster && (
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            selectLayer(layer.id);
+                            setRasterAttributeTableOpen(true);
+                          }}
+                        >
+                          <TableProperties className="me-2 h-3.5 w-3.5" />
+                          {t("layers.openRasterAttributeTable")}
                         </DropdownMenuItem>
                       )}
                       {(canExportRaster || canExtractSubset) && (

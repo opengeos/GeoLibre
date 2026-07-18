@@ -38,7 +38,9 @@ export type RasterSymbology = {
   customColors?: string[];
   /** How the class edges are derived. */
   method: RasterClassificationMethod;
-  /** Number of classes, clamped to [2, 12]. */
+  /** Number of classes: UI authoring clamps to [2, 12]; a stored categorical
+   * symbology (from the Raster Attribute Table) may carry up to
+   * {@link RASTER_MAX_STORED_CLASSES}. */
   classCount: number;
   /** Class edges, ascending, length `classCount + 1` (min..max inclusive). */
   breaks: number[];
@@ -47,6 +49,15 @@ export type RasterSymbology = {
 /** Minimum and maximum class count for raster classification. */
 export const RASTER_MIN_CLASSES = 2;
 export const RASTER_MAX_CLASSES = 12;
+
+/**
+ * Upper bound on classes a *stored* symbology may carry. The classification UI
+ * caps authoring at {@link RASTER_MAX_CLASSES}, but a categorical symbology
+ * applied from the Raster Attribute Table carries one class per pixel value
+ * (a landcover raster easily exceeds 12). 256 matches the width of the
+ * colormap lookup texture, past which classes cannot be told apart anyway.
+ */
+export const RASTER_MAX_STORED_CLASSES = 256;
 
 /** Number of columns in a colormap lookup texture (matches deck.gl-raster). */
 export const COLORMAP_TEXTURE_WIDTH = 256;
@@ -290,7 +301,15 @@ export function savedRasterSymbology(
     return null;
   }
   if (typeof candidate.classCount !== "number") return null;
-  const classCount = clampRasterClassCount(candidate.classCount);
+  // Stored symbologies accept up to RASTER_MAX_STORED_CLASSES (a categorical
+  // symbology from the Raster Attribute Table has one class per value); the
+  // tighter clampRasterClassCount cap applies only to UI authoring.
+  const classCount = Number.isFinite(candidate.classCount)
+    ? Math.min(
+        RASTER_MAX_STORED_CLASSES,
+        Math.max(RASTER_MIN_CLASSES, Math.round(candidate.classCount)),
+      )
+    : RASTER_MIN_CLASSES;
 
   if (
     !Array.isArray(candidate.breaks) ||

@@ -238,6 +238,8 @@ export interface AppState {
     notebookOpen: boolean;
     assistantOpen: boolean;
     attributeTableOpen: boolean;
+    /** Whether the Raster Attribute Table bottom panel is open (issue #1307). */
+    rasterAttributeTableOpen: boolean;
     dashboardOpen: boolean;
     storymapPanelOpen: boolean;
     storymapPresenting: boolean;
@@ -363,6 +365,7 @@ export interface AppState {
   setNotebookOpen: (open: boolean) => void;
   setAssistantOpen: (open: boolean) => void;
   setAttributeTableOpen: (open: boolean) => void;
+  setRasterAttributeTableOpen: (open: boolean) => void;
   setDashboardOpen: (open: boolean) => void;
   setStorymapPanelOpen: (open: boolean) => void;
   setStorymapPresenting: (
@@ -746,6 +749,7 @@ export const useAppStore = create<AppState>()(
         notebookOpen: false,
         assistantOpen: false,
         attributeTableOpen: false,
+        rasterAttributeTableOpen: false,
         dashboardOpen: false,
         storymapPanelOpen: false,
         storymapPresenting: false,
@@ -1016,6 +1020,8 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, assistantOpen: open } })),
       setAttributeTableOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, attributeTableOpen: open } })),
+      setRasterAttributeTableOpen: (open) =>
+        set((s) => ({ ui: { ...s.ui, rasterAttributeTableOpen: open } })),
       setDashboardOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, dashboardOpen: open } })),
       setStorymapPanelOpen: (open) =>

@@ -170,20 +170,35 @@ describe("savedRasterSymbology", () => {
     assert.equal(savedRasterSymbology(layerWith([1, 2, 3])), null);
   });
 
-  it("validates and clamps a well-formed record", () => {
+  it("validates a well-formed record beyond the authoring cap", () => {
+    // A categorical symbology from the Raster Attribute Table stores one class
+    // per pixel value, so stored classCounts above the UI's 12-class authoring
+    // cap must round-trip (up to RASTER_MAX_STORED_CLASSES).
     const result = savedRasterSymbology(
       layerWith({
         classified: true,
         ramp: "plasma",
         method: "quantile",
         classCount: 99,
-        // classCount clamps to 12, so breaks must have 13 edges.
-        breaks: Array.from({ length: 13 }, (_, index) => index),
+        breaks: Array.from({ length: 100 }, (_, index) => index),
       }),
     );
     assert.ok(result);
-    assert.equal(result.classCount, 12);
+    assert.equal(result.classCount, 99);
     assert.equal(result.method, "quantile");
+  });
+
+  it("rejects a record whose breaks do not match its class count", () => {
+    const result = savedRasterSymbology(
+      layerWith({
+        classified: true,
+        ramp: "plasma",
+        method: "quantile",
+        classCount: 99,
+        breaks: Array.from({ length: 13 }, (_, index) => index),
+      }),
+    );
+    assert.equal(result, null);
   });
 
   it("keeps and normalizes custom colors with >= 2 valid entries", () => {

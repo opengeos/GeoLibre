@@ -137,6 +137,7 @@ import {
   SilentErrorBoundary,
 } from "../common/error-boundaries";
 import { AttributeTable } from "../panels/AttributeTable";
+import { RasterAttributeTable } from "../panels/RasterAttributeTable";
 import { BrowserPanel } from "../panels/BrowserPanel";
 import { LayerPanel } from "../panels/LayerPanel";
 import { FloatingPanels } from "../panels/FloatingPanels";
@@ -2242,6 +2243,9 @@ export function DesktopShell({
           <AttributeTable mapControllerRef={mapControllerRef} />
         </SectionErrorBoundary>
       ) : null}
+      <SectionErrorBoundary label="Raster attribute table">
+        <RasterAttributeTable mapControllerRef={mapControllerRef} />
+      </SectionErrorBoundary>
       {dashboardOpen ? (
         <SectionErrorBoundary label="Dashboard">
           <Suspense fallback={null}>
