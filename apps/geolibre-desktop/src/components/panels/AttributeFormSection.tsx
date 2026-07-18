@@ -106,14 +106,22 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
   );
   // Feature properties plus any Field Collection schema keys, so a freshly
   // created (still empty) collection layer can be configured before its first
-  // capture.
+  // capture. Keyed on the data/schema pieces only, so unrelated style edits
+  // to the layer do not repeat the O(features) property scan.
+  const { type: layerType, metadata: layerMetadata, geojson: layerGeojson } =
+    layer;
   const fieldNames = useMemo(() => {
-    const names = new Set(getAttributePropertyNames(layer));
-    for (const field of getSchema(layer).fields) names.add(field.key);
+    const source = {
+      type: layerType,
+      metadata: layerMetadata,
+      geojson: layerGeojson,
+    };
+    const names = new Set(getAttributePropertyNames(source));
+    for (const field of getSchema(source).fields) names.add(field.key);
     return [...names].sort((a, b) =>
       a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
     );
-  }, [layer]);
+  }, [layerType, layerMetadata, layerGeojson]);
   const features = useMemo(
     () => layer.geojson?.features ?? [],
     [layer.geojson],
@@ -154,25 +162,28 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     [fieldNames, configs, editingField],
   );
 
+  // Validated WITHOUT the `@` variable set on purpose: runtime evaluation
+  // (attribute table and Field Collection saves) has no variables either, so
+  // a hand-typed `@token` must fail here instead of validating at design time
+  // and then rejecting every save. Tokens are still usable via the Expression
+  // Builder, which bakes them into literal values on Apply.
   const constraintValidation = useMemo(
     () =>
       draft
         ? validateMapExpression(draft.constraintExpression, {
-            variables,
             expectedType: "boolean",
           })
         : null,
-    [draft, variables],
+    [draft],
   );
   const visibilityValidation = useMemo(
     () =>
       draft
         ? validateMapExpression(draft.visibilityExpression, {
-            variables,
             expectedType: "boolean",
           })
         : null,
-    [draft, variables],
+    [draft],
   );
 
   // A min above max would make validateAttributeFormField reject every value
