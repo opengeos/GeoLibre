@@ -2093,7 +2093,7 @@ export function StylePanel({
       : expressionBuilderTarget?.kind === "style"
         ? draftVectorStyleExpression
         : expressionBuilderTarget?.kind === "labelOverride"
-          ? labels[expressionBuilderTarget.property.field]
+          ? labels[expressionBuilderTarget.property.field] || ""
           : labels.expression;
   const builderTargetLabel =
     expressionBuilderTarget?.kind === "rule"

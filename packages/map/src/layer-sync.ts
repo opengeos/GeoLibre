@@ -2404,8 +2404,8 @@ function applyVectorDataRenderLayers(
             // Lower sort keys place first, so they win when space is tight.
             // `null` resets a previously applied priority (stripped on first
             // add by ensureLayer).
-            "symbol-sort-key": (priorityOverride ??
-              null) as unknown as PropertyValueSpecification<number>,
+            "symbol-sort-key":
+              priorityOverride as unknown as PropertyValueSpecification<number>,
             visibility,
           },
           paint: {
