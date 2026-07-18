@@ -146,7 +146,10 @@ export function RasterAttributeTable({
   const sectionRef = useRef<HTMLElement | null>(null);
   const computeAbortRef = useRef<AbortController | null>(null);
   const colorFlushRef = useRef<number | null>(null);
-  const pendingColorRef = useRef<{ value: number; color: string } | null>(null);
+  // Pending color edits buffered per row value, so rapid edits across
+  // multiple rows inside one throttle window all persist (a single-slot
+  // buffer would drop all but the last row's edit).
+  const pendingColorsRef = useRef<Map<number, string>>(new Map());
 
   // Reset transient state when the target layer changes, and abort any
   // in-flight computation so its result can't land on the wrong layer. The
@@ -164,12 +167,12 @@ export function RasterAttributeTable({
         computeAbortRef.current = null;
         setComputing(false);
       }
-      // Drop any throttled color commit aimed at the previous layer.
+      // Drop any throttled color commits aimed at the previous layer.
       if (colorFlushRef.current !== null) {
         window.clearTimeout(colorFlushRef.current);
         colorFlushRef.current = null;
       }
-      pendingColorRef.current = null;
+      pendingColorsRef.current.clear();
     };
   }, [ratLayer?.id]);
 
@@ -355,19 +358,30 @@ export function RasterAttributeTable({
     });
   }
 
-  /** Trailing-throttled color commit: at most one store write per interval. */
+  /**
+   * Trailing-throttled color commit: at most one store write per interval,
+   * flushing every buffered row edit in that single write.
+   */
   function scheduleColorCommit(value: number, color: string) {
-    pendingColorRef.current = { value, color };
-    if (colorFlushRef.current !== null) return;
+    pendingColorsRef.current.set(value, color);
+    if (colorFlushRef.current !== null || !ratLayer) return;
+    const layerId = ratLayer.id;
     colorFlushRef.current = window.setTimeout(() => {
       colorFlushRef.current = null;
-      const pending = pendingColorRef.current;
-      pendingColorRef.current = null;
-      if (!pending) return;
-      commitRowPatch(pending.value, { color: pending.color });
+      const pending = new Map(pendingColorsRef.current);
+      pendingColorsRef.current.clear();
+      if (pending.size === 0) return;
+      const live = liveLayer(layerId);
+      const current = live ? savedRasterAttributeTable(live) : null;
+      if (!current) return;
+      const rows = current.rows.map((row) => {
+        const pendingColor = pending.get(row.value);
+        return pendingColor ? { ...row, color: pendingColor } : row;
+      });
+      commitRows(layerId, current, rows, { colorsChanged: true });
       setColorDrafts((drafts) => {
         const next = { ...drafts };
-        delete next[pending.value];
+        for (const pendingValue of pending.keys()) delete next[pendingValue];
         return next;
       });
     }, 200);
