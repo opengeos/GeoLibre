@@ -568,6 +568,14 @@ function ruleMatchFilter(rule: EffectiveVectorRule): unknown[] {
   return conditions.length === 1 ? rule.filter : ["all", ...conditions];
 }
 
+// The layer sync recomputes the visibility filter for every render sub-layer
+// (fill, line, point, labels, …) on every sync tick, and compiling it re-walks
+// and re-parses the whole rule tree. The store replaces the vectorRules array
+// on every edit, so the array's identity is a correct cache key; memoizing on
+// it makes the repeated per-sub-layer calls O(1), mirroring the WeakMap caches
+// in the map package (e.g. the text-marker scan).
+const visibilityFilterCache = new WeakMap<VectorRule[], unknown[] | null>();
+
 /**
  * The MapLibre filter that hides features matching no rule, for a rule-based
  * layer whose catch-all else rule has been switched off. Returns `null` — and
@@ -588,12 +596,16 @@ function ruleMatchFilter(rule: EffectiveVectorRule): unknown[] {
  */
 export function ruleBasedVisibilityFilter(style: LayerStyle): unknown[] | null {
   if (styleValue(style, "vectorStyleMode") !== "rule-based") return null;
-  const elseRecord = styleValue(style, "vectorRules").find(
-    (rule) => rule.isElse,
-  );
-  if (!elseRecord || elseRecord.enabled !== false) return null;
-  const { rules } = effectiveVectorRules(style);
-  return ["any", ...rules.map(ruleMatchFilter)];
+  const all = styleValue(style, "vectorRules");
+  const cached = visibilityFilterCache.get(all);
+  if (cached !== undefined) return cached;
+  const elseRecord = all.find((rule) => rule.isElse);
+  const filter =
+    !elseRecord || elseRecord.enabled !== false
+      ? null
+      : ["any", ...effectiveVectorRules(style).rules.map(ruleMatchFilter)];
+  visibilityFilterCache.set(all, filter);
+  return filter;
 }
 
 /**
