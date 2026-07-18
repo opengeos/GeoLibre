@@ -1198,7 +1198,9 @@
       "schemeFirstValues": "პირველი მნიშვნელობები",
       "errorChooseAttribute": "აირჩიეთ ატრიბუტი ამ სტილის რეჟიმისთვის.",
       "errorGraduatedStops": "გრადუირებული სტილი მოითხოვს სულ მცირე ორ რიცხვით საფეხურს.",
-      "errorCategorizedStops": "კატეგორიზებული სტილი მოითხოვს სულ მცირე ერთ კატეგორიას."
+      "errorCategorizedStops": "კატეგორიზებული სტილი მოითხოვს სულ მცირე ერთ კატეგორიას.",
+      "invertedFill": "ინვერსიული შევსება",
+      "invertedFillHint": "ობიექტების გარეთ შევსება"
     },
     "selectLayerHint": "აირჩიეთ შრე მისი სტილის რედაქტირებისთვის.",
     "layerOrderDefault": "შრეების რიგი (ნაგულისხმევი)",
@@ -1231,6 +1233,32 @@
       "notArray": "{{label}} უნდა იყოს JSON მასივის გამოსახულება.",
       "notOperator": "{{label}} უნდა იწყებოდეს ოპერატორით, მაგ. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} არ არის სწორი JSON: {{message}}"
+    },
+    "decorations": {
+      "heading": "ხაზის დეკორაცია",
+      "typeNone": "არა",
+      "typeArrow": "ისრები",
+      "typeTriangle": "სამკუთხედები",
+      "typeCircle": "წრეები",
+      "typeSquare": "კვადრატები",
+      "color": "დეკორაციის ფერი",
+      "size": "სიმბოლოს ზომა (px)",
+      "spacing": "ინტერვალი (px)"
+    },
+    "generator": {
+      "heading": "გეომეტრიის გენერატორი",
+      "type": "წარმოებული გეომეტრია",
+      "typeNone": "არა",
+      "typeCentroid": "ცენტროიდები",
+      "typeBoundingBox": "შემომსაზღვრელი ჩარჩოები",
+      "typeConvexHull": "ამოზნექილი გარსები",
+      "typeBuffer": "ბუფერები",
+      "bufferDistance": "ბუფერის მანძილი (მ)",
+      "fillColor": "შევსების ფერი",
+      "strokeColor": "კონტურის ფერი",
+      "strokeWidth": "კონტურის სიგანე (px)",
+      "opacity": "შევსების გაუმჭვირვალობა",
+      "circleRadius": "წერტილის რადიუსი (px)"
     }
   },
   "layers": {

@@ -5,8 +5,10 @@ import {
   type DiagramType,
   type ExpressionVariable,
   type FillPattern,
+  type GeometryGeneratorType,
   type LabelStyle,
   type LayerType,
+  type LineDecoration,
   type MarkerShape,
   type PointRenderer,
   type StrokeWidthUnit,
@@ -2138,6 +2140,25 @@ export function StylePanel({
     hasVectorPaintControls &&
     supportsPointRenderer &&
     pointRenderer === "single";
+  // The symbology-pack renders (inverted mask, line decorations, geometry
+  // generator) are drawn by the core GeoJSON render path
+  // (applyVectorDataRenderLayers), so they don't apply to vector tiles,
+  // external deck layers, or control-painted (external native) layers — hide
+  // the controls there rather than offer a silent no-op.
+  const supportsDerivedGeometry =
+    layer.type === "geojson" &&
+    !!layer.geojson &&
+    !hasExternalDeckLayer(layer) &&
+    !hasExternalNativeLayers(layer);
+  const showLineDecorationControls =
+    hasVectorPaintControls &&
+    !extrusionEnabled &&
+    layer.type === "geojson" &&
+    !hasExternalDeckLayer(layer) &&
+    !hasExternalNativeLayers(layer) &&
+    (geometryFlags.hasLine || geometryFlags.hasPolygon);
+  const showGeneratorControls =
+    hasVectorPaintControls && !extrusionEnabled && supportsDerivedGeometry;
 
   const proportionalEnabled = styleValue(style, "proportionalSizeEnabled");
   const proportionalProperty = styleValue(style, "proportionalSizeProperty");
@@ -2824,6 +2845,26 @@ export function StylePanel({
   );
   const fillPatternControls = (
     <div className="space-y-3">
+      {supportsDerivedGeometry && (
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="invertedFillEnabled">
+            {t("style.symbology.invertedFill")}
+          </Label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              id="invertedFillEnabled"
+              type="checkbox"
+              checked={styleValue(style, "invertedFillEnabled")}
+              onChange={(event) =>
+                setLayerStyle(layer.id, {
+                  invertedFillEnabled: event.target.checked,
+                })
+              }
+            />
+            {t("style.symbology.invertedFillHint")}
+          </label>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="fillPattern">{t("style.symbology.fillPattern")}</Label>
         <Select
@@ -2969,6 +3010,190 @@ export function StylePanel({
               />
             </div>
           ) : null}
+        </>
+      )}
+    </div>
+  );
+  // --- Line decorations (repeated arrow/marker symbols along lines) ---
+  const lineDecoration = styleValue(style, "lineDecoration");
+  const lineDecorationControls = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="lineDecoration">
+          {t("style.decorations.heading")}
+        </Label>
+        <Select
+          id="lineDecoration"
+          value={lineDecoration}
+          onChange={(event) =>
+            setLayerStyle(layer.id, {
+              lineDecoration: event.target.value as LineDecoration,
+            })
+          }
+        >
+          <option value="none">{t("style.decorations.typeNone")}</option>
+          <option value="arrow">{t("style.decorations.typeArrow")}</option>
+          <option value="triangle">
+            {t("style.decorations.typeTriangle")}
+          </option>
+          <option value="circle">{t("style.decorations.typeCircle")}</option>
+          <option value="square">{t("style.decorations.typeSquare")}</option>
+        </Select>
+      </div>
+      {lineDecoration !== "none" && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="lineDecorationColor">
+              {t("style.decorations.color")}
+            </Label>
+            <ColorField
+              id="lineDecorationColor"
+              value={
+                styleValue(style, "lineDecorationColor") ||
+                styleValue(style, "strokeColor")
+              }
+              onChange={(lineDecorationColor) =>
+                setLayerStyle(layer.id, { lineDecorationColor })
+              }
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="lineDecorationSize"
+              label={t("style.decorations.size")}
+              min={4}
+              max={64}
+              step={1}
+              value={styleValue(style, "lineDecorationSize")}
+              onChange={(lineDecorationSize) =>
+                setLayerStyle(layer.id, { lineDecorationSize })
+              }
+            />
+            <NumericStyleInput
+              id="lineDecorationSpacing"
+              label={t("style.decorations.spacing")}
+              min={10}
+              max={500}
+              step={5}
+              value={styleValue(style, "lineDecorationSpacing")}
+              onChange={(lineDecorationSpacing) =>
+                setLayerStyle(layer.id, { lineDecorationSpacing })
+              }
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+  // --- Geometry generator (per-feature derived geometry symbology) ---
+  const generatorType = styleValue(style, "geometryGenerator");
+  const generatorControls = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="geometryGenerator">
+          {t("style.generator.type")}
+        </Label>
+        <Select
+          id="geometryGenerator"
+          value={generatorType}
+          onChange={(event) =>
+            setLayerStyle(layer.id, {
+              geometryGenerator: event.target
+                .value as GeometryGeneratorType,
+            })
+          }
+        >
+          <option value="none">{t("style.generator.typeNone")}</option>
+          <option value="centroid">
+            {t("style.generator.typeCentroid")}
+          </option>
+          <option value="bounding-box">
+            {t("style.generator.typeBoundingBox")}
+          </option>
+          <option value="convex-hull">
+            {t("style.generator.typeConvexHull")}
+          </option>
+          <option value="buffer">{t("style.generator.typeBuffer")}</option>
+        </Select>
+      </div>
+      {generatorType !== "none" && (
+        <>
+          {generatorType === "buffer" && (
+            <NumericStyleInput
+              id="geometryGeneratorBufferDistance"
+              label={t("style.generator.bufferDistance")}
+              min={-100000}
+              max={1000000}
+              step={10}
+              value={styleValue(style, "geometryGeneratorBufferDistance")}
+              onChange={(geometryGeneratorBufferDistance) =>
+                setLayerStyle(layer.id, { geometryGeneratorBufferDistance })
+              }
+            />
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="geometryGeneratorFillColor">
+                {t("style.generator.fillColor")}
+              </Label>
+              <ColorField
+                id="geometryGeneratorFillColor"
+                value={styleValue(style, "geometryGeneratorFillColor")}
+                onChange={(geometryGeneratorFillColor) =>
+                  setLayerStyle(layer.id, { geometryGeneratorFillColor })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="geometryGeneratorStrokeColor">
+                {t("style.generator.strokeColor")}
+              </Label>
+              <ColorField
+                id="geometryGeneratorStrokeColor"
+                value={styleValue(style, "geometryGeneratorStrokeColor")}
+                onChange={(geometryGeneratorStrokeColor) =>
+                  setLayerStyle(layer.id, { geometryGeneratorStrokeColor })
+                }
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="geometryGeneratorStrokeWidth"
+              label={t("style.generator.strokeWidth")}
+              min={0}
+              max={20}
+              step={0.5}
+              value={styleValue(style, "geometryGeneratorStrokeWidth")}
+              onChange={(geometryGeneratorStrokeWidth) =>
+                setLayerStyle(layer.id, { geometryGeneratorStrokeWidth })
+              }
+            />
+            <NumericStyleInput
+              id="geometryGeneratorOpacity"
+              label={t("style.generator.opacity")}
+              min={0}
+              max={1}
+              step={0.05}
+              value={styleValue(style, "geometryGeneratorOpacity")}
+              onChange={(geometryGeneratorOpacity) =>
+                setLayerStyle(layer.id, { geometryGeneratorOpacity })
+              }
+            />
+          </div>
+          {generatorType === "centroid" && (
+            <NumericStyleInput
+              id="geometryGeneratorCircleRadius"
+              label={t("style.generator.circleRadius")}
+              min={1}
+              max={40}
+              step={1}
+              value={styleValue(style, "geometryGeneratorCircleRadius")}
+              onChange={(geometryGeneratorCircleRadius) =>
+                setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
+              }
+            />
+          )}
         </>
       )}
     </div>
@@ -4270,6 +4495,12 @@ export function StylePanel({
                   {fillPatternControls}
                 </>
               )}
+              {showLineDecorationControls && (
+                <>
+                  <Separator />
+                  {lineDecorationControls}
+                </>
+              )}
               {showMarkerControls && (
                 <>
                   <Separator />
@@ -4283,6 +4514,15 @@ export function StylePanel({
                     {t("style.diagrams.heading")}
                   </p>
                   {diagramControls}
+                </>
+              )}
+              {showGeneratorControls && (
+                <>
+                  <Separator />
+                  <p className="text-sm font-semibold">
+                    {t("style.generator.heading")}
+                  </p>
+                  {generatorControls}
                 </>
               )}
             </>

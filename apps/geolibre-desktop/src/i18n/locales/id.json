@@ -2832,7 +2832,9 @@
       "schemeFirstValues": "Nilai pertama",
       "errorChooseAttribute": "Pilih atribut untuk mode gaya ini.",
       "errorGraduatedStops": "Gaya bertingkat memerlukan setidaknya dua titik henti numerik.",
-      "errorCategorizedStops": "Gaya berkategori memerlukan setidaknya satu kategori."
+      "errorCategorizedStops": "Gaya berkategori memerlukan setidaknya satu kategori.",
+      "invertedFill": "Isian terbalik",
+      "invertedFillHint": "Isi di luar fitur"
     },
     "selectLayerHint": "Pilih layer untuk mengedit gayanya.",
     "layerOrderDefault": "Urutan layer (default)",
@@ -2865,6 +2867,32 @@
       "notArray": "{{label}} harus berupa ekspresi array JSON.",
       "notOperator": "{{label}} harus dimulai dengan operator, mis. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} bukan JSON yang valid: {{message}}"
+    },
+    "decorations": {
+      "heading": "Dekorasi garis",
+      "typeNone": "Tidak ada",
+      "typeArrow": "Panah",
+      "typeTriangle": "Segitiga",
+      "typeCircle": "Lingkaran",
+      "typeSquare": "Persegi",
+      "color": "Warna dekorasi",
+      "size": "Ukuran simbol (px)",
+      "spacing": "Jarak (px)"
+    },
+    "generator": {
+      "heading": "Generator geometri",
+      "type": "Geometri turunan",
+      "typeNone": "Tidak ada",
+      "typeCentroid": "Sentroid",
+      "typeBoundingBox": "Kotak pembatas",
+      "typeConvexHull": "Cangkang cembung",
+      "typeBuffer": "Buffer",
+      "bufferDistance": "Jarak buffer (m)",
+      "fillColor": "Warna isian",
+      "strokeColor": "Warna garis luar",
+      "strokeWidth": "Lebar garis luar (px)",
+      "opacity": "Opasitas isian",
+      "circleRadius": "Radius titik (px)"
     }
   },
   "layers": {

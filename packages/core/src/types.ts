@@ -196,6 +196,33 @@ export type MarkerShape =
 export type PointRenderer = "single" | "heatmap" | "cluster";
 
 /**
+ * The repeated decoration symbol drawn along line features (and polygon
+ * outlines), or `"none"` when decorations are off. Mirrors the QGIS
+ * marker-line / arrow symbol layers: `"arrow"` renders directional arrowheads
+ * that follow the line, the other shapes render as repeated markers.
+ */
+export type LineDecoration =
+  | "none"
+  | "arrow"
+  | "triangle"
+  | "circle"
+  | "square";
+
+/**
+ * The per-feature derived geometry rendered by the geometry generator, or
+ * `"none"` when the generator is off. Mirrors QGIS geometry-generator symbol
+ * layers: each feature's derived geometry (its centroid, bounding box, convex
+ * hull, or a buffer) is drawn as an extra symbol over the layer's normal
+ * symbology. `"centroid"` derives points; the rest derive polygons.
+ */
+export type GeometryGeneratorType =
+  | "none"
+  | "centroid"
+  | "bounding-box"
+  | "convex-hull"
+  | "buffer";
+
+/**
  * Unit a stroke/line width is measured in. `"pixels"` is constant screen space;
  * `"meters"` is ground distance, so the rendered width scales with the map
  * scale (zoom). See {@link LayerStyle.strokeWidthUnit}.
@@ -443,6 +470,47 @@ export interface LayerStyle {
   heatmapIntensity: number;
   clusterRadius: number;
   clusterMaxZoom: number;
+  /**
+   * When true, the polygon fill renders *inverted*: the area outside the
+   * features is filled (with {@link fillColor}/{@link fillOpacity}) and the
+   * features themselves become holes, mirroring the QGIS "Inverted polygons"
+   * renderer. Feature outlines still render normally. Only applies to layers
+   * with polygon geometry; ignored while {@link extrusionEnabled} is on.
+   */
+  invertedFillEnabled: boolean;
+  /**
+   * Repeated decoration symbol drawn along line features and polygon outlines
+   * (QGIS marker-line / arrow lines). `"none"` disables it. See
+   * {@link LineDecoration}.
+   */
+  lineDecoration: LineDecoration;
+  /**
+   * Decoration symbol color (6-digit hex). An empty string inherits
+   * {@link strokeColor} so decorations follow the stroke by default.
+   */
+  lineDecorationColor: string;
+  /** Decoration symbol size in pixels. */
+  lineDecorationSize: number;
+  /** Distance between consecutive decoration symbols in pixels. */
+  lineDecorationSpacing: number;
+  /**
+   * Per-feature derived geometry drawn over the layer's normal symbology
+   * (QGIS geometry generator). `"none"` disables it. See
+   * {@link GeometryGeneratorType}.
+   */
+  geometryGenerator: GeometryGeneratorType;
+  /** Buffer distance in meters for the `"buffer"` generator. */
+  geometryGeneratorBufferDistance: number;
+  /** Fill color (6-digit hex) for generated polygons and centroid points. */
+  geometryGeneratorFillColor: string;
+  /** Outline color (6-digit hex) for generated geometry. */
+  geometryGeneratorStrokeColor: string;
+  /** Outline width in pixels for generated geometry. */
+  geometryGeneratorStrokeWidth: number;
+  /** Fill opacity (0..1) for generated polygons and centroid points. */
+  geometryGeneratorOpacity: number;
+  /** Circle radius in pixels for generated centroid points. */
+  geometryGeneratorCircleRadius: number;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
@@ -533,6 +601,18 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   heatmapIntensity: 1,
   clusterRadius: 50,
   clusterMaxZoom: 14,
+  invertedFillEnabled: false,
+  lineDecoration: "none",
+  lineDecorationColor: "",
+  lineDecorationSize: 12,
+  lineDecorationSpacing: 80,
+  geometryGenerator: "none",
+  geometryGeneratorBufferDistance: 1000,
+  geometryGeneratorFillColor: "#f59e0b",
+  geometryGeneratorStrokeColor: "#b45309",
+  geometryGeneratorStrokeWidth: 2,
+  geometryGeneratorOpacity: 0.4,
+  geometryGeneratorCircleRadius: 5,
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,

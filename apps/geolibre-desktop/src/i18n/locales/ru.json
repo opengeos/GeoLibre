@@ -2964,7 +2964,9 @@
       "schemeFirstValues": "Первые значения",
       "errorChooseAttribute": "Выберите атрибут для этого режима стиля.",
       "errorGraduatedStops": "Градуированный стиль требует не менее двух числовых границ.",
-      "errorCategorizedStops": "Категоризированный стиль требует не менее одной категории."
+      "errorCategorizedStops": "Категоризированный стиль требует не менее одной категории.",
+      "invertedFill": "Инвертированная заливка",
+      "invertedFillHint": "Заливка вне объектов"
     },
     "selectLayerHint": "Выберите слой, чтобы изменить его стиль.",
     "layerOrderDefault": "Порядок слоёв (по умолчанию)",
@@ -2997,6 +2999,32 @@
       "notArray": "{{label}} должно быть выражением-массивом JSON.",
       "notOperator": "{{label}} должно начинаться с оператора, например [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} не является допустимым JSON: {{message}}"
+    },
+    "decorations": {
+      "heading": "Декор линии",
+      "typeNone": "Нет",
+      "typeArrow": "Стрелки",
+      "typeTriangle": "Треугольники",
+      "typeCircle": "Круги",
+      "typeSquare": "Квадраты",
+      "color": "Цвет декора",
+      "size": "Размер символа (px)",
+      "spacing": "Интервал (px)"
+    },
+    "generator": {
+      "heading": "Генератор геометрии",
+      "type": "Производная геометрия",
+      "typeNone": "Нет",
+      "typeCentroid": "Центроиды",
+      "typeBoundingBox": "Ограничивающие рамки",
+      "typeConvexHull": "Выпуклые оболочки",
+      "typeBuffer": "Буферы",
+      "bufferDistance": "Расстояние буфера (м)",
+      "fillColor": "Цвет заливки",
+      "strokeColor": "Цвет контура",
+      "strokeWidth": "Ширина контура (px)",
+      "opacity": "Непрозрачность заливки",
+      "circleRadius": "Радиус точки (px)"
     }
   },
   "layers": {

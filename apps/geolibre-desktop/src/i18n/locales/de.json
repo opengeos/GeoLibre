@@ -2876,7 +2876,9 @@
       "schemeFirstValues": "Erste Werte",
       "errorChooseAttribute": "Wählen Sie ein Attribut für diesen Stilmodus.",
       "errorGraduatedStops": "Der abgestufte Stil erfordert mindestens zwei numerische Stopps.",
-      "errorCategorizedStops": "Der kategorisierte Stil erfordert mindestens eine Kategorie."
+      "errorCategorizedStops": "Der kategorisierte Stil erfordert mindestens eine Kategorie.",
+      "invertedFill": "Invertierte Füllung",
+      "invertedFillHint": "Außenbereich füllen"
     },
     "selectLayerHint": "Wählen Sie eine Ebene aus, um ihren Stil zu bearbeiten.",
     "layerOrderDefault": "Ebenenreihenfolge (Standard)",
@@ -2909,6 +2911,32 @@
       "notArray": "{{label}} muss ein JSON-Array-Ausdruck sein.",
       "notOperator": "{{label}} muss mit einem Operator beginnen, z. B. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} ist kein gültiges JSON: {{message}}"
+    },
+    "decorations": {
+      "heading": "Liniendekoration",
+      "typeNone": "Keine",
+      "typeArrow": "Pfeile",
+      "typeTriangle": "Dreiecke",
+      "typeCircle": "Kreise",
+      "typeSquare": "Quadrate",
+      "color": "Dekorationsfarbe",
+      "size": "Symbolgröße (px)",
+      "spacing": "Abstand (px)"
+    },
+    "generator": {
+      "heading": "Geometriegenerator",
+      "type": "Abgeleitete Geometrie",
+      "typeNone": "Keine",
+      "typeCentroid": "Zentroide",
+      "typeBoundingBox": "Begrenzungsrahmen",
+      "typeConvexHull": "Konvexe Hüllen",
+      "typeBuffer": "Puffer",
+      "bufferDistance": "Pufferdistanz (m)",
+      "fillColor": "Füllfarbe",
+      "strokeColor": "Umrissfarbe",
+      "strokeWidth": "Umrissbreite (px)",
+      "opacity": "Fülldeckkraft",
+      "circleRadius": "Punktradius (px)"
     }
   },
   "layers": {

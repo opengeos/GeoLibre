@@ -2947,7 +2947,9 @@
       "schemeFirstValues": "前若干值",
       "errorChooseAttribute": "请为此样式模式选择一个属性。",
       "errorGraduatedStops": "渐变分级样式至少需要两个数值分级点。",
-      "errorCategorizedStops": "分类符号样式至少需要一个类别。"
+      "errorCategorizedStops": "分类符号样式至少需要一个类别。",
+      "invertedFill": "反转填充",
+      "invertedFillHint": "填充要素外部区域"
     },
     "selectLayerHint": "选择要编辑样式的图层。",
     "layerOrderDefault": "图层顺序（默认）",
@@ -2980,6 +2982,32 @@
       "notArray": "{{label}}必须是 JSON 数组表达式。",
       "notOperator": "{{label}}必须以运算符开头，例如 [\"==\", [\"get\", \"field\"], value]。",
       "notJson": "{{label}}不是有效的 JSON：{{message}}"
+    },
+    "decorations": {
+      "heading": "线条装饰",
+      "typeNone": "无",
+      "typeArrow": "箭头",
+      "typeTriangle": "三角形",
+      "typeCircle": "圆形",
+      "typeSquare": "方形",
+      "color": "装饰颜色",
+      "size": "符号大小 (px)",
+      "spacing": "间距 (px)"
+    },
+    "generator": {
+      "heading": "几何生成器",
+      "type": "派生几何",
+      "typeNone": "无",
+      "typeCentroid": "质心",
+      "typeBoundingBox": "外接矩形",
+      "typeConvexHull": "凸包",
+      "typeBuffer": "缓冲区",
+      "bufferDistance": "缓冲距离 (m)",
+      "fillColor": "填充颜色",
+      "strokeColor": "轮廓颜色",
+      "strokeWidth": "轮廓宽度 (px)",
+      "opacity": "填充不透明度",
+      "circleRadius": "点半径 (px)"
     }
   },
   "layers": {

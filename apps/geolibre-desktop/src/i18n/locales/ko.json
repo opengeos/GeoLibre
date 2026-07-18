@@ -2832,7 +2832,9 @@
       "schemeFirstValues": "처음 값",
       "errorChooseAttribute": "이 스타일 모드에 사용할 속성을 선택하세요.",
       "errorGraduatedStops": "단계 구분 스타일에는 숫자 구분점이 두 개 이상 필요합니다.",
-      "errorCategorizedStops": "범주 구분 스타일에는 카테고리가 하나 이상 필요합니다."
+      "errorCategorizedStops": "범주 구분 스타일에는 카테고리가 하나 이상 필요합니다.",
+      "invertedFill": "반전 채우기",
+      "invertedFillHint": "피처 바깥쪽 채우기"
     },
     "selectLayerHint": "스타일을 편집할 레이어를 선택하세요.",
     "layerOrderDefault": "레이어 순서(기본값)",
@@ -2865,6 +2867,32 @@
       "notArray": "{{label}}은(는) JSON 배열 표현식이어야 합니다.",
       "notOperator": "{{label}}은(는) 연산자로 시작해야 합니다. 예: [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}}은(는) 유효한 JSON이 아닙니다: {{message}}"
+    },
+    "decorations": {
+      "heading": "선 장식",
+      "typeNone": "없음",
+      "typeArrow": "화살표",
+      "typeTriangle": "삼각형",
+      "typeCircle": "원",
+      "typeSquare": "사각형",
+      "color": "장식 색상",
+      "size": "기호 크기 (px)",
+      "spacing": "간격 (px)"
+    },
+    "generator": {
+      "heading": "지오메트리 생성기",
+      "type": "파생 지오메트리",
+      "typeNone": "없음",
+      "typeCentroid": "중심점",
+      "typeBoundingBox": "경계 상자",
+      "typeConvexHull": "볼록 껍질",
+      "typeBuffer": "버퍼",
+      "bufferDistance": "버퍼 거리 (m)",
+      "fillColor": "채우기 색상",
+      "strokeColor": "윤곽선 색상",
+      "strokeWidth": "윤곽선 너비 (px)",
+      "opacity": "채우기 불투명도",
+      "circleRadius": "점 반지름 (px)"
     }
   },
   "layers": {

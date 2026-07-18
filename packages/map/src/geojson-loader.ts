@@ -113,6 +113,44 @@ export function labelSourceId(layerId: string): string {
   return `source-${layerId}-label`;
 }
 
+/**
+ * Source id for the inverted-fill mask (see
+ * {@link LayerStyle.invertedFillEnabled}). The mask is a derived polygon, so
+ * it lives in its own GeoJSON source beside the layer's main source.
+ */
+export function invertedSourceId(layerId: string): string {
+  return `source-${layerId}-inverted`;
+}
+
+export function invertedFillLayerId(layerId: string): string {
+  return `layer-${layerId}-inverted-fill`;
+}
+
+/** Symbol layer that repeats decoration icons along line features. */
+export function lineDecorationLayerId(layerId: string): string {
+  return `layer-${layerId}-line-decoration`;
+}
+
+/**
+ * Source id for the geometry generator's derived features (see
+ * {@link LayerStyle.geometryGenerator}).
+ */
+export function generatorSourceId(layerId: string): string {
+  return `source-${layerId}-generator`;
+}
+
+export function generatorFillLayerId(layerId: string): string {
+  return `layer-${layerId}-generator-fill`;
+}
+
+export function generatorLineLayerId(layerId: string): string {
+  return `layer-${layerId}-generator-line`;
+}
+
+export function generatorCircleLayerId(layerId: string): string {
+  return `layer-${layerId}-generator-circle`;
+}
+
 export function highlightSourceId(): string {
   return "geolibre-highlight-source";
 }

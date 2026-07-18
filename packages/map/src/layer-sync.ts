@@ -26,17 +26,30 @@ import {
   detectGeometryProfile,
   fillExtrusionLayerId,
   fillLayerId,
+  generatorCircleLayerId,
+  generatorFillLayerId,
+  generatorLineLayerId,
+  generatorSourceId,
   heatmapLayerId,
+  invertedFillLayerId,
+  invertedSourceId,
   labelLayerId,
   labelSourceId,
+  lineDecorationLayerId,
   lineLayerId,
   markerLayerId,
   sourceId,
   textLayerId,
 } from "./geojson-loader";
 import { buildDedupedLabelFeatures } from "./label-dedup";
+import {
+  buildGeneratedGeometry,
+  buildInvertedMask,
+  generatedGeometryKinds,
+} from "./derived-geometry";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
+import { prepareLineDecoration } from "./line-decorations";
 import { prepareMarker } from "./markers";
 import { isPlaceholderLayer } from "./placeholders";
 import {
@@ -1682,40 +1695,93 @@ function applyVectorDataRenderLayers(
       );
     } else {
       removeIfExists(map, fillExtrusionLayerId(layer.id));
-      ensureLayer(
-        map,
-        fillLayerId(layer.id),
-        {
-          id: fillLayerId(layer.id),
-          type: "fill",
-          ...sourceSpec,
-          ...styleLayerZoomRange(layer.style),
-          filter: withFeatureFilters(layer, [
-            "match",
-            ["geometry-type"],
-            ["Polygon", "MultiPolygon"],
-            true,
-            false,
-          ]),
-          paint: {
-            ...fillPaint(layer.style, opacity),
-            // A set fill-pattern replaces fill-color with the recolorable
-            // sprite tile; null resets it on the setPaintProperty update path in
-            // ensureLayer (MapLibre documents null, not undefined, as the value
-            // that removes a paint property — undefined can silently no-op and
-            // leave a stale pattern rendered after the user selects "None"). The
-            // cast is needed because FillLayerSpecification's paint type omits
-            // null even though setPaintProperty accepts it as the reset value.
-            "fill-pattern": (fillPatternId ?? null) as unknown as string,
+      const fillPaintSpec = {
+        ...fillPaint(layer.style, opacity),
+        // A set fill-pattern replaces fill-color with the recolorable
+        // sprite tile; null resets it on the setPaintProperty update path in
+        // ensureLayer (MapLibre documents null, not undefined, as the value
+        // that removes a paint property — undefined can silently no-op and
+        // leave a stale pattern rendered after the user selects "None"). The
+        // cast is needed because FillLayerSpecification's paint type omits
+        // null even though setPaintProperty accepts it as the reset value.
+        "fill-pattern": (fillPatternId ?? null) as unknown as string,
+      };
+      // Inverted fill (QGIS "Inverted polygons"): the mask — everything
+      // outside the features — takes the layer's fill, and the normal fill
+      // layer is dropped so the features read as holes. The mask derives from
+      // the raw features, so, like dedup labels, it ignores time-slider /
+      // rule-visibility filters. A null mask (no polygons, or a clipper
+      // failure) falls back to the normal fill rather than rendering nothing.
+      const invertedMask =
+        styleValue(layer.style, "invertedFillEnabled") && layer.geojson
+          ? buildInvertedMask(layer.geojson)
+          : null;
+      if (invertedMask) {
+        removeIfExists(map, fillLayerId(layer.id));
+        const maskSrc = invertedSourceId(layer.id);
+        if (map.getSource(maskSrc)) {
+          (map.getSource(maskSrc) as maplibregl.GeoJSONSource).setData(
+            invertedMask,
+          );
+        } else {
+          map.addSource(maskSrc, { type: "geojson", data: invertedMask });
+        }
+        ensureLayer(
+          map,
+          invertedFillLayerId(layer.id),
+          {
+            id: invertedFillLayerId(layer.id),
+            type: "fill",
+            source: maskSrc,
+            ...styleLayerZoomRange(layer.style),
+            metadata: { "geolibre:internal": true },
+            paint: {
+              ...fillPaintSpec,
+              // The mask's outer ring is the world rectangle; its hairline
+              // outline would draw a visible seam at the antimeridian/poles.
+              // Hole edges are already outlined by the layer's line layer.
+              "fill-outline-color": "rgba(0, 0, 0, 0)",
+            },
+            layout: { visibility },
           },
-          layout: { visibility },
-        },
-        beforeId,
-      );
+          beforeId,
+        );
+      } else {
+        removeIfExists(map, invertedFillLayerId(layer.id));
+        removeSourceIfExists(map, invertedSourceId(layer.id));
+        ensureLayer(
+          map,
+          fillLayerId(layer.id),
+          {
+            id: fillLayerId(layer.id),
+            type: "fill",
+            ...sourceSpec,
+            ...styleLayerZoomRange(layer.style),
+            filter: withFeatureFilters(layer, [
+              "match",
+              ["geometry-type"],
+              ["Polygon", "MultiPolygon"],
+              true,
+              false,
+            ]),
+            paint: fillPaintSpec,
+            layout: { visibility },
+          },
+          beforeId,
+        );
+      }
     }
   } else {
     removeIfExists(map, fillLayerId(layer.id));
     removeIfExists(map, fillExtrusionLayerId(layer.id));
+  }
+  if (
+    !profile.hasPolygon ||
+    layer.style.extrusionEnabled ||
+    !styleValue(layer.style, "invertedFillEnabled")
+  ) {
+    removeIfExists(map, invertedFillLayerId(layer.id));
+    removeSourceIfExists(map, invertedSourceId(layer.id));
   }
 
   if (
@@ -1744,6 +1810,56 @@ function applyVectorDataRenderLayers(
     );
   } else {
     removeIfExists(map, lineLayerId(layer.id));
+  }
+
+  // Line decorations (QGIS marker-line / arrow lines): a symbol layer that
+  // repeats the generated decoration icon along line features and polygon
+  // outlines. With line placement MapLibre rotates the icon to follow the
+  // line, so the arrow shape points along the feature's direction.
+  const decorationImageId = prepareLineDecoration(layer.style);
+  if (
+    !layer.style.extrusionEnabled &&
+    decorationImageId &&
+    (profile.hasLine || profile.hasPolygon)
+  ) {
+    ensureLayer(
+      map,
+      lineDecorationLayerId(layer.id),
+      {
+        id: lineDecorationLayerId(layer.id),
+        type: "symbol",
+        ...sourceSpec,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: withFeatureFilters(layer, [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ]),
+        layout: {
+          "icon-image": decorationImageId,
+          // The sprite is baked at its display size, matching the marker path.
+          "icon-size": 1,
+          "symbol-placement": "line",
+          "symbol-spacing": Math.max(
+            1,
+            styleValue(layer.style, "lineDecorationSpacing"),
+          ),
+          // Decorations are deliberate symbology, so they must not thin out
+          // under MapLibre's collision placement.
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotation-alignment": "map",
+          visibility,
+        },
+        paint: { "icon-opacity": opacity },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, lineDecorationLayerId(layer.id));
   }
 
   if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "heatmap") {
@@ -2105,6 +2221,146 @@ function applyVectorDataRenderLayers(
   } else {
     removeIfExists(map, labelLayerId(layer.id));
     removeSourceIfExists(map, labelSourceId(layer.id));
+  }
+
+  applyGeometryGeneratorLayers(map, layer, visibility, opacity, beforeId);
+}
+
+/**
+ * Geometry generator (QGIS geometry-generator symbol layers): renders each
+ * feature's derived geometry — centroid, bounding box, convex hull, or buffer
+ * — as extra symbology over the layer's normal rendering, through a companion
+ * GeoJSON source. Derived from the raw features, so, like dedup labels, it
+ * ignores time-slider / rule-visibility filters.
+ */
+function applyGeometryGeneratorLayers(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  visibility: "visible" | "none",
+  opacity: number,
+  beforeId?: string,
+): void {
+  const generatorType = styleValue(layer.style, "geometryGenerator");
+  const generated =
+    generatorType !== "none" && layer.geojson
+      ? buildGeneratedGeometry(
+          layer.geojson,
+          generatorType,
+          styleValue(layer.style, "geometryGeneratorBufferDistance"),
+        )
+      : null;
+  if (!generated || generated.features.length === 0) {
+    removeIfExists(map, generatorFillLayerId(layer.id));
+    removeIfExists(map, generatorLineLayerId(layer.id));
+    removeIfExists(map, generatorCircleLayerId(layer.id));
+    removeSourceIfExists(map, generatorSourceId(layer.id));
+    return;
+  }
+
+  const genSrc = generatorSourceId(layer.id);
+  if (map.getSource(genSrc)) {
+    (map.getSource(genSrc) as maplibregl.GeoJSONSource).setData(generated);
+  } else {
+    map.addSource(genSrc, { type: "geojson", data: generated });
+  }
+
+  const kinds = generatedGeometryKinds(generated);
+  const fillColor = styleValue(layer.style, "geometryGeneratorFillColor");
+  const strokeColor = styleValue(layer.style, "geometryGeneratorStrokeColor");
+  const strokeWidth = Math.max(
+    0,
+    styleValue(layer.style, "geometryGeneratorStrokeWidth"),
+  );
+  const genOpacity =
+    Math.min(1, Math.max(0, styleValue(layer.style, "geometryGeneratorOpacity"))) *
+    opacity;
+
+  if (kinds.hasPolygon) {
+    ensureLayer(
+      map,
+      generatorFillLayerId(layer.id),
+      {
+        id: generatorFillLayerId(layer.id),
+        type: "fill",
+        source: genSrc,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: { "fill-color": fillColor, "fill-opacity": genOpacity },
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      generatorLineLayerId(layer.id),
+      {
+        id: generatorLineLayerId(layer.id),
+        type: "line",
+        source: genSrc,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: {
+          "line-color": strokeColor,
+          "line-width": strokeWidth,
+          "line-opacity": opacity,
+        },
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, generatorFillLayerId(layer.id));
+    removeIfExists(map, generatorLineLayerId(layer.id));
+  }
+
+  if (kinds.hasPoint) {
+    ensureLayer(
+      map,
+      generatorCircleLayerId(layer.id),
+      {
+        id: generatorCircleLayerId(layer.id),
+        type: "circle",
+        source: genSrc,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Point", "MultiPoint"],
+          true,
+          false,
+        ],
+        paint: {
+          "circle-color": fillColor,
+          "circle-radius": Math.max(
+            1,
+            styleValue(layer.style, "geometryGeneratorCircleRadius"),
+          ),
+          "circle-opacity": genOpacity,
+          "circle-stroke-color": strokeColor,
+          "circle-stroke-width": strokeWidth,
+          "circle-stroke-opacity": opacity,
+        },
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, generatorCircleLayerId(layer.id));
   }
 }
 
@@ -3058,6 +3314,11 @@ export function removeLayerFromMap(
     textLayerId(layerId),
     markerLayerId(layerId),
     labelLayerId(layerId),
+    invertedFillLayerId(layerId),
+    lineDecorationLayerId(layerId),
+    generatorFillLayerId(layerId),
+    generatorLineLayerId(layerId),
+    generatorCircleLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
     `layer-${layerId}-image`,
@@ -3073,6 +3334,8 @@ export function removeLayerFromMap(
     ...getExternalSourceIds(layer),
     sourceId(layerId),
     labelSourceId(layerId),
+    invertedSourceId(layerId),
+    generatorSourceId(layerId),
   ]) {
     if (src && map.getSource(src)) map.removeSource(src);
   }

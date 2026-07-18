@@ -2876,7 +2876,9 @@
       "schemeFirstValues": "Primeros valores",
       "errorChooseAttribute": "Elija un atributo para este modo de estilo.",
       "errorGraduatedStops": "El estilo graduado requiere al menos dos paradas numéricas.",
-      "errorCategorizedStops": "El estilo categorizado requiere al menos una categoría."
+      "errorCategorizedStops": "El estilo categorizado requiere al menos una categoría.",
+      "invertedFill": "Relleno invertido",
+      "invertedFillHint": "Rellenar fuera de los elementos"
     },
     "selectLayerHint": "Seleccione una capa para editar su estilo.",
     "layerOrderDefault": "Orden de capas (predeterminado)",
@@ -2909,6 +2911,32 @@
       "notArray": "{{label}} debe ser una expresión de array JSON.",
       "notOperator": "{{label}} debe comenzar con un operador, p. ej., [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} no es JSON válido: {{message}}"
+    },
+    "decorations": {
+      "heading": "Decoración de línea",
+      "typeNone": "Ninguna",
+      "typeArrow": "Flechas",
+      "typeTriangle": "Triángulos",
+      "typeCircle": "Círculos",
+      "typeSquare": "Cuadrados",
+      "color": "Color de decoración",
+      "size": "Tamaño del símbolo (px)",
+      "spacing": "Espaciado (px)"
+    },
+    "generator": {
+      "heading": "Generador de geometría",
+      "type": "Geometría derivada",
+      "typeNone": "Ninguna",
+      "typeCentroid": "Centroides",
+      "typeBoundingBox": "Cuadros delimitadores",
+      "typeConvexHull": "Envolventes convexas",
+      "typeBuffer": "Zonas de influencia",
+      "bufferDistance": "Distancia de influencia (m)",
+      "fillColor": "Color de relleno",
+      "strokeColor": "Color de contorno",
+      "strokeWidth": "Ancho de contorno (px)",
+      "opacity": "Opacidad de relleno",
+      "circleRadius": "Radio de punto (px)"
     }
   },
   "layers": {

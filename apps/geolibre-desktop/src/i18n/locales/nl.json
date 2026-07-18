@@ -2876,7 +2876,9 @@
       "schemeFirstValues": "Eerste waarden",
       "errorChooseAttribute": "Kies een attribuut voor deze stijlmodus.",
       "errorGraduatedStops": "Gegradueerde stijl vereist minstens twee numerieke stops.",
-      "errorCategorizedStops": "Gecategoriseerde stijl vereist minstens één categorie."
+      "errorCategorizedStops": "Gecategoriseerde stijl vereist minstens één categorie.",
+      "invertedFill": "Omgekeerde vulling",
+      "invertedFillHint": "Buiten objecten vullen"
     },
     "selectLayerHint": "Selecteer een laag om de stijl ervan te bewerken.",
     "layerOrderDefault": "Laagvolgorde (standaard)",
@@ -2909,6 +2911,32 @@
       "notArray": "{{label}} moet een JSON-arrayexpressie zijn.",
       "notOperator": "{{label}} moet beginnen met een operator, bijv. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} is geen geldige JSON: {{message}}"
+    },
+    "decorations": {
+      "heading": "Lijndecoratie",
+      "typeNone": "Geen",
+      "typeArrow": "Pijlen",
+      "typeTriangle": "Driehoeken",
+      "typeCircle": "Cirkels",
+      "typeSquare": "Vierkanten",
+      "color": "Decoratiekleur",
+      "size": "Symboolgrootte (px)",
+      "spacing": "Afstand (px)"
+    },
+    "generator": {
+      "heading": "Geometriegenerator",
+      "type": "Afgeleide geometrie",
+      "typeNone": "Geen",
+      "typeCentroid": "Zwaartepunten",
+      "typeBoundingBox": "Begrenzingsvakken",
+      "typeConvexHull": "Convexe omhullenden",
+      "typeBuffer": "Buffers",
+      "bufferDistance": "Bufferafstand (m)",
+      "fillColor": "Vulkleur",
+      "strokeColor": "Omtrekkleur",
+      "strokeWidth": "Omtrekbreedte (px)",
+      "opacity": "Vuldekking",
+      "circleRadius": "Puntstraal (px)"
     }
   },
   "layers": {

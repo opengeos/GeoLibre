@@ -2876,7 +2876,9 @@
       "schemeFirstValues": "Premières valeurs",
       "errorChooseAttribute": "Choisissez un attribut pour ce mode de style.",
       "errorGraduatedStops": "Le style gradué nécessite au moins deux paliers numériques.",
-      "errorCategorizedStops": "Le style catégorisé nécessite au moins une catégorie."
+      "errorCategorizedStops": "Le style catégorisé nécessite au moins une catégorie.",
+      "invertedFill": "Remplissage inversé",
+      "invertedFillHint": "Remplir hors des entités"
     },
     "selectLayerHint": "Sélectionnez une couche pour modifier son style.",
     "layerOrderDefault": "Ordre des couches (par défaut)",
@@ -2909,6 +2911,32 @@
       "notArray": "{{label}} doit être une expression de tableau JSON.",
       "notOperator": "{{label}} doit commencer par un opérateur, p. ex. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} n'est pas un JSON valide : {{message}}"
+    },
+    "decorations": {
+      "heading": "Décoration de ligne",
+      "typeNone": "Aucune",
+      "typeArrow": "Flèches",
+      "typeTriangle": "Triangles",
+      "typeCircle": "Cercles",
+      "typeSquare": "Carrés",
+      "color": "Couleur de décoration",
+      "size": "Taille du symbole (px)",
+      "spacing": "Espacement (px)"
+    },
+    "generator": {
+      "heading": "Générateur de géométrie",
+      "type": "Géométrie dérivée",
+      "typeNone": "Aucune",
+      "typeCentroid": "Centroïdes",
+      "typeBoundingBox": "Emprises",
+      "typeConvexHull": "Enveloppes convexes",
+      "typeBuffer": "Tampons",
+      "bufferDistance": "Distance de tampon (m)",
+      "fillColor": "Couleur de remplissage",
+      "strokeColor": "Couleur de contour",
+      "strokeWidth": "Largeur de contour (px)",
+      "opacity": "Opacité du remplissage",
+      "circleRadius": "Rayon de point (px)"
     }
   },
   "layers": {

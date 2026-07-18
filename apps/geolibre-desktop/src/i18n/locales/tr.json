@@ -2876,7 +2876,9 @@
       "schemeFirstValues": "İlk değerler",
       "errorChooseAttribute": "Bu stil modu için bir öznitelik seçin.",
       "errorGraduatedStops": "Kademeli stil en az iki sayısal durak gerektirir.",
-      "errorCategorizedStops": "Kategorize stil en az bir kategori gerektirir."
+      "errorCategorizedStops": "Kategorize stil en az bir kategori gerektirir.",
+      "invertedFill": "Ters dolgu",
+      "invertedFillHint": "Objelerin dışını doldur"
     },
     "selectLayerHint": "Stilini düzenlemek için bir katman seçin.",
     "layerOrderDefault": "Katman sırası (varsayılan)",
@@ -2909,6 +2911,32 @@
       "notArray": "{{label}} bir JSON dizi ifadesi olmalıdır.",
       "notOperator": "{{label}} bir operatörle başlamalıdır, örn. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} geçerli bir JSON değil: {{message}}"
+    },
+    "decorations": {
+      "heading": "Çizgi süslemesi",
+      "typeNone": "Yok",
+      "typeArrow": "Oklar",
+      "typeTriangle": "Üçgenler",
+      "typeCircle": "Daireler",
+      "typeSquare": "Kareler",
+      "color": "Süsleme rengi",
+      "size": "Sembol boyutu (px)",
+      "spacing": "Aralık (px)"
+    },
+    "generator": {
+      "heading": "Geometri üreteci",
+      "type": "Türetilmiş geometri",
+      "typeNone": "Yok",
+      "typeCentroid": "Merkezler",
+      "typeBoundingBox": "Sınırlayıcı kutular",
+      "typeConvexHull": "Dışbükey zarflar",
+      "typeBuffer": "Tamponlar",
+      "bufferDistance": "Tampon mesafesi (m)",
+      "fillColor": "Dolgu rengi",
+      "strokeColor": "Kontur rengi",
+      "strokeWidth": "Kontur genişliği (px)",
+      "opacity": "Dolgu saydamlığı",
+      "circleRadius": "Nokta yarıçapı (px)"
     }
   },
   "layers": {

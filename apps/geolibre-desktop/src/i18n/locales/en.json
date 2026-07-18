@@ -3415,7 +3415,9 @@
       "schemeFirstValues": "First values",
       "errorChooseAttribute": "Choose an attribute for this style mode.",
       "errorGraduatedStops": "Graduated style requires at least two numeric stops.",
-      "errorCategorizedStops": "Categorized style requires at least one category."
+      "errorCategorizedStops": "Categorized style requires at least one category.",
+      "invertedFill": "Inverted fill",
+      "invertedFillHint": "Fill outside features"
     },
     "selectLayerHint": "Select a layer to edit its style.",
     "layerOrderDefault": "Layer order (default)",
@@ -3534,6 +3536,32 @@
         "rgb": "Builds a color from red, green, and blue (0-255).",
         "rgba": "Builds a color from red, green, blue, and alpha."
       }
+    },
+    "decorations": {
+      "heading": "Line decoration",
+      "typeNone": "None",
+      "typeArrow": "Arrows",
+      "typeTriangle": "Triangles",
+      "typeCircle": "Circles",
+      "typeSquare": "Squares",
+      "color": "Decoration color",
+      "size": "Symbol size (px)",
+      "spacing": "Spacing (px)"
+    },
+    "generator": {
+      "heading": "Geometry generator",
+      "type": "Derived geometry",
+      "typeNone": "None",
+      "typeCentroid": "Centroids",
+      "typeBoundingBox": "Bounding boxes",
+      "typeConvexHull": "Convex hulls",
+      "typeBuffer": "Buffers",
+      "bufferDistance": "Buffer distance (m)",
+      "fillColor": "Fill color",
+      "strokeColor": "Outline color",
+      "strokeWidth": "Outline width (px)",
+      "opacity": "Fill opacity",
+      "circleRadius": "Point radius (px)"
     }
   },
   "layers": {

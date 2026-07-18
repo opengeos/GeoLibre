@@ -2876,7 +2876,9 @@
       "schemeFirstValues": "Primi valori",
       "errorChooseAttribute": "Scegli un attributo per questa modalità di stile.",
       "errorGraduatedStops": "Lo stile graduato richiede almeno due soglie numeriche.",
-      "errorCategorizedStops": "Lo stile categorizzato richiede almeno una categoria."
+      "errorCategorizedStops": "Lo stile categorizzato richiede almeno una categoria.",
+      "invertedFill": "Riempimento invertito",
+      "invertedFillHint": "Riempi fuori dagli elementi"
     },
     "selectLayerHint": "Seleziona un livello per modificarne lo stile.",
     "layerOrderDefault": "Ordine dei livelli (predefinito)",
@@ -2909,6 +2911,32 @@
       "notArray": "{{label}} deve essere un'espressione array JSON.",
       "notOperator": "{{label}} deve iniziare con un operatore, es. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} non è un JSON valido: {{message}}"
+    },
+    "decorations": {
+      "heading": "Decorazione linea",
+      "typeNone": "Nessuna",
+      "typeArrow": "Frecce",
+      "typeTriangle": "Triangoli",
+      "typeCircle": "Cerchi",
+      "typeSquare": "Quadrati",
+      "color": "Colore decorazione",
+      "size": "Dimensione simbolo (px)",
+      "spacing": "Spaziatura (px)"
+    },
+    "generator": {
+      "heading": "Generatore di geometrie",
+      "type": "Geometria derivata",
+      "typeNone": "Nessuna",
+      "typeCentroid": "Centroidi",
+      "typeBoundingBox": "Riquadri di delimitazione",
+      "typeConvexHull": "Involucri convessi",
+      "typeBuffer": "Buffer",
+      "bufferDistance": "Distanza buffer (m)",
+      "fillColor": "Colore riempimento",
+      "strokeColor": "Colore contorno",
+      "strokeWidth": "Larghezza contorno (px)",
+      "opacity": "Opacità riempimento",
+      "circleRadius": "Raggio punto (px)"
     }
   },
   "layers": {

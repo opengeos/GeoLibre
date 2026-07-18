@@ -3289,7 +3289,9 @@
       "schemeFirstValues": "القيم الأولى",
       "errorChooseAttribute": "اختر سمة لوضع النمط هذا.",
       "errorGraduatedStops": "يتطلب النمط المتدرج نقطتي توقف رقميتين على الأقل.",
-      "errorCategorizedStops": "يتطلب النمط المصنّف صنفًا واحدًا على الأقل."
+      "errorCategorizedStops": "يتطلب النمط المصنّف صنفًا واحدًا على الأقل.",
+      "invertedFill": "تعبئة معكوسة",
+      "invertedFillHint": "تعبئة خارج المعالم"
     },
     "selectLayerHint": "حدد طبقة لتحرير نمطها.",
     "layerOrderDefault": "ترتيب الطبقات (افتراضي)",
@@ -3322,6 +3324,32 @@
       "notArray": "يجب أن يكون {{label}} تعبير مصفوفة JSON.",
       "notOperator": "يجب أن يبدأ {{label}} بعامل تشغيل، مثل [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} ليس JSON صالحًا: {{message}}"
+    },
+    "decorations": {
+      "heading": "زخرفة الخط",
+      "typeNone": "بدون",
+      "typeArrow": "أسهم",
+      "typeTriangle": "مثلثات",
+      "typeCircle": "دوائر",
+      "typeSquare": "مربعات",
+      "color": "لون الزخرفة",
+      "size": "حجم الرمز (px)",
+      "spacing": "التباعد (px)"
+    },
+    "generator": {
+      "heading": "مولّد الهندسة",
+      "type": "هندسة مشتقة",
+      "typeNone": "بدون",
+      "typeCentroid": "نقاط مركزية",
+      "typeBoundingBox": "مربعات إحاطة",
+      "typeConvexHull": "أغلفة محدبة",
+      "typeBuffer": "مناطق عازلة",
+      "bufferDistance": "مسافة العزل (م)",
+      "fillColor": "لون التعبئة",
+      "strokeColor": "لون الحد",
+      "strokeWidth": "عرض الحد (px)",
+      "opacity": "عتامة التعبئة",
+      "circleRadius": "نصف قطر النقطة (px)"
     }
   },
   "layers": {

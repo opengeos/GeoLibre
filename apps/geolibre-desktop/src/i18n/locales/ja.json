@@ -2832,7 +2832,9 @@
       "schemeFirstValues": "先頭の値",
       "errorChooseAttribute": "このスタイルモードの属性を選択してください。",
       "errorGraduatedStops": "段階分けスタイルには少なくとも2つの数値の区分点が必要です。",
-      "errorCategorizedStops": "分類スタイルには少なくとも1つのカテゴリが必要です。"
+      "errorCategorizedStops": "分類スタイルには少なくとも1つのカテゴリが必要です。",
+      "invertedFill": "反転塗りつぶし",
+      "invertedFillHint": "地物の外側を塗りつぶす"
     },
     "selectLayerHint": "スタイルを編集するレイヤーを選択してください。",
     "layerOrderDefault": "レイヤー順序 (既定)",
@@ -2865,6 +2867,32 @@
       "notArray": "{{label}}はJSON配列式である必要があります。",
       "notOperator": "{{label}}は演算子で始まる必要があります。例: [\"==\", [\"get\", \"field\"], value]。",
       "notJson": "{{label}}は有効なJSONではありません: {{message}}"
+    },
+    "decorations": {
+      "heading": "ライン装飾",
+      "typeNone": "なし",
+      "typeArrow": "矢印",
+      "typeTriangle": "三角形",
+      "typeCircle": "円",
+      "typeSquare": "四角形",
+      "color": "装飾の色",
+      "size": "シンボルサイズ (px)",
+      "spacing": "間隔 (px)"
+    },
+    "generator": {
+      "heading": "ジオメトリジェネレーター",
+      "type": "派生ジオメトリ",
+      "typeNone": "なし",
+      "typeCentroid": "重心",
+      "typeBoundingBox": "バウンディングボックス",
+      "typeConvexHull": "凸包",
+      "typeBuffer": "バッファ",
+      "bufferDistance": "バッファ距離 (m)",
+      "fillColor": "塗りつぶし色",
+      "strokeColor": "輪郭色",
+      "strokeWidth": "輪郭幅 (px)",
+      "opacity": "塗りつぶし不透明度",
+      "circleRadius": "ポイント半径 (px)"
     }
   },
   "layers": {
