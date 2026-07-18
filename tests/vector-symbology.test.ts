@@ -261,15 +261,43 @@ describe("markerIconSizeValue proportional sizing", () => {
         proportionalSizeMaxRadius: 24,
       }),
     );
-    // Outputs are 2 * radius / markerSize: 8/18 and 48/18.
+    // The sprite bakes at the largest proportional diameter (48 px, above the
+    // 18 px markerSize), so outputs are 2 * radius / 48: the max value maps to
+    // exactly 1 (no upscaling) and the min value scales down.
     assert.deepEqual(result, [
       "interpolate",
       ["linear"],
       ["to-number", ["get", "pop"], 0],
       0,
-      8 / 18,
+      8 / 48,
       100,
-      48 / 18,
+      1,
+    ]);
+  });
+
+  it("clamps the grown bake at the canvas-safety maximum (96 px)", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        markerSize: 18,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 0,
+        proportionalSizeMaxValue: 100,
+        proportionalSizeMinRadius: 4,
+        proportionalSizeMaxRadius: 100,
+      }),
+    );
+    // 2 * 100 = 200 px diameter clamps to a 96 px bake, so the max output is a
+    // mild ~2x upscale instead of ~11x on the raw 18 px sprite.
+    assert.deepEqual(result, [
+      "interpolate",
+      ["linear"],
+      ["to-number", ["get", "pop"], 0],
+      0,
+      8 / 96,
+      100,
+      200 / 96,
     ]);
   });
 

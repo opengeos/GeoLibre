@@ -1,4 +1,5 @@
 import {
+  circleRadiusValue,
   DEFAULT_LAYER_STYLE,
   type GeoLibreLayer,
   geojsonHasZCoordinates,
@@ -438,6 +439,7 @@ function syncExternalNativeLayer(
         applyExternalNativeFeatureFilters(map, nativeLayerId, layer);
       }
     }
+    syncVectorControlPointSymbology(map, layer, beforeId);
     // A deck.gl raster has no real MapLibre style layer to move (it renders in a
     // `deck-layer-group-*` keyed by its beforeId prop), so forward the computed
     // beforeId to the control that owns it.
@@ -1449,6 +1451,117 @@ function isFillStyleLayerSpec(
 
 export function externalExtrusionLayerId(nativeLayerId: string): string {
   return `${nativeLayerId}-geolibre-extrusion`;
+}
+
+/**
+ * Marker-icon and proportional-size rendering for a point layer owned by the
+ * Add Vector Layer control (maplibre-gl-vector). The control's VectorLayerStyle
+ * carries no marker or data-driven-radius concept, so those Style-panel
+ * options would otherwise silently no-op on control-managed layers. Following
+ * the synthetic-extrusion pattern in {@link syncExternalNativeLayer}, GeoLibre
+ * renders them itself on top of the control's own source:
+ *
+ * - Marker enabled: the control's circle layer is hidden and a GeoLibre-owned
+ *   symbol layer ({@link markerLayerId}) draws the baked sprite per point,
+ *   honoring proportional sizing through its `icon-size` interpolate.
+ * - Proportional size without a marker: the control circle's `circle-radius`
+ *   is overridden with the shared interpolate; when proportional sizing turns
+ *   off the flat radius is restored and the control owns the paint again.
+ *
+ * Scoped to the control's single-point render (GeoLibre's "single" renderer /
+ * the control's "circle" pointMode); the cluster and heatmap renderers keep
+ * the control's own layers untouched.
+ */
+function syncVectorControlPointSymbology(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  if (layer.metadata.sourceKind !== "maplibre-gl-vector") return;
+  const syntheticMarkerId = markerLayerId(layer.id);
+  const singleRenderer = styleValue(layer.style, "pointRenderer") === "single";
+  const circleNativeId = getExternalNativeLayerIds(layer).find(
+    (id) => map.getLayer(id)?.type === "circle",
+  );
+  if (!singleRenderer || !circleNativeId) {
+    // Cluster/heatmap modes rebuild the control's native layers, so the old
+    // overlay (if any) just needs dropping.
+    removeIfExists(map, syntheticMarkerId);
+    return;
+  }
+
+  const circleSpec = getStyleLayerSpec(map, circleNativeId);
+  ensureGeneratedImageHandler(map);
+  const markerImageId = prepareMarker(layer.style);
+
+  if (markerImageId && circleSpec) {
+    // Reuse the control's own base filter (the tracked base when Time-Slider /
+    // rule extras are active, so they never nest) combined with the current
+    // extras, mirroring applyExternalNativeFeatureFilters.
+    const tracked = nativeFilterStatesFor(map).get(circleNativeId);
+    const base = tracked
+      ? tracked.base
+      : (("filter" in circleSpec
+          ? (circleSpec.filter as maplibregl.FilterSpecification)
+          : null) ?? null);
+    const filter = combineExternalFilters(
+      base,
+      externalFeatureFilterExtras(layer),
+    );
+    const sourceLayer =
+      "source-layer" in circleSpec ? circleSpec["source-layer"] : undefined;
+    ensureLayer(
+      map,
+      syntheticMarkerId,
+      {
+        id: syntheticMarkerId,
+        type: "symbol",
+        source: (circleSpec as { source: string }).source,
+        ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
+        ...styleLayerZoomRange(layer.style),
+        // Always present so clearing the extras also clears the layer filter
+        // on the update path (ensureLayer only diffs keys that exist).
+        filter: filter ?? undefined,
+        layout: {
+          "icon-image": markerImageId,
+          "icon-size": markerIconSizeValue(
+            layer.style,
+          ) as PropertyValueSpecification<number>,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          visibility: layer.visible ? "visible" : "none",
+        },
+        paint: { "icon-opacity": layer.opacity },
+      },
+      beforeId,
+    );
+    // The control keeps managing its circle's visibility (and re-shows it on
+    // its own toggles), but every sync re-hides it while the marker overlay is
+    // active, so the points never render twice.
+    setNativeLayerVisibility(map, circleNativeId, "none");
+    return;
+  }
+
+  // No marker: drop the overlay and hand the point render back to the control.
+  if (map.getLayer(syntheticMarkerId)) {
+    removeIfExists(map, syntheticMarkerId);
+    setNativeLayerVisibility(
+      map,
+      circleNativeId,
+      layer.visible ? "visible" : "none",
+    );
+  }
+
+  // Proportional size on the control's flat circle: hold the override while
+  // active; once off, restore the flat radius if (and only if) an expression
+  // from a previous override is still applied, then leave the paint to the
+  // control again.
+  const radius = circleRadiusValue(layer.style);
+  if (Array.isArray(radius)) {
+    map.setPaintProperty(circleNativeId, "circle-radius", radius);
+  } else if (Array.isArray(map.getPaintProperty(circleNativeId, "circle-radius"))) {
+    map.setPaintProperty(circleNativeId, "circle-radius", radius);
+  }
 }
 
 function setExternalNativeLayerPaint(
