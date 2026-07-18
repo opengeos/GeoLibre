@@ -5,6 +5,7 @@ import {
 } from "@geolibre/core";
 import {
   RASTER_MAX_CLASSES,
+  RASTER_MAX_STORED_CLASSES,
   RASTER_MIN_CLASSES,
   RASTER_MIN_CUSTOM_COLORS,
   type RasterBandStats,
@@ -385,12 +386,26 @@ export function RasterSymbologySection({
     const effectiveStats: RasterBandStats | null = overrides.range
       ? { min: overrides.range[0], max: overrides.range[1], histogram: stats?.histogram ?? [] }
       : stats;
-    const breaks = computeRasterBreaks(
-      next.method,
-      effectiveStats,
-      next.classCount,
-      overrides.manualBreaks ?? symbology?.breaks,
-    );
+    // A manual symbology whose edges already match the requested class count
+    // keeps them verbatim, even past the 12-class authoring cap:
+    // computeRasterBreaks clamps to that cap, which would collapse a
+    // categorical table symbology (up to RASTER_MAX_STORED_CLASSES classes)
+    // to an even 12-class spread on any ramp/color/method edit. A class-count
+    // edit (edges no longer match) still recomputes as before.
+    const manualEdges = overrides.manualBreaks ?? symbology?.breaks ?? [];
+    const keepManualEdges =
+      next.method === "manual" &&
+      manualEdges.length === next.classCount + 1 &&
+      next.classCount <= RASTER_MAX_STORED_CLASSES &&
+      manualEdges.every((value) => Number.isFinite(value));
+    const breaks = keepManualEdges
+      ? [...manualEdges].sort((a, b) => a - b)
+      : computeRasterBreaks(
+          next.method,
+          effectiveStats,
+          next.classCount,
+          overrides.manualBreaks ?? symbology?.breaks,
+        );
     const custom =
       (next.customColors?.length ?? 0) >= MIN_CUSTOM_COLORS
         ? next.customColors

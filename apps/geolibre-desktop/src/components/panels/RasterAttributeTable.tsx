@@ -5,7 +5,7 @@ import {
   openLegendPanelWithItems,
   savedRasterSymbology,
 } from "@geolibre/plugins";
-import { readRasterData } from "@geolibre/processing";
+import { type RasterData, readRasterData } from "@geolibre/processing";
 import { Button, Input, Select } from "@geolibre/ui";
 import {
   FileDown,
@@ -150,6 +150,23 @@ export function RasterAttributeTable({
   // multiple rows inside one throttle window all persist (a single-slot
   // buffer would drop all but the last row's edit).
   const pendingColorsRef = useRef<Map<number, string>>(new Map());
+  // The last decoded raster, so a band switch recounts the already-decoded
+  // bands instead of re-downloading and re-decoding the whole file. Held only
+  // while the panel is open on the same layer/source.
+  const rasterCacheRef = useRef<{ key: string; raster: RasterData } | null>(
+    null,
+  );
+
+  /** Drops in-progress edits and any pending throttled color commit. */
+  const resetEditBuffers = useCallback(() => {
+    setLabelDrafts({});
+    setColorDrafts({});
+    if (colorFlushRef.current !== null) {
+      window.clearTimeout(colorFlushRef.current);
+      colorFlushRef.current = null;
+    }
+    pendingColorsRef.current.clear();
+  }, []);
 
   // Reset transient state when the target layer changes, and abort any
   // in-flight computation so its result can't land on the wrong layer. The
@@ -159,22 +176,24 @@ export function RasterAttributeTable({
   useEffect(() => {
     setError(null);
     setNotice(null);
-    setLabelDrafts({});
-    setColorDrafts({});
+    resetEditBuffers();
     return () => {
       if (computeAbortRef.current) {
         computeAbortRef.current.abort();
         computeAbortRef.current = null;
         setComputing(false);
       }
-      // Drop any throttled color commits aimed at the previous layer.
-      if (colorFlushRef.current !== null) {
-        window.clearTimeout(colorFlushRef.current);
-        colorFlushRef.current = null;
-      }
-      pendingColorsRef.current.clear();
+      // Drop edits/commits aimed at the previous layer, and the previous
+      // layer's decoded raster.
+      resetEditBuffers();
+      rasterCacheRef.current = null;
     };
-  }, [ratLayer?.id]);
+  }, [ratLayer?.id, resetEditBuffers]);
+
+  // Release the decoded raster (which can be large) when the panel closes.
+  useEffect(() => {
+    if (!open) rasterCacheRef.current = null;
+  }, [open]);
 
   /**
    * Merges a metadata patch onto the layer's LIVE metadata, read from the
@@ -203,6 +222,10 @@ export function RasterAttributeTable({
       computeAbortRef.current?.abort();
       const controller = new AbortController();
       computeAbortRef.current = controller;
+      // A recompute replaces the table, so in-progress edits (and any pending
+      // throttled commit) target rows that are about to go away — a band
+      // switch must not land an old band's color on the new band's table.
+      resetEditBuffers();
       setComputing(true);
       setError(null);
       setNotice(null);
@@ -216,11 +239,21 @@ export function RasterAttributeTable({
         const palettePromise = getPaletteLegend(target.id, url).catch(
           () => null,
         );
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) {
-          throw new Error(t("rasterAttributeTable.readError"));
+        // readRasterData decodes every band, so a band switch on the same
+        // source reuses the cached decode instead of re-downloading the file.
+        const cacheKey = `${target.id}|${url}`;
+        let raster =
+          rasterCacheRef.current?.key === cacheKey
+            ? rasterCacheRef.current.raster
+            : null;
+        if (!raster) {
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok) {
+            throw new Error(t("rasterAttributeTable.readError"));
+          }
+          raster = await readRasterData(await response.arrayBuffer());
+          rasterCacheRef.current = { key: cacheKey, raster };
         }
-        const raster = await readRasterData(await response.arrayBuffer());
         if (controller.signal.aborted) return;
         const bandValues = raster.bands[band - 1];
         if (!bandValues) {
@@ -274,7 +307,7 @@ export function RasterAttributeTable({
         if (!controller.signal.aborted) setComputing(false);
       }
     },
-    [t, patchLayerMetadata],
+    [t, patchLayerMetadata, resetEditBuffers],
   );
 
   // First open for a layer with no stored table: build it automatically so the
