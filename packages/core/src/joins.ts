@@ -423,8 +423,10 @@ export function cascadeLayerJoinRefresh(
 /**
  * Re-resolve every layer's persistent joins against the freshly loaded layer
  * set (project open). Layers re-derive in topological order of their join
- * dependencies, so a chain (`C joins A, A joins B`) resolves A before C;
- * cycles fall back to array order. Layer sets without joins pass through by
+ * dependencies, so a chain (`C joins A, A joins B`) resolves A before C; a
+ * hand-edited cycle is broken by forcing one of its members through first
+ * (see {@link topologicalJoinOrder}), so consumers downstream of the cycle
+ * still re-derive after it. Layer sets without joins pass through by
  * reference.
  */
 export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
