@@ -53,6 +53,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
   );
   const layers = useAppStore((s) => s.layers);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
   const projectName = useAppStore((s) => s.projectName);
 
   const eligibleLayers = useMemo(() => selectableVectorLayers(layers), [layers]);
@@ -123,6 +124,12 @@ export function SelectByExpressionDialog(): ReactElement | null {
   );
   const canSelect =
     Boolean(targetLayer) && source.trim().length > 0 && validation.ok;
+  // The combine modes only make sense when the target layer holds the live
+  // selection; otherwise remove/intersect would always yield an empty
+  // selection, so the mode dropdown falls back to "new".
+  const targetHoldsSelection =
+    targetLayerId === selectedLayerId && selectionCount > 0;
+  const effectiveMode = targetHoldsSelection ? mode : "new";
 
   const runSelection = () => {
     if (!targetLayer) return;
@@ -131,7 +138,11 @@ export function SelectByExpressionDialog(): ReactElement | null {
       variables,
     });
     if (!result.ok) return;
-    const selected = applyMatchedSelection(targetLayer.id, result.ids, mode);
+    const selected = applyMatchedSelection(
+      targetLayer.id,
+      result.ids,
+      effectiveMode,
+    );
     setSummary({
       matched: result.ids.length,
       selected,
@@ -205,7 +216,11 @@ export function SelectByExpressionDialog(): ReactElement | null {
                   </p>
                 )}
               </div>
-              <SelectionModeField mode={mode} onChange={setMode} />
+              <SelectionModeField
+                mode={effectiveMode}
+                onChange={setMode}
+                disableCombineModes={!targetHoldsSelection}
+              />
               {summary && (
                 <p
                   className="text-sm text-muted-foreground"

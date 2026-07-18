@@ -58,6 +58,8 @@ export function SelectByLocationDialog(): ReactElement | null {
   const setOpen = useAppStore((s) => s.setSelectByLocationOpen);
   const preselectedLayerId = useAppStore((s) => s.ui.selectByLocationLayerId);
   const layers = useAppStore((s) => s.layers);
+  const selectedLayerId = useAppStore((s) => s.selectedLayerId);
+  const selectionCount = useAppStore((s) => s.selectedFeatureIds.length);
 
   const eligibleLayers = useMemo(() => selectableVectorLayers(layers), [layers]);
 
@@ -116,6 +118,12 @@ export function SelectByLocationDialog(): ReactElement | null {
   );
   const tooManyPairs = pairs > MAX_CLIENT_PAIRS;
   const canSelect = Boolean(targetLayer && referenceLayer) && !tooManyPairs;
+  // The combine modes only make sense when the target layer holds the live
+  // selection; otherwise remove/intersect would always yield an empty
+  // selection, so the mode dropdown falls back to "new".
+  const targetHoldsSelection =
+    targetLayerId === selectedLayerId && selectionCount > 0;
+  const effectiveMode = targetHoldsSelection ? mode : "new";
 
   const runSelection = () => {
     if (!targetLayer || !referenceLayer) return;
@@ -128,7 +136,7 @@ export function SelectByLocationDialog(): ReactElement | null {
     targetFeatures.forEach((feature, index) => {
       if (matches[index]) ids.push(featureSelectionId(feature, index));
     });
-    const selected = applyMatchedSelection(targetLayer.id, ids, mode);
+    const selected = applyMatchedSelection(targetLayer.id, ids, effectiveMode);
     setSummary({
       matched: ids.length,
       selected,
@@ -208,7 +216,11 @@ export function SelectByLocationDialog(): ReactElement | null {
                 ))}
               </Select>
             </div>
-            <SelectionModeField mode={mode} onChange={setMode} />
+            <SelectionModeField
+              mode={effectiveMode}
+              onChange={setMode}
+              disableCombineModes={!targetHoldsSelection}
+            />
             {tooManyPairs && (
               <p className="text-xs text-destructive">
                 {t("selection.tooManyPairs", {

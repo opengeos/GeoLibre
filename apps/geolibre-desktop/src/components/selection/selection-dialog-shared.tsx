@@ -26,13 +26,21 @@ export const SELECTION_MODE_LABEL_KEYS: Record<SelectionMode, ParseKeys> = {
   intersect: "selection.modeIntersect",
 };
 
-/** The "modify current selection by" dropdown shared by both dialogs. */
+/**
+ * The "modify current selection by" dropdown shared by both dialogs. When
+ * `disableCombineModes` is set (the target layer does not hold the current
+ * selection, so there is nothing to combine with), only "new" is offered —
+ * add would equal new, and remove/intersect would always produce an empty
+ * selection.
+ */
 export function SelectionModeField({
   mode,
   onChange,
+  disableCombineModes = false,
 }: {
   mode: SelectionMode;
   onChange: (mode: SelectionMode) => void;
+  disableCombineModes?: boolean;
 }) {
   const { t } = useTranslation();
   return (
@@ -44,7 +52,11 @@ export function SelectionModeField({
         onChange={(event) => onChange(event.target.value as SelectionMode)}
       >
         {SELECTION_MODES.map((value) => (
-          <option key={value} value={value}>
+          <option
+            key={value}
+            value={value}
+            disabled={disableCombineModes && value !== "new"}
+          >
             {t(SELECTION_MODE_LABEL_KEYS[value])}
           </option>
         ))}

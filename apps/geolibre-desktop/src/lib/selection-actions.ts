@@ -37,9 +37,12 @@ function selectedFeatures(): { layer: GeoLibreLayer; features: Feature[] } | nul
  * Applies a matched id set to the live selection under the given mode and
  * returns the resulting selection size. Combines with the current selection
  * only when the target layer already holds it (ids are per-layer, so a
- * cross-layer combine would mix unrelated features); otherwise the match
- * starts a fresh selection on that layer. `selectLayer` runs before
- * `selectFeatures` because it clears the selection as a side effect.
+ * cross-layer combine would mix unrelated features). Otherwise `current` is
+ * empty: "new"/"add" start a fresh selection on the target layer, while
+ * "remove"/"intersect" necessarily yield an empty one — the dialogs guard
+ * this by forcing mode "new" when the target layer does not hold the
+ * selection (SelectionModeField's disableCombineModes). `selectLayer` runs
+ * before `selectFeatures` because it clears the selection as a side effect.
  */
 export function applyMatchedSelection(
   targetLayerId: string,
