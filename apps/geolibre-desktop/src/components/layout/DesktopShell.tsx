@@ -2156,6 +2156,17 @@ export function DesktopShell({
           <SectionErrorBoundary label="Plugin floating panels">
             <FloatingPanels />
           </SectionErrorBoundary>
+          {/* Mounted here (inside the map area, like FloatingPanels) so the
+              selection panels anchor to the map canvas's top-left corner and
+              drag-clamp to the map, not the whole window (#1314). */}
+          <SectionErrorBoundary label="Selection panels">
+            <Suspense fallback={null}>
+              <SelectByExpressionDialog />
+            </Suspense>
+            <Suspense fallback={null}>
+              <SelectByLocationDialog />
+            </Suspense>
+          </SectionErrorBoundary>
           <SectionErrorBoundary label="Sun simulation panel">
             <SunPanel />
           </SectionErrorBoundary>
@@ -2369,12 +2380,6 @@ export function DesktopShell({
       </Suspense>
       <Suspense fallback={null}>
         <ProcessingHistoryDialog />
-      </Suspense>
-      <Suspense fallback={null}>
-        <SelectByExpressionDialog />
-      </Suspense>
-      <Suspense fallback={null}>
-        <SelectByLocationDialog />
       </Suspense>
       <Suspense fallback={null}>
         <RasterToolsDialog mapControllerRef={mapControllerRef} />

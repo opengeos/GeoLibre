@@ -161,7 +161,7 @@ export function SelectByExpressionDialog(): ReactElement | null {
         open={open}
         title={t("selection.byExpressionTitle")}
         onClose={() => setOpen(false)}
-        defaultPositionClass="start-4 top-16"
+        defaultPositionClass="start-3 top-3"
       >
         <div>
           <p className="mb-3 text-xs text-muted-foreground">

@@ -11,12 +11,15 @@ import { useTranslation } from "react-i18next";
 
 /**
  * Floating, non-modal window shell shared by the two selection panels
- * (#1314): a draggable `fixed` card instead of a Radix modal, so the map and
+ * (#1314): a draggable card instead of a Radix modal, so the map and
  * attribute table stay interactive while selecting — pan to check a result,
- * click rows, then refine and re-run. Mirrors RecordVideoDialog's drag
- * pattern (also adopted by the Whitebox toolbox in #1226): `pos` is null
- * until first dragged, when the default corner placement (CSS class) applies;
- * afterwards it pins to explicit coords.
+ * click rows, then refine and re-run. Anchored to the map canvas like the
+ * plugin FloatingPanels overlay: an `absolute inset-0` pass-through layer
+ * inside the map area with the card positioned within it (top-left corner by
+ * default). Drag pattern mirrors RecordVideoDialog (also adopted by the
+ * Whitebox toolbox in #1226): `pos` is null until first dragged, when the
+ * default corner placement (CSS class) applies; afterwards it pins to
+ * explicit coords, clamped to the map area.
  */
 export function SelectionFloatingPanel({
   open,
@@ -28,7 +31,7 @@ export function SelectionFloatingPanel({
   open: boolean;
   title: string;
   onClose: () => void;
-  /** Corner placement before the first drag, e.g. "start-4 top-16". */
+  /** Corner placement before the first drag, e.g. "start-3 top-3". */
   defaultPositionClass: string;
   children: ReactNode;
 }) {
@@ -44,29 +47,35 @@ export function SelectionFloatingPanel({
     // would swallow the ensuing click (e.g. the close button).
     if ((event.target as Element).closest("button, a, [role='button']")) return;
     const rect = panelRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    const bounds = panelRef.current?.parentElement?.getBoundingClientRect();
+    if (!rect || !bounds) return;
     dragOffset.current = {
       x: event.clientX - rect.left,
       y: event.clientY - rect.top,
     };
-    setPos({ x: rect.left, y: rect.top });
+    // Coordinates are relative to the map-area overlay, not the viewport.
+    setPos({ x: rect.left - bounds.left, y: rect.top - bounds.top });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const onDragMove = (event: React.PointerEvent) => {
     if (!dragOffset.current) return;
-    const width = panelRef.current?.offsetWidth ?? 0;
-    const height = panelRef.current?.offsetHeight ?? 0;
-    // Keep the panel within the viewport so it can't be dragged off-screen.
+    const card = panelRef.current;
+    const bounds = card?.parentElement?.getBoundingClientRect();
+    if (!card || !bounds) return;
+    // Keep the panel within the map area so it can't be dragged off-canvas.
     const x = Math.max(
       0,
-      Math.min(event.clientX - dragOffset.current.x, window.innerWidth - width),
+      Math.min(
+        event.clientX - dragOffset.current.x - bounds.left,
+        bounds.width - card.offsetWidth,
+      ),
     );
     const y = Math.max(
       0,
       Math.min(
-        event.clientY - dragOffset.current.y,
-        window.innerHeight - height,
+        event.clientY - dragOffset.current.y - bounds.top,
+        bounds.height - card.offsetHeight,
       ),
     );
     setPos({ x, y });
@@ -78,36 +87,40 @@ export function SelectionFloatingPanel({
   };
 
   return (
-    <div
-      ref={panelRef}
-      role="dialog"
-      aria-label={title}
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
-      className={cn(
-        "fixed z-40 flex w-96 max-w-[95vw] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
-        pos ? "" : defaultPositionClass,
-      )}
-    >
-      {/* Drag handle / title bar. */}
+    <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
       <div
-        onPointerDown={onDragStart}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
-        className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2"
+        ref={panelRef}
+        role="dialog"
+        aria-label={title}
+        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        className={cn(
+          "pointer-events-auto absolute flex w-96 max-w-[95%] flex-col rounded-lg border bg-card text-card-foreground shadow-xl",
+          pos ? "" : defaultPositionClass,
+        )}
       >
-        <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-sm font-semibold">{title}</span>
-        <button
-          type="button"
-          aria-label={t("common.close")}
-          onClick={onClose}
-          className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+        {/* Drag handle / title bar. */}
+        <div
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+          className="flex cursor-move touch-none select-none items-center gap-2 border-b px-3 py-2"
         >
-          <X className="h-4 w-4" />
-        </button>
+          <GripHorizontal className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-sm font-semibold">{title}</span>
+          <button
+            type="button"
+            aria-label={t("common.close")}
+            onClick={onClose}
+            className="rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="max-h-[calc(100vh-12rem)] overflow-y-auto p-3">
+          {children}
+        </div>
       </div>
-      <div className="max-h-[70vh] overflow-y-auto p-3">{children}</div>
     </div>
   );
 }

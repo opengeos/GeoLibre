@@ -142,7 +142,7 @@ export function SelectByLocationDialog(): ReactElement | null {
       open={open}
       title={t("selection.byLocationTitle")}
       onClose={() => setOpen(false)}
-      defaultPositionClass="start-10 top-24"
+      defaultPositionClass="start-9 top-9"
     >
       <div>
         <p className="mb-3 text-xs text-muted-foreground">
