@@ -141,6 +141,21 @@ describe("inverted fill sync", () => {
     assert.equal(maskData?.features.length, 1);
   });
 
+  it("falls back to the normal filtered fill while a time filter is active", () => {
+    const { map, layers } = makeMap();
+    const layer = polygonLayer({ invertedFillEnabled: true });
+    (layer as { timeFilter?: unknown[] }).timeFilter = [
+      ">=",
+      ["get", "t"],
+      0,
+    ];
+    syncLayer(map as never, layer);
+    // The mask derives from raw features and cannot honor the filter, so the
+    // normal (filtered) fill renders instead.
+    assert.ok(layers.has("layer-poly-fill"));
+    assert.ok(!layers.has("layer-poly-inverted-fill"));
+  });
+
   it("restores the normal fill and drops the mask when disabled", () => {
     const { map, layers, sources } = makeMap();
     syncLayer(map as never, polygonLayer({ invertedFillEnabled: true }));
@@ -222,6 +237,24 @@ describe("geometry generator sync", () => {
       "line",
     );
     assert.ok(!layers.has("layer-poly-generator-circle"));
+  });
+
+  it("suppresses generator layers while a time filter is active", () => {
+    const { map, layers, sources } = makeMap();
+    syncLayer(map as never, polygonLayer({ geometryGenerator: "centroid" }));
+    assert.ok(layers.has("layer-poly-generator-circle"));
+
+    const filtered = polygonLayer({ geometryGenerator: "centroid" });
+    (filtered as { timeFilter?: unknown[] }).timeFilter = [
+      ">=",
+      ["get", "t"],
+      0,
+    ];
+    syncLayer(map as never, filtered);
+    // Derived features cannot honor the filter, so they are suppressed
+    // rather than rendering hidden features.
+    assert.ok(!layers.has("layer-poly-generator-circle"));
+    assert.ok(!sources.has("source-poly-generator"));
   });
 
   it("suppresses generator layers while the layer renders as an extrusion", () => {

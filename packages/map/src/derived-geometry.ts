@@ -30,6 +30,17 @@ const EMPTY: FeatureCollection = { type: "FeatureCollection", features: [] };
 // the lifetime of the source geojson object.
 const MAX_GENERATOR_CACHE_ENTRIES = 8;
 
+/**
+ * Feature-count cap for the derived-geometry transforms. mask()'s
+ * polygon-clipping union and per-feature convex/buffer all run synchronously
+ * on the main thread, so past this size the derivation is skipped (the mask
+ * falls back to the normal fill; the generator renders nothing) rather than
+ * freezing the UI for the first sync pass. Mirrors
+ * `LARGE_VECTOR_FEATURE_THRESHOLD`, the point where layers already switch
+ * render strategy.
+ */
+export const MAX_DERIVED_FEATURES = 50_000;
+
 // One cache entry per (collection, params) pair. The params key is tiny
 // (renderer type + buffer distance), so per-collection Maps stay small.
 const maskCache = new WeakMap<
@@ -73,6 +84,7 @@ export function buildInvertedMask(
 function computeInvertedMask(
   collection: FeatureCollection,
 ): FeatureCollection<Polygon | MultiPolygon> | null {
+  if (collection.features.length > MAX_DERIVED_FEATURES) return null;
   const polygons = polygonFeatures(collection);
   if (polygons.length === 0) return null;
   try {
@@ -113,6 +125,7 @@ export function buildGeneratedGeometry(
   bufferDistance: number,
 ): FeatureCollection | null {
   if (type === "none") return null;
+  if (collection.features.length > MAX_DERIVED_FEATURES) return EMPTY;
   const distance =
     type === "buffer" && Number.isFinite(bufferDistance) ? bufferDistance : 0;
   if (type === "buffer" && distance === 0) return EMPTY;
@@ -168,9 +181,16 @@ function deriveFeature(
       case "bounding-box": {
         const box = bbox(feature);
         if (!box.every((value) => Number.isFinite(value))) return null;
+        // bbox() returns 6 elements [minX,minY,minZ,maxX,maxY,maxZ] when any
+        // coordinate carries a Z value; normalize to the 2D corners so the
+        // degenerate check and bboxPolygon() see [minX,minY,maxX,maxY].
+        const box2d: [number, number, number, number] =
+          box.length === 6
+            ? [box[0], box[1], box[3], box[4]]
+            : (box as [number, number, number, number]);
         // A point's bbox is degenerate (zero area) and would render nothing.
-        if (box[0] === box[2] && box[1] === box[3]) return null;
-        return bboxPolygon(box as [number, number, number, number]);
+        if (box2d[0] === box2d[2] && box2d[1] === box2d[3]) return null;
+        return bboxPolygon(box2d);
       }
       case "convex-hull":
         return convex({ type: "FeatureCollection", features: [feature] });

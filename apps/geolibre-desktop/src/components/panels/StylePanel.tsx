@@ -2154,6 +2154,7 @@ export function StylePanel({
     hasVectorPaintControls &&
     !extrusionEnabled &&
     layer.type === "geojson" &&
+    !!layer.geojson &&
     !hasExternalDeckLayer(layer) &&
     !hasExternalNativeLayers(layer) &&
     (geometryFlags.hasLine || geometryFlags.hasPolygon);

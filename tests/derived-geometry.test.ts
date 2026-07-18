@@ -154,6 +154,52 @@ describe("buildGeneratedGeometry", () => {
       buildGeneratedGeometry(fc, "convex-hull", 0),
     );
   });
+
+  it("caps cached generator variants per collection (oldest evicted)", () => {
+    const fc = collection(square(0, 0, 10, 10));
+    const first = buildGeneratedGeometry(fc, "buffer", 1);
+    // Fill the 8-entry cache past its cap with distinct buffer distances.
+    for (let distance = 2; distance <= 9; distance += 1) {
+      buildGeneratedGeometry(fc, "buffer", distance);
+    }
+    // The oldest entry (distance 1) was evicted, so it recomputes...
+    assert.notEqual(buildGeneratedGeometry(fc, "buffer", 1), first);
+    // ...while the newest entry is still cached.
+    assert.equal(
+      buildGeneratedGeometry(fc, "buffer", 9),
+      buildGeneratedGeometry(fc, "buffer", 9),
+    );
+  });
+
+  it("normalizes 3D bounding boxes to their 2D corners", () => {
+    const fc: FeatureCollection = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          properties: {},
+          geometry: {
+            type: "LineString",
+            coordinates: [
+              [0, 0, 100],
+              [10, 5, 200],
+            ],
+          },
+        },
+      ],
+    };
+    const derived = buildGeneratedGeometry(fc, "bounding-box", 0);
+    assert.ok(derived);
+    assert.equal(derived.features.length, 1);
+    const ring = (derived.features[0].geometry as Polygon).coordinates[0];
+    const xs = ring.map(([x]) => x);
+    const ys = ring.map(([, y]) => y);
+    // The Z values (100/200) must not leak into the planar bounds.
+    assert.deepEqual(
+      [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
+      [0, 0, 10, 5],
+    );
+  });
 });
 
 describe("generatedGeometryKinds", () => {

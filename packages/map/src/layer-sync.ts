@@ -1669,6 +1669,14 @@ function applyVectorDataRenderLayers(
   ensureGeneratedImageHandler(map);
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
+  // Derived companion symbology (inverted mask, geometry generator, dedup
+  // labels) is built from the raw features, so no MapLibre filter applies to
+  // it. While a Time Slider window or a rule-based visibility filter is
+  // active, those derivations would disagree with the visible data — skip
+  // them for the duration, mirroring the dedup-label behavior.
+  const hasFeatureFilter =
+    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {
     if (layer.style.extrusionEnabled) {
@@ -1709,11 +1717,15 @@ function applyVectorDataRenderLayers(
       // Inverted fill (QGIS "Inverted polygons"): the mask — everything
       // outside the features — takes the layer's fill, and the normal fill
       // layer is dropped so the features read as holes. The mask derives from
-      // the raw features, so, like dedup labels, it ignores time-slider /
-      // rule-visibility filters. A null mask (no polygons, or a clipper
-      // failure) falls back to the normal fill rather than rendering nothing.
+      // the raw features (no MapLibre filter applies to it), so while a
+      // time-slider / rule-visibility filter is active — or when the mask
+      // cannot be built (no polygons, oversized layer, clipper failure) — it
+      // falls back to the normal filtered fill rather than disagreeing with
+      // the visible data or rendering nothing.
       const invertedMask =
-        styleValue(layer.style, "invertedFillEnabled") && layer.geojson
+        styleValue(layer.style, "invertedFillEnabled") &&
+        !hasFeatureFilter &&
+        layer.geojson
           ? buildInvertedMask(layer.geojson)
           : null;
       if (invertedMask) {
@@ -2071,12 +2083,10 @@ function applyVectorDataRenderLayers(
   // gated to point-only layers: the aggregated source holds just points, so a
   // mixed-geometry layer would silently lose its line/polygon labels. It is also
   // skipped while a Time Slider filter or a rule-based visibility filter is
-  // active: the aggregated source is built from the raw features (no MapLibre
-  // filter applies to it), so dedup labels would otherwise ignore the time
-  // window / hidden features and disagree with the visible data.
-  const hasFeatureFilter =
-    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
-    ruleBasedVisibilityFilter(layer.style) !== null;
+  // active (`hasFeatureFilter`, computed at the top of this function): the
+  // aggregated source is built from the raw features (no MapLibre filter
+  // applies to it), so dedup labels would otherwise ignore the time window /
+  // hidden features and disagree with the visible data.
   const dedupedLabelFc =
     labels.enabled &&
     labels.dedupe !== "off" &&
@@ -2223,30 +2233,40 @@ function applyVectorDataRenderLayers(
     removeSourceIfExists(map, labelSourceId(layer.id));
   }
 
-  applyGeometryGeneratorLayers(map, layer, visibility, opacity, beforeId);
+  applyGeometryGeneratorLayers(
+    map,
+    layer,
+    visibility,
+    opacity,
+    hasFeatureFilter,
+    beforeId,
+  );
 }
 
 /**
  * Geometry generator (QGIS geometry-generator symbol layers): renders each
  * feature's derived geometry — centroid, bounding box, convex hull, or buffer
  * — as extra symbology over the layer's normal rendering, through a companion
- * GeoJSON source. Derived from the raw features, so, like dedup labels, it
- * ignores time-slider / rule-visibility filters.
+ * GeoJSON source. Derived from the raw features (no MapLibre filter applies),
+ * so, like dedup labels, it is suppressed while a time-slider /
+ * rule-visibility filter is active rather than rendering hidden features.
  */
 function applyGeometryGeneratorLayers(
   map: maplibregl.Map,
   layer: GeoLibreLayer,
   visibility: "visible" | "none",
   opacity: number,
+  hasFeatureFilter: boolean,
   beforeId?: string,
 ): void {
   // Match inverted fill and line decorations: no flat companion symbology
   // while the layer renders as a 3D extrusion. The Style Panel hides the
   // generator controls in extrusion mode without resetting the setting, so
   // this guard is what actually turns the layers off.
-  const generatorType = layer.style.extrusionEnabled
-    ? "none"
-    : styleValue(layer.style, "geometryGenerator");
+  const generatorType =
+    layer.style.extrusionEnabled || hasFeatureFilter
+      ? "none"
+      : styleValue(layer.style, "geometryGenerator");
   const generated =
     generatorType !== "none" && layer.geojson
       ? buildGeneratedGeometry(
