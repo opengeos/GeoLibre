@@ -2497,8 +2497,12 @@ export function StylePanel({
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 shrink-0"
-                  title={t("style.expressionBuilder.openBuilder")}
-                  aria-label={t("style.expressionBuilder.openBuilder")}
+                  title={t("style.expressionBuilder.openBuilderForRule", {
+                    index: index + 1,
+                  })}
+                  aria-label={t("style.expressionBuilder.openBuilderForRule", {
+                    index: index + 1,
+                  })}
                   onClick={() =>
                     setExpressionBuilderTarget({
                       kind: "rule",

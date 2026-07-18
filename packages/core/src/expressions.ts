@@ -211,6 +211,14 @@ export interface ValidateMapExpressionOptions {
 /**
  * Builds the minimal property spec that makes `createExpression` enforce a
  * result type while still allowing zoom- and feature-dependent input.
+ *
+ * This mirrors the (unexported) `StylePropertySpecification` shape that
+ * `@maplibre/maplibre-gl-style-spec` expects — the cast below means the
+ * compiler cannot catch a change to that contract, so whenever the
+ * style-spec package is bumped (including Dependabot PRs) re-check that
+ * expected-type enforcement still works. The "enforces an expected result
+ * type" test in `tests/expressions.test.ts` fails if this shape stops
+ * being honored.
  */
 function propertySpecFor(expectedType: ExpressionExpectedType) {
   return {
@@ -412,18 +420,19 @@ export function evaluateMapExpression(
  * True when a preview value is shaped like a style-spec `Color` (its
  * evaluated color representation: premultiplied r/g/b/a floats). Shared by
  * the preview formatter and the dialog's color-swatch rendering so the two
- * checks cannot drift apart.
+ * checks cannot drift apart. Channel values must be finite numbers so a
+ * user-data object that merely has r/g/b/a keys (e.g. via `["properties"]`)
+ * cannot be misclassified and break the rgba formatting.
  */
 export function isStyleSpecColor(
   value: unknown,
 ): value is { r: number; g: number; b: number; a: number } {
-  return (
-    value !== null &&
-    typeof value === "object" &&
-    "r" in value &&
-    "g" in value &&
-    "b" in value &&
-    "a" in value
+  if (value === null || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (["r", "g", "b", "a"] as const).every(
+    (channel) =>
+      typeof record[channel] === "number" &&
+      Number.isFinite(record[channel]),
   );
 }
 

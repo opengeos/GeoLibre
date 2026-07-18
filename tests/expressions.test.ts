@@ -229,6 +229,10 @@ describe("variables", () => {
     assert.equal(isStyleSpecColor("#ff0000"), false);
     assert.equal(isStyleSpecColor(null), false);
     assert.equal(isStyleSpecColor({ r: 1, g: 1, b: 1 }), false);
+    // r/g/b/a keys with non-numeric values (e.g. user attribute data via
+    // ["properties"]) must not be mistaken for a color.
+    assert.equal(isStyleSpecColor({ r: "x", g: 0, b: 0, a: "x" }), false);
+    assert.equal(isStyleSpecColor({ r: NaN, g: 0, b: 0, a: 1 }), false);
   });
 });
 

@@ -3375,6 +3375,7 @@
     "expressionBuilder": {
       "title": "Expression Builder",
       "openBuilder": "Open expression builder",
+      "openBuilderForRule": "Open expression builder for rule {{index}}",
       "expressionLabel": "Expression",
       "valid": "Valid expression.",
       "apply": "Apply",
