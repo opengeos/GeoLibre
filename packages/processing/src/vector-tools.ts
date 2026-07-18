@@ -30,7 +30,7 @@ import type {
   Position,
   MultiPolygon,
 } from "geojson";
-import type { GeoLibreLayer } from "@geolibre/core";
+import { layerJoinKey, type GeoLibreLayer } from "@geolibre/core";
 import type { GeometryFamily, ProcessingAlgorithm, ProcessingContext } from "./types";
 import { createH3GridTool, binPointsTool } from "./h3-tools";
 import { TOPOLOGY_TOOLS } from "./topology-tools";
@@ -751,19 +751,13 @@ export const spatialJoinTool: ProcessingAlgorithm = {
 /**
  * Match key for the Attribute join tool: empty values (null/undefined/NaN/empty
  * string) never match a row, mirroring a SQL/pandas NaN join key. Non-empty
- * values are keyed by {@link valueToString}, so a numeric `5` and the string
- * `"5"` join (both render `"5"`) while a zero-padded code like `"01001"` only
- * matches another `"01001"`. Kept in sync with the backend's
- * ``_attribute_join_key``.
+ * values are keyed stringified, so a numeric `5` and the string `"5"` join
+ * (both render `"5"`) while a zero-padded code like `"01001"` only matches
+ * another `"01001"`. Delegates to `@geolibre/core`'s {@link layerJoinKey} —
+ * the persistent-join engine's key — so the two client-side joins cannot
+ * drift; the backend's ``_attribute_join_key`` remains the Python mirror.
  */
-function attributeJoinKey(value: unknown): string | null {
-  const isEmpty =
-    value === null ||
-    value === undefined ||
-    (typeof value === "number" && Number.isNaN(value)) ||
-    valueToString(value) === "";
-  return isEmpty ? null : valueToString(value);
-}
+const attributeJoinKey = layerJoinKey;
 
 /**
  * Join types accepted by the Attribute join tool. Kept local (rather than

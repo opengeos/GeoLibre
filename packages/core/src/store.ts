@@ -41,6 +41,7 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
+  type LayerJoin,
   type LayerStyle,
   type LegendConfig,
   type MapGridLayout,
@@ -57,6 +58,11 @@ import {
   type StyleLibraryEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
+import {
+  applyJoinsToLayer,
+  cascadeLayerJoinRefresh,
+  reapplyLayerJoins,
+} from "./joins";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -495,6 +501,12 @@ export interface AppState {
   setLayerVisibility: (id: string, visible: boolean) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
   setLayerStyle: (id: string, style: Partial<LayerStyle>) => void;
+  /**
+   * Replace a layer's persistent attribute joins and immediately re-derive its
+   * joined columns (strip what the previous joins added, apply the new list).
+   * Pass an empty array to detach every join and restore the base attributes.
+   */
+  setLayerJoins: (id: string, joins: LayerJoin[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   addGeoJsonLayer: (
@@ -1346,7 +1358,14 @@ export const useAppStore = create<AppState>()(
 
       removeLayer: (id) =>
         set((s) => ({
-          layers: s.layers.filter((l) => l.id !== id),
+          // Re-derive any layer whose joins consumed the removed layer: with
+          // the source gone the join resolves to nothing, so its previously
+          // materialized columns strip away instead of staying frozen (the
+          // join definition itself stays, shown as missing in the Joins UI).
+          layers: cascadeLayerJoinRefresh(
+            s.layers.filter((l) => l.id !== id),
+            id,
+          ),
           // Drop any per-pane visibility override for the removed layer so stale
           // ids don't accumulate (and serialize) in secondary panes over time.
           secondaryMapViews: s.secondaryMapViews.map((pane) => {
@@ -1367,10 +1386,38 @@ export const useAppStore = create<AppState>()(
         })),
 
       updateLayer: (id, patch) =>
-        set((s) => ({
-          layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-          isDirty: true,
-        })),
+        set((s) => {
+          let layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
+          // A geojson replacement re-derives persistent joins: on the layer
+          // itself (file reload, attribute edits, processing writes — joined
+          // columns stay derived, QGIS-style), then transitively on every
+          // layer whose joins consume the updated one, so editing a join
+          // table refreshes its targets and their dependents in turn. The
+          // `patch.joins === undefined` guard exists for external callers of
+          // this public store API (plugins, programmatic loads): a patch that
+          // carries both `geojson` and `joins` is taken verbatim as already-
+          // derived state — no in-repo caller does this today.
+          if (patch.geojson !== undefined) {
+            if (patch.joins === undefined) {
+              layers = layers.map((l) =>
+                l.id === id && l.joins?.length ? applyJoinsToLayer(l, layers) : l,
+              );
+            }
+            layers = cascadeLayerJoinRefresh(layers, id);
+          }
+          return { layers, isDirty: true };
+        }),
+
+      setLayerJoins: (id, joins) =>
+        set((s) => {
+          let layers = s.layers.map((l) =>
+            l.id === id ? applyJoinsToLayer(l, s.layers, joins) : l,
+          );
+          // Changing this layer's joins changes its materialized columns, so
+          // layers joining against it (directly or transitively) re-derive too.
+          layers = cascadeLayerJoinRefresh(layers, id);
+          return { layers, isDirty: true };
+        }),
 
       setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 
@@ -1696,6 +1743,10 @@ export const useAppStore = create<AppState>()(
 
       loadProject: (project, path = null, options = {}) => {
         const applied = applyProjectToStore(project);
+        // Re-resolve persistent attribute joins against the loaded layer set,
+        // so joined columns reflect the join tables as saved (and a stale
+        // saved copy of the joined output self-heals).
+        applied.layers = reapplyLayerJoins(applied.layers);
         // A project that ships a story map opens straight into the presentation
         // so the reader sees the story, not the editor. Projects without a story
         // (or with an empty one) open normally. Callers that open a project for
