@@ -51,12 +51,29 @@ import {
   drawLayout,
   PAPER_SIZES,
   resolvePageSize,
+  type BodyCorner,
   type CustomSize,
   type LayoutOptions,
   type Orientation,
   type PaperSizeId,
   type SizeUnit,
 } from "../../lib/print-layout";
+import {
+  buildChartBlock,
+  buildTableBlock,
+  DEFAULT_TABLE_COLUMNS,
+  DEFAULT_TABLE_ROWS,
+  layerRows,
+  MAX_TABLE_ROWS,
+  rowsWithinBounds,
+  type ChartBlockType,
+} from "../../lib/print-data-blocks";
+import {
+  categoricalColumns,
+  numericColumns,
+  type BarAggregation,
+  type ChartRow,
+} from "../../lib/attribute-charts";
 import {
   clearPrintExtent,
   drawPrintExtent,
@@ -91,6 +108,8 @@ import {
   parseAtlasFilter,
   stripAtlasTokens,
   substituteAtlasTokens,
+  type AtlasBounds,
+  type AtlasFeatureInfo,
   type AtlasPage,
   type AtlasTokenContext,
 } from "../../lib/print-atlas";
@@ -272,6 +291,29 @@ export function PrintLayoutDialog({
   const [colorbarPosition, setColorbarPosition] = useState<
     "top-left" | "top-right" | "bottom-left" | "bottom-right"
   >("top-right");
+  // Data blocks: attribute table + chart composed on the page (GH #1324).
+  const [showDataTable, setShowDataTable] = useState(false);
+  const [tableLayerId, setTableLayerId] = useState("");
+  const [tableTitle, setTableTitle] = useState("");
+  // Explicitly checked columns; empty = the layer's first few fields.
+  const [tableColumns, setTableColumns] = useState<string[]>([]);
+  const [tableSortField, setTableSortField] = useState("");
+  const [tableSortDesc, setTableSortDesc] = useState(false);
+  const [tableMaxRows, setTableMaxRows] = useState(DEFAULT_TABLE_ROWS);
+  const [tablePosition, setTablePosition] = useState<BodyCorner>("bottom-left");
+  const [tableFilterToPage, setTableFilterToPage] = useState(true);
+  const [showDataChart, setShowDataChart] = useState(false);
+  const [chartLayerId, setChartLayerId] = useState("");
+  const [chartTitle, setChartTitle] = useState("");
+  const [chartType, setChartType] = useState<ChartBlockType>("bar");
+  const [chartCategoryField, setChartCategoryField] = useState("");
+  const [chartAggregation, setChartAggregation] =
+    useState<BarAggregation>("count");
+  const [chartValueField, setChartValueField] = useState("");
+  // Top-right by default: the scale bar + north arrow duo occupies the
+  // bottom-right corner out of the box.
+  const [chartPosition, setChartPosition] = useState<BodyCorner>("top-right");
+  const [chartFilterToPage, setChartFilterToPage] = useState(true);
   // Cartographic title block ("stempel") fields (GH #522).
   const [showInfoBlock, setShowInfoBlock] = useState(false);
   const [author, setAuthor] = useState("");
@@ -316,6 +358,14 @@ export function PrintLayoutDialog({
   // Set when the last atlas capture had to clamp a fixed scale to the map's
   // zoom limits, mirroring the manual scale flow's out-of-range notice.
   const [atlasScaleNotice, setAtlasScaleNotice] = useState<string | null>(null);
+  // The map's actual visible bounds after the last atlas capture, keyed by
+  // page index. The data blocks' page-extent filter prefers this over the
+  // page's nominal bounds: in fixed-scale mode the zoom correction changes
+  // the rendered extent away from the fitted feature box (GH #1324).
+  const [atlasViewBounds, setAtlasViewBounds] = useState<{
+    index: number;
+    bounds: AtlasBounds;
+  } | null>(null);
   // Mirror of atlasActive (derived further down) for the dialog-open effect,
   // which is declared before those derivations exist.
   const atlasActiveRef = useRef(false);
@@ -885,24 +935,254 @@ export function PrintLayoutDialog({
         : null,
     [currentAtlasPage, clampedAtlasIndex, atlasPageCount],
   );
+  // ---- Data blocks: attribute table + chart on the page (GH #1324) ----
+  // Any layer with loaded features qualifies (the same eligibility as an atlas
+  // coverage layer: the extent filter needs per-feature geometry).
+  const tableLayer = useMemo(
+    () => atlasLayers.find((l) => l.id === tableLayerId) ?? null,
+    [atlasLayers, tableLayerId],
+  );
+  const chartLayer = useMemo(
+    () => atlasLayers.find((l) => l.id === chartLayerId) ?? null,
+    [atlasLayers, chartLayerId],
+  );
+  const tableFields = useMemo(
+    () =>
+      tableLayer?.geojson ? listAtlasFields(tableLayer.geojson.features) : [],
+    [tableLayer],
+  );
+  const chartFields = useMemo(
+    () =>
+      chartLayer?.geojson ? listAtlasFields(chartLayer.geojson.features) : [],
+    [chartLayer],
+  );
+  const tableAllRows = useMemo(
+    () => (tableLayer?.geojson ? layerRows(tableLayer.geojson) : []),
+    [tableLayer],
+  );
+  const chartAllRows = useMemo(
+    () => (chartLayer?.geojson ? layerRows(chartLayer.geojson) : []),
+    [chartLayer],
+  );
+  // Per-feature bounds for the page-extent filter, walked once per layer so
+  // stepping/exporting an N-page atlas does not redo the vertex walk N times
+  // (the same precompute pattern the atlas page builder uses).
+  const tableFeatureInfos = useMemo(
+    () =>
+      tableLayer?.geojson ? collectAtlasFeatures(tableLayer.geojson) : [],
+    [tableLayer],
+  );
+  const chartFeatureInfos = useMemo(
+    () =>
+      chartLayer?.geojson ? collectAtlasFeatures(chartLayer.geojson) : [],
+    [chartLayer],
+  );
+  const chartCategoricalFields = useMemo(
+    () => categoricalColumns(chartAllRows, chartFields),
+    [chartAllRows, chartFields],
+  );
+  const chartNumericFields = useMemo(
+    () => numericColumns(chartAllRows, chartFields),
+    [chartAllRows, chartFields],
+  );
+  // Category options prefer detected low-cardinality fields but fall back to
+  // every field, so an unusual layer can still be charted.
+  const chartCategoryOptions =
+    chartCategoricalFields.length > 0 ? chartCategoricalFields : chartFields;
+  // Effective selections: the first suitable field stands in until the user
+  // picks one, so enabling a block gives instant feedback.
+  const effectiveCategoryField =
+    chartCategoryField && chartFields.includes(chartCategoryField)
+      ? chartCategoryField
+      : (chartCategoryOptions[0] ?? "");
+  const effectiveValueField =
+    chartValueField && chartNumericFields.includes(chartValueField)
+      ? chartValueField
+      : (chartNumericFields[0] ?? "");
+  const chartNeedsValueField =
+    chartType === "line" || chartAggregation !== "count";
+  const effectiveTableColumns = useMemo(() => {
+    const chosen = tableColumns.filter((c) => tableFields.includes(c));
+    return chosen.length > 0
+      ? chosen
+      : tableFields.slice(0, DEFAULT_TABLE_COLUMNS);
+  }, [tableColumns, tableFields]);
+
+  // Margin applied when fitting an atlas page's bounds, shared by the real
+  // fit in captureAtlasPage and the pre-capture approximation below so the
+  // two can never desync (fixed-scale mode fits tight and re-zooms after).
+  const atlasFitMarginPct =
+    atlasExtentMode === "margin" ? atlasMarginPct : 0;
+
+  // The extent a data block's "only features on the page" filter tests
+  // against, before the page's real capture is available: the atlas page's
+  // fitted bounds, or the drawn print extent when that is what the capture
+  // clips to. Plain viewport captures don't filter. Once a page has actually
+  // been captured, the map's true visible bounds override this approximation
+  // (the viewBounds handed to rowsForBlock/buildBlocksFromRows) — the fit
+  // expands the box on one axis for the page aspect, and fixed-scale mode
+  // re-zooms after fitting.
+  const dataFilterBounds = useCallback(
+    (page: AtlasPage | null): AtlasBounds | null => {
+      if (page) return expandBounds(page.bounds, atlasFitMarginPct);
+      if (captureMode === "extent" && extentBbox) return extentBbox;
+      return null;
+    },
+    [atlasFitMarginPct, captureMode, extentBbox],
+  );
+
+  // One block's rows after the optional page-extent filter. This is the
+  // O(features) geometry walk, kept apart from the formatting step below so
+  // it only re-runs when the layer, filter toggle, or bounds change.
+  const rowsForBlock = useCallback(
+    (
+      features: readonly AtlasFeatureInfo[],
+      allRows: ChartRow[],
+      filterOn: boolean,
+      bounds: AtlasBounds | null,
+    ): ChartRow[] =>
+      filterOn && bounds ? rowsWithinBounds(features, bounds) : allRows,
+    [],
+  );
+
+  // Formatting-only step: turn already-filtered rows into the drawable specs.
+  // Cosmetic inputs (headings, positions, sort, chart type) only invalidate
+  // this cheap step, not the extent scans above (per-keystroke lag review).
+  const buildBlocksFromRows = useCallback(
+    (
+      tableRows: ChartRow[],
+      chartRows: ChartRow[],
+    ): Pick<LayoutOptions, "dataTable" | "dataChart"> => {
+      let dataTable: LayoutOptions["dataTable"] = null;
+      let dataChart: LayoutOptions["dataChart"] = null;
+      if (showDataTable) {
+        const data = buildTableBlock(tableRows, {
+          columns: effectiveTableColumns,
+          sortField: tableSortField || undefined,
+          sortDescending: tableSortDesc,
+          maxRows: tableMaxRows,
+        });
+        if (data) {
+          dataTable = {
+            title: tableTitle.trim() || undefined,
+            columns: data.columns,
+            rows: data.rows,
+            truncated: data.truncated,
+            // The final hidden-row count depends on how many rows fit the
+            // page, which only the renderer knows; hand it the translation.
+            formatNote: (count) =>
+              t("printLayout.dataTable.moreRows", { count }),
+            position: tablePosition,
+          };
+        }
+      }
+      if (showDataChart) {
+        const data = buildChartBlock(chartRows, {
+          type: chartType,
+          categoryField: effectiveCategoryField || undefined,
+          aggregation: chartAggregation,
+          valueField: effectiveValueField || undefined,
+        });
+        if (data) {
+          dataChart = {
+            title: chartTitle.trim() || undefined,
+            position: chartPosition,
+            data,
+            // Translated "+N more" for bar categories past the top-N cap.
+            formatNote: (count) =>
+              t("printLayout.dataTable.moreRows", { count }),
+          };
+        }
+      }
+      return { dataTable, dataChart };
+    },
+    [
+      showDataTable,
+      effectiveTableColumns,
+      tableSortField,
+      tableSortDesc,
+      tableMaxRows,
+      tableTitle,
+      tablePosition,
+      showDataChart,
+      chartType,
+      effectiveCategoryField,
+      chartAggregation,
+      effectiveValueField,
+      chartTitle,
+      chartPosition,
+      t,
+    ],
+  );
+
+  // Bounds the display path filters against: the current page's captured view
+  // bounds when they belong to it (while a newly selected page is still
+  // capturing, fall back to its nominal bounds until the auto-drive refresh
+  // lands), or the drawn print extent outside atlas mode.
+  const displayFilterBounds = useMemo<AtlasBounds | null>(() => {
+    const vb =
+      atlasViewBounds && atlasViewBounds.index === clampedAtlasIndex
+        ? atlasViewBounds.bounds
+        : null;
+    return (currentAtlasPage && vb) || dataFilterBounds(currentAtlasPage);
+  }, [atlasViewBounds, clampedAtlasIndex, currentAtlasPage, dataFilterBounds]);
+  const displayTableRows = useMemo(
+    () =>
+      showDataTable
+        ? rowsForBlock(
+            tableFeatureInfos,
+            tableAllRows,
+            tableFilterToPage,
+            displayFilterBounds,
+          )
+        : [],
+    [
+      showDataTable,
+      rowsForBlock,
+      tableFeatureInfos,
+      tableAllRows,
+      tableFilterToPage,
+      displayFilterBounds,
+    ],
+  );
+  const displayChartRows = useMemo(
+    () =>
+      showDataChart
+        ? rowsForBlock(
+            chartFeatureInfos,
+            chartAllRows,
+            chartFilterToPage,
+            displayFilterBounds,
+          )
+        : [],
+    [
+      showDataChart,
+      rowsForBlock,
+      chartFeatureInfos,
+      chartAllRows,
+      chartFilterToPage,
+      displayFilterBounds,
+    ],
+  );
+  const displayDataBlocks = useMemo(
+    () => buildBlocksFromRows(displayTableRows, displayChartRows),
+    [buildBlocksFromRows, displayTableRows, displayChartRows],
+  );
+
   // Options with this page's atlas tokens resolved, fed to the preview, the
   // clipboard copy, and the single-page exports; the inputs keep the raw
   // template so the tokens stay editable.
-  const displayOptions = useMemo<LayoutOptions>(
-    () =>
-      atlasTokenCtx
-        ? {
-            ...options,
-            title: substituteAtlasTokens(options.title, atlasTokenCtx),
-            subtitle: substituteAtlasTokens(options.subtitle, atlasTokenCtx),
-            footerText: substituteAtlasTokens(
-              options.footerText,
-              atlasTokenCtx,
-            ),
-          }
-        : options,
-    [options, atlasTokenCtx],
-  );
+  const displayOptions = useMemo<LayoutOptions>(() => {
+    const withBlocks = { ...options, ...displayDataBlocks };
+    return atlasTokenCtx
+      ? {
+          ...withBlocks,
+          title: substituteAtlasTokens(options.title, atlasTokenCtx),
+          subtitle: substituteAtlasTokens(options.subtitle, atlasTokenCtx),
+          footerText: substituteAtlasTokens(options.footerText, atlasTokenCtx),
+        }
+      : withBlocks;
+  }, [options, displayDataBlocks, atlasTokenCtx]);
 
   /** Resolve once the map goes idle after an atlas camera move, with a grace
    * timeout because browsers may throttle the occluded canvas behind the
@@ -929,15 +1209,15 @@ export function PrintLayoutDialog({
   // Drive the live map to one atlas page's extent and capture it. Margin mode
   // grows the feature's box before fitting; fixed-scale mode fits first, then
   // corrects the zoom by the log2 ratio difference (like applyScale) and
-  // recaptures.
+  // recaptures. Returns the capture plus the map's final visible bounds, so
+  // the data blocks can filter to what the page actually shows.
   const captureAtlasPage = useCallback(
-    async (page: AtlasPage): Promise<CapturedMap> => {
+    async (
+      page: AtlasPage,
+    ): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
       const map = mapControllerRef.current?.getMap();
       if (!map) throw new Error("Map is not ready");
-      const [w, s, e, n] = expandBounds(
-        page.bounds,
-        atlasExtentMode === "margin" ? atlasMarginPct : 0,
-      );
+      const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
       map.fitBounds(
         [
           [w, s],
@@ -1007,12 +1287,16 @@ export function PrintLayoutDialog({
       } else {
         setAtlasScaleNotice(null);
       }
-      return cap;
+      const b = map.getBounds();
+      return {
+        cap,
+        viewBounds: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+      };
     },
     [
       mapControllerRef,
       atlasExtentMode,
-      atlasMarginPct,
+      atlasFitMarginPct,
       atlasScale,
       atlasPageCount,
       waitForAtlasSettle,
@@ -1028,8 +1312,9 @@ export function PrintLayoutDialog({
       setAtlasBusy(true);
       setError(null);
       try {
-        const cap = await captureAtlasPage(page);
+        const { cap, viewBounds } = await captureAtlasPage(page);
         setCaptured(cap);
+        setAtlasViewBounds({ index, bounds: viewBounds });
         setAtlasIndex(index);
       } catch {
         setError(t("printLayout.errors.captureFailed"));
@@ -1057,6 +1342,26 @@ export function PrintLayoutDialog({
       setAtlasIndex(0);
     }
   }, [atlasEnabled, atlasLayerId, atlasLayers]);
+
+  // Same defaulting for the data blocks' layers (GH #1324): fill in the first
+  // eligible layer when a block is enabled without one, or when its selected
+  // layer disappears; the field choices belong to the old layer, so drop them.
+  useEffect(() => {
+    if (!showDataTable || atlasLayers.length === 0) return;
+    if (!atlasLayers.some((l) => l.id === tableLayerId)) {
+      setTableLayerId(atlasLayers[0].id);
+      setTableColumns([]);
+      setTableSortField("");
+    }
+  }, [showDataTable, tableLayerId, atlasLayers]);
+  useEffect(() => {
+    if (!showDataChart || atlasLayers.length === 0) return;
+    if (!atlasLayers.some((l) => l.id === chartLayerId)) {
+      setChartLayerId(atlasLayers[0].id);
+      setChartCategoryField("");
+      setChartValueField("");
+    }
+  }, [showDataChart, chartLayerId, atlasLayers]);
 
   // Latest page index for the auto-drive effect below, so stepping (which
   // sets the index) does not itself re-trigger a capture.
@@ -1382,13 +1687,30 @@ export function PrintLayoutDialog({
         onProgress: (current: number, totalPages: number) =>
           setAtlasProgress({ current, total: totalPages }),
         optionsForPage: async (i: number): Promise<LayoutOptions> => {
-          const cap = await captureAtlasPage(pages[i]);
+          const { cap, viewBounds } = await captureAtlasPage(pages[i]);
           // Mirror progress into the dialog preview as pages are produced.
           setCaptured(cap);
+          setAtlasViewBounds({ index: i, bounds: viewBounds });
           setAtlasIndex(i);
           const ctx = ctxFor(i);
           return {
             ...options,
+            // Each page's table/chart re-filters to the extent the page's
+            // capture actually shows (not just the nominal feature bounds).
+            ...buildBlocksFromRows(
+              rowsForBlock(
+                tableFeatureInfos,
+                tableAllRows,
+                tableFilterToPage,
+                viewBounds,
+              ),
+              rowsForBlock(
+                chartFeatureInfos,
+                chartAllRows,
+                chartFilterToPage,
+                viewBounds,
+              ),
+            ),
             title: substituteAtlasTokens(options.title, ctx),
             subtitle: substituteAtlasTokens(options.subtitle, ctx),
             footerText: substituteAtlasTokens(options.footerText, ctx),
@@ -2234,6 +2556,18 @@ export function PrintLayoutDialog({
                 checked={showCustomLegend}
                 onChange={setShowCustomLegend}
               />
+              <ToggleField
+                id="el-data-table"
+                label={t("printLayout.element.dataTable")}
+                checked={showDataTable}
+                onChange={setShowDataTable}
+              />
+              <ToggleField
+                id="el-data-chart"
+                label={t("printLayout.element.dataChart")}
+                checked={showDataChart}
+                onChange={setShowDataChart}
+              />
             </div>
 
             {showCustomLegend && (
@@ -2492,6 +2826,369 @@ export function PrintLayoutDialog({
                     onValueChange={(v: number[]) => setColorbarLength(v[0])}
                   />
                 </div>
+              </div>
+            )}
+
+            {/* Attribute-table block settings (GH #1324). */}
+            {showDataTable && (
+              <div className="space-y-3 rounded-md border p-3">
+                {atlasLayers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t("printLayout.atlas.noLayers")}
+                  </p>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dt-layer">
+                        {t("printLayout.dataBlocks.layer")}
+                      </Label>
+                      <Select
+                        id="dt-layer"
+                        value={tableLayerId}
+                        onChange={(e) => {
+                          setTableLayerId(e.target.value);
+                          // Column/sort choices belong to the previous layer.
+                          setTableColumns([]);
+                          setTableSortField("");
+                        }}
+                      >
+                        {atlasLayers.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dt-title">
+                        {t("printLayout.dataBlocks.titleLabel")}
+                      </Label>
+                      <Input
+                        id="dt-title"
+                        value={tableTitle}
+                        placeholder={tableLayer?.name ?? ""}
+                        onChange={(e) => setTableTitle(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{t("printLayout.dataTable.columns")}</Label>
+                      <div className="max-h-40 space-y-1 overflow-auto rounded-md border p-2">
+                        {tableFields.map((f) => (
+                          <label
+                            key={f}
+                            className="flex cursor-pointer items-center gap-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-primary"
+                              checked={effectiveTableColumns.includes(f)}
+                              onChange={(e) => {
+                                const next = new Set(effectiveTableColumns);
+                                if (e.target.checked) next.add(f);
+                                else next.delete(f);
+                                // Normalize to the layer's field order so the
+                                // printed column order is stable.
+                                setTableColumns(
+                                  tableFields.filter((c) => next.has(c)),
+                                );
+                              }}
+                            />
+                            {f}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t("printLayout.dataTable.columnsHint", {
+                          count: DEFAULT_TABLE_COLUMNS,
+                        })}
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dt-sort">
+                          {t("printLayout.atlas.sortField")}
+                        </Label>
+                        <Select
+                          id="dt-sort"
+                          value={tableSortField}
+                          onChange={(e) => setTableSortField(e.target.value)}
+                        >
+                          <option value="">
+                            {t("printLayout.atlas.sortNone")}
+                          </option>
+                          {tableFields.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dt-sort-dir">
+                          {t("printLayout.atlas.sortOrder")}
+                        </Label>
+                        <Select
+                          id="dt-sort-dir"
+                          value={tableSortDesc ? "desc" : "asc"}
+                          disabled={!tableSortField}
+                          onChange={(e) =>
+                            setTableSortDesc(e.target.value === "desc")
+                          }
+                        >
+                          <option value="asc">
+                            {t("printLayout.atlas.sortAsc")}
+                          </option>
+                          <option value="desc">
+                            {t("printLayout.atlas.sortDesc")}
+                          </option>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dt-max-rows">
+                          {t("printLayout.dataTable.maxRows")}
+                        </Label>
+                        <Input
+                          id="dt-max-rows"
+                          type="number"
+                          min={1}
+                          max={MAX_TABLE_ROWS}
+                          value={tableMaxRows}
+                          onChange={(e) =>
+                            setTableMaxRows(
+                              Math.max(
+                                1,
+                                Math.min(
+                                  MAX_TABLE_ROWS,
+                                  Number(e.target.value) || 1,
+                                ),
+                              ),
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dt-position">
+                          {t("printLayout.dataBlocks.position")}
+                        </Label>
+                        <Select
+                          id="dt-position"
+                          value={tablePosition}
+                          onChange={(e) =>
+                            setTablePosition(e.target.value as BodyCorner)
+                          }
+                        >
+                          <option value="top-left">
+                            {t("printLayout.position.topLeft")}
+                          </option>
+                          <option value="top-right">
+                            {t("printLayout.position.topRight")}
+                          </option>
+                          <option value="bottom-left">
+                            {t("printLayout.position.bottomLeft")}
+                          </option>
+                          <option value="bottom-right">
+                            {t("printLayout.position.bottomRight")}
+                          </option>
+                        </Select>
+                      </div>
+                    </div>
+                    <ToggleField
+                      id="dt-filter-page"
+                      label={t("printLayout.dataBlocks.filterToPage")}
+                      checked={tableFilterToPage}
+                      onChange={setTableFilterToPage}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("printLayout.dataBlocks.filterToPageHint")}
+                    </p>
+                    {!displayDataBlocks.dataTable && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("printLayout.dataTable.noRows")}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Chart block settings (GH #1324). */}
+            {showDataChart && (
+              <div className="space-y-3 rounded-md border p-3">
+                {atlasLayers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t("printLayout.atlas.noLayers")}
+                  </p>
+                ) : (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dc-layer">
+                        {t("printLayout.dataBlocks.layer")}
+                      </Label>
+                      <Select
+                        id="dc-layer"
+                        value={chartLayerId}
+                        onChange={(e) => {
+                          setChartLayerId(e.target.value);
+                          // Field choices belong to the previous layer.
+                          setChartCategoryField("");
+                          setChartValueField("");
+                        }}
+                      >
+                        {atlasLayers.map((l) => (
+                          <option key={l.id} value={l.id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dc-type">
+                          {t("printLayout.dataChart.type")}
+                        </Label>
+                        <Select
+                          id="dc-type"
+                          value={chartType}
+                          onChange={(e) =>
+                            setChartType(e.target.value as ChartBlockType)
+                          }
+                        >
+                          <option value="bar">
+                            {t("printLayout.dataChart.typeBar")}
+                          </option>
+                          <option value="pie">
+                            {t("printLayout.dataChart.typePie")}
+                          </option>
+                          <option value="line">
+                            {t("printLayout.dataChart.typeLine")}
+                          </option>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dc-position">
+                          {t("printLayout.dataBlocks.position")}
+                        </Label>
+                        <Select
+                          id="dc-position"
+                          value={chartPosition}
+                          onChange={(e) =>
+                            setChartPosition(e.target.value as BodyCorner)
+                          }
+                        >
+                          <option value="top-left">
+                            {t("printLayout.position.topLeft")}
+                          </option>
+                          <option value="top-right">
+                            {t("printLayout.position.topRight")}
+                          </option>
+                          <option value="bottom-left">
+                            {t("printLayout.position.bottomLeft")}
+                          </option>
+                          <option value="bottom-right">
+                            {t("printLayout.position.bottomRight")}
+                          </option>
+                        </Select>
+                      </div>
+                    </div>
+                    {chartType !== "line" && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="dc-category">
+                            {t("printLayout.dataChart.categoryField")}
+                          </Label>
+                          <Select
+                            id="dc-category"
+                            value={effectiveCategoryField}
+                            onChange={(e) =>
+                              setChartCategoryField(e.target.value)
+                            }
+                          >
+                            {chartCategoryOptions.map((f) => (
+                              <option key={f} value={f}>
+                                {f}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="dc-aggregation">
+                            {t("printLayout.dataChart.aggregation")}
+                          </Label>
+                          <Select
+                            id="dc-aggregation"
+                            value={chartAggregation}
+                            onChange={(e) =>
+                              setChartAggregation(
+                                e.target.value as BarAggregation,
+                              )
+                            }
+                          >
+                            <option value="count">
+                              {t("printLayout.dataChart.aggCount")}
+                            </option>
+                            <option value="sum">
+                              {t("printLayout.dataChart.aggSum")}
+                            </option>
+                            <option value="mean">
+                              {t("printLayout.dataChart.aggMean")}
+                            </option>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                    {chartNeedsValueField && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="dc-value">
+                          {t("printLayout.dataChart.valueField")}
+                        </Label>
+                        <Select
+                          id="dc-value"
+                          value={effectiveValueField}
+                          disabled={chartNumericFields.length === 0}
+                          onChange={(e) => setChartValueField(e.target.value)}
+                        >
+                          {chartNumericFields.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </Select>
+                        {chartNumericFields.length === 0 && (
+                          <p className="text-xs text-destructive">
+                            {t("printLayout.dataChart.noNumericFields")}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="dc-title">
+                        {t("printLayout.dataBlocks.titleLabel")}
+                      </Label>
+                      <Input
+                        id="dc-title"
+                        value={chartTitle}
+                        placeholder={chartLayer?.name ?? ""}
+                        onChange={(e) => setChartTitle(e.target.value)}
+                      />
+                    </div>
+                    <ToggleField
+                      id="dc-filter-page"
+                      label={t("printLayout.dataBlocks.filterToPage")}
+                      checked={chartFilterToPage}
+                      onChange={setChartFilterToPage}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("printLayout.dataBlocks.filterToPageHint")}
+                    </p>
+                    {!displayDataBlocks.dataChart && (
+                      <p className="text-xs text-muted-foreground">
+                        {t("printLayout.dataChart.noData")}
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
