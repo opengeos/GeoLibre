@@ -29,6 +29,7 @@
     "**/cesium/**",
     "**/jupyterlite/**",
     "apps/geolibre-desktop/public/**",
+    "apps/geolibre-desktop/src/lib/whitebox-menu-catalog.ts",
     "e2e/fixtures/malformed.geojson"
   ]
 }
