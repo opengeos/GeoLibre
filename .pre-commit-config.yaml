@@ -1,7 +1,14 @@
 ci:
-  # `npm-build` and `eslint` need the full toolchain (node_modules + a build)
-  # so they run via the local npm scripts in dev, not in pre-commit.ci.
-  # The format/lint hooks below ARE run in CI (they are pure checks / auto-fix).
+  # pre-commit.ci (https://pre-commit.ci) runs the hooks below on every PR and
+  # auto-commits any fixes with the message below. It authenticates via its own
+  # GitHub App, so it works on fork PRs too (unlike a GITHUB_TOKEN workflow,
+  # which is read-only on fork PRs and cannot push back). It does NOT run on
+  # push to main, so auto-formatted commits never bypass PR review.
+  # `npm-build` and `eslint` are skipped: they need the full toolchain
+  # (node_modules + a build) and run via the local npm scripts in dev only.
+  autofix_commit_msg: "style: auto-format (ruff + oxfmt) [pre-commit.ci]"
+  autofix_prs: true
+  autoupdate_schedule: weekly
   skip: [npm-build, eslint]
 
 repos:
@@ -27,10 +34,11 @@ repos:
   # than the astral-sh/ruff-pre-commit repo) so pre-commit works offline / behind
   # restricted networks: pre-commit installs the pinned ruff wheel itself
   # (language: python + additional_dependencies), so contributors need no
-  # global ruff. Bump the pin in lockstep with .github/workflows/format.yml.
+  # global ruff. This pin is the single source of truth -- pre-commit.ci runs
+  # these hooks directly, so there is no separate CI pin to keep in sync.
   # ruff-format rewrites in place (a commit with bad style fails, re-add picks
   # up the fix); `ruff` lints with --fix for the auto-fixable rules in ruff.toml
-  # (F/I/W/E). CI mirrors these with --write/--fix and commits the result.
+  # (F/I/W/E). pre-commit.ci auto-commits the rewritten files on PRs.
   - repo: local
     hooks:
       - id: ruff-format
@@ -61,7 +69,8 @@ repos:
         name: oxfmt (JS/TS/JSON/CSS/YAML/TOML)
         entry: oxfmt --write
         language: node
-        # Pin in lockstep with the npm pin in .github/workflows/format.yml.
+        # Single source of truth for the oxfmt version (pre-commit.ci runs
+        # this hook directly, no separate CI pin to keep in sync).
         additional_dependencies: [oxfmt@0.59.0]
         # ipynb is deliberately NOT here: ruff owns notebook Python cells, and
         # oxfmt near them would fight the nbstripout hook below it.
