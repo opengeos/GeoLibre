@@ -41,6 +41,17 @@ repos:
   # (F/I/W/E). pre-commit.ci auto-commits the rewritten files on PRs.
   - repo: local
     hooks:
+      # Run `ruff check --fix` BEFORE `ruff format`: lint autofixes (import
+      # sorting via I, unused-import removal via F) can change layout, and the
+      # formatter must run last so a single pre-commit pass stabilizes the file.
+      # Matches the order recommended by ruff's docs and astral-sh/ruff-pre-commit.
+      - id: ruff
+        name: ruff check
+        entry: ruff check --config ruff.toml --fix
+        language: python
+        additional_dependencies: [ruff==0.15.22]
+        types_or: [python, pyi, jupyter]
+        pass_filenames: true
       - id: ruff-format
         name: ruff format
         entry: ruff format --config ruff.toml
@@ -49,13 +60,6 @@ repos:
         # types_or alone scopes the hook: pre-commit ANDs it with `files`, so a
         # `files` regex would only narrow it further. Covers .py, .pyi stubs,
         # and Jupyter notebooks (ruff formats the Python cells).
-        types_or: [python, pyi, jupyter]
-        pass_filenames: true
-      - id: ruff
-        name: ruff check
-        entry: ruff check --config ruff.toml --fix
-        language: python
-        additional_dependencies: [ruff==0.15.22]
         types_or: [python, pyi, jupyter]
         pass_filenames: true
 
