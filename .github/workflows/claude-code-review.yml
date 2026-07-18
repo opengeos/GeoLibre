@@ -44,8 +44,15 @@ jobs:
     #      path for first-time-contributor PRs).
     # author_association on the comment gates (b): only OWNER/MEMBER/COLLABORATOR
     # accounts — i.e. people with write/admin on the repo — can trigger a review.
+    #
+    # sender.type gates out bot-initiated events (e.g. a pre-commit.ci autofix
+    # push firing `synchronize`): claude-code-action hard-fails on non-human
+    # actors not in its allowed_bots list, and an autofix formatting commit does
+    # not need a fresh (paid) review anyway. Skipping here shows the run as
+    # skipped instead of failed; a maintainer can still `/claude-review`.
     if: >
       (github.event_name == 'pull_request_target' &&
+        github.event.sender.type != 'Bot' &&
         (github.event.pull_request.author_association == 'OWNER' ||
          github.event.pull_request.author_association == 'MEMBER' ||
          github.event.pull_request.author_association == 'COLLABORATOR' ||
