@@ -179,6 +179,45 @@ function loadSvgMarker(
 }
 
 /**
+ * Builds the `icon-size` layout value for a marker symbol layer, honoring
+ * proportional (graduated) symbol sizing. The marker sprite is baked at its
+ * display size (see {@link prepareMarker}), so the constant value is `1`; when
+ * {@link LayerStyle.proportionalSizeEnabled} is set with a chosen numeric field
+ * and a valid value range, returns an `interpolate` whose outputs scale the
+ * sprite so its on-screen width matches the diameter a proportional circle of
+ * the same radius would span (`2 * radius / bakedSize`). The guards mirror
+ * `circleRadiusValue` in `@geolibre/core` so a configuration that leaves
+ * circles at their constant radius also leaves markers unscaled.
+ *
+ * @param style - The layer style.
+ * @returns `1`, or a MapLibre `interpolate` expression for `icon-size`.
+ */
+export function markerIconSizeValue(style: LayerStyle): number | unknown[] {
+  if (!styleValue(style, "proportionalSizeEnabled")) return 1;
+  const property = styleValue(style, "proportionalSizeProperty").trim();
+  if (!property) return 1;
+  const minValue = styleValue(style, "proportionalSizeMinValue");
+  const maxValue = styleValue(style, "proportionalSizeMaxValue");
+  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return 1;
+  if (maxValue <= minValue) return 1;
+  const minRadius = styleValue(style, "proportionalSizeMinRadius");
+  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
+  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return 1;
+  const size = markerSize(style);
+  // icon-size must not go negative; clamp so a hand-edited project with a
+  // negative radius degrades to an invisible marker instead of a style error.
+  return [
+    "interpolate",
+    ["linear"],
+    ["to-number", ["get", property], minValue],
+    minValue,
+    Math.max(0, (2 * minRadius) / size),
+    maxValue,
+    Math.max(0, (2 * maxRadius) / size),
+  ];
+}
+
+/**
  * Resolve the `icon-image` id for a point layer's marker, registering the lazy
  * factory that draws it. Returns `null` when markers are disabled or a custom
  * SVG marker has no markup, in which case the caller renders a plain circle

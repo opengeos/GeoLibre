@@ -9,6 +9,7 @@ import {
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
+import type { PropertyValueSpecification } from "maplibre-gl";
 import { FileSource, PMTiles, Protocol } from "pmtiles";
 import {
   ensureGeoJsonVtProtocol,
@@ -37,7 +38,7 @@ import {
 import { buildDedupedLabelFeatures } from "./label-dedup";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
-import { prepareMarker } from "./markers";
+import { markerIconSizeValue, prepareMarker } from "./markers";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -1858,8 +1859,11 @@ function applyVectorDataRenderLayers(
           filter: pointFilter,
           layout: {
             "icon-image": markerImageId,
-            // The sprite is baked at its display size, so keep icon-size at 1.
-            "icon-size": 1,
+            // The sprite is baked at its display size, so icon-size stays 1
+            // unless proportional sizing scales it per feature.
+            "icon-size": markerIconSizeValue(
+              layer.style,
+            ) as PropertyValueSpecification<number>,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             visibility,

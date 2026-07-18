@@ -2122,15 +2122,12 @@ export function StylePanel({
   const showProportionalControls =
     hasVectorPaintControls &&
     pointRenderer !== "heatmap" &&
-    // A marker symbol layer uses a baked icon (icon-size 1), so proportional
-    // circle-radius sizing would not apply; hide it for points to avoid a silent
-    // no-op. The marker gate stays inside the point branch so that proportional
-    // line-width controls remain available on layers that carry lines (markers
-    // never affect line rendering, even if markerEnabled is set on a mixed
-    // point+line layer via a hand-edited project file).
-    ((geometryFlags.hasPoint &&
-      pointRenderer === "single" &&
-      !styleValue(style, "markerEnabled")) ||
+    // Proportional sizing drives circle-radius, marker icon-size (the
+    // interpolate scales the baked sprite, see markerIconSizeValue in
+    // @geolibre/map), and line-width, so it applies to any single-renderer
+    // point layer (with or without a marker icon) and to layers that carry
+    // lines.
+    ((geometryFlags.hasPoint && pointRenderer === "single") ||
       geometryFlags.hasLine);
   const showFillPatternControls =
     hasVectorPaintControls && !extrusionEnabled && geometryFlags.hasPolygon;
