@@ -672,6 +672,10 @@ export function DesktopShell({
       }
       host.replaceChildren();
     };
+    // `activePanel` is intentionally narrowed to `activePanel?.render`:
+    // getRightPanel returns a fresh clone each call, so the whole object would
+    // re-run this effect on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePanelId, activePanel?.render, pluginContentEl]);
   // Reset the shared width to the panel's default when a new panel activates
   // (keyed on activePanelId only, so a user resize survives re-registration).

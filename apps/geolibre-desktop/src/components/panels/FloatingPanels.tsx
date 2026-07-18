@@ -98,6 +98,10 @@ function FloatingPanelCard({
       }
       container.replaceChildren();
     };
+    // `panel` is intentionally narrowed to `panel?.render`: getFloatingPanel
+    // returns a fresh clone each call, so the whole object would re-run this
+    // effect on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, panel?.render]);
 
   if (!panel) return null;

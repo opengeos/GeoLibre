@@ -81,13 +81,22 @@ export class PanelTitleResolver<T extends PanelRegistrationWithTitle> {
    * `.title` is always a string (never a getter) so the caller's original
    * registration object is never mutated. A throwing resolver, or one that
    * returns an empty string / non-string, degrades to the panel id and logs
-   * at most once per id.
+   * at most once per registration — `set()` clears the dedup, so a re-registered
+   * panel whose resolver still misbehaves logs again.
    */
   resolve(panel: T): T & { title: string } {
     const resolve = this.resolvers.get(panel.id);
     let resolved: string;
     try {
-      resolved = resolve ? resolve() : String(panel.title);
+      // Both registries call set() before any resolve(), so the no-resolver
+      // branch is unreachable from them. It guards direct use of this exported
+      // class without a prior set(): a getter title must still be invoked
+      // there, not stringified into its source code.
+      resolved = resolve
+        ? resolve()
+        : typeof panel.title === "function"
+          ? panel.title()
+          : String(panel.title);
     } catch (error) {
       if (!this.warned.has(panel.id)) {
         this.warned.add(panel.id);
