@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Nível de zoom em que esta camada aparece. Números mais altos indicam mais aproximação.",
       "maxZoomTooltip": "Nível de zoom em que esta camada desaparece. Números mais altos indicam mais aproximação."
     },
+    "joins": {
+      "heading": "Junções",
+      "empty": "Adicione colunas de outra camada ou tabela combinando campos-chave. As colunas unidas são atualizadas quando a tabela muda e ficam salvas com o projeto.",
+      "addJoin": "Adicionar junção",
+      "joinLayer": "Camada de junção",
+      "selectLayer": "Selecione uma camada…",
+      "joinField": "Campo de junção",
+      "targetField": "Campo de destino",
+      "selectField": "Selecione um campo…",
+      "fields": "Campos a unir",
+      "fieldCount": "{{count}} campos",
+      "prefix": "Prefixo do nome do campo",
+      "prefixPlaceholder": "ex.: census_",
+      "add": "Adicionar",
+      "cancel": "Cancelar",
+      "remove": "Remover junção",
+      "enabledTitle": "Aplicar esta junção",
+      "missingLayer": "Camada de junção não encontrada",
+      "noCandidates": "Nenhuma outra camada tem tabela de atributos para unir",
+      "statsMatched": "{{matched}} de {{total}} feições correspondidas",
+      "statsUnmatchedJoin": "{{count}} linhas da tabela sem correspondência"
+    },
     "labels": {
       "heading": "Rótulos",
       "show": "Mostrar rótulos",

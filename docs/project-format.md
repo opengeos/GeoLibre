@@ -203,6 +203,41 @@ the file changes on disk:
 The key is omitted when watching is off, and it has no effect off the desktop
 host (the browser cannot watch a local filesystem path).
 
+A layer may carry persistent attribute joins (Layer properties → Joins): live
+left joins that materialize columns from another layer's attribute table —
+typically a geometry-less table added via Delimited Text with no coordinate
+fields — into this layer's feature properties, matched on a key field:
+
+```json
+{
+  "joins": [
+    {
+      "id": "uuid",
+      "joinLayerId": "other-layer-uuid",
+      "targetField": "name",
+      "joinField": "state_name",
+      "fields": ["pop_2025", "median_income"],
+      "prefix": "census_",
+      "enabled": true,
+      "addedFields": ["census_pop_2025", "census_median_income"],
+      "stats": {
+        "matchedCount": 50,
+        "unmatchedTargetCount": 2,
+        "unmatchedJoinCount": 2
+      }
+    }
+  ]
+}
+```
+
+`fields` (subset to bring over; omitted = every field except the key), `prefix`,
+and `enabled` are optional. `addedFields` and `stats` are engine bookkeeping,
+rewritten on every apply: `addedFields` lists the output columns the join added
+(so re-applying can strip them first, keeping the operation idempotent), and
+`stats` records the last match counts shown in the Joins UI. Joins re-resolve
+against the loaded layer set on project open, so a saved copy of the joined
+output self-heals if the join table changed.
+
 When a `geojson` layer enables `style.simpleStyleEnabled`, individual features
 may override the layer style with [simplestyle-spec](https://github.com/mapbox/simplestyle-spec)
 properties (`stroke`, `fill`, `stroke-width`, `fill-opacity`, ...). GeoLibre also

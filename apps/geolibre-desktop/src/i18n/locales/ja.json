@@ -2642,6 +2642,28 @@
       "minZoomTooltip": "このレイヤーが表示されるズームレベルです。数値が大きいほど拡大された状態を示します。",
       "maxZoomTooltip": "このレイヤーが非表示になるズームレベルです。数値が大きいほど拡大された状態を示します。"
     },
+    "joins": {
+      "heading": "結合",
+      "empty": "キーとなるフィールドを照合して、別のレイヤやテーブルから列を追加します。結合された列はテーブルの変更に合わせて更新され、プロジェクトと一緒に保存されます。",
+      "addJoin": "結合を追加",
+      "joinLayer": "結合レイヤ",
+      "selectLayer": "レイヤを選択…",
+      "joinField": "結合フィールド",
+      "targetField": "ターゲットフィールド",
+      "selectField": "フィールドを選択…",
+      "fields": "結合するフィールド",
+      "fieldCount": "{{count}} 個のフィールド",
+      "prefix": "フィールド名の接頭辞",
+      "prefixPlaceholder": "例: census_",
+      "add": "追加",
+      "cancel": "キャンセル",
+      "remove": "結合を削除",
+      "enabledTitle": "この結合を適用",
+      "missingLayer": "結合レイヤが見つかりません",
+      "noCandidates": "結合できる属性テーブルを持つレイヤがありません",
+      "statsMatched": "{{total}} 件中 {{matched}} 件の地物が一致",
+      "statsUnmatchedJoin": "一致しなかったテーブル行: {{count}} 行"
+    },
     "labels": {
       "heading": "ラベル",
       "show": "ラベルを表示",

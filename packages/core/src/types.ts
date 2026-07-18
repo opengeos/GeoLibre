@@ -577,6 +577,60 @@ export function shouldUseTiledRendering(
   );
 }
 
+/**
+ * Match statistics from the last time a {@link LayerJoin} was applied, shown in
+ * the Joins UI so silent key mismatches are visible (mirrors QGIS's join
+ * feedback). Recomputed on every apply; persisted harmlessly with the join.
+ */
+export interface LayerJoinStats {
+  /** Target features whose key matched a join-table row. */
+  matchedCount: number;
+  /** Target features with no matching join-table row (their joined columns are null). */
+  unmatchedTargetCount: number;
+  /** Join-table rows (with a non-empty key) that matched no target feature. */
+  unmatchedJoinCount: number;
+}
+
+/**
+ * A persistent attribute join attached to a layer (QGIS Layer Properties →
+ * Joins): a live left join that augments the layer's attribute table with
+ * columns from another layer (typically a geometry-less table added via
+ * Delimited Text with no coordinate fields) matched on a key field. Unlike the
+ * Processing → Vector attribute join, the layer keeps its identity — styles,
+ * labels, and position — and the joined columns refresh whenever the join
+ * table's data changes. Definitions persist in `.geolibre.json` and re-resolve
+ * on project load. See `joins.ts` for the engine.
+ */
+export interface LayerJoin {
+  /** Stable id for list edits. */
+  id: string;
+  /** Id of the layer providing the joined columns (its geometry is ignored). */
+  joinLayerId: string;
+  /** Key field on the layer that owns this join. */
+  targetField: string;
+  /** Key field on the join layer. */
+  joinField: string;
+  /**
+   * Join-layer fields to bring over; `undefined` brings every field except the
+   * key. Names are the join layer's own (pre-prefix) field names.
+   */
+  fields?: string[];
+  /** Optional prefix prepended to every joined column name (as in QGIS). */
+  prefix?: string;
+  /** `false` detaches the joined columns without deleting the definition. */
+  enabled?: boolean;
+  /**
+   * Bookkeeping written by the engine: the output column names this join added
+   * to the layer's features. Applying joins strips these first, which makes
+   * re-application idempotent without keeping a duplicate copy of the base
+   * data (base columns always win a name collision, so a joined column never
+   * shadows one). Not user-editable.
+   */
+  addedFields?: string[];
+  /** Last-run match statistics; see {@link LayerJoinStats}. */
+  stats?: LayerJoinStats;
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -588,6 +642,13 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Persistent attribute joins applied to this layer's features, in order.
+   * The joined columns are materialized into `geojson` feature properties (so
+   * the attribute table, Expression Builder, styling, and labels all see them)
+   * and re-derived whenever the layer's or a join table's data changes.
+   */
+  joins?: LayerJoin[];
   /**
    * Transient MapLibre filter expression applied on top of every rendered
    * sub-layer's geometry filter. The Time Slider plugin sets this on a bound

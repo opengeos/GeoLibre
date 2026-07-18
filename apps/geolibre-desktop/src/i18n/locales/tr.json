@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Bu katmanın göründüğü yakınlaştırma düzeyi. Daha yüksek sayılar daha fazla yakınlaştırılmış demektir.",
       "maxZoomTooltip": "Bu katmanın kaybolduğu yakınlaştırma düzeyi. Daha yüksek sayılar daha fazla yakınlaştırılmış demektir."
     },
+    "joins": {
+      "heading": "Birleştirmeler",
+      "empty": "Anahtar alanları eşleştirerek başka bir katmandan veya tablodan sütun ekleyin. Birleştirilen sütunlar tablo değiştiğinde güncellenir ve projeyle birlikte kaydedilir.",
+      "addJoin": "Birleştirme ekle",
+      "joinLayer": "Birleştirme katmanı",
+      "selectLayer": "Bir katman seçin…",
+      "joinField": "Birleştirme alanı",
+      "targetField": "Hedef alan",
+      "selectField": "Bir alan seçin…",
+      "fields": "Birleştirilecek alanlar",
+      "fieldCount": "{{count}} alan",
+      "prefix": "Alan adı öneki",
+      "prefixPlaceholder": "örn. census_",
+      "add": "Ekle",
+      "cancel": "İptal",
+      "remove": "Birleştirmeyi kaldır",
+      "enabledTitle": "Bu birleştirmeyi uygula",
+      "missingLayer": "Birleştirme katmanı bulunamadı",
+      "noCandidates": "Birleştirilecek öznitelik tablosu olan başka katman yok",
+      "statsMatched": "{{total}} öğeden {{matched}} tanesi eşleşti",
+      "statsUnmatchedJoin": "Eşleşmeyen {{count}} tablo satırı"
+    },
     "labels": {
       "heading": "Etiketler",
       "show": "Etiketleri göster",

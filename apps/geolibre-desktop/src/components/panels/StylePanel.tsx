@@ -47,6 +47,7 @@ import {
 import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { LayerJoinsSection } from "./LayerJoinsSection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
@@ -4296,6 +4297,15 @@ export function StylePanel({
                 {t("style.labels.heading")}
               </p>
               {labelControls}
+            </>
+          ) : null}
+          {/* Persistent attribute joins need the layer's features in the store
+              (layer.geojson); tile/service layers without an inline attribute
+              table cannot be a join target. */}
+          {layer.geojson ? (
+            <>
+              <Separator />
+              <LayerJoinsSection layer={layer} />
             </>
           ) : null}
         </div>

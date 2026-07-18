@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Zoomniveau waarop deze laag verschijnt. Hogere getallen betekenen meer ingezoomd.",
       "maxZoomTooltip": "Zoomniveau waarop deze laag verdwijnt. Hogere getallen betekenen meer ingezoomd."
     },
+    "joins": {
+      "heading": "Koppelingen",
+      "empty": "Voeg kolommen uit een andere laag of tabel toe door sleutelvelden te matchen. Gekoppelde kolommen worden bijgewerkt wanneer de tabel verandert en worden met het project opgeslagen.",
+      "addJoin": "Koppeling toevoegen",
+      "joinLayer": "Koppelingslaag",
+      "selectLayer": "Selecteer een laag…",
+      "joinField": "Koppelveld",
+      "targetField": "Doelveld",
+      "selectField": "Selecteer een veld…",
+      "fields": "Te koppelen velden",
+      "fieldCount": "{{count}} velden",
+      "prefix": "Voorvoegsel veldnaam",
+      "prefixPlaceholder": "bijv. census_",
+      "add": "Toevoegen",
+      "cancel": "Annuleren",
+      "remove": "Koppeling verwijderen",
+      "enabledTitle": "Deze koppeling toepassen",
+      "missingLayer": "Koppelingslaag niet gevonden",
+      "noCandidates": "Geen andere laag heeft een attributentabel om te koppelen",
+      "statsMatched": "{{matched}} van {{total}} objecten gematcht",
+      "statsUnmatchedJoin": "{{count}} tabelrijen zonder match"
+    },
     "labels": {
       "heading": "Labels",
       "show": "Labels tonen",

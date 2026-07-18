@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Nivel de zoom en el que aparece esta capa. Los números más altos indican más acercamiento.",
       "maxZoomTooltip": "Nivel de zoom en el que desaparece esta capa. Los números más altos indican más acercamiento."
     },
+    "joins": {
+      "heading": "Uniones",
+      "empty": "Añade columnas de otra capa o tabla haciendo coincidir campos clave. Las columnas unidas se actualizan cuando cambia la tabla y se guardan con el proyecto.",
+      "addJoin": "Añadir unión",
+      "joinLayer": "Capa de unión",
+      "selectLayer": "Selecciona una capa…",
+      "joinField": "Campo de unión",
+      "targetField": "Campo de destino",
+      "selectField": "Selecciona un campo…",
+      "fields": "Campos a unir",
+      "fieldCount": "{{count}} campos",
+      "prefix": "Prefijo de nombre de campo",
+      "prefixPlaceholder": "p. ej. census_",
+      "add": "Añadir",
+      "cancel": "Cancelar",
+      "remove": "Eliminar unión",
+      "enabledTitle": "Aplicar esta unión",
+      "missingLayer": "Capa de unión no encontrada",
+      "noCandidates": "Ninguna otra capa tiene una tabla de atributos para unir",
+      "statsMatched": "{{matched}} de {{total}} entidades coincidentes",
+      "statsUnmatchedJoin": "{{count}} filas de la tabla sin coincidencia"
+    },
     "labels": {
       "heading": "Etiquetas",
       "show": "Mostrar etiquetas",

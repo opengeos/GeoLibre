@@ -41,6 +41,7 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
+  type LayerJoin,
   type LayerStyle,
   type LegendConfig,
   type MapGridLayout,
@@ -57,6 +58,7 @@ import {
   type StyleLibraryEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
+import { applyJoinsToLayer, reapplyLayerJoins } from "./joins";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -475,6 +477,12 @@ export interface AppState {
   setLayerVisibility: (id: string, visible: boolean) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
   setLayerStyle: (id: string, style: Partial<LayerStyle>) => void;
+  /**
+   * Replace a layer's persistent attribute joins and immediately re-derive its
+   * joined columns (strip what the previous joins added, apply the new list).
+   * Pass an empty array to detach every join and restore the base attributes.
+   */
+  setLayerJoins: (id: string, joins: LayerJoin[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   addGeoJsonLayer: (
@@ -1345,8 +1353,35 @@ export const useAppStore = create<AppState>()(
         })),
 
       updateLayer: (id, patch) =>
+        set((s) => {
+          let layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
+          // A geojson replacement re-derives persistent joins: on the layer
+          // itself when the patch doesn't already carry fresh join records
+          // (file reload, attribute edits, processing writes — joined columns
+          // stay derived, QGIS-style), and on every layer that joins against
+          // the updated one, so editing a join table refreshes its targets.
+          if (patch.geojson !== undefined) {
+            layers = layers.map((l) => {
+              const refreshSelf =
+                l.id === id && patch.joins === undefined && !!l.joins?.length;
+              const refreshTarget =
+                l.id !== id &&
+                !!l.joins?.some(
+                  (j) => j.enabled !== false && j.joinLayerId === id,
+                );
+              return refreshSelf || refreshTarget
+                ? applyJoinsToLayer(l, layers)
+                : l;
+            });
+          }
+          return { layers, isDirty: true };
+        }),
+
+      setLayerJoins: (id, joins) =>
         set((s) => ({
-          layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+          layers: s.layers.map((l) =>
+            l.id === id ? applyJoinsToLayer(l, s.layers, joins) : l,
+          ),
           isDirty: true,
         })),
 
@@ -1674,6 +1709,10 @@ export const useAppStore = create<AppState>()(
 
       loadProject: (project, path = null, options = {}) => {
         const applied = applyProjectToStore(project);
+        // Re-resolve persistent attribute joins against the loaded layer set,
+        // so joined columns reflect the join tables as saved (and a stale
+        // saved copy of the joined output self-heals).
+        applied.layers = reapplyLayerJoins(applied.layers);
         // A project that ships a story map opens straight into the presentation
         // so the reader sees the story, not the editor. Projects without a story
         // (or with an empty one) open normally. Callers that open a project for

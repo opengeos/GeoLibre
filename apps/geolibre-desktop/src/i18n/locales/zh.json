@@ -2757,6 +2757,28 @@
       "minZoomTooltip": "此图层出现的缩放级别。数值越大表示放大得越多。",
       "maxZoomTooltip": "此图层消失的缩放级别。数值越大表示放大得越多。"
     },
+    "joins": {
+      "heading": "连接",
+      "empty": "通过匹配键字段，从其他图层或表格附加列。连接的列会随表格数据变化而更新，并随工程一起保存。",
+      "addJoin": "添加连接",
+      "joinLayer": "连接图层",
+      "selectLayer": "选择图层…",
+      "joinField": "连接字段",
+      "targetField": "目标字段",
+      "selectField": "选择字段…",
+      "fields": "要连接的字段",
+      "fieldCount": "{{count}} 个字段",
+      "prefix": "字段名前缀",
+      "prefixPlaceholder": "例如 census_",
+      "add": "添加",
+      "cancel": "取消",
+      "remove": "移除连接",
+      "enabledTitle": "应用此连接",
+      "missingLayer": "未找到连接图层",
+      "noCandidates": "没有其他图层具有可连接的属性表",
+      "statsMatched": "{{total}} 个要素中有 {{matched}} 个匹配",
+      "statsUnmatchedJoin": "{{count}} 个表格行未匹配"
+    },
     "labels": {
       "heading": "标签",
       "show": "显示标签",

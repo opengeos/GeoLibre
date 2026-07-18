@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Livello di zoom a cui questo livello appare. Numeri più alti indicano un maggiore ingrandimento.",
       "maxZoomTooltip": "Livello di zoom a cui questo livello scompare. Numeri più alti indicano un maggiore ingrandimento."
     },
+    "joins": {
+      "heading": "Join",
+      "empty": "Aggiungi colonne da un altro layer o tabella facendo corrispondere i campi chiave. Le colonne unite si aggiornano quando la tabella cambia e vengono salvate con il progetto.",
+      "addJoin": "Aggiungi join",
+      "joinLayer": "Layer di join",
+      "selectLayer": "Seleziona un layer…",
+      "joinField": "Campo di join",
+      "targetField": "Campo di destinazione",
+      "selectField": "Seleziona un campo…",
+      "fields": "Campi da unire",
+      "fieldCount": "{{count}} campi",
+      "prefix": "Prefisso dei nomi dei campi",
+      "prefixPlaceholder": "es. census_",
+      "add": "Aggiungi",
+      "cancel": "Annulla",
+      "remove": "Rimuovi join",
+      "enabledTitle": "Applica questo join",
+      "missingLayer": "Layer di join non trovato",
+      "noCandidates": "Nessun altro layer ha una tabella degli attributi da unire",
+      "statsMatched": "{{matched}} di {{total}} elementi corrispondenti",
+      "statsUnmatchedJoin": "{{count}} righe della tabella senza corrispondenza"
+    },
     "labels": {
       "heading": "Etichette",
       "show": "Mostra etichette",

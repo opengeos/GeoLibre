@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Niveau de zoom auquel cette couche apparaît. Des nombres plus élevés correspondent à un zoom plus rapproché.",
       "maxZoomTooltip": "Niveau de zoom auquel cette couche disparaît. Des nombres plus élevés correspondent à un zoom plus rapproché."
     },
+    "joins": {
+      "heading": "Jointures",
+      "empty": "Ajoutez des colonnes d'une autre couche ou table en faisant correspondre des champs clés. Les colonnes jointes se mettent à jour quand la table change et sont enregistrées avec le projet.",
+      "addJoin": "Ajouter une jointure",
+      "joinLayer": "Couche de jointure",
+      "selectLayer": "Sélectionner une couche…",
+      "joinField": "Champ de jointure",
+      "targetField": "Champ cible",
+      "selectField": "Sélectionner un champ…",
+      "fields": "Champs à joindre",
+      "fieldCount": "{{count}} champs",
+      "prefix": "Préfixe des noms de champ",
+      "prefixPlaceholder": "ex. census_",
+      "add": "Ajouter",
+      "cancel": "Annuler",
+      "remove": "Supprimer la jointure",
+      "enabledTitle": "Appliquer cette jointure",
+      "missingLayer": "Couche de jointure introuvable",
+      "noCandidates": "Aucune autre couche n'a de table attributaire à joindre",
+      "statsMatched": "{{matched}} entités sur {{total}} appariées",
+      "statsUnmatchedJoin": "{{count}} lignes de la table sans correspondance"
+    },
     "labels": {
       "heading": "Étiquettes",
       "show": "Afficher les étiquettes",

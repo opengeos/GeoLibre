@@ -2686,6 +2686,28 @@
       "minZoomTooltip": "Zoomstufe, ab der diese Ebene erscheint. Höhere Werte bedeuten stärker herangezoomt.",
       "maxZoomTooltip": "Zoomstufe, ab der diese Ebene verschwindet. Höhere Werte bedeuten stärker herangezoomt."
     },
+    "joins": {
+      "heading": "Verknüpfungen",
+      "empty": "Spalten aus einem anderen Layer oder einer Tabelle über übereinstimmende Schlüsselfelder anhängen. Verknüpfte Spalten aktualisieren sich, wenn sich die Tabelle ändert, und werden mit dem Projekt gespeichert.",
+      "addJoin": "Verknüpfung hinzufügen",
+      "joinLayer": "Verknüpfungslayer",
+      "selectLayer": "Layer auswählen…",
+      "joinField": "Verknüpfungsfeld",
+      "targetField": "Zielfeld",
+      "selectField": "Feld auswählen…",
+      "fields": "Zu verknüpfende Felder",
+      "fieldCount": "{{count}} Felder",
+      "prefix": "Feldnamen-Präfix",
+      "prefixPlaceholder": "z. B. census_",
+      "add": "Hinzufügen",
+      "cancel": "Abbrechen",
+      "remove": "Verknüpfung entfernen",
+      "enabledTitle": "Diese Verknüpfung anwenden",
+      "missingLayer": "Verknüpfungslayer nicht gefunden",
+      "noCandidates": "Kein anderer Layer hat eine Attributtabelle zum Verknüpfen",
+      "statsMatched": "{{matched}} von {{total}} Objekten zugeordnet",
+      "statsUnmatchedJoin": "{{count}} Tabellenzeilen ohne Treffer"
+    },
     "labels": {
       "heading": "Beschriftungen",
       "show": "Beschriftungen anzeigen",
