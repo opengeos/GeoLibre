@@ -696,10 +696,21 @@ function ruleBasedRules(
       layerMaxZoom,
       clampZoom(entry.maxZoom ?? layerMaxZoom, MAX_LAYER_ZOOM),
     );
-    const ruleScale =
-      entry.minZoom !== undefined || entry.maxZoom !== undefined
-        ? scaleDenominatorsForWindow(ruleMinZoom, ruleMaxZoom)
-        : scale;
+    const hasRuleZoom =
+      entry.minZoom !== undefined || entry.maxZoom !== undefined;
+    if (hasRuleZoom && ruleMinZoom >= ruleMaxZoom) {
+      // The rule's zoom range lies entirely outside the layer's window, so
+      // the live map never draws it (the layer's zoom clipping hides it).
+      // scaleDenominatorsForWindow would silently swap the inverted bounds
+      // into a wrong, visible range, so skip the rule instead.
+      warnings.push(
+        `The rule "${entry.label || JSON.stringify(entry.filter)}" is never visible inside the layer's zoom window and was not exported.`,
+      );
+      continue;
+    }
+    const ruleScale = hasRuleZoom
+      ? scaleDenominatorsForWindow(ruleMinZoom, ruleMaxZoom)
+      : scale;
     const paint: SymbolPaint = {
       ...base,
       fillColor: entry.color,

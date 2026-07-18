@@ -2756,6 +2756,7 @@
       "filterInvalid": "Filter tidak valid — harus berupa ekspresi array JSON. Aturan ini dilewati hingga diperbaiki.",
       "elseRuleColor": "Warna aturan else",
       "elseRuleColorPick": "Pilih warna aturan else dari layar",
+      "elseRuleEnabled": "Aktifkan aturan lainnya",
       "elseAllOtherFeatures": "Else (semua fitur lainnya)",
       "applyHint": "Klik Terapkan untuk mengaktifkan rendering berbasis aturan.",
       "proportionalSize": "Ukuran proporsional",

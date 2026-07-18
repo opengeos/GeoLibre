@@ -2800,6 +2800,7 @@
       "filterInvalid": "Filtre invalide — doit être une expression de tableau JSON. Cette règle est ignorée jusqu'à sa correction.",
       "elseRuleColor": "Couleur de la règle Sinon",
       "elseRuleColorPick": "Choisir la couleur de la règle Sinon à l'écran",
+      "elseRuleEnabled": "Activer la règle «sinon»",
       "elseAllOtherFeatures": "Sinon (toutes les autres entités)",
       "applyHint": "Cliquez sur Appliquer pour activer le rendu basé sur des règles.",
       "proportionalSize": "Taille proportionnelle",

@@ -2547,7 +2547,23 @@ export function StylePanel({
               </details>
             </div>
           ))}
-          <div className="grid grid-cols-[auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
+          <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
+            {elseRule ? (
+              // The enable toggle needs an else-rule record to write to; the
+              // default (no record yet) is always enabled, so it only shows
+              // once a rule exists - e.g. after an import that disabled it.
+              <input
+                type="checkbox"
+                checked={elseRule.enabled !== false}
+                title={t("style.symbology.elseRuleEnabled")}
+                aria-label={t("style.symbology.elseRuleEnabled")}
+                onChange={(event) =>
+                  updateVectorRule(elseRule.id, {
+                    enabled: event.target.checked ? undefined : false,
+                  })
+                }
+              />
+            ) : null}
             <ColorField
               fill={false}
               aria-label={t("style.symbology.elseRuleColor")}

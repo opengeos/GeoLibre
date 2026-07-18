@@ -2756,6 +2756,7 @@
       "filterInvalid": "잘못된 필터입니다. JSON 배열 표현식이어야 합니다. 수정할 때까지 이 규칙은 건너뜁니다.",
       "elseRuleColor": "Else 규칙 색상",
       "elseRuleColorPick": "화면에서 Else 규칙 색상 선택",
+      "elseRuleEnabled": "기타 규칙 활성화",
       "elseAllOtherFeatures": "Else(나머지 모든 피처)",
       "applyHint": "적용을 클릭하여 규칙 기반 렌더링을 활성화하세요.",
       "proportionalSize": "비례 크기",

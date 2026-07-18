@@ -3263,6 +3263,7 @@
       "filterInvalid": "Invalid filter — must be a JSON array expression. This rule is skipped until fixed.",
       "elseRuleColor": "Else rule color",
       "elseRuleColorPick": "Pick the else rule color from the screen",
+      "elseRuleEnabled": "Enable the else rule",
       "elseAllOtherFeatures": "Else (all other features)",
       "applyHint": "Click Apply to activate rule-based rendering.",
       "proportionalSize": "Proportional size",

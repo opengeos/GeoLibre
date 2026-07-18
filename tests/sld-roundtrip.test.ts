@@ -436,4 +436,31 @@ describe("SLD round-trip of extended rule-based symbology (#1305)", () => {
     assert.equal(concrete.length, 1);
     assert.equal(concrete[0].label, "On");
   });
+
+  it("skips a rule whose zoom range lies outside the layer window", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "a",
+        label: "Deep zoom",
+        filter: '["all", ["==", ["get", "a"], 1], ["==", ["get", "b"], 2]]',
+        color: "#ff0000",
+        isElse: false,
+        minZoom: 5,
+        maxZoom: 10,
+      },
+      { id: "e", label: "", filter: "", color: "#cccccc", isElse: true },
+    ];
+    // Layer window [16, 24] never overlaps the rule window [5, 10): on the
+    // live map the layer's zoom clipping hides the rule entirely, so the SLD
+    // must not fabricate a visible scale range for it.
+    const input = style({
+      vectorStyleMode: "rule-based",
+      vectorRules: rules,
+      minZoom: 16,
+      maxZoom: 24,
+    });
+    const { sld, warnings } = buildSld(layer(input), fc("polygon"));
+    assert.ok(warnings.some((warning) => warning.includes("never visible")));
+    assert.ok(!sld.includes("Deep zoom"));
+  });
 });

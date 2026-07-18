@@ -2756,6 +2756,7 @@
       "filterInvalid": "無効なフィルターです。JSON配列式である必要があります。修正されるまでこのルールはスキップされます。",
       "elseRuleColor": "Elseルールの色",
       "elseRuleColorPick": "画面からElseルールの色を選択",
+      "elseRuleEnabled": "その他ルールを有効にする",
       "elseAllOtherFeatures": "Else (それ以外のすべてのフィーチャ)",
       "applyHint": "「適用」をクリックしてルールベースの描画を有効にします。",
       "proportionalSize": "比例サイズ",

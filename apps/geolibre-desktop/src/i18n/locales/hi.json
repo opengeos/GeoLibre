@@ -2800,6 +2800,7 @@
       "filterInvalid": "अमान्य फ़िल्टर — JSON array एक्सप्रेशन होना चाहिए। ठीक होने तक इस नियम को छोड़ दिया गया है।",
       "elseRuleColor": "Else नियम रंग",
       "elseRuleColorPick": "स्क्रीन से Else नियम रंग चुनें",
+      "elseRuleEnabled": "अन्यथा नियम सक्षम करें",
       "elseAllOtherFeatures": "Else (बाकी सभी फ़ीचर)",
       "applyHint": "नियम-आधारित रेंडरिंग सक्रिय करने के लिए Apply पर क्लिक करें।",
       "proportionalSize": "आनुपातिक आकार",
