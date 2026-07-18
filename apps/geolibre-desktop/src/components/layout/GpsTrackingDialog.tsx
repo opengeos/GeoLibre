@@ -247,12 +247,14 @@ export function GpsTrackingDialog({
 
       // Log to the track first: which fixes belong in the recording must not
       // depend on whether the map object happens to be available right now.
+      let logged = false;
       if (recordingRef.current === "recording") {
         const segment = fixesRef.current[fixesRef.current.length - 1];
         const prev = segment[segment.length - 1] ?? null;
         if (shouldLogFix(prev, fix, settingsRef.current)) {
           segment.push(fix);
           setFixCount((n) => n + 1);
+          logged = true;
         }
       }
 
@@ -260,11 +262,11 @@ export function GpsTrackingDialog({
       if (map) {
         ensureGpsSources(map);
         setSourceData(map, ACCURACY_SOURCE, accuracyCircle(fix));
-        // Redraw the whole track on every fix, not only when one was logged:
-        // a basemap switch (map.setStyle) wipes the custom source, and this
-        // unconditional refresh heals it on the next fix. trackPreview is
-        // geometry-only, so the rebuild stays cheap.
-        setSourceData(map, TRACK_SOURCE, trackPreview(fixesRef.current));
+        // Redraw the track only when a fix was actually logged; the styledata
+        // listener below re-seeds the source if a basemap switch wipes it.
+        if (logged) {
+          setSourceData(map, TRACK_SOURCE, trackPreview(fixesRef.current));
+        }
         if (!markerRef.current) {
           const { root, arrow } = createMarkerElement();
           markerArrowRef.current = arrow;
@@ -322,19 +324,33 @@ export function GpsTrackingDialog({
     return () => navigator.geolocation.clearWatch(id);
   }, [tracking, handleFix, t]);
 
-  // Manual panning turns follow mode off, QGIS-style, so the map stays where
-  // the user dragged it instead of snapping back on the next fix. The map may
-  // not be mounted yet when tracking starts, so retry until it is rather than
-  // silently skipping the subscription for the whole session.
+  // Map subscriptions while tracking. Manual panning turns follow mode off,
+  // QGIS-style, so the map stays where the user dragged it instead of snapping
+  // back on the next fix; the styledata listener re-registers the overlay
+  // sources after a basemap switch (map.setStyle wipes custom sources) and
+  // re-seeds them from the recorded fixes. The map may not be mounted yet when
+  // tracking starts, so retry until it is rather than silently skipping the
+  // subscriptions for the whole session.
   useEffect(() => {
     if (!tracking) return;
     const onDragStart = () => setFollow(false);
+    // Gated on the source actually being gone, so the frequent styledata
+    // events fired by ordinary style mutations cost one getSource() check.
+    const onStyleData = () => {
+      const m = getMap();
+      if (!m || m.getSource(TRACK_SOURCE)) return;
+      ensureGpsSources(m);
+      const fix = lastFixRef.current;
+      if (fix) setSourceData(m, ACCURACY_SOURCE, accuracyCircle(fix));
+      setSourceData(m, TRACK_SOURCE, trackPreview(fixesRef.current));
+    };
     let map: maplibregl.Map | null = null;
     let timer: number | undefined;
     const attach = () => {
       map = getMap();
       if (map) {
         map.on("dragstart", onDragStart);
+        map.on("styledata", onStyleData);
         return;
       }
       timer = window.setTimeout(attach, 500);
@@ -343,6 +359,7 @@ export function GpsTrackingDialog({
     return () => {
       if (timer !== undefined) window.clearTimeout(timer);
       map?.off("dragstart", onDragStart);
+      map?.off("styledata", onStyleData);
     };
   }, [tracking, getMap]);
 

@@ -34,14 +34,19 @@ export function StatusBar({
   const gpsAgeS = gpsStatus
     ? Math.max(0, Math.round((Date.now() - gpsStatus.timestamp) / 1000))
     : 0;
+  const gpsCoords = gpsStatus
+    ? `${gpsStatus.lng.toFixed(5)}, ${gpsStatus.lat.toFixed(5)}`
+    : null;
+  // Compact status bars get coordinates only; the full form matches the GPS
+  // dialog's readout formatting (space before the units).
   const gpsText = gpsStatus
-    ? `${gpsStatus.lng.toFixed(5)}, ${gpsStatus.lat.toFixed(5)} ±${Math.round(
-        gpsStatus.accuracy,
-      )}m` +
-      (gpsStatus.speed != null
-        ? ` ${formatSpeedKmh(gpsStatus.speed)}km/h`
-        : "") +
-      (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
+    ? compact
+      ? gpsCoords
+      : `${gpsCoords} ±${Math.round(gpsStatus.accuracy)} m` +
+        (gpsStatus.speed != null
+          ? ` ${formatSpeedKmh(gpsStatus.speed)} km/h`
+          : "") +
+        (gpsAgeS >= 10 ? ` (${gpsAgeS}s)` : "")
     : null;
 
   const coordText = pointerCoords
