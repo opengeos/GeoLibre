@@ -30,6 +30,16 @@ import type { LayerVirtualField } from "./types";
  * another. Zoom-dependent expressions evaluate at zoom 0 and `@` variables
  * are not substituted: a virtual field is a property of the data, not of the
  * current view.
+ *
+ * Known trade-off, shared with the joins engine (see `joins.ts`): when a
+ * layer's data is replaced wholesale, the replacement is stripped with the
+ * *previous* bookkeeping. That is required because a replacement can also be
+ * a write-back of the derived output (the attribute table round-trips
+ * `layer.geojson`), which must not freeze a stale computed value into base
+ * data — but it means a replacement dataset's own column whose name matches a
+ * previously-materialized virtual column is replaced by the expression's
+ * value for that column. Renaming or removing the virtual field first keeps
+ * such collisions from arising.
  */
 
 /**
@@ -108,8 +118,13 @@ export function applyLayerVirtualFields(
     error: undefined,
     errorCount: undefined,
   });
+  // Only bail out when no field is active. A zero-feature layer still runs
+  // the per-field pass below: compiling validates the expression (so a real
+  // compile error is surfaced, not swallowed) and a free name is still
+  // recorded as `addedField` — otherwise an empty dataset would be
+  // indistinguishable from a name collision in the UI.
   const active = fieldList.filter((field) => field.enabled !== false);
-  if (active.length === 0 || features.length === 0) {
+  if (active.length === 0) {
     return { features, fields: fieldList.map(clearBookkeeping) };
   }
 

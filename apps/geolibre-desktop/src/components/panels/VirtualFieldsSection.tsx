@@ -1,6 +1,7 @@
 import {
   type GeoLibreLayer,
   type LayerVirtualField,
+  stripVirtualFieldColumns,
   useAppStore,
   validateMapExpression,
 } from "@geolibre/core";
@@ -59,6 +60,32 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
     [layer.geojson],
   );
   const fieldNames = useMemo(() => getAttributePropertyNames(layer), [layer]);
+
+  // The engine evaluates a field against only the columns materialized by
+  // *earlier* fields (its own and later columns are stripped first), so the
+  // builder's preview context must match: when editing, hide the edited
+  // field's column and every later field's column, or a self-reference would
+  // preview successfully and then evaluate to null. A new field appends last
+  // and legitimately sees every existing column.
+  const editedAndLaterFields = useMemo(() => {
+    if (!editingId) return [];
+    const index = fields.findIndex((field) => field.id === editingId);
+    return index < 0 ? [] : fields.slice(index);
+  }, [fields, editingId]);
+  const builderFeatures = useMemo(
+    () => stripVirtualFieldColumns(features, editedAndLaterFields),
+    [features, editedAndLaterFields],
+  );
+  const builderFieldNames = useMemo(() => {
+    const hidden = new Set(
+      editedAndLaterFields.flatMap((field) =>
+        field.addedField ? [field.addedField] : [],
+      ),
+    );
+    return hidden.size === 0
+      ? fieldNames
+      : fieldNames.filter((name) => !hidden.has(name));
+  }, [fieldNames, editedAndLaterFields]);
 
   // Names the draft may not use: every existing column plus the other virtual
   // field definitions (which may be currently skipped and so not materialized).
@@ -301,8 +328,8 @@ export function VirtualFieldsSection({ layer }: VirtualFieldsSectionProps) {
           targetLabel={t("style.virtualFields.expressionTarget")}
           context="value"
           initialExpression={draftExpression}
-          features={features}
-          fieldNames={fieldNames}
+          features={builderFeatures}
+          fieldNames={builderFieldNames}
           // Virtual fields evaluate at zoom 0 with no `@` variables (they are
           // a property of the data, not the view) — mirror that in the
           // builder's preview so what it shows is what materializes.

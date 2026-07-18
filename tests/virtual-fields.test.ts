@@ -135,6 +135,21 @@ describe("applyLayerVirtualFields", () => {
     assert.equal(fields[0].errorCount, 3);
   });
 
+  it("keeps accurate bookkeeping on a zero-feature layer", () => {
+    // An empty dataset must not look like a name collision: a valid field
+    // still records its column, and a compile error still surfaces.
+    const valid = applyLayerVirtualFields([], [vfield()]);
+    assert.deepEqual(valid.features, []);
+    assert.equal(valid.fields[0].addedField, "double_density");
+    assert.equal(valid.fields[0].error, undefined);
+
+    const broken = applyLayerVirtualFields([], [
+      vfield({ expression: '["definitely-not-an-operator"]' }),
+    ]);
+    assert.equal(broken.fields[0].addedField, undefined);
+    assert.ok(broken.fields[0].error);
+  });
+
   it("normalizes missing values to null cells", () => {
     const { features } = applyLayerVirtualFields(states().features, [
       vfield({ name: "missing", expression: '["get", "nope"]' }),
@@ -278,6 +293,24 @@ describe("store integration", () => {
       .updateLayer(id, {
         geojson: collection([pointFeature({ name: "Alabama", density: 100 })]),
       });
+    const layer = layerById(id);
+    assert.equal(layer.geojson?.features[0].properties?.double_density, 200);
+  });
+
+  it("re-derives over a replacement column named like the virtual field (documented trade-off)", () => {
+    // Shared contract with the joins engine: a wholesale geojson replacement
+    // is stripped with the previous bookkeeping because it can be a
+    // write-back of the derived output (the attribute table round-trips
+    // layer.geojson). A replacement dataset shipping its own column under
+    // the virtual field's name therefore gets the expression's value, not
+    // the incoming one — pinned here so a behavior change is deliberate.
+    const id = useAppStore.getState().addGeoJsonLayer("States", states());
+    useAppStore.getState().setLayerVirtualFields(id, [vfield()]);
+    useAppStore.getState().updateLayer(id, {
+      geojson: collection([
+        pointFeature({ name: "Alabama", density: 100, double_density: 7 }),
+      ]),
+    });
     const layer = layerById(id);
     assert.equal(layer.geojson?.features[0].properties?.double_density, 200);
   });
