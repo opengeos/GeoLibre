@@ -1360,11 +1360,14 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           let layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
           // A geojson replacement re-derives persistent joins: on the layer
-          // itself when the patch doesn't already carry fresh join records
-          // (file reload, attribute edits, processing writes — joined columns
-          // stay derived, QGIS-style), then transitively on every layer whose
-          // joins consume the updated one, so editing a join table refreshes
-          // its targets and their dependents in turn.
+          // itself (file reload, attribute edits, processing writes — joined
+          // columns stay derived, QGIS-style), then transitively on every
+          // layer whose joins consume the updated one, so editing a join
+          // table refreshes its targets and their dependents in turn. The
+          // `patch.joins === undefined` guard exists for external callers of
+          // this public store API (plugins, programmatic loads): a patch that
+          // carries both `geojson` and `joins` is taken verbatim as already-
+          // derived state — no in-repo caller does this today.
           if (patch.geojson !== undefined) {
             if (patch.joins === undefined) {
               layers = layers.map((l) =>

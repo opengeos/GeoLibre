@@ -377,6 +377,26 @@ describe("store integration", () => {
     assert.equal(layerById(chainedId).geojson?.features[0].properties?.pop, 123);
   });
 
+  it("takes a patch carrying both geojson and joins verbatim (external callers)", () => {
+    const { targetId, tableId } = addLayers();
+    useAppStore.getState().setLayerJoins(targetId, [
+      join({ joinLayerId: tableId }),
+    ]);
+    // An external caller (plugin) supplying already-derived state must not
+    // trigger a re-derivation that would strip its custom columns.
+    const externalJoins = [
+      { ...join({ joinLayerId: tableId }), addedFields: [], stats: undefined },
+    ];
+    useAppStore.getState().updateLayer(targetId, {
+      geojson: collection([pointFeature({ name: "Alabama", custom: 7 })]),
+      joins: externalJoins,
+    });
+    const layer = layerById(targetId);
+    assert.equal(layer.geojson?.features[0].properties?.custom, 7);
+    assert.equal("pop" in (layer.geojson?.features[0].properties ?? {}), false);
+    assert.deepEqual(layer.joins, externalJoins);
+  });
+
   it("loadProject re-resolves persisted joins against the loaded layers", () => {
     const { targetId, tableId } = addLayers();
     useAppStore.getState().setLayerJoins(targetId, [

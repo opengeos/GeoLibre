@@ -114,12 +114,13 @@ export interface ApplyLayerJoinsResult {
  * Apply `joins` in order to base (already-stripped) `features`, returning new
  * feature objects with the joined columns merged into their properties.
  *
- * Semantics per join: left join, first matching join row wins, joined columns
- * are null-filled on unmatched features so the schema stays consistent, and an
- * output name (prefix + field) that collides with an existing column — from
- * the base data or an earlier join — is skipped for the whole join. A disabled
- * join, or one whose source cannot be resolved, contributes nothing and gets
- * empty `addedFields` and no stats.
+ * Semantics per join: left join, first matching join row wins, and joined
+ * columns are null-filled on unmatched features so the schema stays
+ * consistent. An output name (prefix + field) that collides with an existing
+ * column — from the base data or an earlier join — drops that one column;
+ * the join's other columns still apply. A disabled join, or one whose source
+ * cannot be resolved, contributes nothing and gets empty `addedFields` and no
+ * stats.
  *
  * @param features - The layer's base features (strip previous joins first).
  * @param joins - Join definitions in application order.
@@ -133,8 +134,17 @@ export function applyLayerJoins(
   resolveSource: (joinLayerId: string) => FeatureCollection | undefined,
 ): ApplyLayerJoinsResult {
   const joinList = joins ?? [];
+  // Resolve each source once, shared between the early-exit check and the
+  // per-join application below.
+  const resolved = new Map<string, FeatureCollection | undefined>();
+  const resolveOnce = (joinLayerId: string): FeatureCollection | undefined => {
+    if (!resolved.has(joinLayerId)) {
+      resolved.set(joinLayerId, resolveSource(joinLayerId));
+    }
+    return resolved.get(joinLayerId);
+  };
   const active = joinList.filter(
-    (join) => join.enabled !== false && resolveSource(join.joinLayerId),
+    (join) => join.enabled !== false && resolveOnce(join.joinLayerId),
   );
   if (active.length === 0) {
     return {
@@ -162,7 +172,7 @@ export function applyLayerJoins(
 
   const outJoins = joinList.map((join): LayerJoin => {
     const source =
-      join.enabled === false ? undefined : resolveSource(join.joinLayerId);
+      join.enabled === false ? undefined : resolveOnce(join.joinLayerId);
     if (!source) return { ...join, addedFields: [], stats: undefined };
 
     const joinFeatures = (source.features ?? []).filter(Boolean);

@@ -986,10 +986,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setAddingColumn(false);
   };
 
+  // The Field Calculator must not target a join-derived column either: the
+  // calculated value would be overwritten by the join re-derivation in the
+  // same store update.
+  const calculatorTargetColumns = discoveredColumns.filter(
+    (col) => !joinDerivedColumns.has(col),
+  );
+
   const openCalculator = () => {
-    const hasColumns = discoveredColumns.length > 0;
+    const hasColumns = calculatorTargetColumns.length > 0;
     setCalcMode(hasColumns ? "update" : "create");
-    setCalcTargetField(hasColumns ? discoveredColumns[0] : "");
+    setCalcTargetField(hasColumns ? calculatorTargetColumns[0] : "");
     setCalcNewName("");
     setCalcOutputType("auto");
     setCalcExpression("");
@@ -2026,7 +2033,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                     value={calcTargetField}
                     onChange={(event) => setCalcTargetField(event.target.value)}
                   >
-                    {discoveredColumns.map((col) => (
+                    {calculatorTargetColumns.map((col) => (
                       <option key={col} value={col}>
                         {col}
                       </option>
