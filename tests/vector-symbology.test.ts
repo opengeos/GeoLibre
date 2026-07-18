@@ -323,6 +323,22 @@ describe("rule-based extensions (#1305)", () => {
     );
   });
 
+
+  it("walks past an ancestor whose parentId references itself", () => {
+    const rules: VectorRule[] = [
+      // The group's self-referencing parentId means "top-level", so its
+      // child must still draw (with the group filter ANDed), not be dropped
+      // by the cycle guard.
+      rule({ id: "g", filter: roadFilter, color: "#111111", parentId: "g" }),
+      rule({ id: "c", filter: parkFilter, color: "#00ff00", parentId: "g" }),
+      rule({ id: "e", isElse: true, color: "#cccccc" }),
+    ];
+    assert.deepEqual(
+      ruleBasedColorExpression(style({ vectorRules: rules }), "#000000"),
+      ["case", ["all", roadParsed, parkParsed], "#00ff00", "#cccccc"],
+    );
+  });
+
   it("intersects nested zoom ranges and drops empty intersections", () => {
     const rules: VectorRule[] = [
       rule({ id: "g", filter: roadFilter, color: "#111111", maxZoom: 10 }),

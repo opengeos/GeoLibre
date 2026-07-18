@@ -670,7 +670,9 @@ function ruleBasedRules(
       "Disabled rules are not part of the rendered style and were not exported.",
     );
   }
-  if (rules.some((entry) => entry.parentId)) {
+  // A self-referencing parentId means "no parent" (top-level), so it does not
+  // count as nesting for the flattening warning.
+  if (rules.some((entry) => entry.parentId && entry.parentId !== entry.id)) {
     warnings.push(
       "Nested rules were flattened for SLD: each rule's filter was combined with its parents' filters.",
     );

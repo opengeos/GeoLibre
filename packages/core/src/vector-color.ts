@@ -510,7 +510,13 @@ export function effectiveVectorRules(style: LayerStyle): {
       if (parentMax !== undefined) {
         maxZoom = maxZoom === undefined ? parentMax : Math.min(maxZoom, parentMax);
       }
-      parent = parent.parentId ? byId.get(parent.parentId) : undefined;
+      // An ancestor with a self-referencing parentId is a top-level rule (the
+      // same convention as the initial parent resolution above); advancing to
+      // itself would trip the cycle guard and wrongly drop the whole subtree.
+      parent =
+        parent.parentId && parent.parentId !== parent.id
+          ? byId.get(parent.parentId)
+          : undefined;
     }
     if (dropped) continue;
     if (minZoom !== undefined && maxZoom !== undefined && minZoom >= maxZoom) {

@@ -335,6 +335,44 @@ function ruleTreeRows(rules: VectorRule[]): RuleTreeRow[] {
   return rows;
 }
 
+/**
+ * A rule's effective zoom range: its own bounds intersected with every
+ * ancestor's, mirroring how `effectiveVectorRules` resolves the tree for
+ * rendering. Used to warn when the intersection is empty (the rule never
+ * applies), which the rule's own fields alone cannot reveal.
+ */
+function effectiveRuleZoomRange(
+  rules: VectorRule[],
+  rule: VectorRule,
+): { minZoom?: number; maxZoom?: number } {
+  const byId = new Map(
+    rules.filter((entry) => !entry.isElse).map((entry) => [entry.id, entry]),
+  );
+  let minZoom = rule.minZoom;
+  let maxZoom = rule.maxZoom;
+  const seen = new Set([rule.id]);
+  let parent =
+    rule.parentId && rule.parentId !== rule.id
+      ? byId.get(rule.parentId)
+      : undefined;
+  while (parent && !seen.has(parent.id)) {
+    seen.add(parent.id);
+    if (parent.minZoom !== undefined) {
+      minZoom =
+        minZoom === undefined ? parent.minZoom : Math.max(minZoom, parent.minZoom);
+    }
+    if (parent.maxZoom !== undefined) {
+      maxZoom =
+        maxZoom === undefined ? parent.maxZoom : Math.min(maxZoom, parent.maxZoom);
+    }
+    parent =
+      parent.parentId && parent.parentId !== parent.id
+        ? byId.get(parent.parentId)
+        : undefined;
+  }
+  return { minZoom, maxZoom };
+}
+
 /** Ids of a rule and all rules nested (transitively) under it. */
 function ruleSubtreeIds(rules: VectorRule[], id: string): Set<string> {
   const ids = new Set([id]);
@@ -2421,13 +2459,19 @@ export function StylePanel({
                       }
                     />
                   </div>
-                  {rule.minZoom !== undefined &&
-                  rule.maxZoom !== undefined &&
-                  rule.minZoom >= rule.maxZoom ? (
-                    <p className="text-xs text-destructive">
-                      {t("style.symbology.ruleZoomInvalid")}
-                    </p>
-                  ) : null}
+                  {(() => {
+                    // Warn on the effective (ancestor-intersected) range, not
+                    // just the rule's own fields: a child's individually valid
+                    // range can still be emptied by a parent's narrower one.
+                    const effective = effectiveRuleZoomRange(currentRules, rule);
+                    return effective.minZoom !== undefined &&
+                      effective.maxZoom !== undefined &&
+                      effective.minZoom >= effective.maxZoom ? (
+                      <p className="text-xs text-destructive">
+                        {t("style.symbology.ruleZoomInvalid")}
+                      </p>
+                    ) : null;
+                  })()}
                   {!isGroup ? (
                     <>
                       <div className="grid grid-cols-3 gap-2">
