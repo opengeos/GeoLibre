@@ -44,7 +44,7 @@ import {
   SKETCHES_SOURCE_KIND,
   countAtlasDroppedDiagrams,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import { OGC_SCALE_DENOMINATOR_AT_ZOOM_0, type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { RasterSymbologySection } from "./RasterSymbologySection";
@@ -1177,8 +1177,6 @@ export function StylePanel({
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
   const projectName = useAppStore((s) => s.projectName);
-  const mapZoom = useAppStore((s) => s.mapView.zoom);
-  const mapCenterLat = useAppStore((s) => s.mapView.center[1]);
   const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
@@ -1411,20 +1409,34 @@ export function StylePanel({
     () => (layer ? getAttributePropertyNames(layer) : []),
     [layer],
   );
-  const builderVariables = useMemo<ExpressionVariable[]>(() => {
+  // Zoom and variables snapshot the camera via getState() when the builder
+  // opens instead of subscribing: the dialog is modal (the map cannot move
+  // while it is open), and mapView subscriptions would re-render this whole
+  // panel on every map move even with the builder closed.
+  const { zoom: builderZoom, variables: builderVariables } = useMemo<{
+    zoom: number;
+    variables: ExpressionVariable[];
+  }>(() => {
+    const { zoom, center } = useAppStore.getState().mapView;
     // Approximate scale denominator at the map center (96 dpi Web Mercator).
     const mapScaleDenominator = Math.round(
-      (559082264.028 / Math.pow(2, mapZoom)) *
-        Math.cos((mapCenterLat * Math.PI) / 180),
+      (OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / Math.pow(2, zoom)) *
+        Math.cos((center[1] * Math.PI) / 180),
     );
-    return [
-      { token: "@project_name", value: projectName },
-      { token: "@layer_name", value: layer?.name ?? "" },
-      { token: "@feature_count", value: builderFeatures.length },
-      { token: "@map_zoom", value: Math.round(mapZoom * 100) / 100 },
-      { token: "@map_scale", value: mapScaleDenominator },
-    ];
-  }, [projectName, layer, builderFeatures, mapZoom, mapCenterLat]);
+    return {
+      zoom,
+      variables: [
+        { token: "@project_name", value: projectName },
+        { token: "@layer_name", value: layer?.name ?? "" },
+        { token: "@feature_count", value: builderFeatures.length },
+        { token: "@map_zoom", value: Math.round(zoom * 100) / 100 },
+        { token: "@map_scale", value: mapScaleDenominator },
+      ],
+    };
+    // expressionBuilderTarget is an intentional dep: it re-snapshots the
+    // camera each time the builder opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectName, layer, builderFeatures, expressionBuilderTarget]);
   // Diagram-loss notices: whether the feature cap truncates the drawable
   // dataset (derived from the real scan — features without an anchor or a
   // positive value don't consume the cap, so the raw count alone would
@@ -2141,7 +2153,7 @@ export function StylePanel({
       initialExpression={builderInitialExpression}
       features={builderFeatures}
       fieldNames={builderFieldNames}
-      zoom={mapZoom}
+      zoom={builderZoom}
       variables={builderVariables}
       onApply={applyBuilderExpression}
     />
