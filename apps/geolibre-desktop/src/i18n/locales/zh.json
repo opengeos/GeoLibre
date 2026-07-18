@@ -2767,7 +2767,7 @@
       "targetField": "目标字段",
       "selectField": "选择字段…",
       "fields": "要连接的字段",
-      "fieldCount": "{{count}} 个字段",
+      "fieldCount_other": "{{count}} 个字段",
       "prefix": "字段名前缀",
       "prefixPlaceholder": "例如 census_",
       "add": "添加",
@@ -2777,7 +2777,7 @@
       "missingLayer": "未找到连接图层",
       "noCandidates": "没有其他图层具有可连接的属性表",
       "statsMatched": "{{total}} 个要素中有 {{matched}} 个匹配",
-      "statsUnmatchedJoin": "{{count}} 个表格行未匹配"
+      "statsUnmatchedJoin_other": "{{count}} 个表格行未匹配"
     },
     "labels": {
       "heading": "标签",

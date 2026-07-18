@@ -132,6 +132,31 @@ describe("applyLayerJoins", () => {
     assert.equal(features[0].properties?.density, 94);
   });
 
+  it("honors an explicitly empty field subset by joining no columns", () => {
+    const { features, joins } = applyLayerJoins(
+      states().features,
+      [join({ fields: [] })],
+      resolveCensus,
+    );
+    assert.deepEqual(features[0].properties, { name: "Alabama", density: 94 });
+    assert.deepEqual(joins[0].addedFields, []);
+    // Stats still compute so key mismatches stay visible.
+    assert.equal(joins[0].stats?.matchedCount, 2);
+  });
+
+  it("counts every unmatched join row, including duplicate keys", () => {
+    const { joins } = applyLayerJoins(states().features, [join()], (id) =>
+      id === "census"
+        ? collection([
+            tableFeature({ state_name: "Guam", pop: 1 }),
+            tableFeature({ state_name: "Guam", pop: 2 }),
+            tableFeature({ state_name: "Alabama", pop: 3 }),
+          ])
+        : undefined,
+    );
+    assert.equal(joins[0].stats?.unmatchedJoinCount, 2);
+  });
+
   it("keeps the first matching join row when keys repeat", () => {
     const { features } = applyLayerJoins(states().features, [join()], (id) =>
       id === "census"
@@ -282,6 +307,72 @@ describe("store integration", () => {
     });
     const layer = layerById(targetId);
     assert.equal(layer.geojson?.features[0].properties?.pop, 7_200_000);
+  });
+
+  it("changing a layer's joins refreshes layers that join against it", () => {
+    const { targetId, tableId } = addLayers();
+    // A joins the census table; C joins A and pulls A's joined column through.
+    const chainedId = useAppStore
+      .getState()
+      .addGeoJsonLayer(
+        "Chained",
+        collection([pointFeature({ state: "Alabama" })]),
+      );
+    useAppStore.getState().setLayerJoins(targetId, [
+      join({ joinLayerId: tableId }),
+    ]);
+    useAppStore.getState().setLayerJoins(chainedId, [
+      join({
+        id: "j2",
+        joinLayerId: targetId,
+        targetField: "state",
+        joinField: "name",
+        fields: ["pop"],
+      }),
+    ]);
+    assert.equal(
+      layerById(chainedId).geojson?.features[0].properties?.pop,
+      5_000_000,
+    );
+
+    // Detaching A's join must cascade: A no longer offers `pop`, so C's
+    // subset request finds nothing and the pulled-through column disappears.
+    useAppStore.getState().setLayerJoins(targetId, []);
+    assert.equal(
+      "pop" in (layerById(chainedId).geojson?.features[0].properties ?? {}),
+      false,
+    );
+  });
+
+  it("updating a join table refreshes multi-hop dependents in order", () => {
+    const { targetId, tableId } = addLayers();
+    const chainedId = useAppStore
+      .getState()
+      .addGeoJsonLayer(
+        "Chained",
+        collection([pointFeature({ state: "Alabama" })]),
+      );
+    useAppStore.getState().setLayerJoins(targetId, [
+      join({ joinLayerId: tableId }),
+    ]);
+    useAppStore.getState().setLayerJoins(chainedId, [
+      join({
+        id: "j2",
+        joinLayerId: targetId,
+        targetField: "state",
+        joinField: "name",
+        fields: ["pop"],
+      }),
+    ]);
+
+    // Editing the census table must flow census -> states -> chained.
+    useAppStore.getState().updateLayer(tableId, {
+      geojson: collection([
+        tableFeature({ state_name: "Alabama", pop: 123, income: 1 }),
+      ]),
+    });
+    assert.equal(layerById(targetId).geojson?.features[0].properties?.pop, 123);
+    assert.equal(layerById(chainedId).geojson?.features[0].properties?.pop, 123);
   });
 
   it("loadProject re-resolves persisted joins against the loaded layers", () => {

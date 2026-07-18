@@ -65,6 +65,13 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
     () => (draftJoinLayer ? getAttributePropertyNames(draftJoinLayer) : []),
     [draftJoinLayer],
   );
+  // The checklist offers only non-key fields, matching the engine's default of
+  // "every field except the key" — so an untouched list and a fully-checked
+  // list mean the same thing.
+  const subsetFieldNames = useMemo(
+    () => joinFieldNames.filter((name) => name !== draftJoinField),
+    [joinFieldNames, draftJoinField],
+  );
 
   const resetForm = () => {
     setDraftJoinLayerId("");
@@ -74,18 +81,25 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
     setDraftFields(null);
   };
 
+  // A selected-but-empty subset would join no columns; require at least one.
+  const subsetEmpty =
+    draftFields !== null &&
+    subsetFieldNames.length > 0 &&
+    subsetFieldNames.every((name) => !draftFields.has(name));
+
   const addJoin = () => {
-    if (!draftJoinLayerId || !draftTargetField || !draftJoinField) return;
+    if (!draftJoinLayerId || !draftTargetField || !draftJoinField || subsetEmpty)
+      return;
     const subset =
       draftFields === null
         ? undefined
-        : joinFieldNames.filter((name) => draftFields.has(name));
+        : subsetFieldNames.filter((name) => draftFields.has(name));
     const join: LayerJoin = {
       id: newJoinId(),
       joinLayerId: draftJoinLayerId,
       targetField: draftTargetField,
       joinField: draftJoinField,
-      ...(subset && subset.length < joinFieldNames.length
+      ...(subset && subset.length < subsetFieldNames.length
         ? { fields: subset }
         : {}),
       ...(draftPrefix.trim() ? { prefix: draftPrefix.trim() } : {}),
@@ -111,7 +125,7 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
 
   const toggleDraftField = (name: string, checked: boolean) => {
     setDraftFields((previous) => {
-      const next = new Set(previous ?? joinFieldNames);
+      const next = new Set(previous ?? subsetFieldNames);
       if (checked) next.add(name);
       else next.delete(name);
       return next;
@@ -220,7 +234,12 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
             <Select
               id={`join-field-${layer.id}`}
               value={draftJoinField}
-              onChange={(event) => setDraftJoinField(event.target.value)}
+              onChange={(event) => {
+                setDraftJoinField(event.target.value);
+                // The checklist's field pool excludes the key, so a key change
+                // invalidates any subset picked against the old pool.
+                setDraftFields(null);
+              }}
               disabled={!draftJoinLayer}
             >
               <option value="">{t("style.joins.selectField")}</option>
@@ -248,11 +267,11 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
               ))}
             </Select>
           </div>
-          {joinFieldNames.length > 0 && (
+          {subsetFieldNames.length > 0 && (
             <div className="space-y-1">
               <Label>{t("style.joins.fields")}</Label>
               <div className="max-h-32 space-y-1 overflow-y-auto rounded-md border border-input p-2">
-                {joinFieldNames.map((name) => (
+                {subsetFieldNames.map((name) => (
                   <label
                     key={name}
                     className="flex items-center gap-2 text-xs"
@@ -294,7 +313,12 @@ export function LayerJoinsSection({ layer }: LayerJoinsSectionProps) {
             </Button>
             <Button
               size="sm"
-              disabled={!draftJoinLayerId || !draftTargetField || !draftJoinField}
+              disabled={
+                !draftJoinLayerId ||
+                !draftTargetField ||
+                !draftJoinField ||
+                subsetEmpty
+              }
               onClick={addJoin}
             >
               {t("style.joins.add")}

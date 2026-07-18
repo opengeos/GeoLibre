@@ -2696,7 +2696,8 @@
       "targetField": "Doelveld",
       "selectField": "Selecteer een veld…",
       "fields": "Te koppelen velden",
-      "fieldCount": "{{count}} velden",
+      "fieldCount_one": "{{count}} veld",
+      "fieldCount_other": "{{count}} velden",
       "prefix": "Voorvoegsel veldnaam",
       "prefixPlaceholder": "bijv. census_",
       "add": "Toevoegen",
@@ -2706,7 +2707,8 @@
       "missingLayer": "Koppelingslaag niet gevonden",
       "noCandidates": "Geen andere laag heeft een attributentabel om te koppelen",
       "statsMatched": "{{matched}} van {{total}} objecten gematcht",
-      "statsUnmatchedJoin": "{{count}} tabelrijen zonder match"
+      "statsUnmatchedJoin_one": "{{count}} tabelrij zonder match",
+      "statsUnmatchedJoin_other": "{{count}} tabelrijen zonder match"
     },
     "labels": {
       "heading": "Labels",

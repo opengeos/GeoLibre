@@ -3109,7 +3109,12 @@
       "targetField": "الحقل الهدف",
       "selectField": "اختر حقلاً…",
       "fields": "الحقول المراد ربطها",
-      "fieldCount": "{{count}} حقول",
+      "fieldCount_zero": "{{count}} من الحقول",
+      "fieldCount_one": "{{count}} حقل",
+      "fieldCount_two": "{{count}} من الحقول",
+      "fieldCount_few": "{{count}} حقول",
+      "fieldCount_many": "{{count}} حقلاً",
+      "fieldCount_other": "{{count}} حقل",
       "prefix": "بادئة اسم الحقل",
       "prefixPlaceholder": "مثل census_",
       "add": "إضافة",
@@ -3119,7 +3124,12 @@
       "missingLayer": "طبقة الربط غير موجودة",
       "noCandidates": "لا توجد طبقة أخرى بجدول سمات للربط",
       "statsMatched": "تمت مطابقة {{matched}} من {{total}} من المعالم",
-      "statsUnmatchedJoin": "{{count}} صفوف من الجدول بدون تطابق"
+      "statsUnmatchedJoin_zero": "{{count}} من صفوف الجدول بدون تطابق",
+      "statsUnmatchedJoin_one": "{{count}} صف من الجدول بدون تطابق",
+      "statsUnmatchedJoin_two": "{{count}} من صفوف الجدول بدون تطابق",
+      "statsUnmatchedJoin_few": "{{count}} صفوف من الجدول بدون تطابق",
+      "statsUnmatchedJoin_many": "{{count}} صفًا من الجدول بدون تطابق",
+      "statsUnmatchedJoin_other": "{{count}} صف من الجدول بدون تطابق"
     },
     "labels": {
       "heading": "التسميات",

@@ -2652,7 +2652,7 @@
       "targetField": "Bidang target",
       "selectField": "Pilih bidang…",
       "fields": "Bidang yang digabungkan",
-      "fieldCount": "{{count}} bidang",
+      "fieldCount_other": "{{count}} bidang",
       "prefix": "Awalan nama bidang",
       "prefixPlaceholder": "mis. census_",
       "add": "Tambah",
@@ -2662,7 +2662,7 @@
       "missingLayer": "Layer gabungan tidak ditemukan",
       "noCandidates": "Tidak ada layer lain dengan tabel atribut untuk digabungkan",
       "statsMatched": "{{matched}} dari {{total}} fitur cocok",
-      "statsUnmatchedJoin": "{{count}} baris tabel tanpa kecocokan"
+      "statsUnmatchedJoin_other": "{{count}} baris tabel tanpa kecocokan"
     },
     "labels": {
       "heading": "Label",

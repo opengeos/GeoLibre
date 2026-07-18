@@ -2696,7 +2696,8 @@
       "targetField": "Zielfeld",
       "selectField": "Feld auswählen…",
       "fields": "Zu verknüpfende Felder",
-      "fieldCount": "{{count}} Felder",
+      "fieldCount_one": "{{count}} Feld",
+      "fieldCount_other": "{{count}} Felder",
       "prefix": "Feldnamen-Präfix",
       "prefixPlaceholder": "z. B. census_",
       "add": "Hinzufügen",
@@ -2706,7 +2707,8 @@
       "missingLayer": "Verknüpfungslayer nicht gefunden",
       "noCandidates": "Kein anderer Layer hat eine Attributtabelle zum Verknüpfen",
       "statsMatched": "{{matched}} von {{total}} Objekten zugeordnet",
-      "statsUnmatchedJoin": "{{count}} Tabellenzeilen ohne Treffer"
+      "statsUnmatchedJoin_one": "{{count}} Tabellenzeile ohne Treffer",
+      "statsUnmatchedJoin_other": "{{count}} Tabellenzeilen ohne Treffer"
     },
     "labels": {
       "heading": "Beschriftungen",

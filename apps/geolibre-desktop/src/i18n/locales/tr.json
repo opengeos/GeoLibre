@@ -2696,7 +2696,8 @@
       "targetField": "Hedef alan",
       "selectField": "Bir alan seçin…",
       "fields": "Birleştirilecek alanlar",
-      "fieldCount": "{{count}} alan",
+      "fieldCount_one": "{{count}} alan",
+      "fieldCount_other": "{{count}} alan",
       "prefix": "Alan adı öneki",
       "prefixPlaceholder": "örn. census_",
       "add": "Ekle",
@@ -2706,7 +2707,8 @@
       "missingLayer": "Birleştirme katmanı bulunamadı",
       "noCandidates": "Birleştirilecek öznitelik tablosu olan başka katman yok",
       "statsMatched": "{{total}} öğeden {{matched}} tanesi eşleşti",
-      "statsUnmatchedJoin": "Eşleşmeyen {{count}} tablo satırı"
+      "statsUnmatchedJoin_one": "Eşleşmeyen {{count}} tablo satırı",
+      "statsUnmatchedJoin_other": "Eşleşmeyen {{count}} tablo satırı"
     },
     "labels": {
       "heading": "Etiketler",

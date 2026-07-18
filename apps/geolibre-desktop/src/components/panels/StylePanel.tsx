@@ -4305,7 +4305,9 @@ export function StylePanel({
           {layer.geojson ? (
             <>
               <Separator />
-              <LayerJoinsSection layer={layer} />
+              {/* Keyed by layer so the add-join draft never survives a layer
+                  switch (a stale draft could reference the new target itself). */}
+              <LayerJoinsSection key={layer.id} layer={layer} />
             </>
           ) : null}
         </div>

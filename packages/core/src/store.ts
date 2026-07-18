@@ -58,7 +58,11 @@ import {
   type StyleLibraryEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
-import { applyJoinsToLayer, reapplyLayerJoins } from "./joins";
+import {
+  applyJoinsToLayer,
+  cascadeLayerJoinRefresh,
+  reapplyLayerJoins,
+} from "./joins";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -1358,32 +1362,30 @@ export const useAppStore = create<AppState>()(
           // A geojson replacement re-derives persistent joins: on the layer
           // itself when the patch doesn't already carry fresh join records
           // (file reload, attribute edits, processing writes — joined columns
-          // stay derived, QGIS-style), and on every layer that joins against
-          // the updated one, so editing a join table refreshes its targets.
+          // stay derived, QGIS-style), then transitively on every layer whose
+          // joins consume the updated one, so editing a join table refreshes
+          // its targets and their dependents in turn.
           if (patch.geojson !== undefined) {
-            layers = layers.map((l) => {
-              const refreshSelf =
-                l.id === id && patch.joins === undefined && !!l.joins?.length;
-              const refreshTarget =
-                l.id !== id &&
-                !!l.joins?.some(
-                  (j) => j.enabled !== false && j.joinLayerId === id,
-                );
-              return refreshSelf || refreshTarget
-                ? applyJoinsToLayer(l, layers)
-                : l;
-            });
+            if (patch.joins === undefined) {
+              layers = layers.map((l) =>
+                l.id === id && l.joins?.length ? applyJoinsToLayer(l, layers) : l,
+              );
+            }
+            layers = cascadeLayerJoinRefresh(layers, id);
           }
           return { layers, isDirty: true };
         }),
 
       setLayerJoins: (id, joins) =>
-        set((s) => ({
-          layers: s.layers.map((l) =>
+        set((s) => {
+          let layers = s.layers.map((l) =>
             l.id === id ? applyJoinsToLayer(l, s.layers, joins) : l,
-          ),
-          isDirty: true,
-        })),
+          );
+          // Changing this layer's joins changes its materialized columns, so
+          // layers joining against it (directly or transitively) re-derive too.
+          layers = cascadeLayerJoinRefresh(layers, id);
+          return { layers, isDirty: true };
+        }),
 
       setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 

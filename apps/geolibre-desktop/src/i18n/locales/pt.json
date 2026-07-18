@@ -2696,7 +2696,8 @@
       "targetField": "Campo de destino",
       "selectField": "Selecione um campo…",
       "fields": "Campos a unir",
-      "fieldCount": "{{count}} campos",
+      "fieldCount_one": "{{count}} campo",
+      "fieldCount_other": "{{count}} campos",
       "prefix": "Prefixo do nome do campo",
       "prefixPlaceholder": "ex.: census_",
       "add": "Adicionar",
@@ -2706,7 +2707,8 @@
       "missingLayer": "Camada de junção não encontrada",
       "noCandidates": "Nenhuma outra camada tem tabela de atributos para unir",
       "statsMatched": "{{matched}} de {{total}} feições correspondidas",
-      "statsUnmatchedJoin": "{{count}} linhas da tabela sem correspondência"
+      "statsUnmatchedJoin_one": "{{count}} linha da tabela sem correspondência",
+      "statsUnmatchedJoin_other": "{{count}} linhas da tabela sem correspondência"
     },
     "labels": {
       "heading": "Rótulos",

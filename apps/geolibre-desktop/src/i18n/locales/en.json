@@ -3196,7 +3196,8 @@
       "targetField": "Target field",
       "selectField": "Select a field…",
       "fields": "Fields to join",
-      "fieldCount": "{{count}} fields",
+      "fieldCount_one": "{{count}} field",
+      "fieldCount_other": "{{count}} fields",
       "prefix": "Field name prefix",
       "prefixPlaceholder": "e.g. census_",
       "add": "Add",
@@ -3206,7 +3207,8 @@
       "missingLayer": "Join layer not found",
       "noCandidates": "No other layer has an attribute table to join",
       "statsMatched": "{{matched}} of {{total}} features matched",
-      "statsUnmatchedJoin": "{{count}} join rows unmatched"
+      "statsUnmatchedJoin_one": "{{count}} join row unmatched",
+      "statsUnmatchedJoin_other": "{{count}} join rows unmatched"
     },
     "labels": {
       "heading": "Labels",

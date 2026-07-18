@@ -16,6 +16,16 @@ import type { GeoLibreLayer, LayerJoin } from "./types";
  * whose output name already exists is skipped entirely), so stripping the
  * added columns exactly restores the pre-join properties.
  *
+ * Known trade-off of that bookkeeping: when a layer's data is replaced
+ * wholesale (file reload), the replacement is stripped with the *previous*
+ * `addedFields`. That is required because a replacement can also be a
+ * write-back of the joined output (the attribute table round-trips
+ * `layer.geojson`), which must not freeze stale joined values into base data —
+ * but it means a reloaded base column whose name collides with a
+ * previously-joined output column is replaced by the join's value for that
+ * column. A field-name prefix (the QGIS convention the UI suggests) keeps
+ * such collisions from arising.
+ *
  * The data is already in memory as JS feature objects, so the join is a plain
  * hash join here rather than the DuckDB-WASM SQL statement sketched in the
  * issue — the result is identical for equality keys and the engine stays
@@ -169,9 +179,12 @@ export function applyLayerJoins(
       }
     }
 
-    const requested = join.fields?.length
-      ? join.fields.filter((field) => joinKeySet.has(field))
-      : joinKeysOrder.filter((key) => key !== join.joinField);
+    // An explicit `fields` array is honored verbatim (an empty subset joins no
+    // columns); only an absent array means "every field except the key".
+    const requested =
+      join.fields !== undefined
+        ? join.fields.filter((field) => joinKeySet.has(field))
+        : joinKeysOrder.filter((key) => key !== join.joinField);
     const prefix = join.prefix ?? "";
     const fieldPairs: Array<[source: string, output: string]> = [];
     for (const field of requested) {
@@ -206,13 +219,12 @@ export function applyLayerJoins(
       }
     }
 
+    // Counts rows, not unique keys: duplicate unmatched rows each count, as
+    // the stat (and the UI copy) promise.
     let unmatchedJoin = 0;
-    const countedKeys = new Set<string>();
     for (const jf of joinFeatures) {
       const key = layerJoinKey(jf.properties?.[join.joinField]);
-      if (key === null || countedKeys.has(key)) continue;
-      countedKeys.add(key);
-      if (!targetKeys.has(key)) unmatchedJoin += 1;
+      if (key !== null && !targetKeys.has(key)) unmatchedJoin += 1;
     }
 
     return {
@@ -259,15 +271,95 @@ export function applyJoinsToLayer(
 }
 
 /**
+ * Refresh every layer whose joins (directly or transitively) consume the
+ * layer identified by `seedId`, after that layer's materialized data changed.
+ * Chains re-derive in dependency order (`C joins A, A joins B`: updating B
+ * refreshes A, then C sees A's fresh columns); each layer refreshes at most
+ * once, which also breaks join cycles. The seed itself is not touched.
+ */
+export function cascadeLayerJoinRefresh(
+  layers: GeoLibreLayer[],
+  seedId: string,
+): GeoLibreLayer[] {
+  let current = layers;
+  const queue = [seedId];
+  const refreshed = new Set<string>([seedId]);
+  while (queue.length > 0) {
+    const sourceId = queue.shift() as string;
+    const dependents = current.filter(
+      (layer) =>
+        !refreshed.has(layer.id) &&
+        layer.joins?.some(
+          (join) => join.enabled !== false && join.joinLayerId === sourceId,
+        ),
+    );
+    for (const dependent of dependents) {
+      refreshed.add(dependent.id);
+      queue.push(dependent.id);
+      current = current.map((layer) =>
+        layer.id === dependent.id ? applyJoinsToLayer(layer, current) : layer,
+      );
+    }
+  }
+  return current;
+}
+
+/**
  * Re-resolve every layer's persistent joins against the freshly loaded layer
- * set (project open). Join sources resolve against the layers as loaded, so a
- * join table whose saved data changed on disk refreshes its targets once the
- * table itself reloads (the store's `updateLayer` cascades that change).
- * Layers without joins pass through by reference.
+ * set (project open). Layers re-derive in topological order of their join
+ * dependencies, so a chain (`C joins A, A joins B`) resolves A before C;
+ * cycles fall back to array order. Layer sets without joins pass through by
+ * reference.
  */
 export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
-  if (!layers.some((layer) => layer.joins?.length)) return layers;
-  return layers.map((layer) =>
-    layer.joins?.length ? applyJoinsToLayer(layer, layers) : layer,
-  );
+  const joined = layers.filter((layer) => layer.joins?.length);
+  if (joined.length === 0) return layers;
+
+  // Kahn's algorithm over "join source → join target" edges between layers
+  // that themselves have joins; other sources contribute no ordering.
+  const joinedIds = new Set(joined.map((layer) => layer.id));
+  const indegree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  for (const layer of joined) indegree.set(layer.id, 0);
+  for (const layer of joined) {
+    for (const join of layer.joins ?? []) {
+      if (
+        join.enabled === false ||
+        join.joinLayerId === layer.id ||
+        !joinedIds.has(join.joinLayerId)
+      ) {
+        continue;
+      }
+      indegree.set(layer.id, (indegree.get(layer.id) ?? 0) + 1);
+      const list = dependents.get(join.joinLayerId) ?? [];
+      list.push(layer.id);
+      dependents.set(join.joinLayerId, list);
+    }
+  }
+  const order: string[] = [];
+  const queue = joined
+    .filter((layer) => indegree.get(layer.id) === 0)
+    .map((layer) => layer.id);
+  while (queue.length > 0) {
+    const id = queue.shift() as string;
+    order.push(id);
+    for (const dependent of dependents.get(id) ?? []) {
+      const remaining = (indegree.get(dependent) ?? 1) - 1;
+      indegree.set(dependent, remaining);
+      if (remaining === 0) queue.push(dependent);
+    }
+  }
+  // Cycle members never reach indegree 0; append them in array order.
+  const ordered = new Set(order);
+  for (const layer of joined) {
+    if (!ordered.has(layer.id)) order.push(layer.id);
+  }
+
+  let current = layers;
+  for (const id of order) {
+    current = current.map((layer) =>
+      layer.id === id ? applyJoinsToLayer(layer, current) : layer,
+    );
+  }
+  return current;
 }

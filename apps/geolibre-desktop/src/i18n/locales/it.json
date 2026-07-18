@@ -2696,7 +2696,8 @@
       "targetField": "Campo di destinazione",
       "selectField": "Seleziona un campo…",
       "fields": "Campi da unire",
-      "fieldCount": "{{count}} campi",
+      "fieldCount_one": "{{count}} campo",
+      "fieldCount_other": "{{count}} campi",
       "prefix": "Prefisso dei nomi dei campi",
       "prefixPlaceholder": "es. census_",
       "add": "Aggiungi",
@@ -2706,7 +2707,8 @@
       "missingLayer": "Layer di join non trovato",
       "noCandidates": "Nessun altro layer ha una tabella degli attributi da unire",
       "statsMatched": "{{matched}} di {{total}} elementi corrispondenti",
-      "statsUnmatchedJoin": "{{count}} righe della tabella senza corrispondenza"
+      "statsUnmatchedJoin_one": "{{count}} riga della tabella senza corrispondenza",
+      "statsUnmatchedJoin_other": "{{count}} righe della tabella senza corrispondenza"
     },
     "labels": {
       "heading": "Etichette",

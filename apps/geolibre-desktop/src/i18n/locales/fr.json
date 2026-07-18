@@ -2696,7 +2696,8 @@
       "targetField": "Champ cible",
       "selectField": "Sélectionner un champ…",
       "fields": "Champs à joindre",
-      "fieldCount": "{{count}} champs",
+      "fieldCount_one": "{{count}} champ",
+      "fieldCount_other": "{{count}} champs",
       "prefix": "Préfixe des noms de champ",
       "prefixPlaceholder": "ex. census_",
       "add": "Ajouter",
@@ -2706,7 +2707,8 @@
       "missingLayer": "Couche de jointure introuvable",
       "noCandidates": "Aucune autre couche n'a de table attributaire à joindre",
       "statsMatched": "{{matched}} entités sur {{total}} appariées",
-      "statsUnmatchedJoin": "{{count}} lignes de la table sans correspondance"
+      "statsUnmatchedJoin_one": "{{count}} ligne de la table sans correspondance",
+      "statsUnmatchedJoin_other": "{{count}} lignes de la table sans correspondance"
     },
     "labels": {
       "heading": "Étiquettes",

@@ -2696,7 +2696,8 @@
       "targetField": "लक्ष्य फ़ील्ड",
       "selectField": "एक फ़ील्ड चुनें…",
       "fields": "जोड़ने के लिए फ़ील्ड",
-      "fieldCount": "{{count}} फ़ील्ड",
+      "fieldCount_one": "{{count}} फ़ील्ड",
+      "fieldCount_other": "{{count}} फ़ील्ड",
       "prefix": "फ़ील्ड नाम उपसर्ग",
       "prefixPlaceholder": "जैसे census_",
       "add": "जोड़ें",
@@ -2706,7 +2707,8 @@
       "missingLayer": "जॉइन लेयर नहीं मिली",
       "noCandidates": "किसी अन्य लेयर में जोड़ने के लिए विशेषता तालिका नहीं है",
       "statsMatched": "{{total}} में से {{matched}} फ़ीचर मेल खाए",
-      "statsUnmatchedJoin": "{{count}} तालिका पंक्तियाँ बिना मेल"
+      "statsUnmatchedJoin_one": "{{count}} तालिका पंक्ति बिना मेल",
+      "statsUnmatchedJoin_other": "{{count}} तालिका पंक्तियाँ बिना मेल"
     },
     "labels": {
       "heading": "लेबल",
