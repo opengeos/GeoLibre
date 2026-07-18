@@ -2803,6 +2803,7 @@
       "elseRuleEnabled": "Anders-regel inschakelen (uitgeschakeld worden objecten die met geen enkele regel overeenkomen verborgen)",
       "elseAllOtherFeatures": "Else (alle overige objecten)",
       "applyHint": "Klik op Toepassen om weergave op basis van regels te activeren.",
+      "rulesApplyLive": "Regelwijzigingen worden direct op de kaart toegepast — een aparte toepasstap is niet nodig.",
       "proportionalSize": "Proportionele grootte",
       "sizeByValue": "Grootte op basis van waarde",
       "sizeField": "Grootteveld",

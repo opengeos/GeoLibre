@@ -2803,6 +2803,7 @@
       "elseRuleEnabled": "Attiva la regola «altrimenti» (se disattivata, gli elementi che non corrispondono ad alcuna regola vengono nascosti)",
       "elseAllOtherFeatures": "Else (tutti gli altri elementi)",
       "applyHint": "Fai clic su Applica per attivare il rendering basato su regole.",
+      "rulesApplyLive": "Le modifiche alle regole vengono applicate immediatamente alla mappa: non serve un passaggio di applicazione separato.",
       "proportionalSize": "Dimensione proporzionale",
       "sizeByValue": "Dimensione in base al valore",
       "sizeField": "Campo dimensione",

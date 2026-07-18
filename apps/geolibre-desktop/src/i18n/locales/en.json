@@ -3266,6 +3266,7 @@
       "elseRuleEnabled": "Enable the else rule (when off, features matching no rule are hidden)",
       "elseAllOtherFeatures": "Else (all other features)",
       "applyHint": "Click Apply to activate rule-based rendering.",
+      "rulesApplyLive": "Rule changes apply to the map immediately — no separate apply step is needed.",
       "proportionalSize": "Proportional size",
       "sizeByValue": "Size by value",
       "sizeField": "Size field",

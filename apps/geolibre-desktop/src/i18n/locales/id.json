@@ -2759,6 +2759,7 @@
       "elseRuleEnabled": "Aktifkan aturan lainnya (jika nonaktif, fitur yang tidak cocok dengan aturan mana pun disembunyikan)",
       "elseAllOtherFeatures": "Else (semua fitur lainnya)",
       "applyHint": "Klik Terapkan untuk mengaktifkan rendering berbasis aturan.",
+      "rulesApplyLive": "Perubahan aturan langsung diterapkan ke peta — tidak perlu langkah penerapan terpisah.",
       "proportionalSize": "Ukuran proporsional",
       "sizeByValue": "Ukuran berdasarkan nilai",
       "sizeField": "Bidang ukuran",

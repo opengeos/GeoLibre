@@ -2759,6 +2759,7 @@
       "elseRuleEnabled": "기타 규칙 활성화(끄면 어떤 규칙과도 일치하지 않는 피처가 숨겨집니다)",
       "elseAllOtherFeatures": "Else(나머지 모든 피처)",
       "applyHint": "적용을 클릭하여 규칙 기반 렌더링을 활성화하세요.",
+      "rulesApplyLive": "규칙 변경 사항은 지도에 즉시 적용됩니다. 별도의 적용 단계가 필요하지 않습니다.",
       "proportionalSize": "비례 크기",
       "sizeByValue": "값에 따른 크기",
       "sizeField": "크기 필드",

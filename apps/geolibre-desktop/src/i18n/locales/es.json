@@ -2803,6 +2803,7 @@
       "elseRuleEnabled": "Activar la regla «si no» (si está desactivada, se ocultan los elementos que no coinciden con ninguna regla)",
       "elseAllOtherFeatures": "Else (todas las demás entidades)",
       "applyHint": "Haga clic en Aplicar para activar el renderizado basado en reglas.",
+      "rulesApplyLive": "Los cambios en las reglas se aplican al mapa de inmediato; no hace falta un paso de aplicación aparte.",
       "proportionalSize": "Tamaño proporcional",
       "sizeByValue": "Tamaño según valor",
       "sizeField": "Campo de tamaño",

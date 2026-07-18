@@ -2803,6 +2803,7 @@
       "elseRuleEnabled": "Activer la règle «sinon» (désactivée, les entités ne correspondant à aucune règle sont masquées)",
       "elseAllOtherFeatures": "Sinon (toutes les autres entités)",
       "applyHint": "Cliquez sur Appliquer pour activer le rendu basé sur des règles.",
+      "rulesApplyLive": "Les modifications des règles s'appliquent immédiatement à la carte — aucune étape d'application distincte n'est nécessaire.",
       "proportionalSize": "Taille proportionnelle",
       "sizeByValue": "Taille selon la valeur",
       "sizeField": "Champ de taille",

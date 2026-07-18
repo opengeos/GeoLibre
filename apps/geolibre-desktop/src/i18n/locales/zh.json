@@ -2874,6 +2874,7 @@
       "elseRuleEnabled": "启用“其他”规则（关闭时，不匹配任何规则的要素将被隐藏）",
       "elseAllOtherFeatures": "其他（所有剩余要素）",
       "applyHint": "点击“应用”以激活基于规则的渲染。",
+      "rulesApplyLive": "规则更改会立即应用到地图，无需单独的应用步骤。",
       "proportionalSize": "比例符号",
       "sizeByValue": "按数值设置大小",
       "sizeField": "大小字段",

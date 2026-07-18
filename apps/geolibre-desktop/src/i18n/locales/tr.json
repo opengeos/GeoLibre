@@ -2803,6 +2803,7 @@
       "elseRuleEnabled": "Aksi halde kuralını etkinleştir (kapalıyken hiçbir kurala uymayan öğeler gizlenir)",
       "elseAllOtherFeatures": "Diğer (tüm diğer öğeler)",
       "applyHint": "Kural tabanlı işlemeyi etkinleştirmek için Uygula'ya tıklayın.",
+      "rulesApplyLive": "Kural değişiklikleri haritaya anında uygulanır — ayrı bir uygulama adımı gerekmez.",
       "proportionalSize": "Orantılı boyut",
       "sizeByValue": "Değere göre boyutlandır",
       "sizeField": "Boyut alanı",

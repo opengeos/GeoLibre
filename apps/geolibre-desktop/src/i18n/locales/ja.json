@@ -2759,6 +2759,7 @@
       "elseRuleEnabled": "その他ルールを有効にする（オフの場合、どのルールにも一致しない地物は非表示になります）",
       "elseAllOtherFeatures": "Else (それ以外のすべてのフィーチャ)",
       "applyHint": "「適用」をクリックしてルールベースの描画を有効にします。",
+      "rulesApplyLive": "ルールの変更は直ちに地図に適用されます。別途適用する操作は不要です。",
       "proportionalSize": "比例サイズ",
       "sizeByValue": "値によるサイズ設定",
       "sizeField": "サイズフィールド",

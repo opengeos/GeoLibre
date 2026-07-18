@@ -2593,15 +2593,27 @@ export function StylePanel({
           </div>
         </div>
       )}
-      <Button
-        type="button"
-        size="sm"
-        className="w-full"
-        disabled={!vectorStyleSettingsChanged}
-        onClick={applyVectorStyleSettings}
-      >
-        {t("style.symbology.applyStyleType")}
-      </Button>
+      {/* With rule-based already active, rule edits write straight to the
+          store and render live, so the Apply button would never enable again —
+          a permanently disabled button reads as "your edits are not applied".
+          Replace it with a hint saying edits are live; the button returns as
+          soon as the user drafts a different style type. */}
+      {draftVectorStyleMode === "rule-based" &&
+      draftVectorStyleMode === styleValue(style, "vectorStyleMode") ? (
+        <p className="text-xs text-muted-foreground">
+          {t("style.symbology.rulesApplyLive")}
+        </p>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          className="w-full"
+          disabled={!vectorStyleSettingsChanged}
+          onClick={applyVectorStyleSettings}
+        >
+          {t("style.symbology.applyStyleType")}
+        </Button>
+      )}
       {draftVectorStyleMode === "rule-based" &&
         draftVectorStyleMode !== styleValue(style, "vectorStyleMode") && (
           <p className="text-xs text-muted-foreground">
