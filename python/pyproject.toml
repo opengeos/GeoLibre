@@ -12,12 +12,12 @@ license = "MIT"
 authors = [{ name = "Qiusheng Wu", email = "giswqs@gmail.com" }]
 keywords = ["geolibre", "gis", "maplibre", "jupyter", "anywidget", "mapping"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Framework :: Jupyter",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3 :: Only",
-    "Topic :: Scientific/Engineering :: GIS",
+  "Development Status :: 5 - Production/Stable",
+  "Framework :: Jupyter",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Topic :: Scientific/Engineering :: GIS",
 ]
 dependencies = ["anywidget>=0.9", "traitlets>=5", "jupyter-ui-poll>=0.2"]
 

@@ -167,7 +167,7 @@ uploads its report as an artifact on failure.
 - All text files are normalized to LF via `.gitattributes` (`* text=auto eol=lf`),
   so line endings are consistent across platforms; `core.autocrlf` is overridden.
 - The remaining pre-commit hooks enforce LF line endings (`mixed-line-ending
---fix=lf`) and basic whitespace (end-of-file and trailing-whitespace fixers).
+  --fix=lf`) and basic whitespace (end-of-file and trailing-whitespace fixers).
   You rarely need to format by hand — commit once, let the hooks rewrite, then
   `git add` the fixed files and commit again. Install the hooks after cloning
   with `pre-commit install`.

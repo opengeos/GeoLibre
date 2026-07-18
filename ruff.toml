@@ -24,7 +24,7 @@ extend-exclude = [
 # F = Pyflakes (real bugs: unused imports/vars, undefined names).
 # I = isort (import ordering; the repo already groups stdlib/third-party/first-party).
 # W = pycodestyle whitespace warnings.
-# E = pycodestyle errors (E501 line-length kept; see [lint.pycodestyle] below).
+# E = pycodestyle errors (E501 fires at the top-level line-length, 100).
 select = ["F", "I", "W", "E"]
 
 [lint.isort]
@@ -39,11 +39,6 @@ known-first-party = ["geolibre", "geolibre_server"]
 # E501 from flagging lines whose only "violation" is a long string.
 "backend/geolibre_server/geolibre_server/app/whitebox.py" = ["E501"]
 "python/tests/test_map.py" = ["E501"]
-
-[lint.pycodestyle]
-# Let the formatter own line wrapping; the linter should only flag genuinely
-# over-long lines beyond this hard limit.
-max-line-length = 100
 
 [format]
 # The repo uses double-quoted strings throughout (see basemaps.py, vector.py).

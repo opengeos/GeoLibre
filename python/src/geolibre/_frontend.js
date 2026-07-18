@@ -223,10 +223,7 @@ async function render({ model, el }) {
     } else if (data.type === "geolibre:error") {
       model.set("error", String(data.message || ""));
       model.save_changes();
-    } else if (
-      data.type === "geolibre:result" ||
-      data.type === "geolibre:event"
-    ) {
+    } else if (data.type === "geolibre:result" || data.type === "geolibre:event") {
       // Pure passthrough of the scripting RPC reply / event back to Python over
       // the anywidget custom-message channel; the requestId stays opaque here.
       model.send(data);
@@ -251,9 +248,7 @@ async function render({ model, el }) {
     } else {
       // Warn so a full queue is diagnosable; otherwise the dropped command only
       // surfaces as a confusing TimeoutError on the Python side.
-      console.warn(
-        `[GeoLibre] command queue full (500); dropping "${msg.method}"`,
-      );
+      console.warn(`[GeoLibre] command queue full (500); dropping "${msg.method}"`);
     }
   };
   model.on("msg:custom", onCustom);

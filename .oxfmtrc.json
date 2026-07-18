@@ -11,7 +11,6 @@
   "endOfLine": "lf",
   "ignorePatterns": [
     "*.ipynb",
-    "python/**",
     "package-lock.json",
     "pnpm-lock.yaml",
     "yarn.lock",
