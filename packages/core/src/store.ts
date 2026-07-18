@@ -1336,7 +1336,14 @@ export const useAppStore = create<AppState>()(
 
       removeLayer: (id) =>
         set((s) => ({
-          layers: s.layers.filter((l) => l.id !== id),
+          // Re-derive any layer whose joins consumed the removed layer: with
+          // the source gone the join resolves to nothing, so its previously
+          // materialized columns strip away instead of staying frozen (the
+          // join definition itself stays, shown as missing in the Joins UI).
+          layers: cascadeLayerJoinRefresh(
+            s.layers.filter((l) => l.id !== id),
+            id,
+          ),
           // Drop any per-pane visibility override for the removed layer so stale
           // ids don't accumulate (and serialize) in secondary panes over time.
           secondaryMapViews: s.secondaryMapViews.map((pane) => {

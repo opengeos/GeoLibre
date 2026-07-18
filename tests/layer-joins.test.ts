@@ -377,6 +377,70 @@ describe("store integration", () => {
     assert.equal(layerById(chainedId).geojson?.features[0].properties?.pop, 123);
   });
 
+  it("refreshes same-level siblings in dependency order, not layer-panel order", () => {
+    const store = useAppStore.getState();
+    const bId = store.addGeoJsonLayer(
+      "B",
+      collection([tableFeature({ k: "x", val: 1 })]),
+    );
+    const dId = store.addGeoJsonLayer("D", collection([pointFeature({ k: "x" })]));
+    const eId = store.addGeoJsonLayer("E", collection([pointFeature({ k: "x" })]));
+    // E joins B; D joins both B and E (pulling E's derived column through).
+    useAppStore.getState().setLayerJoins(eId, [
+      {
+        id: "eb",
+        joinLayerId: bId,
+        targetField: "k",
+        joinField: "k",
+        fields: ["val"],
+        prefix: "e_",
+      },
+    ]);
+    useAppStore.getState().setLayerJoins(dId, [
+      {
+        id: "db",
+        joinLayerId: bId,
+        targetField: "k",
+        joinField: "k",
+        fields: ["val"],
+        prefix: "d_",
+      },
+      {
+        id: "de",
+        joinLayerId: eId,
+        targetField: "k",
+        joinField: "k",
+        fields: ["e_val"],
+      },
+    ]);
+    assert.equal(layerById(dId).geojson?.features[0].properties?.e_val, 1);
+
+    useAppStore.getState().updateLayer(bId, {
+      geojson: collection([tableFeature({ k: "x", val: 2 })]),
+    });
+    const d = layerById(dId);
+    assert.equal(d.geojson?.features[0].properties?.d_val, 2);
+    // Regardless of D's and E's relative order in the layers array, D must
+    // see E's freshly re-derived column, not its pre-update value.
+    assert.equal(d.geojson?.features[0].properties?.e_val, 2);
+  });
+
+  it("removing a join-source layer strips its columns from dependents", () => {
+    const { targetId, tableId } = addLayers();
+    useAppStore.getState().setLayerJoins(targetId, [
+      join({ joinLayerId: tableId }),
+    ]);
+    assert.equal(
+      layerById(targetId).geojson?.features[0].properties?.pop,
+      5_000_000,
+    );
+    useAppStore.getState().removeLayer(tableId);
+    const layer = layerById(targetId);
+    assert.equal("pop" in (layer.geojson?.features[0].properties ?? {}), false);
+    // The definition itself survives; the Joins UI flags the missing layer.
+    assert.equal(layer.joins?.length, 1);
+  });
+
   it("takes a patch carrying both geojson and joins verbatim (external callers)", () => {
     const { targetId, tableId } = addLayers();
     useAppStore.getState().setLayerJoins(targetId, [

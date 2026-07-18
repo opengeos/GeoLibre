@@ -308,63 +308,26 @@ export function collectTransitiveJoinSourceIds(
 }
 
 /**
- * Refresh every layer whose joins (directly or transitively) consume the
- * layer identified by `seedId`, after that layer's materialized data changed.
- * Chains re-derive in dependency order (`C joins A, A joins B`: updating B
- * refreshes A, then C sees A's fresh columns); each layer refreshes at most
- * once, which also breaks join cycles. The seed itself is not touched.
+ * Order `candidates` (layers with joins) so every layer comes after the
+ * candidates its joins consume — Kahn's algorithm over "join source → join
+ * target" edges within the candidate set. When a cycle blocks progress
+ * (possible only in hand-edited projects; the UI refuses circular joins), an
+ * actual cycle member is forced through — found by walking unmet-source edges
+ * until a node repeats — so consumers *downstream* of the cycle still order
+ * after it rather than falling back ahead of it.
  */
-export function cascadeLayerJoinRefresh(
-  layers: GeoLibreLayer[],
-  seedId: string,
-): GeoLibreLayer[] {
-  let current = layers;
-  const queue = [seedId];
-  const refreshed = new Set<string>([seedId]);
-  while (queue.length > 0) {
-    const sourceId = queue.shift() as string;
-    const dependents = current.filter(
-      (layer) =>
-        !refreshed.has(layer.id) &&
-        layer.joins?.some(
-          (join) => join.enabled !== false && join.joinLayerId === sourceId,
-        ),
-    );
-    for (const dependent of dependents) {
-      refreshed.add(dependent.id);
-      queue.push(dependent.id);
-      current = current.map((layer) =>
-        layer.id === dependent.id ? applyJoinsToLayer(layer, current) : layer,
-      );
-    }
-  }
-  return current;
-}
-
-/**
- * Re-resolve every layer's persistent joins against the freshly loaded layer
- * set (project open). Layers re-derive in topological order of their join
- * dependencies, so a chain (`C joins A, A joins B`) resolves A before C;
- * cycles fall back to array order. Layer sets without joins pass through by
- * reference.
- */
-export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
-  const joined = layers.filter((layer) => layer.joins?.length);
-  if (joined.length === 0) return layers;
-
-  // Kahn's algorithm over "join source → join target" edges between layers
-  // that themselves have joins; other sources contribute no ordering.
-  const joinedIds = new Set(joined.map((layer) => layer.id));
+function topologicalJoinOrder(candidates: GeoLibreLayer[]): string[] {
+  const candidateIds = new Set(candidates.map((layer) => layer.id));
   const indegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();
   const sourcesOf = new Map<string, string[]>();
-  for (const layer of joined) indegree.set(layer.id, 0);
-  for (const layer of joined) {
+  for (const layer of candidates) indegree.set(layer.id, 0);
+  for (const layer of candidates) {
     for (const join of layer.joins ?? []) {
       if (
         join.enabled === false ||
         join.joinLayerId === layer.id ||
-        !joinedIds.has(join.joinLayerId)
+        !candidateIds.has(join.joinLayerId)
       ) {
         continue;
       }
@@ -379,19 +342,15 @@ export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
   }
   const order: string[] = [];
   const orderedSet = new Set<string>();
-  const queue = joined
+  const queue = candidates
     .filter((layer) => indegree.get(layer.id) === 0)
     .map((layer) => layer.id);
-  while (order.length < joined.length) {
+  while (order.length < candidates.length) {
     if (queue.length === 0) {
-      // A cycle blocks progress. Force an actual cycle member through — not
-      // just any unordered layer, or a consumer *downstream* of the cycle
-      // could run before it and keep stale columns. Every unordered layer has
-      // at least one unordered source, so walking unmet-source edges from any
-      // unordered layer must revisit a node, and that node sits on a cycle.
-      // Forcing it decrements its edges normally, so downstream layers still
-      // order after it.
-      const start = joined.find((layer) => !orderedSet.has(layer.id));
+      // Every unordered layer has at least one unordered source, so walking
+      // unmet-source edges from any unordered layer must revisit a node, and
+      // that node sits on a cycle.
+      const start = candidates.find((layer) => !orderedSet.has(layer.id));
       if (!start) break;
       let cursor = start.id;
       const walked = new Set<string>();
@@ -415,9 +374,65 @@ export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
       if (remaining === 0 && !orderedSet.has(dependent)) queue.push(dependent);
     }
   }
+  return order;
+}
+
+/**
+ * Refresh every layer whose joins (directly or transitively) consume the
+ * layer identified by `seedId`, after that layer's data changed — or after it
+ * was removed (a gone source resolves to nothing, so its frozen columns strip
+ * away). The affected layers re-derive in topological dependency order, so a
+ * layer joining two other affected layers sees both of them fresh regardless
+ * of their positions in the layer panel. The seed itself is not touched.
+ */
+export function cascadeLayerJoinRefresh(
+  layers: GeoLibreLayer[],
+  seedId: string,
+): GeoLibreLayer[] {
+  // Collect the transitive dependents of the seed.
+  const affected = new Set<string>();
+  const queue = [seedId];
+  while (queue.length > 0) {
+    const sourceId = queue.shift() as string;
+    for (const layer of layers) {
+      if (layer.id === seedId || affected.has(layer.id)) continue;
+      if (
+        layer.joins?.some(
+          (join) => join.enabled !== false && join.joinLayerId === sourceId,
+        )
+      ) {
+        affected.add(layer.id);
+        queue.push(layer.id);
+      }
+    }
+  }
+  if (affected.size === 0) return layers;
 
   let current = layers;
+  const order = topologicalJoinOrder(
+    layers.filter((layer) => affected.has(layer.id)),
+  );
   for (const id of order) {
+    current = current.map((layer) =>
+      layer.id === id ? applyJoinsToLayer(layer, current) : layer,
+    );
+  }
+  return current;
+}
+
+/**
+ * Re-resolve every layer's persistent joins against the freshly loaded layer
+ * set (project open). Layers re-derive in topological order of their join
+ * dependencies, so a chain (`C joins A, A joins B`) resolves A before C;
+ * cycles fall back to array order. Layer sets without joins pass through by
+ * reference.
+ */
+export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
+  const joined = layers.filter((layer) => layer.joins?.length);
+  if (joined.length === 0) return layers;
+
+  let current = layers;
+  for (const id of topologicalJoinOrder(joined)) {
     current = current.map((layer) =>
       layer.id === id ? applyJoinsToLayer(layer, current) : layer,
     );
