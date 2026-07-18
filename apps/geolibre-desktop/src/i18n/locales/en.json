@@ -1153,8 +1153,14 @@
     },
     "atlas": {
       "section": "Atlas (map series)",
-      "enable": "Generate one page per feature",
+      "enable": "Generate a multi-page map series",
       "coverageLayer": "Coverage layer",
+      "coverage": "Coverage",
+      "coveragePerFeature": "One page per feature",
+      "coverageAlongLine": "Pages along a line",
+      "segmentLength": "Segment length (km)",
+      "segmentRequired": "Enter a segment length greater than zero.",
+      "noLineFeatures": "The coverage layer has no line features.",
       "noLayers": "No vector layers with loaded features. Add a GeoJSON or other local vector layer first.",
       "nameField": "Page name field",
       "nameFieldNone": "Feature number",
@@ -1183,7 +1189,8 @@
       "exportPdfPages_one": "Export PDF ({{count}} page)",
       "exportPdfPages_other": "Export PDF ({{count}} pages)",
       "exporting": "Exporting page {{current}} of {{total}}...",
-      "tokensHint": "Tokens {atlas.name}, {atlas.pagenumber}, {atlas.total}, and {atlas.attr:FIELD} are replaced per page in the title, subtitle, footer, and page file name."
+      "tokensHint": "Tokens {atlas.name}, {atlas.pagenumber}, {atlas.total}, and {atlas.attr:FIELD} are replaced per page in the title, subtitle, footer, and page file name.",
+      "alongLineHint": "Pages follow each line in order; km_start, km_end, segment, and segments are available as {atlas.attr:FIELD} tokens."
     }
   },
   "kml": {

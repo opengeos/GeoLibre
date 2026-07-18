@@ -448,6 +448,165 @@ export function buildAtlasPages(
   return pages.map((p, index) => ({ ...p, index }));
 }
 
+const EARTH_RADIUS_M = 6371008.8;
+
+/** Great-circle distance in metres between two `[lng, lat]` positions. */
+function haversineMeters(a: Position, b: Position): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLng = toRad(b[0] - a[0]);
+  const la1 = toRad(a[1]);
+  const la2 = toRad(b[1]);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(la1) * Math.cos(la2) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Linear interpolation between two positions — adequate at the sub-segment
+ * distances the cutter works with (an edge of a digitized line). */
+function lerpPosition(a: Position, b: Position, t: number): Position {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/** Collect the line parts (as coordinate arrays) of a geometry: LineStrings,
+ * MultiLineStrings, and any of either nested in a GeometryCollection.
+ * Non-line geometries contribute nothing. */
+function lineParts(geometry: Geometry | null | undefined): Position[][] {
+  if (!geometry) return [];
+  switch (geometry.type) {
+    case "LineString":
+      return [geometry.coordinates];
+    case "MultiLineString":
+      return geometry.coordinates;
+    case "GeometryCollection":
+      return geometry.geometries.flatMap((g) => lineParts(g));
+    default:
+      return [];
+  }
+}
+
+interface LineSegment {
+  coords: Position[];
+  startM: number;
+  endM: number;
+}
+
+/**
+ * Cut a (possibly multi-part) line into consecutive stretches of
+ * `segmentM` metres of ground length, interpolating cut points inside edges.
+ * Chainage runs continuously across parts (gaps between MultiLineString parts
+ * add no distance), and a trailing remainder shorter than `segmentM` becomes
+ * the final segment.
+ */
+function segmentLine(parts: Position[][], segmentM: number): LineSegment[] {
+  const segments: LineSegment[] = [];
+  let walked = 0;
+  let segStart = 0;
+  let current: Position[] = [];
+  const flush = () => {
+    // Skip degenerate leftovers (an exact-multiple cut leaves a zero-length
+    // tail) so no page ever frames a single point.
+    if (current.length >= 2 && walked - segStart > 0.5) {
+      segments.push({ coords: current, startM: segStart, endM: walked });
+    }
+  };
+  for (const part of parts) {
+    if (part.length < 2) continue;
+    current.push(part[0]);
+    for (let i = 1; i < part.length; i++) {
+      let from = part[i - 1];
+      const to = part[i];
+      let d = haversineMeters(from, to);
+      // Cut every segment boundary that falls inside this edge.
+      while (d > 0 && walked + d >= segStart + segmentM) {
+        const t = (segStart + segmentM - walked) / d;
+        const cut = lerpPosition(from, to, t);
+        current.push(cut);
+        walked = segStart + segmentM;
+        flush();
+        segStart = walked;
+        current = [cut];
+        from = cut;
+        d = haversineMeters(from, to);
+      }
+      walked += d;
+      current.push(to);
+    }
+  }
+  flush();
+  return segments;
+}
+
+export interface BuildLineAtlasPagesOptions {
+  /** Ground length of one page's stretch of line, in kilometres. */
+  segmentKm: number;
+  /** Attribute naming the source line; blank = `Line N`. */
+  nameField?: string;
+  /** Predicate over source-feature attributes; failing lines are skipped. */
+  filter?: AtlasFilterPredicate | null;
+}
+
+/** Round a chainage value to one decimal for labels and attributes. */
+function roundKm(v: number): number {
+  return Math.round(v * 10) / 10;
+}
+
+/**
+ * Build atlas pages that tile the line features of a coverage layer in
+ * fixed-length stretches (GH #1291 follow-up: uniformly scaled map series
+ * along a river or trail). Each page covers `segmentKm` kilometres of line;
+ * pages follow the line's own direction, per feature, in source order.
+ *
+ * Page properties carry the source feature's attributes plus `km_start`,
+ * `km_end`, `segment`, and `segments`, all usable as `{atlas.attr:FIELD}`
+ * tokens. Non-line features are skipped.
+ */
+export function buildLineAtlasPages(
+  collection: Pick<FeatureCollection, "features">,
+  options: BuildLineAtlasPagesOptions,
+): AtlasPage[] {
+  const { segmentKm, nameField, filter } = options;
+  if (!(segmentKm > 0)) return [];
+  const pages: Omit<AtlasPage, "index">[] = [];
+  let sourceIndex = 0;
+  collection.features.forEach((feature, featureIndex) => {
+    const parts = lineParts(feature.geometry);
+    if (parts.length === 0) return;
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    if (filter && !filter(properties)) return;
+    let base = "";
+    if (nameField) {
+      const v = properties[nameField];
+      if (v !== null && v !== undefined) base = String(v).trim();
+    }
+    base = base || `Line ${featureIndex + 1}`;
+    const segments = segmentLine(parts, segmentKm * 1000);
+    segments.forEach((seg, i) => {
+      const bounds = geometryBounds({
+        type: "LineString",
+        coordinates: seg.coords,
+      });
+      if (!bounds) return;
+      const startKm = roundKm(seg.startM / 1000);
+      const endKm = roundKm(seg.endM / 1000);
+      pages.push({
+        sourceIndex: sourceIndex++,
+        name: `${base} km ${startKm}-${endKm}`,
+        properties: {
+          ...properties,
+          km_start: startKm,
+          km_end: endKm,
+          segment: i + 1,
+          segments: segments.length,
+        },
+        bounds,
+      });
+    });
+  });
+  return pages.map((p, index) => ({ ...p, index }));
+}
+
 /**
  * Resolve a zip entry filename for one atlas page: substitute tokens in the
  * pattern, sanitize the result for the filesystem, and fall back to the page

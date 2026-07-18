@@ -4,6 +4,7 @@ import type { Feature, FeatureCollection } from "geojson";
 import {
   atlasEntryName,
   buildAtlasPages,
+  buildLineAtlasPages,
   expandBounds,
   geometryBounds,
   listAtlasFields,
@@ -389,5 +390,119 @@ describe("atlasEntryName", () => {
   it("falls back to the page number when the pattern collapses", () => {
     assert.equal(atlasEntryName("{atlas.attr:MISSING}", ctx()), "3");
     assert.equal(atlasEntryName("", ctx()), "3-Springfield");
+  });
+});
+
+describe("buildLineAtlasPages", () => {
+  // 1 degree of longitude along the equator is ~111.195 km, so this line is a
+  // convenient known length for segment math.
+  const equatorLine: Feature = {
+    type: "Feature",
+    properties: { river: "Blackfeather", region: "north" },
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [0, 0],
+        [0.5, 0],
+        [1, 0],
+      ],
+    },
+  };
+
+  it("tiles a line into fixed-length stretches with a trailing remainder", () => {
+    const pages = buildLineAtlasPages(collection([equatorLine]), {
+      segmentKm: 25,
+      nameField: "river",
+    });
+    assert.equal(pages.length, 5);
+    assert.deepEqual(
+      pages.map((p) => [p.properties.km_start, p.properties.km_end]),
+      [
+        [0, 25],
+        [25, 50],
+        [50, 75],
+        [75, 100],
+        [100, 111.2],
+      ],
+    );
+    assert.equal(pages[0].name, "Blackfeather km 0-25");
+    assert.equal(pages[4].name, "Blackfeather km 100-111.2");
+    assert.deepEqual(pages.map((p) => p.index), [0, 1, 2, 3, 4]);
+    assert.deepEqual(pages.map((p) => p.sourceIndex), [0, 1, 2, 3, 4]);
+    // Segment metadata and inherited feature attributes.
+    assert.equal(pages[2].properties.segment, 3);
+    assert.equal(pages[2].properties.segments, 5);
+    assert.equal(pages[2].properties.region, "north");
+  });
+
+  it("produces contiguous, ordered, non-degenerate bounds", () => {
+    const pages = buildLineAtlasPages(collection([equatorLine]), {
+      segmentKm: 25,
+    });
+    let prevWest = -Infinity;
+    for (const p of pages) {
+      const [w, s, e, n] = p.bounds;
+      assert.ok(e > w, "bounds must have width");
+      assert.ok(w >= prevWest, "segments advance along the line");
+      assert.ok(s <= 0 && n >= 0);
+      prevWest = w;
+    }
+    // Adjacent segments share their cut point.
+    assert.ok(Math.abs(pages[0].bounds[2] - pages[1].bounds[0]) < 1e-9);
+  });
+
+  it("skips non-line features and applies the filter to line features", () => {
+    const point = feature({ river: "NotALine" }, [5, 5]);
+    const southern: Feature = {
+      ...equatorLine,
+      properties: { river: "Southern", region: "south" },
+    };
+    const pages = buildLineAtlasPages(
+      collection([point, equatorLine, southern]),
+      {
+        segmentKm: 60,
+        nameField: "river",
+        filter: parseAtlasFilter('region = "south"'),
+      },
+    );
+    assert.equal(pages.length, 2);
+    assert.ok(pages.every((p) => p.name.startsWith("Southern")));
+  });
+
+  it("continues chainage across MultiLineString parts without measuring gaps", () => {
+    const multi: Feature = {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "MultiLineString",
+        coordinates: [
+          [
+            [0, 0],
+            [0.5, 0],
+          ],
+          [
+            [0.6, 0],
+            [1.1, 0],
+          ],
+        ],
+      },
+    };
+    const pages = buildLineAtlasPages(collection([multi]), { segmentKm: 40 });
+    // Two 55.6 km parts = 111.2 km of measured line (the 0.1 degree gap adds
+    // nothing): 40 + 40 + 31.2.
+    assert.equal(pages.length, 3);
+    assert.equal(pages[2].properties.km_end, 111.2);
+    assert.equal(pages[0].name, "Line 1 km 0-40");
+  });
+
+  it("returns no pages for a non-positive segment length", () => {
+    assert.deepEqual(
+      buildLineAtlasPages(collection([equatorLine]), { segmentKm: 0 }),
+      [],
+    );
+    assert.deepEqual(
+      buildLineAtlasPages(collection([equatorLine]), { segmentKm: NaN }),
+      [],
+    );
   });
 });
