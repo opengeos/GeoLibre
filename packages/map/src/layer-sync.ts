@@ -7,6 +7,7 @@ import {
   ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
   styleValue,
+  validateMapExpression,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
@@ -2339,6 +2340,42 @@ function applyVectorDataRenderLayers(
         "!",
         textMarkerShapeFilter,
       ] as unknown as maplibregl.FilterSpecification;
+      // Data-defined overrides (GH #1320): expression-driven size / color /
+      // opacity, per-feature placement priority (symbol-sort-key), and
+      // attribute-gated visibility. They read source feature attributes, so
+      // they are skipped on the dedup path, whose synthetic features carry
+      // only the aggregated label value. An override that is invalid for its
+      // destination — malformed JSON, not an expression, or the wrong result
+      // type — parses to null and falls back to the literal control; the
+      // style-spec check matters because addLayer validates the whole layer
+      // spec, so an unchecked type-mismatched value would reject the entire
+      // label layer on first add rather than just that property.
+      const labelOverride = (
+        source: string,
+        expectedType: "number" | "color" | "boolean",
+      ) =>
+        dedupedLabelFc ? null : parseLabelOverride(source, expectedType);
+      const sizeOverride = labelOverride(labels.sizeExpression, "number");
+      const colorOverride = labelOverride(labels.colorExpression, "color");
+      const opacityOverride = labelOverride(labels.opacityExpression, "number");
+      const priorityOverride = labelOverride(
+        labels.priorityExpression,
+        "number",
+      );
+      const visibilityOverride = labelOverride(
+        labels.visibilityExpression,
+        "boolean",
+      );
+      // The visibility expression joins the marker exclusion before the
+      // layer-wide feature filters, so a feature evaluating false simply gets
+      // no label.
+      const labelBaseFilter = visibilityOverride
+        ? ([
+            "all",
+            nonMarkerFilter,
+            visibilityOverride,
+          ] as unknown as maplibregl.FilterSpecification)
+        : nonMarkerFilter;
       const sourceRef = dedupedLabelFc
         ? { source: dedupSourceId }
         : sourceSpec;
@@ -2352,11 +2389,11 @@ function applyVectorDataRenderLayers(
           ...labelZoom,
           ...(dedupedLabelFc
             ? {}
-            : { filter: withFeatureFilters(layer, nonMarkerFilter) }),
+            : { filter: withFeatureFilters(layer, labelBaseFilter) }),
           layout: {
             "text-field": textField,
             "text-font": textFontForMapStyle(map),
-            "text-size": Math.max(1, labels.size),
+            "text-size": sizeOverride ?? Math.max(1, labels.size),
             // The dedup source is points, so it cannot use line placement.
             "symbol-placement":
               !dedupedLabelFc && labels.placement === "line"
@@ -2369,13 +2406,21 @@ function applyVectorDataRenderLayers(
             "text-rotate": labels.rotation,
             "text-max-width": Math.max(1, labels.maxWidth),
             "text-transform": labels.transform,
+            // Lower sort keys place first, so they win when space is tight.
+            // `null` resets a previously applied priority (stripped on first
+            // add by ensureLayer).
+            "symbol-sort-key":
+              priorityOverride as unknown as PropertyValueSpecification<number>,
             visibility,
           },
           paint: {
-            "text-color": labels.color,
+            "text-color": colorOverride ?? labels.color,
             "text-halo-color": labels.haloColor,
             "text-halo-width": Math.max(0, labels.haloWidth),
-            "text-opacity": opacity,
+            // The opacity override replaces the layer opacity rather than
+            // multiplying into it: wrapping the expression would invalidate
+            // top-level `["zoom"]` interpolations.
+            "text-opacity": opacityOverride ?? opacity,
           },
         },
         beforeId,
@@ -2580,6 +2625,47 @@ function getDedupedLabelFeatures(
 
 function removeSourceIfExists(map: maplibregl.Map, id: string): void {
   if (map.getSource(id)) map.removeSource(id);
+}
+
+// Data-defined label overrides are re-read on every sync (which can fire per
+// frame, e.g. while dragging the opacity slider), and validating through the
+// style spec is far more expensive than the reads, so results are memoized by
+// expected type + source. Bounded so a pathological stream of distinct
+// expressions cannot grow it without limit.
+const labelOverrideCache = new Map<
+  string,
+  maplibregl.ExpressionSpecification | null
+>();
+const LABEL_OVERRIDE_CACHE_MAX = 256;
+
+/**
+ * Parses and validates a data-defined label override (a MapLibre expression
+ * stored as a JSON string) against its destination's expected result type.
+ * Returns null — falling back to the literal control — for anything invalid:
+ * malformed JSON, a non-expression value, or a type the destination cannot
+ * accept. The `|| ""` guards against a hand-edited project file storing null
+ * for an expression field (the type says string, but the value comes from
+ * untrusted JSON).
+ */
+function parseLabelOverride(
+  source: string,
+  expectedType: "number" | "color" | "boolean",
+): maplibregl.ExpressionSpecification | null {
+  const trimmed = (source || "").trim();
+  if (!trimmed) return null;
+  const key = `${expectedType}:${trimmed}`;
+  const cached = labelOverrideCache.get(key);
+  if (cached !== undefined) return cached;
+  const validation = validateMapExpression(trimmed, { expectedType });
+  const result =
+    validation.ok && validation.parsed
+      ? (validation.parsed as unknown as maplibregl.ExpressionSpecification)
+      : null;
+  if (labelOverrideCache.size >= LABEL_OVERRIDE_CACHE_MAX) {
+    labelOverrideCache.clear();
+  }
+  labelOverrideCache.set(key, result);
+  return result;
 }
 
 // Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
@@ -3366,21 +3452,27 @@ function ensureLayer(
   const validBeforeId =
     beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   // MapLibre's addLayer rejects (and silently drops, without throwing) a layer
-  // whose paint carries an explicit `null`. `null` is only valid as a
-  // setPaintProperty reset, which the update branch above uses; on first add it
-  // must be stripped so e.g. `fill-pattern: null` (the "no pattern" reset) does
-  // not blank the whole fill layer. Properties simply absent default correctly.
-  // Scoped to `paint` deliberately: `fill-pattern` is the only reset-via-null in
-  // this file. Extend to `layout` here if a layout property ever uses the same
-  // null-reset pattern.
+  // whose paint or layout carries an explicit `null`. `null` is only valid as
+  // a set*Property reset, which the update branch above uses (`fill-pattern`
+  // in paint, `symbol-sort-key` in layout); on first add it must be stripped
+  // so a reset value does not blank the whole layer. Properties simply absent
+  // default correctly.
+  const stripNulls = (
+    record: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined =>
+    record && Object.values(record).some((value) => value === null)
+      ? Object.fromEntries(
+          Object.entries(record).filter(([, value]) => value !== null),
+        )
+      : record;
+  const strippedPaint = stripNulls(spec.paint);
+  const strippedLayout = stripNulls(spec.layout);
   const addSpec =
-    spec.paint &&
-    Object.values(spec.paint).some((value) => value === null)
+    strippedPaint !== spec.paint || strippedLayout !== spec.layout
       ? {
           ...spec,
-          paint: Object.fromEntries(
-            Object.entries(spec.paint).filter(([, value]) => value !== null),
-          ),
+          ...(strippedPaint ? { paint: strippedPaint } : {}),
+          ...(strippedLayout ? { layout: strippedLayout } : {}),
         }
       : spec;
   map.addLayer(addSpec, validBeforeId);

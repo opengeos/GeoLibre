@@ -43,6 +43,7 @@ import {
   type LayerGroup,
   type AttributeFormConfig,
   type LayerJoin,
+  type LayerVirtualField,
   type LayerStyle,
   type LegendConfig,
   type MapGridLayout,
@@ -517,6 +518,12 @@ export interface AppState {
     id: string,
     attributeForm: AttributeFormConfig | undefined,
   ) => void;
+  /**
+   * Replace a layer's virtual fields and immediately re-derive its computed
+   * columns (strip what the previous fields added, evaluate the new list).
+   * Pass an empty array to detach every virtual field.
+   */
+  setLayerVirtualFields: (id: string, fields: LayerVirtualField[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   addGeoJsonLayer: (
@@ -1398,19 +1405,26 @@ export const useAppStore = create<AppState>()(
       updateLayer: (id, patch) =>
         set((s) => {
           let layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
-          // A geojson replacement re-derives persistent joins: on the layer
-          // itself (file reload, attribute edits, processing writes — joined
+          // A geojson replacement re-derives the layer's derived columns
+          // (persistent joins, then virtual fields): on the layer itself
+          // (file reload, attribute edits, processing writes — derived
           // columns stay derived, QGIS-style), then transitively on every
           // layer whose joins consume the updated one, so editing a join
           // table refreshes its targets and their dependents in turn. The
-          // `patch.joins === undefined` guard exists for external callers of
-          // this public store API (plugins, programmatic loads): a patch that
-          // carries both `geojson` and `joins` is taken verbatim as already-
-          // derived state — no in-repo caller does this today.
+          // `patch.joins`/`patch.virtualFields` guard exists for external
+          // callers of this public store API (plugins, programmatic loads):
+          // a patch that carries `geojson` alongside the definitions is taken
+          // verbatim as already-derived state — no in-repo caller does this
+          // today.
           if (patch.geojson !== undefined) {
-            if (patch.joins === undefined) {
+            if (
+              patch.joins === undefined &&
+              patch.virtualFields === undefined
+            ) {
               layers = layers.map((l) =>
-                l.id === id && l.joins?.length ? applyJoinsToLayer(l, layers) : l,
+                l.id === id && (l.joins?.length || l.virtualFields?.length)
+                  ? applyJoinsToLayer(l, layers)
+                  : l,
               );
             }
             layers = cascadeLayerJoinRefresh(layers, id);
@@ -1431,6 +1445,20 @@ export const useAppStore = create<AppState>()(
 
       setLayerAttributeForm: (id, attributeForm) =>
         get().updateLayer(id, { attributeForm }),
+
+      setLayerVirtualFields: (id, fields) =>
+        set((s) => {
+          let layers = s.layers.map((l) =>
+            l.id === id
+              ? applyJoinsToLayer(l, s.layers, undefined, fields)
+              : l,
+          );
+          // Virtual columns are ordinary materialized properties, so a layer
+          // joining against this one (directly or transitively) sees them and
+          // must re-derive too.
+          layers = cascadeLayerJoinRefresh(layers, id);
+          return { layers, isDirty: true };
+        }),
 
       setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 

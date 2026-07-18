@@ -3110,6 +3110,7 @@
     "moveRight": "Move right",
     "deleteField": "Delete field",
     "joinedColumnTitle": "Joined column, derived from a join table. Edit the join table or the join definition instead.",
+    "virtualColumnTitle": "Virtual field, computed from an expression. Edit its definition in the layer's style panel instead.",
     "deleteFieldConfirm": "This permanently removes the field \"{{field}}\" from every feature in \"{{layer}}\". Styling or labels that reference it will be cleared. This cannot be undone.",
     "addFieldDescription": "Add a new field to every feature in \"{{layer}}\".",
     "fieldName": "Field name",
@@ -3251,6 +3252,28 @@
       "statsUnmatchedJoin_one": "{{count}} join row unmatched",
       "statsUnmatchedJoin_other": "{{count}} join rows unmatched"
     },
+    "virtualFields": {
+      "heading": "Virtual fields",
+      "empty": "Add expression-backed columns that recompute whenever the data changes. Virtual fields persist with the project and appear everywhere fields do: the attribute table, styling, labels, and selection.",
+      "addField": "Add virtual field",
+      "name": "Field name",
+      "namePlaceholder": "e.g. density",
+      "nameTaken": "A column with this name already exists",
+      "nameConflict": "Not applied: the name collides with an existing column",
+      "expression": "Expression",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Virtual field expression",
+      "openBuilder": "Open builder",
+      "invalidExpression": "Invalid expression",
+      "add": "Add",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit virtual field",
+      "remove": "Remove virtual field",
+      "enabledTitle": "Apply this virtual field",
+      "evaluationErrors_one": "{{count}} feature failed to evaluate (null cell)",
+      "evaluationErrors_other": "{{count}} features failed to evaluate (null cells)"
+    },
     "labels": {
       "heading": "Labels",
       "show": "Show labels",
@@ -3292,7 +3315,23 @@
       "dedupeHint": "Collapses points stacked at the same coordinate. Uses the label field on local point layers.",
       "expression": "Expression (optional)",
       "expressionHint": "A MapLibre expression (JSON). Overrides the field when set.",
-      "expressionInvalid": "Not a valid MapLibre expression (must be a JSON array). This value is ignored."
+      "expressionInvalid": "Not a valid MapLibre expression (must be a JSON array). This value is ignored.",
+      "dataDefined": {
+        "heading": "Data-defined overrides",
+        "size": "Size",
+        "color": "Color",
+        "opacity": "Opacity",
+        "visibility": "Visibility",
+        "priority": "Priority",
+        "sizeTarget": "Label size expression",
+        "colorTarget": "Label color expression",
+        "opacityTarget": "Label opacity expression",
+        "visibilityTarget": "Label visibility expression",
+        "priorityTarget": "Label priority expression",
+        "notSet": "Not set",
+        "clear": "Clear expression",
+        "hint": "Per-feature MapLibre expressions. Size, opacity, and priority produce numbers (labels with lower priority values are placed first), color a color, visibility true/false. Ignored while duplicate-label collapsing is active. An opacity expression replaces the layer opacity for labels."
+      }
     },
     "elevation3d": {
       "mode": "3D (Z values)",

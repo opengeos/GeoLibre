@@ -1,5 +1,9 @@
 import type { Feature, FeatureCollection, GeoJsonProperties } from "geojson";
-import type { GeoLibreLayer, LayerJoin } from "./types";
+import type { GeoLibreLayer, LayerJoin, LayerVirtualField } from "./types";
+import {
+  applyLayerVirtualFields,
+  stripVirtualFieldColumns,
+} from "./virtual-fields";
 
 /**
  * Persistent attribute joins (QGIS Layer Properties → Joins), issue #1315.
@@ -252,31 +256,48 @@ export function applyLayerJoins(
 }
 
 /**
- * Strip-and-reapply joins on one layer, resolving join sources from
- * `allLayers`. Pass `nextJoins` to replace the definitions (the layer's
- * current `addedFields` still drive the strip, so removed joins clean up after
- * themselves); omit it to refresh the existing joins against current data.
- * Layers without a feature collection are returned unchanged.
+ * Strip-and-reapply this layer's derived columns — persistent joins, then
+ * virtual fields (so an expression can read joined columns) — resolving join
+ * sources from `allLayers`. Pass `nextJoins`/`nextVirtualFields` to replace
+ * the definitions (the layer's current bookkeeping still drives the strip, so
+ * removed definitions clean up after themselves); omit them to refresh the
+ * existing definitions against current data. Layers without a feature
+ * collection are returned unchanged.
  */
 export function applyJoinsToLayer(
   layer: GeoLibreLayer,
   allLayers: GeoLibreLayer[],
   nextJoins?: LayerJoin[],
+  nextVirtualFields?: LayerVirtualField[],
 ): GeoLibreLayer {
   const geojson = layer.geojson;
   const joins = nextJoins ?? layer.joins ?? [];
+  const virtualFields = nextVirtualFields ?? layer.virtualFields ?? [];
   if (!geojson) {
-    return { ...layer, joins: joins.length > 0 ? joins : undefined };
+    return {
+      ...layer,
+      joins: joins.length > 0 ? joins : undefined,
+      virtualFields: virtualFields.length > 0 ? virtualFields : undefined,
+    };
   }
-  const base = stripJoinFields(geojson.features ?? [], layer.joins);
+  // Virtual columns strip before join columns so a join output name held by a
+  // stale virtual column frees up; the reverse order would also work today
+  // (both strips are pure column removals), but this matches apply order.
+  const base = stripJoinFields(
+    stripVirtualFieldColumns(geojson.features ?? [], layer.virtualFields),
+    layer.joins,
+  );
   const applied = applyLayerJoins(base, joins, (joinLayerId) => {
     if (joinLayerId === layer.id) return undefined;
     return allLayers.find((candidate) => candidate.id === joinLayerId)?.geojson;
   });
+  const withVirtual = applyLayerVirtualFields(applied.features, virtualFields);
   return {
     ...layer,
-    geojson: { ...geojson, features: applied.features },
+    geojson: { ...geojson, features: withVirtual.features },
     joins: applied.joins.length > 0 ? applied.joins : undefined,
+    virtualFields:
+      withVirtual.fields.length > 0 ? withVirtual.fields : undefined,
   };
 }
 
@@ -426,11 +447,14 @@ export function cascadeLayerJoinRefresh(
  * dependencies, so a chain (`C joins A, A joins B`) resolves A before C; a
  * hand-edited cycle is broken by forcing one of its members through first
  * (see {@link topologicalJoinOrder}), so consumers downstream of the cycle
- * still re-derive after it. Layer sets without joins pass through by
- * reference.
+ * still re-derive after it. Layers with virtual fields but no joins re-derive
+ * too (their expressions run against the freshly loaded features). Layer sets
+ * without joins or virtual fields pass through by reference.
  */
 export function reapplyLayerJoins(layers: GeoLibreLayer[]): GeoLibreLayer[] {
-  const joined = layers.filter((layer) => layer.joins?.length);
+  const joined = layers.filter(
+    (layer) => layer.joins?.length || layer.virtualFields?.length,
+  );
   if (joined.length === 0) return layers;
 
   let current = layers;

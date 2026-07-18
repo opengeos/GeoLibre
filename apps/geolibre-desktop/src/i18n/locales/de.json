@@ -2621,6 +2621,7 @@
     "moveRight": "Nach rechts verschieben",
     "deleteField": "Feld löschen",
     "joinedColumnTitle": "Verknüpfte Spalte, abgeleitet aus einer Verknüpfungstabelle. Bearbeiten Sie stattdessen die Tabelle oder die Verknüpfungsdefinition.",
+    "virtualColumnTitle": "Virtuelles Feld, berechnet aus einem Ausdruck. Bearbeiten Sie stattdessen seine Definition im Stilbereich des Layers.",
     "deleteFieldConfirm": "Dadurch wird das Feld „{{field}}“ dauerhaft aus jedem Objekt in „{{layer}}“ entfernt. Darauf verweisende Stile oder Beschriftungen werden gelöscht. Dies kann nicht rückgängig gemacht werden.",
     "addFieldDescription": "Fügen Sie jedem Objekt in „{{layer}}“ ein neues Feld hinzu.",
     "fieldName": "Feldname",
@@ -2712,6 +2713,28 @@
       "statsUnmatchedJoin_one": "{{count}} Tabellenzeile ohne Treffer",
       "statsUnmatchedJoin_other": "{{count}} Tabellenzeilen ohne Treffer"
     },
+    "virtualFields": {
+      "heading": "Virtuelle Felder",
+      "empty": "Ausdrucksbasierte Spalten hinzufügen, die bei jeder Datenänderung neu berechnet werden. Virtuelle Felder werden mit dem Projekt gespeichert und erscheinen überall dort, wo Felder erscheinen: in der Attributtabelle, im Stil, in Beschriftungen und in der Auswahl.",
+      "addField": "Virtuelles Feld hinzufügen",
+      "name": "Feldname",
+      "namePlaceholder": "z. B. density",
+      "nameTaken": "Eine Spalte mit diesem Namen existiert bereits",
+      "nameConflict": "Nicht angewendet: Der Name kollidiert mit einer vorhandenen Spalte",
+      "expression": "Ausdruck",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Ausdruck des virtuellen Felds",
+      "openBuilder": "Editor öffnen",
+      "invalidExpression": "Ungültiger Ausdruck",
+      "add": "Hinzufügen",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "edit": "Virtuelles Feld bearbeiten",
+      "remove": "Virtuelles Feld entfernen",
+      "enabledTitle": "Dieses virtuelle Feld anwenden",
+      "evaluationErrors_one": "{{count}} Objekt konnte nicht ausgewertet werden (leere Zelle)",
+      "evaluationErrors_other": "{{count}} Objekte konnten nicht ausgewertet werden (leere Zellen)"
+    },
     "labels": {
       "heading": "Beschriftungen",
       "show": "Beschriftungen anzeigen",
@@ -2753,7 +2776,23 @@
       "dedupeHint": "Fasst Punkte zusammen, die an derselben Koordinate übereinanderliegen. Verwendet das Beschriftungsfeld bei lokalen Punktebenen.",
       "expression": "Ausdruck (optional)",
       "expressionHint": "Ein MapLibre-Ausdruck (JSON). Überschreibt das Feld, wenn festgelegt.",
-      "expressionInvalid": "Kein gültiger MapLibre-Ausdruck (muss ein JSON-Array sein). Dieser Wert wird ignoriert."
+      "expressionInvalid": "Kein gültiger MapLibre-Ausdruck (muss ein JSON-Array sein). Dieser Wert wird ignoriert.",
+      "dataDefined": {
+        "heading": "Datendefinierte Überschreibungen",
+        "size": "Größe",
+        "color": "Farbe",
+        "opacity": "Deckkraft",
+        "visibility": "Sichtbarkeit",
+        "priority": "Priorität",
+        "sizeTarget": "Ausdruck für Beschriftungsgröße",
+        "colorTarget": "Ausdruck für Beschriftungsfarbe",
+        "opacityTarget": "Ausdruck für Beschriftungsdeckkraft",
+        "visibilityTarget": "Ausdruck für Beschriftungssichtbarkeit",
+        "priorityTarget": "Ausdruck für Beschriftungspriorität",
+        "notSet": "Nicht gesetzt",
+        "clear": "Ausdruck löschen",
+        "hint": "MapLibre-Ausdrücke pro Feature. Größe, Deckkraft und Priorität ergeben Zahlen (Beschriftungen mit niedrigeren Prioritätswerten werden zuerst platziert), Farbe eine Farbe, Sichtbarkeit wahr/falsch. Wird ignoriert, solange das Zusammenfassen doppelter Beschriftungen aktiv ist. Ein Deckkraft-Ausdruck ersetzt die Ebenendeckkraft für Beschriftungen."
+      }
     },
     "elevation3d": {
       "mode": "3D (Z-Werte)",

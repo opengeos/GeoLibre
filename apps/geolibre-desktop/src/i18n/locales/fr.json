@@ -2621,6 +2621,7 @@
     "moveRight": "Déplacer à droite",
     "deleteField": "Supprimer le champ",
     "joinedColumnTitle": "Colonne jointe, dérivée d'une table de jointure. Modifiez plutôt la table ou la définition de la jointure.",
+    "virtualColumnTitle": "Champ virtuel, calculé à partir d'une expression. Modifiez plutôt sa définition dans le panneau de style de la couche.",
     "deleteFieldConfirm": "Cela supprime définitivement le champ « {{field}} » de toutes les entités de « {{layer}} ». Le style ou les étiquettes qui le référencent seront effacés. Cette action est irréversible.",
     "addFieldDescription": "Ajoutez un nouveau champ à toutes les entités de « {{layer}} ».",
     "fieldName": "Nom du champ",
@@ -2712,6 +2713,28 @@
       "statsUnmatchedJoin_one": "{{count}} ligne de la table sans correspondance",
       "statsUnmatchedJoin_other": "{{count}} lignes de la table sans correspondance"
     },
+    "virtualFields": {
+      "heading": "Champs virtuels",
+      "empty": "Ajoutez des colonnes basées sur des expressions, recalculées à chaque changement des données. Les champs virtuels sont enregistrés avec le projet et apparaissent partout où les champs apparaissent : table attributaire, style, étiquettes et sélection.",
+      "addField": "Ajouter un champ virtuel",
+      "name": "Nom du champ",
+      "namePlaceholder": "ex. density",
+      "nameTaken": "Une colonne portant ce nom existe déjà",
+      "nameConflict": "Non appliqué : le nom entre en conflit avec une colonne existante",
+      "expression": "Expression",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Expression du champ virtuel",
+      "openBuilder": "Ouvrir l'éditeur",
+      "invalidExpression": "Expression invalide",
+      "add": "Ajouter",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "edit": "Modifier le champ virtuel",
+      "remove": "Supprimer le champ virtuel",
+      "enabledTitle": "Appliquer ce champ virtuel",
+      "evaluationErrors_one": "{{count}} entité n'a pas pu être évaluée (cellule nulle)",
+      "evaluationErrors_other": "{{count}} entités n'ont pas pu être évaluées (cellules nulles)"
+    },
     "labels": {
       "heading": "Étiquettes",
       "show": "Afficher les étiquettes",
@@ -2753,7 +2776,23 @@
       "dedupeHint": "Regroupe les points empilés à la même coordonnée. Utilise le champ d'étiquette sur les couches de points locales.",
       "expression": "Expression (facultatif)",
       "expressionHint": "Une expression MapLibre (JSON). Remplace le champ lorsqu'elle est définie.",
-      "expressionInvalid": "Ce n'est pas une expression MapLibre valide (doit être un tableau JSON). Cette valeur est ignorée."
+      "expressionInvalid": "Ce n'est pas une expression MapLibre valide (doit être un tableau JSON). Cette valeur est ignorée.",
+      "dataDefined": {
+        "heading": "Substitutions définies par les données",
+        "size": "Taille",
+        "color": "Couleur",
+        "opacity": "Opacité",
+        "visibility": "Visibilité",
+        "priority": "Priorité",
+        "sizeTarget": "Expression de taille d'étiquette",
+        "colorTarget": "Expression de couleur d'étiquette",
+        "opacityTarget": "Expression d'opacité d'étiquette",
+        "visibilityTarget": "Expression de visibilité d'étiquette",
+        "priorityTarget": "Expression de priorité d'étiquette",
+        "notSet": "Non défini",
+        "clear": "Effacer l'expression",
+        "hint": "Expressions MapLibre par entité. La taille, l'opacité et la priorité produisent des nombres (les étiquettes aux valeurs de priorité les plus basses sont placées en premier), la couleur une couleur, la visibilité vrai/faux. Ignorées tant que le regroupement des étiquettes en double est actif. Une expression d'opacité remplace l'opacité de la couche pour les étiquettes."
+      }
     },
     "elevation3d": {
       "mode": "3D (valeurs Z)",

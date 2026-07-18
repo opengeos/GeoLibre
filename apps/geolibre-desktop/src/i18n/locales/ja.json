@@ -2577,6 +2577,7 @@
     "moveRight": "右に移動",
     "deleteField": "フィールドを削除",
     "joinedColumnTitle": "結合テーブルから導出された結合列です。代わりに結合テーブルまたは結合定義を編集してください。",
+    "virtualColumnTitle": "式から計算される仮想フィールドです。代わりにレイヤのスタイルパネルで定義を編集してください。",
     "deleteFieldConfirm": "これにより、フィールド「{{field}}」が「{{layer}}」内のすべてのフィーチャから完全に削除されます。これを参照しているスタイルやラベルはクリアされます。この操作は元に戻せません。",
     "addFieldDescription": "「{{layer}}」内のすべてのフィーチャに新しいフィールドを追加します。",
     "fieldName": "フィールド名",
@@ -2666,6 +2667,27 @@
       "statsMatched": "{{total}} 件中 {{matched}} 件の地物が一致",
       "statsUnmatchedJoin_other": "一致しなかったテーブル行: {{count}} 行"
     },
+    "virtualFields": {
+      "heading": "仮想フィールド",
+      "empty": "データが変わるたびに再計算される、式に基づく列を追加します。仮想フィールドはプロジェクトと一緒に保存され、属性テーブル、スタイル、ラベル、選択など、フィールドが使われるあらゆる場所に表示されます。",
+      "addField": "仮想フィールドを追加",
+      "name": "フィールド名",
+      "namePlaceholder": "例: density",
+      "nameTaken": "この名前の列は既に存在します",
+      "nameConflict": "未適用: 名前が既存の列と競合しています",
+      "expression": "式",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "仮想フィールドの式",
+      "openBuilder": "ビルダーを開く",
+      "invalidExpression": "無効な式",
+      "add": "追加",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "edit": "仮想フィールドを編集",
+      "remove": "仮想フィールドを削除",
+      "enabledTitle": "この仮想フィールドを適用",
+      "evaluationErrors_other": "{{count}} 個の地物で評価に失敗しました (null セル)"
+    },
     "labels": {
       "heading": "ラベル",
       "show": "ラベルを表示",
@@ -2707,7 +2729,23 @@
       "dedupeHint": "同じ座標に重なるポイントをまとめます。ローカルのポイントレイヤーではラベルフィールドを使用します。",
       "expression": "式 (任意)",
       "expressionHint": "MapLibre式 (JSON形式) です。設定するとフィールドより優先されます。",
-      "expressionInvalid": "有効なMapLibre式ではありません(JSON配列である必要があります)。この値は無視されます。"
+      "expressionInvalid": "有効なMapLibre式ではありません(JSON配列である必要があります)。この値は無視されます。",
+      "dataDefined": {
+        "heading": "データ定義の上書き",
+        "size": "サイズ",
+        "color": "色",
+        "opacity": "不透明度",
+        "visibility": "表示",
+        "priority": "優先度",
+        "sizeTarget": "ラベルサイズの式",
+        "colorTarget": "ラベル色の式",
+        "opacityTarget": "ラベル不透明度の式",
+        "visibilityTarget": "ラベル表示の式",
+        "priorityTarget": "ラベル優先度の式",
+        "notSet": "未設定",
+        "clear": "式をクリア",
+        "hint": "フィーチャごとの MapLibre 式。サイズ・不透明度・優先度は数値(優先度値が小さいラベルほど先に配置)、色は色、表示は真偽値を返します。重複ラベルの集約が有効な間は無視されます。 不透明度の式はラベルに対してレイヤーの不透明度を置き換えます。"
+      }
     },
     "elevation3d": {
       "mode": "3D (Z値)",

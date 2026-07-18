@@ -2621,6 +2621,7 @@
     "moveRight": "Sağa taşı",
     "deleteField": "Alanı sil",
     "joinedColumnTitle": "Birleştirme tablosundan türetilen birleştirilmiş sütun. Bunun yerine tabloyu veya birleştirme tanımını düzenleyin.",
+    "virtualColumnTitle": "İfadeden hesaplanan sanal alan. Bunun yerine tanımını katmanın stil panelinde düzenleyin.",
     "deleteFieldConfirm": "Bu işlem, \"{{field}}\" alanını \"{{layer}}\" katmanındaki her öğeden kalıcı olarak kaldırır. Buna başvuran stil veya etiketler temizlenir. Bu işlem geri alınamaz.",
     "addFieldDescription": "\"{{layer}}\" katmanındaki her öğeye yeni bir alan ekleyin.",
     "fieldName": "Alan adı",
@@ -2712,6 +2713,28 @@
       "statsUnmatchedJoin_one": "Eşleşmeyen {{count}} tablo satırı",
       "statsUnmatchedJoin_other": "Eşleşmeyen {{count}} tablo satırı"
     },
+    "virtualFields": {
+      "heading": "Sanal alanlar",
+      "empty": "Veri her değiştiğinde yeniden hesaplanan, ifade tabanlı sütunlar ekleyin. Sanal alanlar projeyle birlikte kaydedilir ve alanların göründüğü her yerde görünür: öznitelik tablosu, stil, etiketler ve seçim.",
+      "addField": "Sanal alan ekle",
+      "name": "Alan adı",
+      "namePlaceholder": "örn. density",
+      "nameTaken": "Bu ada sahip bir sütun zaten var",
+      "nameConflict": "Uygulanmadı: ad mevcut bir sütunla çakışıyor",
+      "expression": "İfade",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Sanal alan ifadesi",
+      "openBuilder": "Oluşturucuyu aç",
+      "invalidExpression": "Geçersiz ifade",
+      "add": "Ekle",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "edit": "Sanal alanı düzenle",
+      "remove": "Sanal alanı kaldır",
+      "enabledTitle": "Bu sanal alanı uygula",
+      "evaluationErrors_one": "{{count}} öğenin değerlendirilmesi başarısız oldu (null hücre)",
+      "evaluationErrors_other": "{{count}} öğenin değerlendirilmesi başarısız oldu (null hücreler)"
+    },
     "labels": {
       "heading": "Etiketler",
       "show": "Etiketleri göster",
@@ -2753,7 +2776,23 @@
       "dedupeHint": "Aynı koordinatta yığılmış noktaları daraltır. Yerel nokta katmanlarında etiket alanını kullanır.",
       "expression": "İfade (isteğe bağlı)",
       "expressionHint": "Bir MapLibre ifadesi (JSON). Ayarlandığında alanı geçersiz kılar.",
-      "expressionInvalid": "Geçerli bir MapLibre ifadesi değil (bir JSON dizisi olmalıdır). Bu değer yok sayılır."
+      "expressionInvalid": "Geçerli bir MapLibre ifadesi değil (bir JSON dizisi olmalıdır). Bu değer yok sayılır.",
+      "dataDefined": {
+        "heading": "Veri tanımlı geçersiz kılmalar",
+        "size": "Boyut",
+        "color": "Renk",
+        "opacity": "Opaklık",
+        "visibility": "Görünürlük",
+        "priority": "Öncelik",
+        "sizeTarget": "Etiket boyutu ifadesi",
+        "colorTarget": "Etiket rengi ifadesi",
+        "opacityTarget": "Etiket opaklığı ifadesi",
+        "visibilityTarget": "Etiket görünürlüğü ifadesi",
+        "priorityTarget": "Etiket önceliği ifadesi",
+        "notSet": "Ayarlanmadı",
+        "clear": "İfadeyi temizle",
+        "hint": "Öğe başına MapLibre ifadeleri. Boyut, opaklık ve öncelik sayı üretir (öncelik değeri düşük etiketler önce yerleştirilir), renk bir renk, görünürlük doğru/yanlış üretir. Yinelenen etiket birleştirme etkinken yok sayılır. Opaklık ifadesi, etiketler için katman opaklığının yerine geçer."
+      }
     },
     "elevation3d": {
       "mode": "3B (Z değerleri)",

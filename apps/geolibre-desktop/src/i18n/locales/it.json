@@ -2621,6 +2621,7 @@
     "moveRight": "Sposta a destra",
     "deleteField": "Elimina campo",
     "joinedColumnTitle": "Colonna unita, derivata da una tabella di join. Modifica invece la tabella o la definizione del join.",
+    "virtualColumnTitle": "Campo virtuale, calcolato da un'espressione. Modifica invece la sua definizione nel pannello di stile del layer.",
     "deleteFieldConfirm": "Questa operazione rimuove definitivamente il campo \"{{field}}\" da ogni elemento in \"{{layer}}\". Lo stile o le etichette che vi fanno riferimento verranno cancellati. L'operazione non può essere annullata.",
     "addFieldDescription": "Aggiungi un nuovo campo a ogni elemento in \"{{layer}}\".",
     "fieldName": "Nome del campo",
@@ -2712,6 +2713,28 @@
       "statsUnmatchedJoin_one": "{{count}} riga della tabella senza corrispondenza",
       "statsUnmatchedJoin_other": "{{count}} righe della tabella senza corrispondenza"
     },
+    "virtualFields": {
+      "heading": "Campi virtuali",
+      "empty": "Aggiungi colonne basate su espressioni che vengono ricalcolate ogni volta che i dati cambiano. I campi virtuali vengono salvati con il progetto e compaiono ovunque compaiano i campi: tabella degli attributi, stile, etichette e selezione.",
+      "addField": "Aggiungi campo virtuale",
+      "name": "Nome del campo",
+      "namePlaceholder": "es. density",
+      "nameTaken": "Esiste già una colonna con questo nome",
+      "nameConflict": "Non applicato: il nome è in conflitto con una colonna esistente",
+      "expression": "Espressione",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Espressione del campo virtuale",
+      "openBuilder": "Apri l'editor",
+      "invalidExpression": "Espressione non valida",
+      "add": "Aggiungi",
+      "save": "Salva",
+      "cancel": "Annulla",
+      "edit": "Modifica campo virtuale",
+      "remove": "Rimuovi campo virtuale",
+      "enabledTitle": "Applica questo campo virtuale",
+      "evaluationErrors_one": "{{count}} elemento non è stato valutato (cella nulla)",
+      "evaluationErrors_other": "{{count}} elementi non sono stati valutati (celle nulle)"
+    },
     "labels": {
       "heading": "Etichette",
       "show": "Mostra etichette",
@@ -2753,7 +2776,23 @@
       "dedupeHint": "Unisce i punti sovrapposti nella stessa coordinata. Utilizza il campo etichetta sui livelli puntuali locali.",
       "expression": "Espressione (opzionale)",
       "expressionHint": "Un'espressione MapLibre (JSON). Se impostata, sostituisce il campo.",
-      "expressionInvalid": "Non è un'espressione MapLibre valida (deve essere un array JSON). Questo valore viene ignorato."
+      "expressionInvalid": "Non è un'espressione MapLibre valida (deve essere un array JSON). Questo valore viene ignorato.",
+      "dataDefined": {
+        "heading": "Sostituzioni definite dai dati",
+        "size": "Dimensione",
+        "color": "Colore",
+        "opacity": "Opacità",
+        "visibility": "Visibilità",
+        "priority": "Priorità",
+        "sizeTarget": "Espressione dimensione etichetta",
+        "colorTarget": "Espressione colore etichetta",
+        "opacityTarget": "Espressione opacità etichetta",
+        "visibilityTarget": "Espressione visibilità etichetta",
+        "priorityTarget": "Espressione priorità etichetta",
+        "notSet": "Non impostato",
+        "clear": "Cancella espressione",
+        "hint": "Espressioni MapLibre per elemento. Dimensione, opacità e priorità producono numeri (le etichette con valori di priorità più bassi vengono posizionate per prime), colore un colore, visibilità vero/falso. Ignorate mentre l'unione delle etichette duplicate è attiva. Un'espressione di opacità sostituisce l'opacità del layer per le etichette."
+      }
     },
     "elevation3d": {
       "mode": "3D (valori Z)",

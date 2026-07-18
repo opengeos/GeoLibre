@@ -2621,6 +2621,7 @@
     "moveRight": "Mover a la derecha",
     "deleteField": "Eliminar campo",
     "joinedColumnTitle": "Columna unida, derivada de una tabla de unión. Edita la tabla o la definición de la unión en su lugar.",
+    "virtualColumnTitle": "Campo virtual, calculado a partir de una expresión. Edita su definición en el panel de estilo de la capa en su lugar.",
     "deleteFieldConfirm": "Esto elimina permanentemente el campo \"{{field}}\" de todas las entidades de \"{{layer}}\". El estilo o las etiquetas que lo referencian se borrarán. Esto no se puede deshacer.",
     "addFieldDescription": "Añada un nuevo campo a todas las entidades de \"{{layer}}\".",
     "fieldName": "Nombre del campo",
@@ -2712,6 +2713,28 @@
       "statsUnmatchedJoin_one": "{{count}} fila de la tabla sin coincidencia",
       "statsUnmatchedJoin_other": "{{count}} filas de la tabla sin coincidencia"
     },
+    "virtualFields": {
+      "heading": "Campos virtuales",
+      "empty": "Añade columnas basadas en expresiones que se recalculan cada vez que cambian los datos. Los campos virtuales se guardan con el proyecto y aparecen en todos los lugares donde aparecen los campos: la tabla de atributos, el estilo, las etiquetas y la selección.",
+      "addField": "Añadir campo virtual",
+      "name": "Nombre del campo",
+      "namePlaceholder": "p. ej. density",
+      "nameTaken": "Ya existe una columna con este nombre",
+      "nameConflict": "No aplicado: el nombre entra en conflicto con una columna existente",
+      "expression": "Expresión",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Expresión del campo virtual",
+      "openBuilder": "Abrir el editor",
+      "invalidExpression": "Expresión no válida",
+      "add": "Añadir",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "edit": "Editar campo virtual",
+      "remove": "Eliminar campo virtual",
+      "enabledTitle": "Aplicar este campo virtual",
+      "evaluationErrors_one": "{{count}} entidad no se pudo evaluar (celda nula)",
+      "evaluationErrors_other": "{{count}} entidades no se pudieron evaluar (celdas nulas)"
+    },
     "labels": {
       "heading": "Etiquetas",
       "show": "Mostrar etiquetas",
@@ -2753,7 +2776,23 @@
       "dedupeHint": "Combina los puntos apilados en la misma coordenada. Usa el campo de etiqueta en las capas de puntos locales.",
       "expression": "Expresión (opcional)",
       "expressionHint": "Una expresión de MapLibre (JSON). Reemplaza el campo cuando se establece.",
-      "expressionInvalid": "No es una expresión de MapLibre válida (debe ser un array JSON). Este valor se ignora."
+      "expressionInvalid": "No es una expresión de MapLibre válida (debe ser un array JSON). Este valor se ignora.",
+      "dataDefined": {
+        "heading": "Sustituciones definidas por datos",
+        "size": "Tamaño",
+        "color": "Color",
+        "opacity": "Opacidad",
+        "visibility": "Visibilidad",
+        "priority": "Prioridad",
+        "sizeTarget": "Expresión de tamaño de etiqueta",
+        "colorTarget": "Expresión de color de etiqueta",
+        "opacityTarget": "Expresión de opacidad de etiqueta",
+        "visibilityTarget": "Expresión de visibilidad de etiqueta",
+        "priorityTarget": "Expresión de prioridad de etiqueta",
+        "notSet": "Sin definir",
+        "clear": "Borrar expresión",
+        "hint": "Expresiones MapLibre por entidad. Tamaño, opacidad y prioridad producen números (las etiquetas con valores de prioridad más bajos se colocan primero), color un color y visibilidad verdadero/falso. Se ignoran mientras la combinación de etiquetas duplicadas está activa. Una expresión de opacidad reemplaza la opacidad de la capa para las etiquetas."
+      }
     },
     "elevation3d": {
       "mode": "3D (valores Z)",

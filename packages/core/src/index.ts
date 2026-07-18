@@ -10,6 +10,7 @@ export * from "./vector-color";
 export * from "./expressions";
 export * from "./attribute-form";
 export * from "./joins";
+export * from "./virtual-fields";
 export * from "./selection";
 export * from "./scale-units";
 export * from "./project";

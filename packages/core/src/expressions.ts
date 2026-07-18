@@ -422,6 +422,62 @@ export function evaluateMapExpression(
   }
 }
 
+/**
+ * A compiled per-feature evaluator: the expression is parsed and compiled
+ * once, then `evaluate` runs it against each feature. `evaluate` is absent
+ * when compilation failed (see `errors`); it throws on runtime evaluation
+ * failures (same rationale as {@link evaluateMapExpression}: throwing keeps
+ * errors out of console.warn) so callers decide per-feature error handling.
+ */
+export interface CompiledFeatureExpression {
+  ok: boolean;
+  /** Parse/compile problems when `ok` is false. */
+  errors: string[];
+  evaluate?: (feature: Feature) => unknown;
+}
+
+/**
+ * Compiles an expression source once for bulk per-feature evaluation (virtual
+ * fields, and any other caller that runs one expression over a whole layer).
+ * Unlike {@link evaluateMapExpression} the compile cost is paid once, not per
+ * feature. An empty source is reported as a failure with no errors — there is
+ * nothing to evaluate.
+ */
+export function compileFeatureExpression(
+  source: string,
+  options: {
+    zoom?: number;
+    variables?: ExpressionVariable[];
+    expectedType?: ExpressionExpectedType;
+  } = {},
+): CompiledFeatureExpression {
+  const trimmed = source.trim();
+  if (!trimmed) return { ok: false, errors: [] };
+
+  const { validation, expression } = compileMapExpression(trimmed, {
+    variables: options.variables,
+    expectedType: options.expectedType,
+  });
+  if (!validation.ok || !expression) {
+    return { ok: false, errors: validation.errors };
+  }
+  const zoom = options.zoom ?? 0;
+  return {
+    ok: true,
+    errors: [],
+    evaluate: (feature) =>
+      expression.evaluateWithoutErrorHandling(
+        { zoom },
+        {
+          type: feature.geometry?.type ?? "Unknown",
+          properties: feature.properties ?? {},
+          ...(feature.id !== undefined ? { id: feature.id } : {}),
+          geometry: feature.geometry,
+        } as never,
+      ),
+  };
+}
+
 /** Result of matching a feature array against a boolean expression. */
 export interface FeatureExpressionMatches {
   /** False when the expression failed to parse or compile. */

@@ -26,6 +26,7 @@ import {
   removeTrailingJsonCommas,
   styleValue,
   useAppStore,
+  validateMapExpression,
 } from "@geolibre/core";
 import {
   Button,
@@ -51,6 +52,7 @@ import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import { AttributeFormSection } from "./AttributeFormSection";
 import { LayerJoinsSection } from "./LayerJoinsSection";
+import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
 import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
@@ -81,6 +83,70 @@ import {
   getAttributePropertyNames,
   standardExpressionVariables,
 } from "../../lib/expression-inputs";
+
+/**
+ * Data-defined label overrides (GH #1320): one row per {@link LabelStyle}
+ * expression field, with the Expression Builder context enforcing each
+ * destination's result type (size/opacity/priority are numbers, color a
+ * color, visibility a boolean filter).
+ */
+const LABEL_OVERRIDE_PROPERTIES = [
+  {
+    key: "size",
+    field: "sizeExpression",
+    context: "number",
+    expectedType: "number",
+  },
+  {
+    key: "color",
+    field: "colorExpression",
+    context: "color",
+    expectedType: "color",
+  },
+  {
+    key: "opacity",
+    field: "opacityExpression",
+    context: "number",
+    expectedType: "number",
+  },
+  {
+    key: "visibility",
+    field: "visibilityExpression",
+    context: "filter",
+    expectedType: "boolean",
+  },
+  {
+    key: "priority",
+    field: "priorityExpression",
+    context: "number",
+    expectedType: "number",
+  },
+] as const;
+type LabelOverrideProperty = (typeof LABEL_OVERRIDE_PROPERTIES)[number];
+
+// Override validity is checked on every panel render, and compiling through
+// the style spec is far more expensive than a lookup, so results are memoized
+// by expected type + source (module scope: this section renders below the
+// component's early returns, where a useMemo would violate the rules of
+// hooks). Bounded so a pathological stream of distinct expressions cannot
+// grow it without limit.
+const labelOverrideValidityCache = new Map<string, boolean>();
+const LABEL_OVERRIDE_VALIDITY_CACHE_MAX = 256;
+
+function labelOverrideInvalid(
+  value: string,
+  expectedType: "number" | "color" | "boolean",
+): boolean {
+  const key = `${expectedType}:${value}`;
+  const cached = labelOverrideValidityCache.get(key);
+  if (cached !== undefined) return cached;
+  const invalid = !validateMapExpression(value, { expectedType }).ok;
+  if (labelOverrideValidityCache.size >= LABEL_OVERRIDE_VALIDITY_CACHE_MAX) {
+    labelOverrideValidityCache.clear();
+  }
+  labelOverrideValidityCache.set(key, invalid);
+  return invalid;
+}
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -1217,6 +1283,11 @@ export function StylePanel({
     | { kind: "rule"; ruleId: string; index: number; layerId: string }
     | { kind: "style"; layerId: string }
     | { kind: "label"; layerId: string }
+    | {
+        kind: "labelOverride";
+        property: LabelOverrideProperty;
+        layerId: string;
+      }
     | null
   >(null);
   // Close the builder when the selected layer changes: its fields, sample
@@ -2073,13 +2144,19 @@ export function StylePanel({
       ? (builderRule?.filter ?? "")
       : expressionBuilderTarget?.kind === "style"
         ? draftVectorStyleExpression
-        : labels.expression;
+        : expressionBuilderTarget?.kind === "labelOverride"
+          ? labels[expressionBuilderTarget.property.field] || ""
+          : labels.expression;
   const builderTargetLabel =
     expressionBuilderTarget?.kind === "rule"
       ? t("style.symbology.ruleFilter", { index: expressionBuilderTarget.index })
       : expressionBuilderTarget?.kind === "style"
         ? t("style.symbology.colorExpression")
-        : t("style.labels.expression");
+        : expressionBuilderTarget?.kind === "labelOverride"
+          ? t(
+              `style.labels.dataDefined.${expressionBuilderTarget.property.key}Target`,
+            )
+          : t("style.labels.expression");
   const applyBuilderExpression = (expression: string) => {
     if (!expressionBuilderTarget) return;
     // Never write through to a different layer than the builder was opened
@@ -2091,6 +2168,10 @@ export function StylePanel({
     } else if (expressionBuilderTarget.kind === "style") {
       setDraftVectorStyleExpression(expression);
       setVectorStyleError(null);
+    } else if (expressionBuilderTarget.kind === "labelOverride") {
+      updateLabels({
+        [expressionBuilderTarget.property.field]: expression,
+      } as Partial<LabelStyle>);
     } else {
       updateLabels({ expression });
     }
@@ -2110,7 +2191,9 @@ export function StylePanel({
           ? "filter"
           : expressionBuilderTarget.kind === "style"
             ? "color"
-            : "value"
+            : expressionBuilderTarget.kind === "labelOverride"
+              ? expressionBuilderTarget.property.context
+              : "value"
       }
       initialExpression={builderInitialExpression}
       features={builderFeatures}
@@ -3447,6 +3530,27 @@ export function StylePanel({
     </div>
   );
 
+  // One pass over the override fields for both the rows and the invalid
+  // banner; the style-spec compile behind the invalid flag is memoized per
+  // distinct expression (labelOverrideInvalid), so re-renders cost lookups,
+  // not recompiles. The `|| ""` guards against a hand-edited project file
+  // storing null for an expression field (the type says string, but the
+  // value comes from untrusted JSON); the invalid flag surfaces the
+  // renderer's fallback to the literal control (the builder's Apply is
+  // disabled for invalid expressions, but a hand-edited file can still carry
+  // one). Validation runs through the style spec with the row's expected
+  // result type, mirroring the builder's own check, so a type mismatch
+  // (e.g. a string-producing size expression) is flagged too, not just
+  // malformed JSON.
+  const labelOverrideStates = LABEL_OVERRIDE_PROPERTIES.map((property) => {
+    const value = (labels[property.field] || "").trim();
+    return {
+      property,
+      value,
+      invalid:
+        value !== "" && labelOverrideInvalid(value, property.expectedType),
+    };
+  });
   const labelControls = (
     <div className="space-y-3">
       <label
@@ -3742,6 +3846,77 @@ export function StylePanel({
               {labelExpressionInvalid
                 ? t("style.labels.expressionInvalid")
                 : t("style.labels.expressionHint")}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>{t("style.labels.dataDefined.heading")}</Label>
+            {labelOverrideStates.map(({ property, value, invalid }) => {
+              return (
+                <div key={property.key} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs">
+                    {t(`style.labels.dataDefined.${property.key}`)}
+                  </span>
+                  <code
+                    className={[
+                      "min-w-0 flex-1 truncate font-mono text-xs",
+                      invalid ? "text-destructive" : "text-muted-foreground",
+                    ].join(" ")}
+                    title={
+                      invalid
+                        ? t("style.labels.expressionInvalid")
+                        : value || undefined
+                    }
+                  >
+                    {value || t("style.labels.dataDefined.notSet")}
+                  </code>
+                  <Button
+                    type="button"
+                    variant={value ? "secondary" : "outline"}
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    title={t(
+                      `style.labels.dataDefined.${property.key}Target`,
+                    )}
+                    aria-label={t(
+                      `style.labels.dataDefined.${property.key}Target`,
+                    )}
+                    onClick={() =>
+                      setExpressionBuilderTarget({
+                        kind: "labelOverride",
+                        property,
+                        layerId: layer.id,
+                      })
+                    }
+                  >
+                    <SquareFunction className="h-3.5 w-3.5" />
+                  </Button>
+                  {value ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      title={t("style.labels.dataDefined.clear")}
+                      aria-label={t("style.labels.dataDefined.clear")}
+                      onClick={() =>
+                        updateLabels({
+                          [property.field]: "",
+                        } as Partial<LabelStyle>)
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {labelOverrideStates.some((state) => state.invalid) ? (
+              <p className="text-xs text-destructive">
+                {t("style.labels.expressionInvalid")}
+              </p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              {t("style.labels.dataDefined.hint")}
             </p>
           </div>
         </>
@@ -4547,6 +4722,11 @@ export function StylePanel({
               {/* Keyed by layer so the add-join draft never survives a layer
                   switch (a stale draft could reference the new target itself). */}
               <LayerJoinsSection key={layer.id} layer={layer} />
+              <Separator />
+              {/* Virtual fields need the layer's features in the store too
+                  (the expressions evaluate against layer.geojson). Keyed for
+                  the same draft-lifetime reason as the joins section. */}
+              <VirtualFieldsSection key={`vf-${layer.id}`} layer={layer} />
             </>
           ) : null}
           {/* The Attribute Form designer configures how attribute values are

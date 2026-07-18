@@ -2577,6 +2577,7 @@
     "moveRight": "Pindahkan ke kanan",
     "deleteField": "Hapus bidang",
     "joinedColumnTitle": "Kolom gabungan, diturunkan dari tabel gabungan. Edit tabel atau definisi gabungan sebagai gantinya.",
+    "virtualColumnTitle": "Bidang virtual, dihitung dari ekspresi. Edit definisinya di panel gaya layer sebagai gantinya.",
     "deleteFieldConfirm": "Ini menghapus bidang \"{{field}}\" secara permanen dari setiap fitur di \"{{layer}}\". Penataan gaya atau label yang mengacu padanya akan dihapus. Ini tidak dapat dibatalkan.",
     "addFieldDescription": "Tambahkan bidang baru ke setiap fitur di \"{{layer}}\".",
     "fieldName": "Nama bidang",
@@ -2666,6 +2667,27 @@
       "statsMatched": "{{matched}} dari {{total}} fitur cocok",
       "statsUnmatchedJoin_other": "{{count}} baris tabel tanpa kecocokan"
     },
+    "virtualFields": {
+      "heading": "Bidang virtual",
+      "empty": "Tambahkan kolom berbasis ekspresi yang dihitung ulang setiap kali data berubah. Bidang virtual tersimpan bersama proyek dan muncul di semua tempat bidang digunakan: tabel atribut, penataan gaya, label, dan seleksi.",
+      "addField": "Tambah bidang virtual",
+      "name": "Nama bidang",
+      "namePlaceholder": "mis. density",
+      "nameTaken": "Kolom dengan nama ini sudah ada",
+      "nameConflict": "Tidak diterapkan: nama bertabrakan dengan kolom yang sudah ada",
+      "expression": "Ekspresi",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Ekspresi bidang virtual",
+      "openBuilder": "Buka pembangun",
+      "invalidExpression": "Ekspresi tidak valid",
+      "add": "Tambah",
+      "save": "Simpan",
+      "cancel": "Batal",
+      "edit": "Edit bidang virtual",
+      "remove": "Hapus bidang virtual",
+      "enabledTitle": "Terapkan bidang virtual ini",
+      "evaluationErrors_other": "{{count}} fitur gagal dievaluasi (sel null)"
+    },
     "labels": {
       "heading": "Label",
       "show": "Tampilkan label",
@@ -2707,7 +2729,23 @@
       "dedupeHint": "Menciutkan titik yang bertumpuk pada koordinat yang sama. Menggunakan bidang label pada layer titik lokal.",
       "expression": "Ekspresi (opsional)",
       "expressionHint": "Ekspresi MapLibre (JSON). Mengesampingkan bidang jika diisi.",
-      "expressionInvalid": "Bukan ekspresi MapLibre yang valid (harus berupa array JSON). Nilai ini diabaikan."
+      "expressionInvalid": "Bukan ekspresi MapLibre yang valid (harus berupa array JSON). Nilai ini diabaikan.",
+      "dataDefined": {
+        "heading": "Penggantian berbasis data",
+        "size": "Ukuran",
+        "color": "Warna",
+        "opacity": "Opasitas",
+        "visibility": "Visibilitas",
+        "priority": "Prioritas",
+        "sizeTarget": "Ekspresi ukuran label",
+        "colorTarget": "Ekspresi warna label",
+        "opacityTarget": "Ekspresi opasitas label",
+        "visibilityTarget": "Ekspresi visibilitas label",
+        "priorityTarget": "Ekspresi prioritas label",
+        "notSet": "Belum diatur",
+        "clear": "Hapus ekspresi",
+        "hint": "Ekspresi MapLibre per fitur. Ukuran, opasitas, dan prioritas menghasilkan angka (label dengan nilai prioritas lebih rendah ditempatkan lebih dulu), warna sebuah warna, visibilitas benar/salah. Diabaikan saat penggabungan label duplikat aktif. Ekspresi opasitas menggantikan opasitas lapisan untuk label."
+      }
     },
     "elevation3d": {
       "mode": "3D (nilai Z)",

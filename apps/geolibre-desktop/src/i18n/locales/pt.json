@@ -2621,6 +2621,7 @@
     "moveRight": "Mover para a direita",
     "deleteField": "Excluir campo",
     "joinedColumnTitle": "Coluna unida, derivada de uma tabela de junção. Edite a tabela ou a definição da junção em vez disso.",
+    "virtualColumnTitle": "Campo virtual, calculado a partir de uma expressão. Edite a definição dele no painel de estilo da camada em vez disso.",
     "deleteFieldConfirm": "Isso remove permanentemente o campo \"{{field}}\" de todas as feições em \"{{layer}}\". O estilo ou os rótulos que fazem referência a ele serão apagados. Isso não pode ser desfeito.",
     "addFieldDescription": "Adicione um novo campo a todas as feições em \"{{layer}}\".",
     "fieldName": "Nome do campo",
@@ -2712,6 +2713,28 @@
       "statsUnmatchedJoin_one": "{{count}} linha da tabela sem correspondência",
       "statsUnmatchedJoin_other": "{{count}} linhas da tabela sem correspondência"
     },
+    "virtualFields": {
+      "heading": "Campos virtuais",
+      "empty": "Adicione colunas baseadas em expressões que são recalculadas sempre que os dados mudam. Os campos virtuais ficam salvos com o projeto e aparecem em todos os lugares onde os campos aparecem: tabela de atributos, estilo, rótulos e seleção.",
+      "addField": "Adicionar campo virtual",
+      "name": "Nome do campo",
+      "namePlaceholder": "ex.: density",
+      "nameTaken": "Já existe uma coluna com este nome",
+      "nameConflict": "Não aplicado: o nome entra em conflito com uma coluna existente",
+      "expression": "Expressão",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Expressão do campo virtual",
+      "openBuilder": "Abrir o editor",
+      "invalidExpression": "Expressão inválida",
+      "add": "Adicionar",
+      "save": "Salvar",
+      "cancel": "Cancelar",
+      "edit": "Editar campo virtual",
+      "remove": "Remover campo virtual",
+      "enabledTitle": "Aplicar este campo virtual",
+      "evaluationErrors_one": "{{count}} feição não pôde ser avaliada (célula nula)",
+      "evaluationErrors_other": "{{count}} feições não puderam ser avaliadas (células nulas)"
+    },
     "labels": {
       "heading": "Rótulos",
       "show": "Mostrar rótulos",
@@ -2753,7 +2776,23 @@
       "dedupeHint": "Recolhe pontos empilhados na mesma coordenada. Usa o campo de rótulo em camadas de pontos locais.",
       "expression": "Expressão (opcional)",
       "expressionHint": "Uma expressão MapLibre (JSON). Substitui o campo quando definida.",
-      "expressionInvalid": "Não é uma expressão MapLibre válida (deve ser um array JSON). Este valor é ignorado."
+      "expressionInvalid": "Não é uma expressão MapLibre válida (deve ser um array JSON). Este valor é ignorado.",
+      "dataDefined": {
+        "heading": "Substituições definidas por dados",
+        "size": "Tamanho",
+        "color": "Cor",
+        "opacity": "Opacidade",
+        "visibility": "Visibilidade",
+        "priority": "Prioridade",
+        "sizeTarget": "Expressão de tamanho do rótulo",
+        "colorTarget": "Expressão de cor do rótulo",
+        "opacityTarget": "Expressão de opacidade do rótulo",
+        "visibilityTarget": "Expressão de visibilidade do rótulo",
+        "priorityTarget": "Expressão de prioridade do rótulo",
+        "notSet": "Não definido",
+        "clear": "Limpar expressão",
+        "hint": "Expressões MapLibre por feição. Tamanho, opacidade e prioridade produzem números (rótulos com valores de prioridade mais baixos são posicionados primeiro), cor uma cor e visibilidade verdadeiro/falso. Ignoradas enquanto o agrupamento de rótulos duplicados está ativo. Uma expressão de opacidade substitui a opacidade da camada para os rótulos."
+      }
     },
     "elevation3d": {
       "mode": "3D (valores Z)",

@@ -319,6 +319,39 @@ export interface LabelStyle {
    * {@link field} (not {@link expression}) as the label value.
    */
   dedupe: LabelDedupe;
+  /**
+   * Data-defined override for {@link size}: a MapLibre expression (JSON
+   * string) producing a number, e.g. sizing labels by population. Empty means
+   * "use the literal {@link size}". Like the other data-defined overrides
+   * below, it reads source feature attributes, so it is skipped while
+   * {@link dedupe} collapsing is active (the aggregated features carry only
+   * the label value).
+   */
+  sizeExpression: string;
+  /**
+   * Data-defined override for {@link color}: a MapLibre expression (JSON
+   * string) producing a color, e.g. coloring labels by category.
+   */
+  colorExpression: string;
+  /**
+   * Data-defined label opacity: a MapLibre expression (JSON string) producing
+   * a number in 0..1. When set it replaces the layer-wide opacity for labels
+   * (wrapping it would invalidate top-level `["zoom"]` interpolations).
+   */
+  opacityExpression: string;
+  /**
+   * Per-feature label visibility: a MapLibre expression (JSON string)
+   * producing a boolean. Features evaluating false get no label (e.g. hide
+   * labels below an attribute threshold). Combined with the layer's other
+   * feature filters.
+   */
+  visibilityExpression: string;
+  /**
+   * Per-feature placement priority: a MapLibre expression (JSON string)
+   * producing a number, applied as `symbol-sort-key`. Labels with lower
+   * values are placed first, so they win when space is tight.
+   */
+  priorityExpression: string;
 }
 
 /** MapLibre `text-anchor` positions offered for {@link LabelStyle.anchor}. */
@@ -550,6 +583,11 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     maxWidth: 10,
     transform: "none",
     dedupe: "off",
+    sizeExpression: "",
+    colorExpression: "",
+    opacityExpression: "",
+    visibilityExpression: "",
+    priorityExpression: "",
   },
   extrusionEnabled: false,
   extrusionColor: "#3b82f6",
@@ -777,6 +815,49 @@ export interface AttributeFormConfig {
   fields: AttributeFormFieldConfig[];
 }
 
+/**
+ * A virtual field attached to a vector layer (QGIS Field Calculator → "Create
+ * virtual field", issue #1321): a column defined by a MapLibre expression that
+ * recomputes live instead of being written once as static values. The engine
+ * (`virtual-fields.ts`) materializes the computed values into the layer's
+ * feature properties — so the attribute table, Expression Builder,
+ * data-driven styling, labels, and selection all see the column with no
+ * further wiring — and re-derives them whenever the layer's data (or its
+ * joins) change. Definitions persist in `.geolibre.json` and re-resolve on
+ * project load; the expression is a declarative MapLibre expression (never
+ * arbitrary code), so re-evaluating it from a shared project file is safe.
+ */
+export interface LayerVirtualField {
+  /** Stable id for list edits. */
+  id: string;
+  /** The output column name. A name already taken by a base column is skipped. */
+  name: string;
+  /**
+   * MapLibre expression source (JSON text, e.g. `["/", ["get", "pop"],
+   * ["get", "area_km2"]]`) evaluated against each feature.
+   */
+  expression: string;
+  /** `false` detaches the computed column without deleting the definition. */
+  enabled?: boolean;
+  /**
+   * Bookkeeping written by the engine: the column name actually materialized
+   * on the last apply, absent when the field was disabled, failed to compile,
+   * or was skipped because the name collided with an existing column.
+   * Applying virtual fields strips these first, which makes re-application
+   * idempotent (an existing column is never shadowed, so stripping exactly
+   * restores the pre-apply properties). Not user-editable.
+   */
+  addedField?: string;
+  /** Compile error from the last apply, when the expression failed to parse. */
+  error?: string;
+  /**
+   * Features whose evaluation threw at runtime on the last apply (their cell
+   * is null). Surfaced so the UI can warn without one bad feature aborting
+   * the whole column.
+   */
+  errorCount?: number;
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -802,6 +883,13 @@ export interface GeoLibreLayer {
    * and re-derived whenever the layer's or a join table's data changes.
    */
   joins?: LayerJoin[];
+  /**
+   * Expression-backed virtual fields computed for this layer's features, in
+   * order. Applied after joins (so an expression can read joined columns) and
+   * materialized into `geojson` feature properties; re-derived whenever the
+   * layer's data changes. See {@link LayerVirtualField}.
+   */
+  virtualFields?: LayerVirtualField[];
   /**
    * Transient MapLibre filter expression applied on top of every rendered
    * sub-layer's geometry filter. The Time Slider plugin sets this on a bound
