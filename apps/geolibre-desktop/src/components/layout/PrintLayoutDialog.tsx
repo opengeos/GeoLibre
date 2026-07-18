@@ -84,6 +84,8 @@ import {
   buildAtlasPages,
   buildLineAtlasPages,
   collectAtlasFeatures,
+  hasLineGeometry,
+  MAX_LINE_ATLAS_PAGES,
   expandBounds,
   listAtlasFields,
   parseAtlasFilter,
@@ -795,10 +797,9 @@ export function PrintLayoutDialog({
   const atlasLineFeatureCount = useMemo(
     () =>
       atlasLayer?.geojson
-        ? atlasLayer.geojson.features.filter((f) => {
-            const t = f.geometry?.type;
-            return t === "LineString" || t === "MultiLineString";
-          }).length
+        ? atlasLayer.geojson.features.filter((f) =>
+            hasLineGeometry(f.geometry),
+          ).length
         : 0,
     [atlasLayer],
   );
@@ -853,14 +854,25 @@ export function PrintLayoutDialog({
   const atlasFilterValid = atlasFilterPredicate !== null;
   const atlasScaleValid =
     atlasExtentMode !== "scale" || Number(atlasScale) > 0;
+  // A floor (not just > 0) keeps a mistyped tiny length from cutting a long
+  // line into an enormous synchronous page list.
   const atlasSegmentValid =
-    atlasCoverage !== "line" || Number(atlasSegmentKm) > 0;
+    atlasCoverage !== "line" || Number(atlasSegmentKm) >= 0.1;
+  // atlasPages is built from the *deferred* filter/segment values; block the
+  // export while an edit is still catching up so a quick click can never
+  // export the previous configuration's pages.
+  const atlasDeferredPending =
+    atlasFilter !== deferredAtlasFilter ||
+    (atlasCoverage === "line" && atlasSegmentKm !== deferredSegmentKm);
   // A visible-but-invalid filter, a blank fixed scale, or a blank segment
   // length must block the export: proceeding would silently export all
   // features / arbitrary extents while the user is looking at an error.
   const atlasConfigBlocked =
     atlasEnabled &&
-    (!atlasFilterValid || !atlasScaleValid || !atlasSegmentValid);
+    (!atlasFilterValid ||
+      !atlasScaleValid ||
+      !atlasSegmentValid ||
+      atlasDeferredPending);
   const atlasTokenCtx = useMemo<AtlasTokenContext | null>(
     () =>
       currentAtlasPage
@@ -1926,6 +1938,14 @@ export function PrintLayoutDialog({
                                 {t("printLayout.atlas.noLineFeatures")}
                               </p>
                             )}
+                          {atlasSegmentValid &&
+                            atlasPageCount >= MAX_LINE_ATLAS_PAGES && (
+                              <p className="text-xs text-destructive">
+                                {t("printLayout.atlas.segmentTruncated", {
+                                  count: MAX_LINE_ATLAS_PAGES,
+                                })}
+                              </p>
+                            )}
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-3">
@@ -2033,48 +2053,48 @@ export function PrintLayoutDialog({
                       {/* Along-a-line pages follow the line's own chainage,
                           so ordering controls only apply per-feature mode. */}
                       {atlasCoverage === "features" && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label htmlFor="atlas-sort">
-                            {t("printLayout.atlas.sortField")}
-                          </Label>
-                          <Select
-                            id="atlas-sort"
-                            value={atlasSortField}
-                            disabled={atlasBusy}
-                            onChange={(e) => setAtlasSortField(e.target.value)}
-                          >
-                            <option value="">
-                              {t("printLayout.atlas.sortNone")}
-                            </option>
-                            {atlasFields.map((f) => (
-                              <option key={f} value={f}>
-                                {f}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="atlas-sort">
+                              {t("printLayout.atlas.sortField")}
+                            </Label>
+                            <Select
+                              id="atlas-sort"
+                              value={atlasSortField}
+                              disabled={atlasBusy}
+                              onChange={(e) => setAtlasSortField(e.target.value)}
+                            >
+                              <option value="">
+                                {t("printLayout.atlas.sortNone")}
                               </option>
-                            ))}
-                          </Select>
+                              {atlasFields.map((f) => (
+                                <option key={f} value={f}>
+                                  {f}
+                                </option>
+                              ))}
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label htmlFor="atlas-sort-dir">
+                              {t("printLayout.atlas.sortOrder")}
+                            </Label>
+                            <Select
+                              id="atlas-sort-dir"
+                              value={atlasSortDescending ? "desc" : "asc"}
+                              disabled={atlasBusy || !atlasSortField}
+                              onChange={(e) =>
+                                setAtlasSortDescending(e.target.value === "desc")
+                              }
+                            >
+                              <option value="asc">
+                                {t("printLayout.atlas.sortAsc")}
+                              </option>
+                              <option value="desc">
+                                {t("printLayout.atlas.sortDesc")}
+                              </option>
+                            </Select>
+                          </div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label htmlFor="atlas-sort-dir">
-                            {t("printLayout.atlas.sortOrder")}
-                          </Label>
-                          <Select
-                            id="atlas-sort-dir"
-                            value={atlasSortDescending ? "desc" : "asc"}
-                            disabled={atlasBusy || !atlasSortField}
-                            onChange={(e) =>
-                              setAtlasSortDescending(e.target.value === "desc")
-                            }
-                          >
-                            <option value="asc">
-                              {t("printLayout.atlas.sortAsc")}
-                            </option>
-                            <option value="desc">
-                              {t("printLayout.atlas.sortDesc")}
-                            </option>
-                          </Select>
-                        </div>
-                      </div>
                       )}
                       <div className="space-y-1.5">
                         <Label htmlFor="atlas-filter">

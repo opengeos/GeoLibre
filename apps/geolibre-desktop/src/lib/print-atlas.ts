@@ -464,9 +464,16 @@ function haversineMeters(a: Position, b: Position): number {
 }
 
 /** Linear interpolation between two positions — adequate at the sub-segment
- * distances the cutter works with (an edge of a digitized line). */
+ * distances the cutter works with (an edge of a digitized line). Longitude is
+ * unwrapped first so an edge crossing the antimeridian (179° to -179°)
+ * interpolates across the short dateline path haversine measured, not through
+ * 0°; the result may exceed ±180°, which MapLibre and {@link geometryBounds}
+ * both understand. */
 function lerpPosition(a: Position, b: Position, t: number): Position {
-  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  let dx = b[0] - a[0];
+  if (dx > 180) dx -= 360;
+  else if (dx < -180) dx += 360;
+  return [a[0] + dx * t, a[1] + (b[1] - a[1]) * t];
 }
 
 /** Collect the line parts (as coordinate arrays) of a geometry: LineStrings,
@@ -485,6 +492,25 @@ function lineParts(geometry: Geometry | null | undefined): Position[][] {
       return [];
   }
 }
+
+/**
+ * Whether a geometry contributes any line parts to along-a-line coverage —
+ * the same traversal {@link buildLineAtlasPages} uses (GeometryCollections
+ * included), so UI counts can never disagree with the page builder.
+ */
+export function hasLineGeometry(
+  geometry: Geometry | null | undefined,
+): boolean {
+  return lineParts(geometry).length > 0;
+}
+
+/**
+ * Hard ceiling on pages one along-a-line series may produce. A tiny segment
+ * length against a very long line would otherwise build an unbounded page
+ * list synchronously on the main thread; the dialog surfaces a truncation
+ * notice when this cap is hit.
+ */
+export const MAX_LINE_ATLAS_PAGES = 5000;
 
 interface LineSegment {
   coords: Position[];
@@ -569,12 +595,17 @@ export function buildLineAtlasPages(
   const { segmentKm, nameField, filter } = options;
   if (!(segmentKm > 0)) return [];
   const pages: Omit<AtlasPage, "index">[] = [];
-  let sourceIndex = 0;
-  collection.features.forEach((feature, featureIndex) => {
+  for (
+    let featureIndex = 0;
+    featureIndex < collection.features.length &&
+    pages.length < MAX_LINE_ATLAS_PAGES;
+    featureIndex++
+  ) {
+    const feature = collection.features[featureIndex];
     const parts = lineParts(feature.geometry);
-    if (parts.length === 0) return;
+    if (parts.length === 0) continue;
     const properties = (feature.properties ?? {}) as Record<string, unknown>;
-    if (filter && !filter(properties)) return;
+    if (filter && !filter(properties)) continue;
     let base = "";
     if (nameField) {
       const v = properties[nameField];
@@ -582,16 +613,20 @@ export function buildLineAtlasPages(
     }
     base = base || `Line ${featureIndex + 1}`;
     const segments = segmentLine(parts, segmentKm * 1000);
-    segments.forEach((seg, i) => {
+    for (let i = 0; i < segments.length; i++) {
+      if (pages.length >= MAX_LINE_ATLAS_PAGES) break;
+      const seg = segments[i];
       const bounds = geometryBounds({
         type: "LineString",
         coordinates: seg.coords,
       });
-      if (!bounds) return;
+      if (!bounds) continue;
       const startKm = roundKm(seg.startM / 1000);
       const endKm = roundKm(seg.endM / 1000);
       pages.push({
-        sourceIndex: sourceIndex++,
+        // Pages keep the *feature's* stable identity (the AtlasPage contract);
+        // ordering within it lives in `index`/`segment`.
+        sourceIndex: featureIndex,
         name: `${base} km ${startKm}-${endKm}`,
         properties: {
           ...properties,
@@ -602,8 +637,8 @@ export function buildLineAtlasPages(
         },
         bounds,
       });
-    });
-  });
+    }
+  }
   return pages.map((p, index) => ({ ...p, index }));
 }
 
