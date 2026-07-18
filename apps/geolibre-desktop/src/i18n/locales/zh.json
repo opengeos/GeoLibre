@@ -3077,7 +3077,7 @@
     "finishEditingGeometry": "完成几何编辑",
     "editGeometry": "编辑几何",
     "openAttributeTable": "打开属性表",
-    "openRasterAttributeTable": "栅格属性表",
+    "openRasterAttributeTable": "打开栅格属性表",
     "export": "导出",
     "refresh": "刷新",
     "autoRefreshOn": "自动刷新已开启",

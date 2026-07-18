@@ -7,7 +7,7 @@ import {
 } from "@geolibre/core";
 import type { RasterSymbology } from "@geolibre/plugins";
 
-import { csvCell } from "./csv";
+import { csvCell, spreadsheetSafeText } from "./csv";
 
 /**
  * Raster Attribute Table (issue #1307).
@@ -214,7 +214,13 @@ export function parseGdalRat(xml: string, band = 1): GdalRatEntry[] | null {
     else if (COUNT_FIELD_NAMES.has(name)) countIndex ??= index;
     else if (LABEL_FIELD_NAMES.has(name)) labelIndex ??= index;
   }
-  if (valueIndex === null) return null;
+  // A RAT without a value column may still define row values by linear
+  // binning: row i covers value Row0Min + i * BinSize (GDAL writes both as
+  // attributes on the table element).
+  const row0Min = xmlAttr(rat, "Row0Min");
+  const binSize = xmlAttr(rat, "BinSize");
+  const hasLinearBinning = row0Min !== null && binSize !== null && binSize > 0;
+  if (valueIndex === null && !hasLinearBinning) return null;
 
   const channel = (fields: string[], index: number | null): number | null => {
     if (index === null) return null;
@@ -233,9 +239,12 @@ export function parseGdalRat(xml: string, band = 1): GdalRatEntry[] | null {
     );
 
   const entries: GdalRatEntry[] = [];
-  for (const row of xmlBlocks(rat, "Row")) {
+  for (const [rowIndex, row] of xmlBlocks(rat, "Row").entries()) {
     const fields = rowCells(row);
-    const value = Number(fields[valueIndex]);
+    const value =
+      valueIndex === null
+        ? (row0Min as number) + rowIndex * (binSize as number)
+        : Number(fields[valueIndex]);
     if (!Number.isFinite(value)) continue;
     const entry: GdalRatEntry = { value };
     if (countIndex !== null) {
@@ -380,7 +389,13 @@ export function savedRasterAttributeTable(
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
     const row = entry as Record<string, unknown>;
     if (typeof row.value !== "number" || !Number.isFinite(row.value)) continue;
-    if (typeof row.count !== "number" || row.count < 0) continue;
+    if (
+      typeof row.count !== "number" ||
+      !Number.isFinite(row.count) ||
+      row.count < 0
+    ) {
+      continue;
+    }
     const color =
       typeof row.color === "string" ? normalizeHexColor(row.color) : null;
     if (!color) continue;
@@ -490,7 +505,10 @@ export function ratRowsToCsv(
       total > 0 ? ((row.count / total) * 100).toFixed(2) : "0.00",
     ];
     if (pixelAreaM2 !== null) cells.push((row.count * pixelAreaM2).toFixed(1));
-    cells.push(row.color, row.label);
+    // Labels are free text that can come from a remote RAT; guard the export
+    // against spreadsheet formula injection. Values/counts/colors are numeric
+    // or format-validated and stay verbatim.
+    cells.push(row.color, spreadsheetSafeText(row.label));
     lines.push(cells.map(csvCell).join(","));
   }
   return lines.join("\n");

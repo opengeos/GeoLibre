@@ -10,3 +10,17 @@ export function csvCell(value: unknown): string {
   const text = String(value);
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
+
+/**
+ * Neutralizes spreadsheet formula injection in untrusted text destined for a
+ * CSV cell: a leading `=`, `+`, `-`, `@`, tab, or CR would otherwise execute
+ * as a formula when the file is opened in spreadsheet software (quoting alone
+ * does not prevent this). Apply to free-text fields sourced from untrusted
+ * input, not to numeric or format-validated cells.
+ *
+ * @param text - The untrusted cell text.
+ * @returns The text, prefixed with `'` when it starts with a formula trigger.
+ */
+export function spreadsheetSafeText(text: string): string {
+  return /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+}

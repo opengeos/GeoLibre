@@ -2962,7 +2962,7 @@
     "finishEditingGeometry": "지오메트리 편집 완료",
     "editGeometry": "지오메트리 편집",
     "openAttributeTable": "속성 테이블 열기",
-    "openRasterAttributeTable": "래스터 속성 테이블",
+    "openRasterAttributeTable": "래스터 속성 테이블 열기",
     "export": "내보내기",
     "refresh": "새로고침",
     "autoRefreshOn": "자동 새로고침 켜짐",

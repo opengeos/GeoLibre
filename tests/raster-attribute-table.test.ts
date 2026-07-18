@@ -179,6 +179,25 @@ describe("parseGdalRat", () => {
     </PAMRasterBand></PAMDataset>`;
     assert.equal(parseGdalRat(xml, 1), null);
   });
+
+  it("derives row values from Row0Min/BinSize linear binning", () => {
+    const xml = `<PAMDataset><PAMRasterBand band="1">
+      <GDALRasterAttributeTable Row0Min="10" BinSize="5">
+        <FieldDefn index="0"><Name>Class_name</Name><Usage>2</Usage></FieldDefn>
+        <Row index="0"><F>Low</F></Row>
+        <Row index="1"><F>High</F></Row>
+      </GDALRasterAttributeTable>
+    </PAMRasterBand></PAMDataset>`;
+    const entries = parseGdalRat(xml, 1);
+    assert.ok(entries);
+    assert.deepEqual(
+      entries.map((e) => [e.value, e.label]),
+      [
+        [10, "Low"],
+        [15, "High"],
+      ],
+    );
+  });
 });
 
 describe("pixelAreaSquareMeters", () => {
@@ -308,6 +327,8 @@ describe("savedRasterAttributeTable", () => {
             { value: "x", count: 1, label: "bad", color: "#fff" },
             { value: 2, count: -1, label: "bad", color: "#ffffff" },
             { value: 3, count: 1, label: "bad", color: "not-a-color" },
+            { value: 4, count: Number.NaN, label: "bad", color: "#ffffff" },
+            { value: 5, count: Infinity, label: "bad", color: "#ffffff" },
           ],
           pixelAreaM2: null,
         },
@@ -409,5 +430,14 @@ describe("ratRowsToCsv", () => {
   it("omits the area column when the pixel area is unknown", () => {
     const csv = ratRowsToCsv([row(1, 1)], null);
     assert.equal(csv.split("\n")[0], "value,count,percent,color,label");
+  });
+
+  it("neutralizes spreadsheet formulas in labels", () => {
+    const csv = ratRowsToCsv(
+      [row(1, 1, { label: "=HYPERLINK(\"http://evil\")" })],
+      null,
+    );
+    const label = csv.split("\n")[1].split(",").slice(4).join(",");
+    assert.equal(label, "\"'=HYPERLINK(\"\"http://evil\"\")\"");
   });
 });

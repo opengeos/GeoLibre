@@ -3006,7 +3006,7 @@
     "finishEditingGeometry": "Finalizar la edición de geometría",
     "editGeometry": "Editar geometría",
     "openAttributeTable": "Abrir tabla de atributos",
-    "openRasterAttributeTable": "Tabla de atributos ráster",
+    "openRasterAttributeTable": "Abrir la tabla de atributos ráster",
     "export": "Exportar",
     "refresh": "Actualizar",
     "autoRefreshOn": "Actualización automática activada",

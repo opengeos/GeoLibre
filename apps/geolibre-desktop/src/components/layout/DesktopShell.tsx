@@ -2243,9 +2243,11 @@ export function DesktopShell({
           <AttributeTable mapControllerRef={mapControllerRef} />
         </SectionErrorBoundary>
       ) : null}
-      <SectionErrorBoundary label="Raster attribute table">
-        <RasterAttributeTable mapControllerRef={mapControllerRef} />
-      </SectionErrorBoundary>
+      {layoutOptions.attributePanelVisible ? (
+        <SectionErrorBoundary label="Raster attribute table">
+          <RasterAttributeTable mapControllerRef={mapControllerRef} />
+        </SectionErrorBoundary>
+      ) : null}
       {dashboardOpen ? (
         <SectionErrorBoundary label="Dashboard">
           <Suspense fallback={null}>

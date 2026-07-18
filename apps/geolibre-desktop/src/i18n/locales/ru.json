@@ -3094,7 +3094,7 @@
     "finishEditingGeometry": "Завершить редактирование геометрии",
     "editGeometry": "Редактировать геометрию",
     "openAttributeTable": "Открыть таблицу атрибутов",
-    "openRasterAttributeTable": "Таблица атрибутов растра",
+    "openRasterAttributeTable": "Открыть таблицу атрибутов растра",
     "export": "Экспорт",
     "refresh": "Обновить",
     "autoRefreshOn": "Автообновление включено",

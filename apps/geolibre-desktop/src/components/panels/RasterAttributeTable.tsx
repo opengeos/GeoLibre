@@ -478,6 +478,12 @@ export function RasterAttributeTable({
 
   // Drag-to-resize, dispatching the shared panel-resize events so MapCanvas
   // pauses expensive work during the drag (same contract as AttributeTable).
+  // The cleanup is idempotent and also fires on window blur and unmount, so a
+  // drag interrupted mid-flight (alt-tab, panel teardown) can't leave global
+  // listeners attached with the map's resize work paused.
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
+
   function startResize(event: React.MouseEvent) {
     event.preventDefault();
     const startY = event.clientY;
@@ -494,14 +500,19 @@ export function RasterAttributeTable({
         sectionRef.current.style.height = `${nextHeight}px`;
       }
     };
-    const onMouseUp = () => {
+    const finishResize = () => {
+      if (resizeCleanupRef.current !== finishResize) return;
+      resizeCleanupRef.current = null;
       window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mouseup", finishResize);
+      window.removeEventListener("blur", finishResize);
       setPanelHeight(nextHeight);
       window.dispatchEvent(new Event(PANEL_RESIZE_END_EVENT));
     };
+    resizeCleanupRef.current = finishResize;
     window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mouseup", finishResize);
+    window.addEventListener("blur", finishResize);
   }
 
   if (!open) return null;
@@ -528,7 +539,7 @@ export function RasterAttributeTable({
         role="separator"
         aria-orientation="horizontal"
         aria-label={t("rasterAttributeTable.resize")}
-        className="absolute -top-1 left-0 right-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
+        className="absolute -top-1 start-0 end-0 z-20 h-2 cursor-row-resize select-none border-t border-transparent hover:border-primary"
         onMouseDown={startResize}
       />
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-1.5 md:flex-nowrap">

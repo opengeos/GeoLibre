@@ -2962,7 +2962,7 @@
     "finishEditingGeometry": "ジオメトリ編集を終了",
     "editGeometry": "ジオメトリを編集",
     "openAttributeTable": "属性テーブルを開く",
-    "openRasterAttributeTable": "ラスタ属性テーブル",
+    "openRasterAttributeTable": "ラスタ属性テーブルを開く",
     "export": "エクスポート",
     "refresh": "更新",
     "autoRefreshOn": "自動更新オン",

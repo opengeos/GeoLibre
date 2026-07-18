@@ -3420,7 +3420,7 @@
     "finishEditingGeometry": "إنهاء تحرير الشكل الهندسي",
     "editGeometry": "تحرير الشكل الهندسي",
     "openAttributeTable": "فتح جدول السمات",
-    "openRasterAttributeTable": "جدول سمات البيانات النقطية",
+    "openRasterAttributeTable": "فتح جدول سمات البيانات النقطية",
     "export": "تصدير",
     "refresh": "تحديث",
     "autoRefreshOn": "التحديث التلقائي مفعّل",

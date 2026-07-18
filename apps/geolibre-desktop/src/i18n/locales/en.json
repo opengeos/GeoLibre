@@ -3471,7 +3471,7 @@
     "finishEditingGeometry": "Finish editing geometry",
     "editGeometry": "Edit geometry",
     "openAttributeTable": "Open attribute table",
-    "openRasterAttributeTable": "Raster attribute table",
+    "openRasterAttributeTable": "Open raster attribute table",
     "export": "Export",
     "refresh": "Refresh",
     "autoRefreshOn": "Auto refresh on",
