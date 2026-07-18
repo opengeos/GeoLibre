@@ -1008,25 +1008,27 @@ export function PrintLayoutDialog({
       : tableFields.slice(0, DEFAULT_TABLE_COLUMNS);
   }, [tableColumns, tableFields]);
 
+  // Margin applied when fitting an atlas page's bounds, shared by the real
+  // fit in captureAtlasPage and the pre-capture approximation below so the
+  // two can never desync (fixed-scale mode fits tight and re-zooms after).
+  const atlasFitMarginPct =
+    atlasExtentMode === "margin" ? atlasMarginPct : 0;
+
   // The extent a data block's "only features on the page" filter tests
   // against, before the page's real capture is available: the atlas page's
   // fitted bounds, or the drawn print extent when that is what the capture
   // clips to. Plain viewport captures don't filter. Once a page has actually
   // been captured, the map's true visible bounds override this approximation
-  // (see buildDataBlocksFor's viewBounds) — the fit expands the box on one
-  // axis for the page aspect, and fixed-scale mode re-zooms after fitting.
+  // (the viewBounds handed to rowsForBlock/buildBlocksFromRows) — the fit
+  // expands the box on one axis for the page aspect, and fixed-scale mode
+  // re-zooms after fitting.
   const dataFilterBounds = useCallback(
     (page: AtlasPage | null): AtlasBounds | null => {
-      if (page) {
-        return expandBounds(
-          page.bounds,
-          atlasExtentMode === "margin" ? atlasMarginPct : 0,
-        );
-      }
+      if (page) return expandBounds(page.bounds, atlasFitMarginPct);
       if (captureMode === "extent" && extentBbox) return extentBbox;
       return null;
     },
-    [atlasExtentMode, atlasMarginPct, captureMode, extentBbox],
+    [atlasFitMarginPct, captureMode, extentBbox],
   );
 
   // One block's rows after the optional page-extent filter. This is the
@@ -1215,10 +1217,7 @@ export function PrintLayoutDialog({
     ): Promise<{ cap: CapturedMap; viewBounds: AtlasBounds }> => {
       const map = mapControllerRef.current?.getMap();
       if (!map) throw new Error("Map is not ready");
-      const [w, s, e, n] = expandBounds(
-        page.bounds,
-        atlasExtentMode === "margin" ? atlasMarginPct : 0,
-      );
+      const [w, s, e, n] = expandBounds(page.bounds, atlasFitMarginPct);
       map.fitBounds(
         [
           [w, s],
@@ -1297,7 +1296,7 @@ export function PrintLayoutDialog({
     [
       mapControllerRef,
       atlasExtentMode,
-      atlasMarginPct,
+      atlasFitMarginPct,
       atlasScale,
       atlasPageCount,
       waitForAtlasSettle,

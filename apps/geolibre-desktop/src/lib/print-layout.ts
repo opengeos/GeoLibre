@@ -1562,7 +1562,10 @@ function drawDataTable(
   let hidden = table.truncated ?? 0;
   if (rows.length * rowH + (hidden > 0 ? rowH : 0) > budget) {
     // Reserve one row of the budget for the note the truncation produces.
-    const fitRows = Math.max(1, Math.floor((budget - rowH) / rowH));
+    // When even a single row cannot fit (several panels already stacked in
+    // this corner on a small page), degrade to header + note only rather
+    // than forcing a row that would overlap the neighbouring panel.
+    const fitRows = Math.max(0, Math.floor((budget - rowH) / rowH));
     if (fitRows < rows.length) {
       hidden += rows.length - fitRows;
       rows = rows.slice(0, fitRows);
