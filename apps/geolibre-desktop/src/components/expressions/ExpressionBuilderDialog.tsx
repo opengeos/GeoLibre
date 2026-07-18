@@ -22,7 +22,7 @@ import {
 import type { Feature } from "geojson";
 import type { ParseKeys } from "i18next";
 import { ChevronLeft, ChevronRight, Eraser } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface ExpressionBuilderDialogProps {
@@ -86,15 +86,11 @@ export function ExpressionBuilderDialog({
   const [functionQuery, setFunctionQuery] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Re-seed the editor each time the dialog opens for a (possibly different)
-  // target expression; edits while open stay local until Apply.
-  useEffect(() => {
-    if (open) {
-      setSource(initialExpression);
-      setSampleIndex(0);
-      setFunctionQuery("");
-    }
-  }, [open, initialExpression]);
+  // No re-seed effect: the caller mounts this dialog only while open, so the
+  // useState initializers above seed a fresh instance per open. Re-seeding on
+  // `initialExpression` changes would let an external store mutation (e.g.
+  // the global undo shortcut while a dialog button has focus) silently wipe
+  // the user's draft.
 
   // The destination's required result type: filters must produce booleans and
   // style expressions colors; label expressions stay untyped (MapLibre
@@ -262,6 +258,7 @@ export function ExpressionBuilderDialog({
             <textarea
               id="expressionBuilderSource"
               ref={textareaRef}
+              aria-invalid={!validation.ok}
               className={[
                 "min-h-24 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0",
                 validation.ok ? "border-input" : "border-destructive",

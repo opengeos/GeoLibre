@@ -1,4 +1,4 @@
-import { createExpression } from "@maplibre/maplibre-gl-style-spec";
+import { Color, createExpression } from "@maplibre/maplibre-gl-style-spec";
 import type { StyleExpression } from "@maplibre/maplibre-gl-style-spec";
 import type { Feature } from "geojson";
 
@@ -422,23 +422,17 @@ export function evaluateMapExpression(
 }
 
 /**
- * True when a preview value is shaped like a style-spec `Color` (its
+ * True when a preview value is a real style-spec `Color` instance (its
  * evaluated color representation: premultiplied r/g/b/a floats). Shared by
  * the preview formatter and the dialog's color-swatch rendering so the two
- * checks cannot drift apart. Channel values must be finite numbers so a
- * user-data object that merely has r/g/b/a keys (e.g. via `["properties"]`)
- * cannot be misclassified and break the rgba formatting.
+ * checks cannot drift apart. An instanceof check (not duck typing) so user
+ * attribute data that happens to carry numeric r/g/b/a fields (e.g. via
+ * `["properties"]`) is never misclassified as a color.
  */
 export function isStyleSpecColor(
   value: unknown,
 ): value is { r: number; g: number; b: number; a: number } {
-  if (value === null || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return (["r", "g", "b", "a"] as const).every(
-    (channel) =>
-      typeof record[channel] === "number" &&
-      Number.isFinite(record[channel]),
-  );
+  return value instanceof Color;
 }
 
 /**
