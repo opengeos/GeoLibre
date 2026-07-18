@@ -39,7 +39,17 @@ describe("boundsIntersect", () => {
 
   it("rejects disjoint boxes on either axis", () => {
     assert.equal(boundsIntersect([0, 0, 10, 10], [11, 0, 20, 10]), false);
-    assert.equal(boundsIntersect([0, 0, 10, 10], [0, 11, 10, 20], ), false);
+    assert.equal(boundsIntersect([0, 0, 10, 10], [0, 11, 10, 20]), false);
+  });
+
+  it("matches across the antimeridian's differing longitude conventions", () => {
+    // An unwrapped dateline view (east > 180, à la map.getBounds()) against a
+    // normalized feature box on the far side of the wrap.
+    assert.equal(boundsIntersect([170, -10, 190, 10], [-178, -5, -176, 5]), true);
+    // And the mirror case: a shifted feature box against a normalized view.
+    assert.equal(boundsIntersect([-180, -10, -170, 10], [178, -5, 185, 5]), true);
+    // Genuinely far apart boxes still do not match.
+    assert.equal(boundsIntersect([170, -10, 190, 10], [-10, -5, 0, 5]), false);
   });
 });
 

@@ -72,6 +72,7 @@ import {
   categoricalColumns,
   numericColumns,
   type BarAggregation,
+  type ChartRow,
 } from "../../lib/attribute-charts";
 import {
   clearPrintExtent,
@@ -1014,26 +1015,36 @@ export function PrintLayoutDialog({
     [atlasExtentMode, atlasMarginPct, captureMode, extentBbox],
   );
 
-  // Resolve both data blocks for one atlas page (or the non-atlas layout when
-  // null). Used for the live preview/current page and again per page during
-  // an atlas export, so each page's table/chart reflects its own extent.
-  // `viewBounds` is the map's actual visible extent from that page's capture;
-  // when provided it replaces the nominal page-bounds approximation.
-  const buildDataBlocksFor = useCallback(
+  // One block's rows after the optional page-extent filter. This is the
+  // O(features) geometry walk, kept apart from the formatting step below so
+  // it only re-runs when the layer, filter toggle, or bounds change.
+  const rowsForBlock = useCallback(
     (
-      page: AtlasPage | null,
-      viewBounds?: AtlasBounds | null,
+      layer: (typeof atlasLayers)[number] | null,
+      allRows: ChartRow[],
+      filterOn: boolean,
+      bounds: AtlasBounds | null,
+    ): ChartRow[] => {
+      if (!layer?.geojson) return [];
+      return filterOn && bounds
+        ? rowsWithinBounds(layer.geojson, bounds)
+        : allRows;
+    },
+    [],
+  );
+
+  // Formatting-only step: turn already-filtered rows into the drawable specs.
+  // Cosmetic inputs (headings, positions, sort, chart type) only invalidate
+  // this cheap step, not the extent scans above (per-keystroke lag review).
+  const buildBlocksFromRows = useCallback(
+    (
+      tableRows: ChartRow[],
+      chartRows: ChartRow[],
     ): Pick<LayoutOptions, "dataTable" | "dataChart"> => {
       let dataTable: LayoutOptions["dataTable"] = null;
       let dataChart: LayoutOptions["dataChart"] = null;
-      const filterBounds = () =>
-        (page && viewBounds) || dataFilterBounds(page);
-      if (showDataTable && tableLayer?.geojson) {
-        const bounds = tableFilterToPage ? filterBounds() : null;
-        const rows = bounds
-          ? rowsWithinBounds(tableLayer.geojson, bounds)
-          : tableAllRows;
-        const data = buildTableBlock(rows, {
+      if (showDataTable) {
+        const data = buildTableBlock(tableRows, {
           columns: effectiveTableColumns,
           sortField: tableSortField || undefined,
           sortDescending: tableSortDesc,
@@ -1053,12 +1064,8 @@ export function PrintLayoutDialog({
           };
         }
       }
-      if (showDataChart && chartLayer?.geojson) {
-        const bounds = chartFilterToPage ? filterBounds() : null;
-        const rows = bounds
-          ? rowsWithinBounds(chartLayer.geojson, bounds)
-          : chartAllRows;
-        const data = buildChartBlock(rows, {
+      if (showDataChart) {
+        const data = buildChartBlock(chartRows, {
           type: chartType,
           categoryField: effectiveCategoryField || undefined,
           aggregation: chartAggregation,
@@ -1076,10 +1083,6 @@ export function PrintLayoutDialog({
     },
     [
       showDataTable,
-      tableLayer,
-      tableAllRows,
-      tableFilterToPage,
-      dataFilterBounds,
       effectiveTableColumns,
       tableSortField,
       tableSortDesc,
@@ -1087,9 +1090,6 @@ export function PrintLayoutDialog({
       tableTitle,
       tablePosition,
       showDataChart,
-      chartLayer,
-      chartFilterToPage,
-      chartAllRows,
       chartType,
       effectiveCategoryField,
       chartAggregation,
@@ -1099,18 +1099,59 @@ export function PrintLayoutDialog({
       t,
     ],
   );
-  const displayDataBlocks = useMemo(
+
+  // Bounds the display path filters against: the current page's captured view
+  // bounds when they belong to it (while a newly selected page is still
+  // capturing, fall back to its nominal bounds until the auto-drive refresh
+  // lands), or the drawn print extent outside atlas mode.
+  const displayFilterBounds = useMemo<AtlasBounds | null>(() => {
+    const vb =
+      atlasViewBounds && atlasViewBounds.index === clampedAtlasIndex
+        ? atlasViewBounds.bounds
+        : null;
+    return (currentAtlasPage && vb) || dataFilterBounds(currentAtlasPage);
+  }, [atlasViewBounds, clampedAtlasIndex, currentAtlasPage, dataFilterBounds]);
+  const displayTableRows = useMemo(
     () =>
-      buildDataBlocksFor(
-        currentAtlasPage,
-        // The captured view bounds only apply to the page they were taken on;
-        // while a newly selected page is still capturing, fall back to its
-        // nominal bounds until the auto-drive refresh lands.
-        atlasViewBounds && atlasViewBounds.index === clampedAtlasIndex
-          ? atlasViewBounds.bounds
-          : null,
-      ),
-    [buildDataBlocksFor, currentAtlasPage, atlasViewBounds, clampedAtlasIndex],
+      showDataTable
+        ? rowsForBlock(
+            tableLayer,
+            tableAllRows,
+            tableFilterToPage,
+            displayFilterBounds,
+          )
+        : [],
+    [
+      showDataTable,
+      rowsForBlock,
+      tableLayer,
+      tableAllRows,
+      tableFilterToPage,
+      displayFilterBounds,
+    ],
+  );
+  const displayChartRows = useMemo(
+    () =>
+      showDataChart
+        ? rowsForBlock(
+            chartLayer,
+            chartAllRows,
+            chartFilterToPage,
+            displayFilterBounds,
+          )
+        : [],
+    [
+      showDataChart,
+      rowsForBlock,
+      chartLayer,
+      chartAllRows,
+      chartFilterToPage,
+      displayFilterBounds,
+    ],
+  );
+  const displayDataBlocks = useMemo(
+    () => buildBlocksFromRows(displayTableRows, displayChartRows),
+    [buildBlocksFromRows, displayTableRows, displayChartRows],
   );
 
   // Options with this page's atlas tokens resolved, fed to the preview, the
@@ -1644,7 +1685,20 @@ export function PrintLayoutDialog({
             ...options,
             // Each page's table/chart re-filters to the extent the page's
             // capture actually shows (not just the nominal feature bounds).
-            ...buildDataBlocksFor(pages[i], viewBounds),
+            ...buildBlocksFromRows(
+              rowsForBlock(
+                tableLayer,
+                tableAllRows,
+                tableFilterToPage,
+                viewBounds,
+              ),
+              rowsForBlock(
+                chartLayer,
+                chartAllRows,
+                chartFilterToPage,
+                viewBounds,
+              ),
+            ),
             title: substituteAtlasTokens(options.title, ctx),
             subtitle: substituteAtlasTokens(options.subtitle, ctx),
             footerText: substituteAtlasTokens(options.footerText, ctx),

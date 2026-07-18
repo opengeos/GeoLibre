@@ -35,9 +35,21 @@ export function layerRows(
   }));
 }
 
-/** Whether two `[west, south, east, north]` boxes overlap (touching counts). */
+/**
+ * Whether two `[west, south, east, north]` boxes overlap (touching counts).
+ * The two boxes need not share a longitude convention: `geometryBounds`
+ * returns shifted boxes (east > 180) for antimeridian-crossing features, and
+ * `map.getBounds()` can return unwrapped longitudes near the dateline, so the
+ * test also tries `b` shifted by ±360° — the same ground box, one world copy
+ * over. (A box that is degenerate `west > east` without being unwrapped is
+ * not supported, matching the print-extent tool's documented limitation.)
+ */
 export function boundsIntersect(a: AtlasBounds, b: AtlasBounds): boolean {
-  return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+  if (a[1] > b[3] || b[1] > a[3]) return false;
+  for (const offset of [0, -360, 360]) {
+    if (a[0] <= b[2] + offset && b[0] + offset <= a[2]) return true;
+  }
+  return false;
 }
 
 /**
