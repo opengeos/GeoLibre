@@ -1,5 +1,6 @@
 import {
   DEFAULT_LAYER_STYLE,
+  ruleBasedVisibilityFilter,
   styleValue,
   type GeoLibreLayer,
   type LayerStyle,
@@ -289,6 +290,22 @@ export function buildMapboxStyle(
   const layers: LayerSpecification[] = [];
   const zoom = zoomRange(style);
 
+  // A rule-based layer whose else rule is switched off hides features matching
+  // no rule; the live map does that with a per-feature filter, so fold the same
+  // filter into every exported render layer or the exported style would draw
+  // features GeoLibre hides.
+  const ruleFilter = ruleBasedVisibilityFilter(style);
+  const withRuleVisibility = (
+    geometryFilter: ExpressionSpecification,
+  ): ExpressionSpecification =>
+    ruleFilter
+      ? ([
+          "all",
+          geometryFilter,
+          ruleFilter,
+        ] as unknown as ExpressionSpecification)
+      : geometryFilter;
+
   // Only warn about a dropped fill pattern when the layer actually has polygons
   // to fill (and is not extruded, where the pattern never applies).
   if (
@@ -310,7 +327,7 @@ export function buildMapboxStyle(
         type: "fill-extrusion",
         source: sourceKey,
         ...zoom,
-        filter: POLYGON_FILTER,
+        filter: withRuleVisibility(POLYGON_FILTER),
         paint: fillExtrusionPaint(style, opacity),
         layout: { visibility },
       } as LayerSpecification);
@@ -320,7 +337,7 @@ export function buildMapboxStyle(
         type: "fill",
         source: sourceKey,
         ...zoom,
-        filter: POLYGON_FILTER,
+        filter: withRuleVisibility(POLYGON_FILTER),
         paint: fillPaint(style, opacity),
         layout: { visibility },
       } as LayerSpecification);
@@ -333,7 +350,7 @@ export function buildMapboxStyle(
       type: "line",
       source: sourceKey,
       ...zoom,
-      filter: LINE_FILTER,
+      filter: withRuleVisibility(LINE_FILTER),
       paint: linePaint(style, opacity),
       layout: { visibility },
     } as LayerSpecification);
@@ -353,7 +370,7 @@ export function buildMapboxStyle(
         type: "heatmap",
         source: sourceKey,
         ...zoom,
-        filter: POINT_FILTER,
+        filter: withRuleVisibility(POINT_FILTER),
         paint: heatmapPaint(style, opacity),
         layout: { visibility },
       } as LayerSpecification);
@@ -371,7 +388,7 @@ export function buildMapboxStyle(
         type: "circle",
         source: sourceKey,
         ...zoom,
-        filter: POINT_FILTER,
+        filter: withRuleVisibility(POINT_FILTER),
         paint: circlePaint(style, opacity),
         layout: { visibility },
       } as LayerSpecification);
@@ -381,7 +398,7 @@ export function buildMapboxStyle(
         type: "circle",
         source: sourceKey,
         ...zoom,
-        filter: POINT_FILTER,
+        filter: withRuleVisibility(POINT_FILTER),
         paint: circlePaint(style, opacity),
         layout: { visibility },
       } as LayerSpecification);
@@ -402,7 +419,14 @@ export function buildMapboxStyle(
           pointOnly,
           warnings,
         );
-  if (labelLayer) layers.push(labelLayer);
+  if (labelLayer) {
+    // Labels on a hide-unmatched rule layer are filtered live too, so the
+    // exported label layer must not label features the render layers drop.
+    if (ruleFilter) {
+      (labelLayer as { filter?: unknown }).filter = ruleFilter;
+    }
+    layers.push(labelLayer);
+  }
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a
   // label layer is emitted. Treat a blank glyphsUrl as "not provided" so a

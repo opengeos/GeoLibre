@@ -346,3 +346,31 @@ describe("QML round-trip of extended rule-based symbology (#1305)", () => {
     assert.equal(elseRule?.enabled, false);
   });
 });
+
+describe("QML round-trip of a switched-off else rule (#1312)", () => {
+  it("keeps the else rule disabled so unmatched features stay hidden", () => {
+    const input = style({
+      vectorStyleMode: "rule-based",
+      vectorRules: [
+        {
+          id: "a",
+          label: "big",
+          filter: JSON.stringify([">", ["get", "pop"], 1000]),
+          color: "#d62728",
+          isElse: false,
+        },
+        {
+          id: "e",
+          label: "",
+          filter: "",
+          color: "#cccccc",
+          isElse: true,
+          enabled: false,
+        },
+      ],
+    });
+    const out = roundTrip(input, "polygon");
+    assert.equal(out.vectorStyleMode, "rule-based");
+    assert.equal(out.vectorRules.find((rule) => rule.isElse)?.enabled, false);
+  });
+});

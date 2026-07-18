@@ -6,6 +6,7 @@ import {
   effectiveVectorRules,
   lineWidthValue,
   ruleBasedColorExpression,
+  ruleBasedVisibilityFilter,
   vectorColorExpression,
   mapZoomStepOutputs,
   vectorFillColorValue,
@@ -608,4 +609,119 @@ describe("rule-based extensions (#1305)", () => {
     assert.equal(elseRule?.id, "e");
   });
 
+});
+
+describe("ruleBasedVisibilityFilter (#1312 hide unmatched features)", () => {
+  const parkRule = rule({
+    id: "1",
+    filter: '["==", ["get", "TYPE"], "park"]',
+    color: "#00ff00",
+  });
+  const waterRule = rule({
+    id: "2",
+    filter: '["==", ["get", "TYPE"], "water"]',
+    color: "#0000ff",
+  });
+  const disabledElse = rule({
+    id: "e",
+    isElse: true,
+    color: "#cccccc",
+    enabled: false,
+  });
+
+  it("returns null outside rule-based mode", () => {
+    assert.equal(
+      ruleBasedVisibilityFilter(
+        style({ vectorStyleMode: "single", vectorRules: [parkRule, disabledElse] }),
+      ),
+      null,
+    );
+  });
+
+  it("returns null when no else record exists (historical fallback rendering)", () => {
+    assert.equal(
+      ruleBasedVisibilityFilter(
+        style({ vectorStyleMode: "rule-based", vectorRules: [parkRule] }),
+      ),
+      null,
+    );
+  });
+
+  it("returns null while the else rule is enabled", () => {
+    const enabledElse = rule({ id: "e", isElse: true, color: "#cccccc" });
+    assert.equal(
+      ruleBasedVisibilityFilter(
+        style({ vectorStyleMode: "rule-based", vectorRules: [parkRule, enabledElse] }),
+      ),
+      null,
+    );
+  });
+
+  it("keeps only features matched by a drawable rule when the else rule is off", () => {
+    assert.deepEqual(
+      ruleBasedVisibilityFilter(
+        style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [parkRule, waterRule, disabledElse],
+        }),
+      ),
+      [
+        "any",
+        ["==", ["get", "TYPE"], "park"],
+        ["==", ["get", "TYPE"], "water"],
+      ],
+    );
+  });
+
+  it("skips disabled and invalid rules, like the paint compiler", () => {
+    const disabledRule = rule({
+      id: "off",
+      filter: '["==", ["get", "TYPE"], "road"]',
+      color: "#111111",
+      enabled: false,
+    });
+    const invalidRule = rule({ id: "bad", filter: "not json", color: "#222222" });
+    assert.deepEqual(
+      ruleBasedVisibilityFilter(
+        style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [parkRule, disabledRule, invalidRule, disabledElse],
+        }),
+      ),
+      ["any", ["==", ["get", "TYPE"], "park"]],
+    );
+  });
+
+  it("hides everything (vacuous any) when no drawable rule exists", () => {
+    assert.deepEqual(
+      ruleBasedVisibilityFilter(
+        style({ vectorStyleMode: "rule-based", vectorRules: [disabledElse] }),
+      ),
+      ["any"],
+    );
+  });
+
+  it("folds per-rule scale ranges in as half-open zoom windows", () => {
+    const zoomed = rule({
+      id: "z",
+      filter: '["==", ["get", "TYPE"], "park"]',
+      color: "#00ff00",
+      minZoom: 6,
+      maxZoom: 12,
+    });
+    assert.deepEqual(
+      ruleBasedVisibilityFilter(
+        style({ vectorStyleMode: "rule-based", vectorRules: [zoomed, disabledElse] }),
+      ),
+      [
+        "any",
+        [
+          "all",
+          ["==", ["get", "TYPE"], "park"],
+          [">=", ["zoom"], 6],
+          ["<", ["zoom"], 12],
+        ],
+      ],
+    );
+  });
 });

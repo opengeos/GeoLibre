@@ -2871,7 +2871,7 @@
       "filterInvalid": "无效的过滤条件 — 必须是 JSON 数组表达式。此规则将被跳过，直至修正。",
       "elseRuleColor": "“其他”规则颜色",
       "elseRuleColorPick": "从屏幕上拾取“其他”规则的颜色",
-      "elseRuleEnabled": "启用“其他”规则",
+      "elseRuleEnabled": "启用“其他”规则（关闭时，不匹配任何规则的要素将被隐藏）",
       "elseAllOtherFeatures": "其他（所有剩余要素）",
       "applyHint": "点击“应用”以激活基于规则的渲染。",
       "proportionalSize": "比例符号",

@@ -2800,7 +2800,7 @@
       "filterInvalid": "Geçersiz filtre — bir JSON dizisi ifadesi olmalıdır. Bu kural düzeltilene kadar atlanır.",
       "elseRuleColor": "Diğer kural rengi",
       "elseRuleColorPick": "Diğer kural rengini ekrandan seç",
-      "elseRuleEnabled": "Aksi halde kuralını etkinleştir",
+      "elseRuleEnabled": "Aksi halde kuralını etkinleştir (kapalıyken hiçbir kurala uymayan öğeler gizlenir)",
       "elseAllOtherFeatures": "Diğer (tüm diğer öğeler)",
       "applyHint": "Kural tabanlı işlemeyi etkinleştirmek için Uygula'ya tıklayın.",
       "proportionalSize": "Orantılı boyut",

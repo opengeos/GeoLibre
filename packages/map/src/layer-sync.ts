@@ -3,6 +3,7 @@ import {
   type GeoLibreLayer,
   geojsonHasZCoordinates,
   type LayerStyle,
+  ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
   styleValue,
 } from "@geolibre/core";
@@ -119,45 +120,53 @@ function unclusteredPointFilter(
 }
 
 /**
- * Combine a sub-layer's geometry filter with the layer's transient
- * {@link GeoLibreLayer.timeFilter}, when set, so a Time-Slider-bound vector
- * layer only renders features inside the current timeline window. Returns the
- * geometry filter unchanged when no time filter is set, so the common (unbound)
- * path produces an identical spec and `ensureLayer` performs no filter update.
+ * Combine a sub-layer's geometry filter with the layer's per-feature filters:
+ * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
+ * only renders features inside the current timeline window) and the rule-based
+ * visibility filter (a rule-based layer whose else rule is switched off hides
+ * features matching no rule — see {@link ruleBasedVisibilityFilter}). Returns
+ * the geometry filter unchanged when neither applies, so the common path
+ * produces an identical spec and `ensureLayer` performs no filter update.
  *
  * Aggregate cluster layers (the bubble and its count) intentionally do not pass
- * through here: a cluster feature carries no time property, so an `["all", ...]`
- * wrap would drop every cluster whenever a window is active. Per-feature layers
- * (fill, line, point, heatmap, text) filter correctly.
+ * through here: a cluster feature carries no time or rule property, so an
+ * `["all", ...]` wrap would drop every cluster whenever a window or rule filter
+ * is active. Per-feature layers (fill, line, point, heatmap, text) filter
+ * correctly.
  *
  * @param layer - The store layer being synced.
  * @param geometryFilter - The sub-layer's own geometry-type filter.
- * @returns The combined filter, or the original when no time filter applies.
+ * @returns The combined filter, or the original when no extra filter applies.
  */
-function withTimeFilter(
+function withFeatureFilters(
   layer: GeoLibreLayer,
   geometryFilter: maplibregl.FilterSpecification,
 ): maplibregl.FilterSpecification {
+  const filters: unknown[] = [];
   const timeFilter = layer.timeFilter;
-  if (!Array.isArray(timeFilter) || timeFilter.length === 0) {
-    return geometryFilter;
+  if (Array.isArray(timeFilter) && timeFilter.length > 0) {
+    filters.push(timeFilter);
   }
+  const ruleFilter = ruleBasedVisibilityFilter(layer.style);
+  if (ruleFilter) filters.push(ruleFilter);
+  if (filters.length === 0) return geometryFilter;
   return [
     "all",
     geometryFilter,
-    timeFilter,
+    ...filters,
   ] as unknown as maplibregl.FilterSpecification;
 }
 
-// Tracked filter state for external-native vector layers whose Time Slider
-// window GeoLibre applies. `base` is the control's own filter, captured the
-// first time a window is applied so the window can be combined without nesting
-// and fully restored when the binding is removed; `appliedKey` is the JSON of
-// the combined filter we last pushed, compared against the next combined filter
-// (both built here, so they round-trip) to avoid calling `setFilter` on every
-// sync tick. Keyed first by the map instance (a WeakMap, so entries are
-// garbage-collected when a map is destroyed and a fresh map never inherits
-// stale base filters) then by native MapLibre layer id.
+// Tracked filter state for external-native vector layers whose per-feature
+// filters (a Time Slider window and/or the rule-based hide-unmatched filter)
+// GeoLibre applies. `base` is the control's own filter, captured the first time
+// a filter is applied so it can be combined without nesting and fully restored
+// when the last filter is removed; `appliedKey` is the JSON of the combined
+// filter we last pushed, compared against the next combined filter (both built
+// here, so they round-trip) to avoid calling `setFilter` on every sync tick.
+// Keyed first by the map instance (a WeakMap, so entries are garbage-collected
+// when a map is destroyed and a fresh map never inherits stale base filters)
+// then by native MapLibre layer id.
 interface NativeFilterState {
   base: maplibregl.FilterSpecification | null;
   appliedKey: string;
@@ -194,29 +203,38 @@ function nativeLayerSupportsFilter(type: string): boolean {
 }
 
 /**
- * Apply (or clear) a Time-Slider window on an external-native vector layer that
- * a control owns and paints itself (e.g. the Add Vector Layer control). The
- * control segregates geometry across its own native layers with a base filter
- * such as `["==", ["geometry-type"], "Point"]`; this combines that base filter
- * with the layer's transient {@link GeoLibreLayer.timeFilter} via `["all", ...]`
- * so the window narrows the visible features without disturbing the control's
- * paint. The control's base filter is captured once and restored on unbind.
+ * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window and
+ * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter})
+ * — on an external-native vector layer that a control owns and paints itself
+ * (e.g. the Add Vector Layer control). The control segregates geometry across
+ * its own native layers with a base filter such as
+ * `["==", ["geometry-type"], "Point"]`; this combines that base filter with the
+ * active per-feature filters via `["all", ...]` so they narrow the visible
+ * features without disturbing the control's paint. The control's base filter is
+ * captured once and restored when the last per-feature filter is removed.
  *
  * @param map - The MapLibre map.
  * @param nativeLayerId - A control-owned native layer id.
- * @param timeFilter - The layer's current time filter, or undefined when none.
+ * @param layer - The store layer (reads `timeFilter` and the rule filter).
  */
-function applyExternalNativeTimeFilter(
+function applyExternalNativeFeatureFilters(
   map: maplibregl.Map,
   nativeLayerId: string,
-  timeFilter: unknown[] | undefined,
+  layer: GeoLibreLayer,
 ): void {
   if (!map.getLayer(nativeLayerId)) return;
   const states = nativeFilterStatesFor(map);
-  const hasTimeFilter = Array.isArray(timeFilter) && timeFilter.length > 0;
+  const extras: unknown[] = [];
+  const timeFilter = layer.timeFilter;
+  if (Array.isArray(timeFilter) && timeFilter.length > 0) {
+    extras.push(timeFilter);
+  }
+  const ruleFilter = ruleBasedVisibilityFilter(layer.style);
+  if (ruleFilter) extras.push(ruleFilter);
 
-  if (!hasTimeFilter) {
-    // No window: restore the control's own filter (once) and stop tracking.
+  if (extras.length === 0) {
+    // Nothing to narrow: restore the control's own filter (once) and stop
+    // tracking.
     const state = states.get(nativeLayerId);
     if (state) {
       map.setFilter(nativeLayerId, state.base ?? undefined);
@@ -225,8 +243,8 @@ function applyExternalNativeTimeFilter(
     return;
   }
 
-  // Window active: capture the control's base filter the first time, then keep
-  // reusing it so repeated ticks combine rather than nest.
+  // Filters active: capture the control's base filter the first time, then
+  // keep reusing it so repeated ticks combine rather than nest.
   let state = states.get(nativeLayerId);
   if (!state) {
     const base =
@@ -235,10 +253,14 @@ function applyExternalNativeTimeFilter(
     states.set(nativeLayerId, state);
   }
   const combined = (
-    state.base ? ["all", state.base, timeFilter] : timeFilter
+    state.base
+      ? ["all", state.base, ...extras]
+      : extras.length === 1
+        ? extras[0]
+        : ["all", ...extras]
   ) as unknown as maplibregl.FilterSpecification;
   // Compare against the last filter we applied (not `getFilter`, which MapLibre
-  // may have normalized) so an unchanged window does not re-push on every tick.
+  // may have normalized) so an unchanged filter does not re-push on every tick.
   const combinedKey = JSON.stringify(combined);
   if (state.appliedKey !== combinedKey) {
     map.setFilter(nativeLayerId, combined);
@@ -382,12 +404,13 @@ function syncExternalNativeLayer(
     for (const nativeLayerId of nativeLayerIds) {
       moveLayer(map, nativeLayerId, beforeId);
       // Control-painted vector layers (e.g. Add Vector Layer's circle/fill/line
-      // layers) still honor a Time Slider window: filtering is independent of
-      // the paint the control owns. Native layers without a filter (deck.gl /
-      // 3D Tiles custom layers) are skipped by the type guard.
+      // layers) still honor a Time Slider window and the rule-based
+      // hide-unmatched filter: filtering is independent of the paint the
+      // control owns. Native layers without a filter (deck.gl / 3D Tiles
+      // custom layers) are skipped by the type guard.
       const nativeLayer = map.getLayer(nativeLayerId);
       if (nativeLayer && nativeLayerSupportsFilter(nativeLayer.type)) {
-        applyExternalNativeTimeFilter(map, nativeLayerId, layer.timeFilter);
+        applyExternalNativeFeatureFilters(map, nativeLayerId, layer);
       }
     }
     // A deck.gl raster has no real MapLibre style layer to move (it renders in a
@@ -478,10 +501,11 @@ function syncExternalNativeLayer(
     );
 
     // Narrow the control-painted features to the Time Slider window (if the
-    // layer is bound). Filtering is independent of paint, so this applies even
-    // when the control owns the paint.
+    // layer is bound) and to the rule-based hide-unmatched filter (if the else
+    // rule is switched off). Filtering is independent of paint, so this
+    // applies even when the control owns the paint.
     if (nativeLayerSupportsFilter(nativeLayer.type)) {
-      applyExternalNativeTimeFilter(map, nativeLayerId, layer.timeFilter);
+      applyExternalNativeFeatureFilters(map, nativeLayerId, layer);
     }
 
     if (!controlOwnsPaint(layer)) {
@@ -737,7 +761,11 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: ["==", ["geometry-type"], "Polygon"],
+        filter: withFeatureFilters(layer, [
+          "==",
+          ["geometry-type"],
+          "Polygon",
+        ]),
         paint: fillPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -753,11 +781,11 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: [
+        filter: withFeatureFilters(layer, [
           "any",
           ["==", ["geometry-type"], "LineString"],
           ["==", ["geometry-type"], "Polygon"],
-        ],
+        ]),
         paint: linePaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -773,7 +801,7 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: ["==", ["geometry-type"], "Point"],
+        filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Point"]),
         paint: circlePaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -1602,7 +1630,7 @@ function applyVectorDataRenderLayers(
           type: "fill-extrusion",
           ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
-          filter: withTimeFilter(layer, [
+          filter: withFeatureFilters(layer, [
             "match",
             ["geometry-type"],
             ["Polygon", "MultiPolygon"],
@@ -1624,7 +1652,7 @@ function applyVectorDataRenderLayers(
           type: "fill",
           ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
-          filter: withTimeFilter(layer, [
+          filter: withFeatureFilters(layer, [
             "match",
             ["geometry-type"],
             ["Polygon", "MultiPolygon"],
@@ -1664,7 +1692,7 @@ function applyVectorDataRenderLayers(
         type: "line",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: withTimeFilter(layer, [
+        filter: withFeatureFilters(layer, [
           "match",
           ["geometry-type"],
           ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
@@ -1696,7 +1724,7 @@ function applyVectorDataRenderLayers(
         ...styleLayerZoomRange(layer.style),
         // Keep text-marker points out of the density, mirroring single mode;
         // they still render through the text symbol layer below.
-        filter: withTimeFilter(
+        filter: withFeatureFilters(
           layer,
           hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
         ),
@@ -1763,7 +1791,7 @@ function applyVectorDataRenderLayers(
         ...styleLayerZoomRange(layer.style),
         // Unclustered points, excluding text markers (which the symbol layer
         // renders) so they don't also appear as plain circles.
-        filter: withTimeFilter(layer, unclusteredPointFilter(hasTextMarkers)),
+        filter: withFeatureFilters(layer, unclusteredPointFilter(hasTextMarkers)),
         paint: circlePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1775,7 +1803,7 @@ function applyVectorDataRenderLayers(
     removeIfExists(map, heatmapLayerId(layer.id));
     removeIfExists(map, clusterLayerId(layer.id));
     removeIfExists(map, clusterCountLayerId(layer.id));
-    const pointFilter = withTimeFilter(
+    const pointFilter = withFeatureFilters(
       layer,
       hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
     );
@@ -1836,7 +1864,7 @@ function applyVectorDataRenderLayers(
         type: "symbol",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: withTimeFilter(layer, textMarkerFilter),
+        filter: withFeatureFilters(layer, textMarkerFilter),
         layout: {
           "text-allow-overlap": true,
           "text-font": textFontForMapStyle(map),
@@ -1888,16 +1916,18 @@ function applyVectorDataRenderLayers(
   // source, and dedup keys off the field value rather than the expression. It is
   // gated to point-only layers: the aggregated source holds just points, so a
   // mixed-geometry layer would silently lose its line/polygon labels. It is also
-  // skipped while a Time Slider filter is active: the aggregated source is built
-  // from the raw features (no MapLibre filter applies to it), so dedup labels
-  // would otherwise ignore the time window and disagree with the visible data.
-  const hasTimeFilter =
-    Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0;
+  // skipped while a Time Slider filter or a rule-based visibility filter is
+  // active: the aggregated source is built from the raw features (no MapLibre
+  // filter applies to it), so dedup labels would otherwise ignore the time
+  // window / hidden features and disagree with the visible data.
+  const hasFeatureFilter =
+    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    ruleBasedVisibilityFilter(layer.style) !== null;
   const dedupedLabelFc =
     labels.enabled &&
     labels.dedupe !== "off" &&
     !sourceLayer &&
-    !hasTimeFilter &&
+    !hasFeatureFilter &&
     layer.geojson &&
     labels.field &&
     profile.hasPoint &&
@@ -2000,7 +2030,7 @@ function applyVectorDataRenderLayers(
           ...labelZoom,
           ...(dedupedLabelFc
             ? {}
-            : { filter: withTimeFilter(layer, nonMarkerFilter) }),
+            : { filter: withFeatureFilters(layer, nonMarkerFilter) }),
           layout: {
             "text-field": textField,
             "text-font": textFontForMapStyle(map),

@@ -2800,7 +2800,7 @@
       "filterInvalid": "Ungültiger Filter — muss ein JSON-Array-Ausdruck sein. Diese Regel wird übersprungen, bis sie korrigiert ist.",
       "elseRuleColor": "Farbe der Sonst-Regel",
       "elseRuleColorPick": "Farbe der Sonst-Regel vom Bildschirm auswählen",
-      "elseRuleEnabled": "Sonst-Regel aktivieren",
+      "elseRuleEnabled": "Sonst-Regel aktivieren (deaktiviert werden Objekte ohne passende Regel ausgeblendet)",
       "elseAllOtherFeatures": "Sonst (alle übrigen Objekte)",
       "applyHint": "Klicken Sie auf Anwenden, um die regelbasierte Darstellung zu aktivieren.",
       "proportionalSize": "Proportionale Größe",

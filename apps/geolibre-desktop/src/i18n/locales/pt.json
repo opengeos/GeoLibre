@@ -2800,7 +2800,7 @@
       "filterInvalid": "Filtro inválido — deve ser uma expressão de array JSON. Esta regra é ignorada até ser corrigida.",
       "elseRuleColor": "Cor da regra Senão",
       "elseRuleColorPick": "Escolher a cor da regra Senão na tela",
-      "elseRuleEnabled": "Ativar a regra «senão»",
+      "elseRuleEnabled": "Ativar a regra «senão» (quando desativada, os elementos que não correspondem a nenhuma regra ficam ocultos)",
       "elseAllOtherFeatures": "Senão (todas as outras feições)",
       "applyHint": "Clique em Aplicar para ativar a renderização baseada em regras.",
       "proportionalSize": "Tamanho proporcional",

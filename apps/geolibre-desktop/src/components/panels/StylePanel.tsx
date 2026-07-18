@@ -2073,6 +2073,20 @@ export function StylePanel({
     }
     setVectorRules([...currentRules, createVectorRule(true, color)]);
   };
+  const setElseRuleEnabled = (enabled: boolean) => {
+    if (elseRule) {
+      updateVectorRule(elseRule.id, { enabled: enabled ? undefined : false });
+      return;
+    }
+    // No else record yet (its absence means enabled): unchecking materializes
+    // a disabled one, which is what hides features matching no rule.
+    if (!enabled) {
+      setVectorRules([
+        ...currentRules,
+        { ...createVectorRule(true, style.fillColor), enabled: false },
+      ]);
+    }
+  };
 
   // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
   // geometryFlags is memoized above the early returns.
@@ -2554,22 +2568,16 @@ export function StylePanel({
             </div>
           ))}
           <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
-            {elseRule ? (
-              // The enable toggle needs an else-rule record to write to; the
-              // default (no record yet) is always enabled, so it only shows
-              // once a rule exists - e.g. after an import that disabled it.
-              <input
-                type="checkbox"
-                checked={elseRule.enabled !== false}
-                title={t("style.symbology.elseRuleEnabled")}
-                aria-label={t("style.symbology.elseRuleEnabled")}
-                onChange={(event) =>
-                  updateVectorRule(elseRule.id, {
-                    enabled: event.target.checked ? undefined : false,
-                  })
-                }
-              />
-            ) : null}
+            {/* No else record yet means enabled; unchecking materializes a
+                disabled record so features matching no rule are hidden
+                (QGIS-style), not painted with the base style. */}
+            <input
+              type="checkbox"
+              checked={elseRule ? elseRule.enabled !== false : true}
+              title={t("style.symbology.elseRuleEnabled")}
+              aria-label={t("style.symbology.elseRuleEnabled")}
+              onChange={(event) => setElseRuleEnabled(event.target.checked)}
+            />
             <ColorField
               fill={false}
               aria-label={t("style.symbology.elseRuleColor")}

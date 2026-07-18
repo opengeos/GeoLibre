@@ -779,3 +779,57 @@ describe("parseMapboxStyle imports hand-written styles", () => {
     assert.equal(result.fillOpacity, 0.33);
   });
 });
+
+describe("switched-off else rule round-trip (#1312)", () => {
+  it("recovers the hide-unmatched state as a disabled else record", () => {
+    const original = style({
+      vectorStyleMode: "rule-based",
+      vectorRules: [
+        {
+          id: "r1",
+          label: "Parks",
+          filter: '["==",["get","category"],"a"]',
+          color: "#00ff00",
+          isElse: false,
+        },
+        {
+          id: "r2",
+          label: "",
+          filter: "",
+          color: "#888888",
+          isElse: true,
+          enabled: false,
+        },
+      ],
+    });
+    const { style: result } = roundTrip(original, polygons());
+    assert.equal(result.vectorStyleMode, "rule-based");
+    assert.equal(result.vectorRules.find((rule) => rule.isElse)?.enabled, false);
+  });
+
+  it("does not disable the else rule for an unrelated any filter", () => {
+    const imported = parseMapboxStyle({
+      version: 8,
+      sources: {},
+      layers: [
+        {
+          id: "fill",
+          type: "fill",
+          source: "s",
+          filter: ["all", ["==", ["geometry-type"], "Polygon"], ["any", ["has", "x"]]],
+          paint: {
+            "fill-color": [
+              "case",
+              ["==", ["get", "category"], "a"],
+              "#00ff00",
+              "#888888",
+            ],
+          },
+        },
+      ],
+    } as never);
+    const result = applyMapboxStyleImport(DEFAULT_LAYER_STYLE, imported);
+    assert.equal(result.vectorStyleMode, "rule-based");
+    assert.equal(result.vectorRules.find((rule) => rule.isElse)?.enabled, undefined);
+  });
+});

@@ -2800,7 +2800,7 @@
       "filterInvalid": "Filtro non valido: deve essere un'espressione in formato array JSON. Questa regola viene ignorata finché non viene corretta.",
       "elseRuleColor": "Colore regola Else",
       "elseRuleColorPick": "Seleziona il colore della regola Else dallo schermo",
-      "elseRuleEnabled": "Attiva la regola «altrimenti»",
+      "elseRuleEnabled": "Attiva la regola «altrimenti» (se disattivata, gli elementi che non corrispondono ad alcuna regola vengono nascosti)",
       "elseAllOtherFeatures": "Else (tutti gli altri elementi)",
       "applyHint": "Fai clic su Applica per attivare il rendering basato su regole.",
       "proportionalSize": "Dimensione proporzionale",

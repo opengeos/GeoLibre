@@ -734,6 +734,12 @@ function ruleBasedRules(
       ),
     );
   }
+  // A switched-off else rule means features matching no rule are hidden, and
+  // an SLD expresses exactly that by having no ElseFilter rule — so skip the
+  // catch-all and the export round-trips back to a disabled else record.
+  if (rules.find((entry) => entry.isElse)?.enabled === false) {
+    return out.join("");
+  }
   // Catch-all rule so features matched by no rule still draw. The Title is only
   // written when the else rule has a real label, so an unlabeled else round-trips
   // back to an empty label instead of a synthetic "Other". When the else rule

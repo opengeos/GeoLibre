@@ -59,6 +59,7 @@ interface RawStyleLayer {
   type?: unknown;
   paint?: Record<string, unknown> | null;
   layout?: Record<string, unknown> | null;
+  filter?: unknown;
   minzoom?: unknown;
   maxzoom?: unknown;
 }
@@ -808,7 +809,46 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
     );
   }
 
+  detectHiddenElse(patch, [extrusion, fill, line, circle]);
+
   return { style: patch, labels, warnings, matchedLayerCount };
+}
+
+/**
+ * Recover the hide-unmatched state of a rule-based export: with the else rule
+ * switched off the exporter folds `["any", filter1, …]` (the rule visibility
+ * filter) into each render layer's filter. When a render layer carries an
+ * `["all", …]` filter with an `["any", …]` arm whose members are exactly the
+ * recovered rules' filters, the style hides features matching no rule, which
+ * GeoLibre represents as a disabled else record. The exact-match requirement
+ * keeps hand-written `any` filters that are unrelated to the rules from
+ * spuriously disabling the else rule.
+ */
+function detectHiddenElse(
+  patch: Partial<Omit<LayerStyle, "labels">>,
+  renderLayers: (RawStyleLayer | undefined)[],
+): void {
+  if (patch.vectorStyleMode !== "rule-based" || !patch.vectorRules) return;
+  const expected = new Set(
+    patch.vectorRules
+      .filter((rule) => !rule.isElse)
+      .map((rule) => rule.filter),
+  );
+  const filter = asArray(
+    renderLayers.find((layer) => layer && Array.isArray(layer.filter))?.filter,
+  );
+  if (!filter || filter[0] !== "all") return;
+  const anyArm = filter
+    .slice(1)
+    .map(asArray)
+    .find((arm) => arm !== null && arm[0] === "any");
+  if (!anyArm) return;
+  const members = anyArm.slice(1).map((member) => JSON.stringify(member));
+  if (members.length !== expected.size) return;
+  if (!members.every((member) => expected.has(member))) return;
+  patch.vectorRules = patch.vectorRules.map((rule) =>
+    rule.isElse ? { ...rule, enabled: false } : rule,
+  );
 }
 
 /**

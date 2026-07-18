@@ -1042,6 +1042,10 @@ function classifyRenderRules(
     filter: "",
     color: elseColor,
     isElse: true,
+    // An SLD without an ElseFilter (or unfiltered catch-all) rule draws
+    // nothing for features matching no rule, so the imported else record is
+    // disabled to reproduce that: the renderer hides unmatched features.
+    ...(elseRule ? {} : { enabled: false }),
     ...(elseStrokeColor !== undefined ? { strokeColor: elseStrokeColor } : {}),
     ...(elseStrokeWidth !== undefined ? { strokeWidth: elseStrokeWidth } : {}),
     ...(elseFillOpacity !== undefined ? { fillOpacity: elseFillOpacity } : {}),

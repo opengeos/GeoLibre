@@ -2800,7 +2800,7 @@
       "filterInvalid": "Ongeldig filter — moet een JSON-arrayexpressie zijn. Deze regel wordt overgeslagen totdat dit is hersteld.",
       "elseRuleColor": "Kleur else-regel",
       "elseRuleColorPick": "Kleur voor de else-regel van het scherm oppikken",
-      "elseRuleEnabled": "Anders-regel inschakelen",
+      "elseRuleEnabled": "Anders-regel inschakelen (uitgeschakeld worden objecten die met geen enkele regel overeenkomen verborgen)",
       "elseAllOtherFeatures": "Else (alle overige objecten)",
       "applyHint": "Klik op Toepassen om weergave op basis van regels te activeren.",
       "proportionalSize": "Proportionele grootte",
