@@ -1565,17 +1565,31 @@ function syncVectorControlPointSymbology(
   const radius = proportionalRadiusExpression(layer.style);
   if (radius) {
     map.setPaintProperty(circleNativeId, "circle-radius", radius);
-    overriddenRadiusNativeLayerIds.add(circleNativeId);
+    overriddenRadiusIdsFor(map).add(circleNativeId);
   } else {
     restoreOverriddenCircleRadius(map, circleNativeId, layer);
   }
 }
 
 // Control-owned circle layers whose circle-radius GeoLibre has overridden with
-// the proportional interpolate. Tracked (like managedZoomRangeLayerIds) so the
-// restore only ever touches a layer this module actually overrode — never a
-// control-authored expression such as the cluster renderer's stepped radius.
-const overriddenRadiusNativeLayerIds = new Set<string>();
+// the proportional interpolate. Tracked (like externalNativeBaseFilters, keyed
+// per map so two maps sharing a native layer id never see each other's state)
+// so the restore only ever touches a layer this module actually overrode —
+// never a control-authored expression such as the cluster renderer's stepped
+// radius.
+const overriddenRadiusNativeLayerIds = new WeakMap<
+  maplibregl.Map,
+  Set<string>
+>();
+
+function overriddenRadiusIdsFor(map: maplibregl.Map): Set<string> {
+  let ids = overriddenRadiusNativeLayerIds.get(map);
+  if (!ids) {
+    ids = new Set();
+    overriddenRadiusNativeLayerIds.set(map, ids);
+  }
+  return ids;
+}
 
 /** Hand an overridden circle-radius back to the control's flat value. */
 function restoreOverriddenCircleRadius(
@@ -1583,7 +1597,7 @@ function restoreOverriddenCircleRadius(
   circleNativeId: string,
   layer: GeoLibreLayer,
 ): void {
-  if (!overriddenRadiusNativeLayerIds.delete(circleNativeId)) return;
+  if (!overriddenRadiusIdsFor(map).delete(circleNativeId)) return;
   map.setPaintProperty(
     circleNativeId,
     "circle-radius",

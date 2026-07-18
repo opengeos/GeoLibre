@@ -6,10 +6,6 @@ import { syncLayer } from "../packages/map/src/layer-sync";
 // Records the maplibre calls a layer sync makes so a test can assert which
 // native operations ran. Mirrors the stub in control-owns-paint.test.ts, plus
 // the style/paint getters the vector-control symbology overlay reads.
-//
-// Each test uses a distinct layer id: the overlay tracks overridden radii in
-// a module-level set (like managedZoomRangeLayerIds), so sharing ids across
-// tests would leak state between them.
 interface MapCall {
   method: string;
   args: unknown[];
@@ -173,6 +169,36 @@ describe("vector-control point symbology overlay (#1311)", () => {
     assert.equal(radius.length, 2, "expected override then restore");
     assert.ok(Array.isArray(radius[0].args[2]));
     assert.equal(typeof radius[1].args[2], "number");
+  });
+
+  it("tracks overridden radii per map, not globally by layer id", () => {
+    // Two maps (e.g. a swipe pair) can host control layers with the same
+    // native layer id. Restoring one map's radius must not eat the tracking
+    // entry of the other, which would leave its proportional interpolate
+    // stuck on the control's circle.
+    const first = makeVectorControlMapStub("vecw");
+    const second = makeVectorControlMapStub("vecw");
+    const proportional = vectorControlLayer("vecw", {
+      style: { ...DEFAULT_LAYER_STYLE, ...proportionalStyle },
+    });
+
+    syncLayer(first.map as never, proportional);
+    syncLayer(second.map as never, proportional);
+    // Turn proportional sizing off on the first map only.
+    syncLayer(first.map as never, vectorControlLayer("vecw"));
+    syncLayer(second.map as never, vectorControlLayer("vecw"));
+
+    const firstRadius = radiusCalls(first.calls, "vecw");
+    assert.equal(firstRadius.length, 2, "expected override then restore");
+    assert.equal(typeof firstRadius[1].args[2], "number");
+
+    const secondRadius = radiusCalls(second.calls, "vecw");
+    assert.equal(
+      secondRadius.length,
+      2,
+      "expected the second map to restore independently",
+    );
+    assert.equal(typeof secondRadius[1].args[2], "number");
   });
 
   it("restores an overridden radius when the renderer leaves single mode", () => {
