@@ -2706,7 +2706,23 @@
       "dedupeHint": "同じ座標に重なるポイントをまとめます。ローカルのポイントレイヤーではラベルフィールドを使用します。",
       "expression": "式 (任意)",
       "expressionHint": "MapLibre式 (JSON形式) です。設定するとフィールドより優先されます。",
-      "expressionInvalid": "有効なMapLibre式ではありません(JSON配列である必要があります)。この値は無視されます。"
+      "expressionInvalid": "有効なMapLibre式ではありません(JSON配列である必要があります)。この値は無視されます。",
+      "dataDefined": {
+        "heading": "データ定義の上書き",
+        "size": "サイズ",
+        "color": "色",
+        "opacity": "不透明度",
+        "visibility": "表示",
+        "priority": "優先度",
+        "sizeTarget": "ラベルサイズの式",
+        "colorTarget": "ラベル色の式",
+        "opacityTarget": "ラベル不透明度の式",
+        "visibilityTarget": "ラベル表示の式",
+        "priorityTarget": "ラベル優先度の式",
+        "notSet": "未設定",
+        "clear": "式をクリア",
+        "hint": "フィーチャごとの MapLibre 式。サイズ・不透明度・優先度は数値(優先度値が小さいラベルほど先に配置)、色は色、表示は真偽値を返します。重複ラベルの集約が有効な間は無視されます。 不透明度の式はラベルに対してレイヤーの不透明度を置き換えます。"
+      }
     },
     "elevation3d": {
       "mode": "3D (Z値)",

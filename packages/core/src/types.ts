@@ -319,6 +319,39 @@ export interface LabelStyle {
    * {@link field} (not {@link expression}) as the label value.
    */
   dedupe: LabelDedupe;
+  /**
+   * Data-defined override for {@link size}: a MapLibre expression (JSON
+   * string) producing a number, e.g. sizing labels by population. Empty means
+   * "use the literal {@link size}". Like the other data-defined overrides
+   * below, it reads source feature attributes, so it is skipped while
+   * {@link dedupe} collapsing is active (the aggregated features carry only
+   * the label value).
+   */
+  sizeExpression: string;
+  /**
+   * Data-defined override for {@link color}: a MapLibre expression (JSON
+   * string) producing a color, e.g. coloring labels by category.
+   */
+  colorExpression: string;
+  /**
+   * Data-defined label opacity: a MapLibre expression (JSON string) producing
+   * a number in 0..1. When set it replaces the layer-wide opacity for labels
+   * (wrapping it would invalidate top-level `["zoom"]` interpolations).
+   */
+  opacityExpression: string;
+  /**
+   * Per-feature label visibility: a MapLibre expression (JSON string)
+   * producing a boolean. Features evaluating false get no label (e.g. hide
+   * labels below an attribute threshold). Combined with the layer's other
+   * feature filters.
+   */
+  visibilityExpression: string;
+  /**
+   * Per-feature placement priority: a MapLibre expression (JSON string)
+   * producing a number, applied as `symbol-sort-key`. Labels with lower
+   * values are placed first, so they win when space is tight.
+   */
+  priorityExpression: string;
 }
 
 /** MapLibre `text-anchor` positions offered for {@link LabelStyle.anchor}. */
@@ -550,6 +583,11 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     maxWidth: 10,
     transform: "none",
     dedupe: "off",
+    sizeExpression: "",
+    colorExpression: "",
+    opacityExpression: "",
+    visibilityExpression: "",
+    priorityExpression: "",
   },
   extrusionEnabled: false,
   extrusionColor: "#3b82f6",

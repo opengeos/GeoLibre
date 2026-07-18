@@ -2752,7 +2752,23 @@
       "dedupeHint": "Voegt punten samen die op dezelfde coördinaat liggen. Gebruikt het labelveld bij lokale puntlagen.",
       "expression": "Expressie (optioneel)",
       "expressionHint": "Een MapLibre-expressie (JSON). Overschrijft het veld indien ingesteld.",
-      "expressionInvalid": "Geen geldige MapLibre-expressie (moet een JSON-array zijn). Deze waarde wordt genegeerd."
+      "expressionInvalid": "Geen geldige MapLibre-expressie (moet een JSON-array zijn). Deze waarde wordt genegeerd.",
+      "dataDefined": {
+        "heading": "Datagestuurde overschrijvingen",
+        "size": "Grootte",
+        "color": "Kleur",
+        "opacity": "Dekking",
+        "visibility": "Zichtbaarheid",
+        "priority": "Prioriteit",
+        "sizeTarget": "Expressie voor labelgrootte",
+        "colorTarget": "Expressie voor labelkleur",
+        "opacityTarget": "Expressie voor labeldekking",
+        "visibilityTarget": "Expressie voor labelzichtbaarheid",
+        "priorityTarget": "Expressie voor labelprioriteit",
+        "notSet": "Niet ingesteld",
+        "clear": "Expressie wissen",
+        "hint": "MapLibre-expressies per feature. Grootte, dekking en prioriteit leveren getallen op (labels met lagere prioriteitswaarden worden eerst geplaatst), kleur een kleur, zichtbaarheid waar/onwaar. Genegeerd zolang het samenvoegen van dubbele labels actief is. Een dekkingsexpressie vervangt de laagdekking voor labels."
+      }
     },
     "elevation3d": {
       "mode": "3D (Z-waarden)",

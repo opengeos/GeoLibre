@@ -2752,7 +2752,23 @@
       "dedupeHint": "Recolhe pontos empilhados na mesma coordenada. Usa o campo de rótulo em camadas de pontos locais.",
       "expression": "Expressão (opcional)",
       "expressionHint": "Uma expressão MapLibre (JSON). Substitui o campo quando definida.",
-      "expressionInvalid": "Não é uma expressão MapLibre válida (deve ser um array JSON). Este valor é ignorado."
+      "expressionInvalid": "Não é uma expressão MapLibre válida (deve ser um array JSON). Este valor é ignorado.",
+      "dataDefined": {
+        "heading": "Substituições definidas por dados",
+        "size": "Tamanho",
+        "color": "Cor",
+        "opacity": "Opacidade",
+        "visibility": "Visibilidade",
+        "priority": "Prioridade",
+        "sizeTarget": "Expressão de tamanho do rótulo",
+        "colorTarget": "Expressão de cor do rótulo",
+        "opacityTarget": "Expressão de opacidade do rótulo",
+        "visibilityTarget": "Expressão de visibilidade do rótulo",
+        "priorityTarget": "Expressão de prioridade do rótulo",
+        "notSet": "Não definido",
+        "clear": "Limpar expressão",
+        "hint": "Expressões MapLibre por feição. Tamanho, opacidade e prioridade produzem números (rótulos com valores de prioridade mais baixos são posicionados primeiro), cor uma cor e visibilidade verdadeiro/falso. Ignoradas enquanto o agrupamento de rótulos duplicados está ativo. Uma expressão de opacidade substitui a opacidade da camada para os rótulos."
+      }
     },
     "elevation3d": {
       "mode": "3D (valores Z)",

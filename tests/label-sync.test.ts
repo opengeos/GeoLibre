@@ -13,8 +13,13 @@ function makeMap() {
   const sources = new Map<string, Record<string, unknown>>();
   const layers = new Map<string, Record<string, unknown>>();
   const map = {
+    // Expose the stored source type: without it the inline-geojson path treats
+    // the source as wrong-typed and recreates every render layer on each sync,
+    // so re-sync tests would never exercise ensureLayer's update branch.
     getSource: (id: string) =>
-      sources.has(id) ? { setData: () => {} } : undefined,
+      sources.has(id)
+        ? { type: sources.get(id)?.type, setData: () => {} }
+        : undefined,
     addSource: (id: string, spec: Record<string, unknown>) => {
       sources.set(id, spec);
     },
@@ -26,9 +31,20 @@ function makeMap() {
     },
     removeLayer: (id: string) => layers.delete(id),
     getFilter: (id: string) => layers.get(id)?.filter,
-    setFilter: () => {},
-    setPaintProperty: () => {},
-    setLayoutProperty: () => {},
+    // Record updates into the stored spec so a test can observe the second
+    // sync's property/filter changes (ensureLayer updates in place).
+    setFilter: (id: string, filter: unknown) => {
+      const layer = layers.get(id);
+      if (layer) layer.filter = filter;
+    },
+    setPaintProperty: (id: string, key: string, value: unknown) => {
+      const layer = layers.get(id);
+      if (layer) (layer.paint as Record<string, unknown>)[key] = value;
+    },
+    setLayoutProperty: (id: string, key: string, value: unknown) => {
+      const layer = layers.get(id);
+      if (layer) (layer.layout as Record<string, unknown>)[key] = value;
+    },
     setLayerZoomRange: () => {},
     moveLayer: () => {},
     getStyle: () => ({
@@ -392,5 +408,168 @@ describe("label sync", () => {
     assert.ok(!sources.has(LABEL_SOURCE_ID), "dedup source should be removed");
     const label = layers.get(LABEL_ID) as { source: string };
     assert.equal(label.source, "source-lyr");
+  });
+
+  // --- Data-defined overrides (GH #1320) ---
+
+  it("applies data-defined size, color, opacity, and priority expressions", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        sizeExpression: '["+", ["get", "pop"], 8]',
+        colorExpression:
+          '["case", [">", ["get", "pop"], 3], "#ff0000", "#00ff00"]',
+        opacityExpression: '["case", [">", ["get", "pop"], 3], 1, 0.5]',
+        priorityExpression: '["-", 0, ["get", "pop"]]',
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as {
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    };
+    assert.deepEqual(label.layout["text-size"], ["+", ["get", "pop"], 8]);
+    assert.deepEqual(label.layout["symbol-sort-key"], [
+      "-",
+      0,
+      ["get", "pop"],
+    ]);
+    assert.deepEqual(label.paint["text-color"], [
+      "case",
+      [">", ["get", "pop"], 3],
+      "#ff0000",
+      "#00ff00",
+    ]);
+    assert.deepEqual(label.paint["text-opacity"], [
+      "case",
+      [">", ["get", "pop"], 3],
+      1,
+      0.5,
+    ]);
+  });
+
+  it("falls back to the literal controls when an override is invalid", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        // Invalid JSON and valid-JSON-but-not-an-expression must both fall
+        // back to the literal control instead of breaking the layer.
+        sizeExpression: "{not json",
+        colorExpression: '{"k":1}',
+        opacityExpression: "42",
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as {
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    };
+    assert.equal(label.layout["text-size"], DEFAULT_LAYER_STYLE.labels.size);
+    assert.equal(label.paint["text-color"], DEFAULT_LAYER_STYLE.labels.color);
+    assert.equal(label.paint["text-opacity"], 1);
+    // The null symbol-sort-key reset must be stripped on first add (MapLibre
+    // silently drops a layer whose layout carries an explicit null).
+    assert.ok(!("symbol-sort-key" in label.layout));
+  });
+
+  it("falls back when an override is well-formed but wrong for its destination", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        // A JSON array that is not an expression (no operator), and an
+        // expression whose result type cannot fit the destination. Both must
+        // fall back to the literal control: addLayer validates the whole
+        // layer spec, so passing them through would reject the entire label
+        // layer, not just the property.
+        sizeExpression: "[1, 2, 3]",
+        colorExpression: '["literal", 5]',
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as {
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    };
+    assert.equal(label.layout["text-size"], DEFAULT_LAYER_STYLE.labels.size);
+    assert.equal(label.paint["text-color"], DEFAULT_LAYER_STYLE.labels.color);
+  });
+
+  it("ANDs the visibility expression into the label filter", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        visibilityExpression: '[">", ["get", "pop"], 3]',
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as { filter: unknown[] };
+    assert.equal(label.filter[0], "all");
+    assert.equal(label.filter.length, 3);
+    assert.deepEqual(label.filter[2], [">", ["get", "pop"], 3]);
+
+    // Clearing the expression restores the plain marker-exclusion filter.
+    syncLayer(map as never, labeledLayer({ enabled: true, field: "name" }));
+    const updated = layers.get(LABEL_ID) as { filter: unknown[] };
+    assert.notEqual(updated.filter[0], "all");
+  });
+
+  it("resets the placement priority when the expression is cleared", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      labeledLayer({
+        enabled: true,
+        field: "name",
+        priorityExpression: '["get", "pop"]',
+      }),
+    );
+    const label = layers.get(LABEL_ID) as { layout: Record<string, unknown> };
+    assert.deepEqual(label.layout["symbol-sort-key"], ["get", "pop"]);
+
+    syncLayer(map as never, labeledLayer({ enabled: true, field: "name" }));
+    const updated = layers.get(LABEL_ID) as {
+      layout: Record<string, unknown>;
+    };
+    // The update path pushes an explicit null, which setLayoutProperty treats
+    // as a reset to the default.
+    assert.equal(updated.layout["symbol-sort-key"], null);
+  });
+
+  it("keeps literal styling on the dedup path (synthetic features carry no attributes)", () => {
+    const { map, layers } = makeMap();
+    syncLayer(
+      map as never,
+      colocatedPointLayer({
+        enabled: true,
+        field: "name",
+        dedupe: "unique",
+        sizeExpression: '["+", ["get", "pop"], 8]',
+        colorExpression: '["case", ["has", "pop"], "#ff0000", "#00ff00"]',
+        visibilityExpression: '[">", ["get", "pop"], 3]',
+      }),
+    );
+
+    const label = layers.get(LABEL_ID) as {
+      source: string;
+      filter?: unknown;
+      layout: Record<string, unknown>;
+      paint: Record<string, unknown>;
+    };
+    assert.equal(label.source, LABEL_SOURCE_ID);
+    assert.equal(label.layout["text-size"], DEFAULT_LAYER_STYLE.labels.size);
+    assert.equal(label.paint["text-color"], DEFAULT_LAYER_STYLE.labels.color);
+    assert.equal(label.filter, undefined);
   });
 });

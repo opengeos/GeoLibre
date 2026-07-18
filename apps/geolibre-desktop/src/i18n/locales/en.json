@@ -3291,7 +3291,23 @@
       "dedupeHint": "Collapses points stacked at the same coordinate. Uses the label field on local point layers.",
       "expression": "Expression (optional)",
       "expressionHint": "A MapLibre expression (JSON). Overrides the field when set.",
-      "expressionInvalid": "Not a valid MapLibre expression (must be a JSON array). This value is ignored."
+      "expressionInvalid": "Not a valid MapLibre expression (must be a JSON array). This value is ignored.",
+      "dataDefined": {
+        "heading": "Data-defined overrides",
+        "size": "Size",
+        "color": "Color",
+        "opacity": "Opacity",
+        "visibility": "Visibility",
+        "priority": "Priority",
+        "sizeTarget": "Label size expression",
+        "colorTarget": "Label color expression",
+        "opacityTarget": "Label opacity expression",
+        "visibilityTarget": "Label visibility expression",
+        "priorityTarget": "Label priority expression",
+        "notSet": "Not set",
+        "clear": "Clear expression",
+        "hint": "Per-feature MapLibre expressions. Size, opacity, and priority produce numbers (labels with lower priority values are placed first), color a color, visibility true/false. Ignored while duplicate-label collapsing is active. An opacity expression replaces the layer opacity for labels."
+      }
     },
     "elevation3d": {
       "mode": "3D (Z values)",
