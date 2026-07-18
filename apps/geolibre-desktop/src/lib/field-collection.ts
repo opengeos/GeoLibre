@@ -11,7 +11,13 @@
  * `metadata.collectionSchema`. Both ride through `.geolibre.json` save/load via
  * the layer's free-form `metadata` bag, so collection layers reopen ready to use.
  */
-import { PHOTO_FULL_PROPERTY, PHOTO_PROPERTY } from "@geolibre/core";
+import {
+  coerceAttributeFormValue,
+  getAttributeFormField,
+  PHOTO_FULL_PROPERTY,
+  PHOTO_PROPERTY,
+  type AttributeFormConfig,
+} from "@geolibre/core";
 import type {
   Feature,
   FeatureCollection,
@@ -252,6 +258,30 @@ export function buildProperties(
   const props: Record<string, unknown> = {};
   for (const field of schema.fields) {
     const v = coerceValue(field.type, values[field.key] ?? "");
+    if (v !== null) props[field.key] = v;
+  }
+  return { ...props, ...extra };
+}
+
+/**
+ * Like {@link buildProperties}, but fields configured in the layer's Attribute
+ * Form designer coerce by their edit widget instead of the schema's field type
+ * (a `number`/`range` widget stores a number, a `checkbox` stores a boolean),
+ * so constraint expressions and downstream styling see properly typed values.
+ */
+export function buildPropertiesWithForm(
+  schema: CollectionSchema,
+  values: Record<string, string>,
+  form: AttributeFormConfig | undefined,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const props: Record<string, unknown> = {};
+  for (const field of schema.fields) {
+    const config = getAttributeFormField(form, field.key);
+    const raw = values[field.key] ?? "";
+    const v = config
+      ? coerceAttributeFormValue(config, raw)
+      : coerceValue(field.type, raw);
     if (v !== null) props[field.key] = v;
   }
   return { ...props, ...extra };

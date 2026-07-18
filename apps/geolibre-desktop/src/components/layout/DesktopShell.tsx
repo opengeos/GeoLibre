@@ -300,6 +300,34 @@ const ProcessingHistoryDialog = lazy(() =>
     }),
 );
 
+const SelectByExpressionDialog = lazy(() =>
+  import("../selection/SelectByExpressionDialog")
+    .then((module) => ({
+      default: module.SelectByExpressionDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load SelectByExpressionDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../selection/SelectByExpressionDialog").SelectByExpressionDialog;
+      return { default: Fallback };
+    }),
+);
+
+const SelectByLocationDialog = lazy(() =>
+  import("../selection/SelectByLocationDialog")
+    .then((module) => ({
+      default: module.SelectByLocationDialog,
+    }))
+    .catch((error) => {
+      // Same chunk-load fallback rationale as ProcessingDialog above.
+      console.error("Failed to load SelectByLocationDialog", error);
+      const Fallback = (() =>
+        null) as unknown as typeof import("../selection/SelectByLocationDialog").SelectByLocationDialog;
+      return { default: Fallback };
+    }),
+);
+
 const GeocodeDialog = lazy(() =>
   import("../processing/GeocodeDialog")
     .then((module) => ({
@@ -2127,6 +2155,17 @@ export function DesktopShell({
           </SectionErrorBoundary>
           <SectionErrorBoundary label="Plugin floating panels">
             <FloatingPanels />
+          </SectionErrorBoundary>
+          {/* Mounted here (inside the map area, like FloatingPanels) so the
+              selection panels anchor to the map canvas's top-left corner and
+              drag-clamp to the map, not the whole window (#1314). */}
+          <SectionErrorBoundary label="Selection panels">
+            <Suspense fallback={null}>
+              <SelectByExpressionDialog />
+            </Suspense>
+            <Suspense fallback={null}>
+              <SelectByLocationDialog />
+            </Suspense>
           </SectionErrorBoundary>
           <SectionErrorBoundary label="Sun simulation panel">
             <SunPanel />

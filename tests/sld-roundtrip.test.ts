@@ -464,7 +464,7 @@ describe("SLD round-trip of extended rule-based symbology (#1305)", () => {
     assert.ok(!sld.includes("Deep zoom"));
   });
 
-  it("a disabled else rule still exports the fallback Other rule with layer colors", () => {
+  it("a disabled else rule exports no catch-all rule (unmatched features hide, #1312)", () => {
     const rules: VectorRule[] = [
       {
         id: "a",
@@ -482,17 +482,48 @@ describe("SLD round-trip of extended rule-based symbology (#1305)", () => {
         enabled: false,
       },
     ];
-    // Matching the live map: unmatched features always draw with the layer
-    // fallback color, so the catch-all rule is exported (SLD has no disabled
-    // state) but with the layer fill rather than the disabled else's color.
+    // Matching the live map: with the else rule switched off, features
+    // matching no rule are hidden, and an SLD expresses that by having no
+    // ElseFilter rule at all.
     const input = style({
       vectorStyleMode: "rule-based",
       vectorRules: rules,
       fillColor: "#123456",
     });
     const { sld } = buildSld(layer(input), fc("polygon"));
-    assert.ok(sld.includes("<ElseFilter/>"));
+    assert.ok(!sld.includes("<ElseFilter/>"));
     assert.ok(!sld.includes("#00ff00"));
-    assert.ok(sld.includes("#123456"));
+  });
+});
+
+describe("SLD round-trip of a switched-off else rule (#1312)", () => {
+  it("omits the ElseFilter rule and re-imports as a disabled else record", () => {
+    const input = style({
+      vectorStyleMode: "rule-based",
+      fillColor: "#dddddd",
+      vectorRules: [
+        {
+          id: "a",
+          label: "big",
+          filter: JSON.stringify([">", ["get", "pop"], 1000000]),
+          color: "#d62728",
+          isElse: false,
+        },
+        {
+          id: "else",
+          label: "",
+          filter: "",
+          color: "#cccccc",
+          isElse: true,
+          enabled: false,
+        },
+      ],
+    });
+    const sld = buildSld(layer(input), fc("polygon"));
+    // SLD expresses hidden-unmatched by simply having no ElseFilter rule.
+    assert.ok(!sld.sld.includes("<ElseFilter"));
+    const out = roundTrip(input, "polygon");
+    assert.equal(out.vectorStyleMode, "rule-based");
+    assert.equal(out.vectorRules.find((rule) => rule.isElse)?.enabled, false);
   });
 });

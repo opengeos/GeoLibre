@@ -1,5 +1,6 @@
 import { styleValue, type LayerStyle, type VectorRule } from "./types";
 import { getActiveSemiMajorAxisMeters } from "./ellipsoids";
+import { removeTrailingJsonCommas } from "./expressions";
 
 /**
  * A data-driven color value for a vector paint property: either a plain CSS
@@ -202,33 +203,12 @@ export function metersWidthExpression(meters: number): unknown[] {
 export function lineWidthValue(style: LayerStyle): number | unknown[] {
   // Proportional (graduated) sizing takes precedence: width is driven by a
   // numeric field, reusing the circle-radius output range as the width range.
-  if (styleValue(style, "proportionalSizeEnabled")) {
-    const property = styleValue(style, "proportionalSizeProperty").trim();
-    const minValue = styleValue(style, "proportionalSizeMinValue");
-    const maxValue = styleValue(style, "proportionalSizeMaxValue");
-    const minRadius = styleValue(style, "proportionalSizeMinRadius");
-    const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
-    if (
-      property &&
-      Number.isFinite(minValue) &&
-      Number.isFinite(maxValue) &&
-      maxValue > minValue &&
-      Number.isFinite(minRadius) &&
-      Number.isFinite(maxRadius)
-    ) {
-      // Per-rule widths still override the proportional base for matched
-      // features (the property-driven interpolate nests legally inside a
-      // case), mirroring circleRadiusValue.
-      return vectorStrokeWidthValue(style, [
-        "interpolate",
-        ["linear"],
-        ["to-number", ["get", property], minValue],
-        minValue,
-        minRadius,
-        maxValue,
-        maxRadius,
-      ]);
-    }
+  const proportionalWidth = proportionalRadiusExpression(style);
+  if (proportionalWidth) {
+    // Per-rule widths still override the proportional base for matched
+    // features (the property-driven interpolate nests legally inside a
+    // case), mirroring circleRadiusValue.
+    return vectorStrokeWidthValue(style, proportionalWidth);
   }
   if (styleValue(style, "strokeWidthUnit") === "meters") {
     // The meters width is itself a zoom-driven interpolation; embedding it
@@ -292,43 +272,6 @@ export function parseJsonExpression(expression: string): unknown[] | null {
   } catch {
     return null;
   }
-}
-
-function removeTrailingJsonCommas(value: string): string {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-
-    if (inString) {
-      result += char;
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      result += char;
-      continue;
-    }
-
-    if (char === ",") {
-      const nextSignificant = value.slice(index + 1).match(/\S/)?.[0];
-      if (nextSignificant === "]" || nextSignificant === "}") continue;
-    }
-
-    result += char;
-  }
-
-  return result;
 }
 
 /**
@@ -549,6 +492,66 @@ export function effectiveVectorRules(style: LayerStyle): {
 }
 
 /**
+ * A rule's match condition as a MapLibre filter: its (ancestor-combined)
+ * attribute filter, with any scale range folded in as `["zoom"]` comparisons.
+ * The zoom window is half-open (`min <= zoom < max`), matching how
+ * {@link zoomWrappedRuleValue} activates rules per zoom segment. MapLibre only
+ * re-evaluates `["zoom"]` in filters at integer zoom levels, so a scale-ranged
+ * rule's features appear/disappear on whole zooms — the paint expressions keep
+ * the fractional-zoom precision.
+ */
+function ruleMatchFilter(rule: EffectiveVectorRule): unknown[] {
+  const conditions: unknown[] = [rule.filter];
+  if (rule.minZoom !== undefined) {
+    conditions.push([">=", ["zoom"], rule.minZoom]);
+  }
+  if (rule.maxZoom !== undefined) {
+    conditions.push(["<", ["zoom"], rule.maxZoom]);
+  }
+  return conditions.length === 1 ? rule.filter : ["all", ...conditions];
+}
+
+// The layer sync recomputes the visibility filter for every render sub-layer
+// (fill, line, point, labels, …) on every sync tick, and compiling it re-walks
+// and re-parses the whole rule tree. The store replaces the vectorRules array
+// on every edit, so the array's identity is a correct cache key; memoizing on
+// it makes the repeated per-sub-layer calls O(1), mirroring the WeakMap caches
+// in the map package (e.g. the text-marker scan).
+const visibilityFilterCache = new WeakMap<VectorRule[], unknown[] | null>();
+
+/**
+ * The MapLibre filter that hides features matching no rule, for a rule-based
+ * layer whose catch-all else rule has been switched off. Returns `null` — and
+ * callers then leave their geometry filters untouched — unless the layer is in
+ * `"rule-based"` mode AND carries an else record explicitly disabled
+ * (`enabled: false`). An absent else record keeps the historical fallback
+ * rendering, so projects saved before the toggle existed are unaffected.
+ *
+ * With the else rule off, the returned `["any", filter1, filter2, …]` keeps
+ * only features matched by a drawable rule (see {@link effectiveVectorRules});
+ * with no drawable rules it returns the vacuous `["any"]`, which matches
+ * nothing, so every feature hides. Sub-layers combine it with their geometry
+ * filters, which also drops unmatched features from labels and hit-testing —
+ * mirroring QGIS, where features matching no rule are simply not drawn.
+ *
+ * @param style - The layer style (reads {@link LayerStyle.vectorRules}).
+ * @returns The filter to `["all", …]`-combine into each sub-layer, or `null`.
+ */
+export function ruleBasedVisibilityFilter(style: LayerStyle): unknown[] | null {
+  if (styleValue(style, "vectorStyleMode") !== "rule-based") return null;
+  const all = styleValue(style, "vectorRules");
+  const cached = visibilityFilterCache.get(all);
+  if (cached !== undefined) return cached;
+  const elseRecord = all.find((rule) => rule.isElse);
+  const filter =
+    !elseRecord || elseRecord.enabled !== false
+      ? null
+      : ["any", ...effectiveVectorRules(style).rules.map(ruleMatchFilter)];
+  visibilityFilterCache.set(all, filter);
+  return filter;
+}
+
+/**
  * Wrap a per-zoom-segment value builder in a `["step", ["zoom"], …]` expression
  * when any rule carries a zoom bound. MapLibre only allows `["zoom"]` as the
  * top-level input of a `step`/`interpolate` in paint properties (not inside a
@@ -716,6 +719,67 @@ export function vectorFillOpacityValue(
 }
 
 
+/** The validated proportional (graduated) size configuration of a layer. */
+export interface ProportionalSizeRange {
+  property: string;
+  minValue: number;
+  maxValue: number;
+  minRadius: number;
+  maxRadius: number;
+}
+
+/**
+ * The proportional-size configuration, or `null` when proportional sizing
+ * does not apply: disabled, no field chosen, non-finite or degenerate
+ * (`maxValue <= minValue`) value range, or non-finite radii. This is the
+ * single validation chain for every proportional consumer — circle radius,
+ * line width, and marker icon-size (`@geolibre/map`) — so their notion of
+ * "active" can never drift apart.
+ *
+ * @param style - The layer style.
+ * @returns The validated range, or `null` when proportional sizing is off.
+ */
+export function proportionalSizeRange(
+  style: LayerStyle,
+): ProportionalSizeRange | null {
+  if (!styleValue(style, "proportionalSizeEnabled")) return null;
+  const property = styleValue(style, "proportionalSizeProperty").trim();
+  if (!property) return null;
+  const minValue = styleValue(style, "proportionalSizeMinValue");
+  const maxValue = styleValue(style, "proportionalSizeMaxValue");
+  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return null;
+  if (maxValue <= minValue) return null;
+  const minRadius = styleValue(style, "proportionalSizeMinRadius");
+  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
+  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) return null;
+  return { property, minValue, maxValue, minRadius, maxRadius };
+}
+
+/**
+ * The proportional `interpolate` expression mapping
+ * `proportionalSizeMinValue..proportionalSizeMaxValue` onto
+ * `proportionalSizeMinRadius..proportionalSizeMaxRadius`, or `null` when
+ * proportional sizing does not apply (see {@link proportionalSizeRange}).
+ *
+ * @param style - The layer style.
+ * @returns The `interpolate` expression, or `null`.
+ */
+export function proportionalRadiusExpression(
+  style: LayerStyle,
+): unknown[] | null {
+  const range = proportionalSizeRange(style);
+  if (!range) return null;
+  return [
+    "interpolate",
+    ["linear"],
+    ["to-number", ["get", range.property], range.minValue],
+    range.minValue,
+    range.minRadius,
+    range.maxValue,
+    range.maxRadius,
+  ];
+}
+
 /**
  * Builds the `circle-radius` paint value, honoring proportional (graduated)
  * symbol sizing. When {@link LayerStyle.proportionalSizeEnabled} is set with a
@@ -737,28 +801,9 @@ export function circleRadiusValue(style: LayerStyle): number | unknown[] {
 
 /** The layer-level circle radius before per-rule overrides. */
 function baseCircleRadiusValue(style: LayerStyle): number | unknown[] {
-  const constant = styleValue(style, "circleRadius");
-  if (!styleValue(style, "proportionalSizeEnabled")) return constant;
-  const property = styleValue(style, "proportionalSizeProperty").trim();
-  if (!property) return constant;
-  const minValue = styleValue(style, "proportionalSizeMinValue");
-  const maxValue = styleValue(style, "proportionalSizeMaxValue");
-  if (!(Number.isFinite(minValue) && Number.isFinite(maxValue))) return constant;
-  if (maxValue <= minValue) return constant;
-  const minRadius = styleValue(style, "proportionalSizeMinRadius");
-  const maxRadius = styleValue(style, "proportionalSizeMaxRadius");
-  if (!(Number.isFinite(minRadius) && Number.isFinite(maxRadius))) {
-    return constant;
-  }
-  return [
-    "interpolate",
-    ["linear"],
-    ["to-number", ["get", property], minValue],
-    minValue,
-    minRadius,
-    maxValue,
-    maxRadius,
-  ];
+  return (
+    proportionalRadiusExpression(style) ?? styleValue(style, "circleRadius")
+  );
 }
 
 /** Fill color value for a polygon layer (fallback: the layer fill color). */

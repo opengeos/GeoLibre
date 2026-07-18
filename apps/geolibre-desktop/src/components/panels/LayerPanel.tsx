@@ -58,6 +58,12 @@ import {
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { createAppAPI, usePluginRegistry } from "../../hooks/usePlugins";
 import { useDesktopSettingsStore } from "../../hooks/useDesktopSettings";
+import {
+  clearFeatureSelection,
+  exportSelectionAsLayer,
+  invertLayerSelection,
+  zoomToSelection,
+} from "../../lib/selection-actions";
 import { activeInterfaceProfile } from "../../lib/ui-profile";
 import {
   Button,
@@ -93,6 +99,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  FilePlus2,
   Folder,
   FolderMinus,
   FolderOpen,
@@ -100,6 +107,7 @@ import {
   GripVertical,
   Info,
   Layers,
+  Locate,
   Map as MapIcon,
   MoreHorizontal,
   MousePointerClick,
@@ -112,12 +120,16 @@ import {
   PenTool,
   RefreshCw,
   Save,
+  Shuffle,
+  SquareDashed,
+  SquareFunction,
   SquarePen,
   Table2,
   TableProperties,
   Timer,
   Trash2,
   Upload,
+  X,
   ZoomIn,
 } from "lucide-react";
 import { clamp } from "../../lib/clamp";
@@ -511,6 +523,17 @@ export function LayerPanel({
   const reorderLayerGroup = useAppStore((s) => s.reorderLayerGroup);
   const selectedLayerId = useAppStore((s) => s.selectedLayerId);
   const selectLayer = useAppStore((s) => s.selectLayer);
+  const selectedFeatureCount = useAppStore((s) => s.selectedFeatureIds.length);
+  // Select by Location needs a second layer to compare against (see EditMenu).
+  const hasTwoSelectableLayers = useAppStore(
+    (s) =>
+      s.layers.filter((layer) => (layer.geojson?.features?.length ?? 0) > 0)
+        .length >= 2,
+  );
+  const setSelectByExpressionOpen = useAppStore(
+    (s) => s.setSelectByExpressionOpen,
+  );
+  const setSelectByLocationOpen = useAppStore((s) => s.setSelectByLocationOpen);
   const identifyLayerId = useAppStore((s) => s.identifyLayerId);
   const setIdentifyLayer = useAppStore((s) => s.setIdentifyLayer);
   const basemapVisible = useAppStore((s) => s.basemapVisible);
@@ -2356,6 +2379,16 @@ export function LayerPanel({
             // Add Vector Layer geojson-mode) and DuckDB query layers.
             const canOpenAttributeTable =
               layer.type === "geojson" || isDuckDBQueryLayer(layer);
+            // The interactive selection dialogs (#1314) resolve selection ids
+            // against in-store features, like the highlight overlay does.
+            const canSelectFeatures =
+              (layer.geojson?.features?.length ?? 0) > 0;
+            // Selection actions act on the live selection, which always
+            // belongs to the active layer.
+            const holdsSelection =
+              canSelectFeatures &&
+              layer.id === selectedLayerId &&
+              selectedFeatureCount > 0;
             // Export writes the layer's GeoJSON features to disk; only
             // geojson-backed vector layers carry those features.
             const canExportLayer = layer.type === "geojson";
@@ -2757,6 +2790,63 @@ export function LayerPanel({
                           <TableProperties className="me-2 h-3.5 w-3.5" />
                           {t("layers.openAttributeTable")}
                         </DropdownMenuItem>
+                      )}
+                      {canSelectFeatures && (
+                        <>
+                          {/* Not selectLayer() + open: that would clear the
+                              live selection the dialogs' add/remove/intersect
+                              modes combine with, so the target travels via the
+                              open setter instead. */}
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              setSelectByExpressionOpen(true, layer.id)
+                            }
+                          >
+                            <SquareFunction className="me-2 h-3.5 w-3.5" />
+                            {t("toolbar.item.selectByExpressionEllipsis")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={!hasTwoSelectableLayers}
+                            onSelect={() =>
+                              setSelectByLocationOpen(true, layer.id)
+                            }
+                          >
+                            <Locate className="me-2 h-3.5 w-3.5" />
+                            {t("toolbar.item.selectByLocationEllipsis")}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                      {holdsSelection && (
+                        <>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              zoomToSelection(mapControllerRef.current)
+                            }
+                          >
+                            <SquareDashed className="me-2 h-3.5 w-3.5" />
+                            {t("toolbar.item.zoomToSelection")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={invertLayerSelection}>
+                            <Shuffle className="me-2 h-3.5 w-3.5" />
+                            {t("toolbar.item.invertSelection")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={clearFeatureSelection}>
+                            <X className="me-2 h-3.5 w-3.5" />
+                            {t("toolbar.item.clearSelection")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() =>
+                              exportSelectionAsLayer(
+                                t("selection.exportedLayerName", {
+                                  name: layer.name,
+                                }),
+                              )
+                            }
+                          >
+                            <FilePlus2 className="me-2 h-3.5 w-3.5" />
+                            {t("toolbar.item.exportSelection")}
+                          </DropdownMenuItem>
+                        </>
                       )}
                       {canBindTimeSlider && (
                         <DropdownMenuItem

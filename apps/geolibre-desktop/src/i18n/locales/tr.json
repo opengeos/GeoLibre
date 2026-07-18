@@ -2620,6 +2620,8 @@
     "moveLeft": "Sola taşı",
     "moveRight": "Sağa taşı",
     "deleteField": "Alanı sil",
+    "joinedColumnTitle": "Birleştirme tablosundan türetilen birleştirilmiş sütun. Bunun yerine tabloyu veya birleştirme tanımını düzenleyin.",
+    "virtualColumnTitle": "İfadeden hesaplanan sanal alan. Bunun yerine tanımını katmanın stil panelinde düzenleyin.",
     "deleteFieldConfirm": "Bu işlem, \"{{field}}\" alanını \"{{layer}}\" katmanındaki her öğeden kalıcı olarak kaldırır. Buna başvuran stil veya etiketler temizlenir. Bu işlem geri alınamaz.",
     "addFieldDescription": "\"{{layer}}\" katmanındaki her öğeye yeni bir alan ekleyin.",
     "fieldName": "Alan adı",
@@ -2650,7 +2652,8 @@
     "invalidExpression": "Geçersiz ifade.",
     "calcCouldNotApply": "Hesaplama bu katmana uygulanamadı.",
     "calcAppliedWithErrors": "Uygulandı, ancak {{evaluated}} öğeden {{errors}} tanesi hata verdi ve null olarak yazıldı.",
-    "exportFailed": "Seçili katman dışa aktarılamadı."
+    "exportFailed": "Seçili katman dışa aktarılamadı.",
+    "saveTitleFormErrors": "Kaydetmeden önce öznitelik formu ihlallerini düzeltin"
   },
   "style": {
     "panelLabel": "Katman stili",
@@ -2685,6 +2688,52 @@
       "maxZoom": "Maksimum yakınlaştırma",
       "minZoomTooltip": "Bu katmanın göründüğü yakınlaştırma düzeyi. Daha yüksek sayılar daha fazla yakınlaştırılmış demektir.",
       "maxZoomTooltip": "Bu katmanın kaybolduğu yakınlaştırma düzeyi. Daha yüksek sayılar daha fazla yakınlaştırılmış demektir."
+    },
+    "joins": {
+      "heading": "Birleştirmeler",
+      "empty": "Anahtar alanları eşleştirerek başka bir katmandan veya tablodan sütun ekleyin. Birleştirilen sütunlar tablo değiştiğinde güncellenir ve projeyle birlikte kaydedilir.",
+      "addJoin": "Birleştirme ekle",
+      "joinLayer": "Birleştirme katmanı",
+      "selectLayer": "Bir katman seçin…",
+      "joinField": "Birleştirme alanı",
+      "targetField": "Hedef alan",
+      "selectField": "Bir alan seçin…",
+      "fields": "Birleştirilecek alanlar",
+      "fieldCount_one": "{{count}} alan",
+      "fieldCount_other": "{{count}} alan",
+      "prefix": "Alan adı öneki",
+      "prefixPlaceholder": "örn. census_",
+      "add": "Ekle",
+      "cancel": "İptal",
+      "remove": "Birleştirmeyi kaldır",
+      "enabledTitle": "Bu birleştirmeyi uygula",
+      "missingLayer": "Birleştirme katmanı bulunamadı",
+      "noCandidates": "Birleştirilecek öznitelik tablosu olan başka katman yok",
+      "statsMatched": "{{total}} öğeden {{matched}} tanesi eşleşti",
+      "statsUnmatchedJoin_one": "Eşleşmeyen {{count}} tablo satırı",
+      "statsUnmatchedJoin_other": "Eşleşmeyen {{count}} tablo satırı"
+    },
+    "virtualFields": {
+      "heading": "Sanal alanlar",
+      "empty": "Veri her değiştiğinde yeniden hesaplanan, ifade tabanlı sütunlar ekleyin. Sanal alanlar projeyle birlikte kaydedilir ve alanların göründüğü her yerde görünür: öznitelik tablosu, stil, etiketler ve seçim.",
+      "addField": "Sanal alan ekle",
+      "name": "Alan adı",
+      "namePlaceholder": "örn. density",
+      "nameTaken": "Bu ada sahip bir sütun zaten var",
+      "nameConflict": "Uygulanmadı: ad mevcut bir sütunla çakışıyor",
+      "expression": "İfade",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Sanal alan ifadesi",
+      "openBuilder": "Oluşturucuyu aç",
+      "invalidExpression": "Geçersiz ifade",
+      "add": "Ekle",
+      "save": "Kaydet",
+      "cancel": "İptal",
+      "edit": "Sanal alanı düzenle",
+      "remove": "Sanal alanı kaldır",
+      "enabledTitle": "Bu sanal alanı uygula",
+      "evaluationErrors_one": "{{count}} öğenin değerlendirilmesi başarısız oldu (null hücre)",
+      "evaluationErrors_other": "{{count}} öğenin değerlendirilmesi başarısız oldu (null hücreler)"
     },
     "labels": {
       "heading": "Etiketler",
@@ -2727,7 +2776,23 @@
       "dedupeHint": "Aynı koordinatta yığılmış noktaları daraltır. Yerel nokta katmanlarında etiket alanını kullanır.",
       "expression": "İfade (isteğe bağlı)",
       "expressionHint": "Bir MapLibre ifadesi (JSON). Ayarlandığında alanı geçersiz kılar.",
-      "expressionInvalid": "Geçerli bir MapLibre ifadesi değil (bir JSON dizisi olmalıdır). Bu değer yok sayılır."
+      "expressionInvalid": "Geçerli bir MapLibre ifadesi değil (bir JSON dizisi olmalıdır). Bu değer yok sayılır.",
+      "dataDefined": {
+        "heading": "Veri tanımlı geçersiz kılmalar",
+        "size": "Boyut",
+        "color": "Renk",
+        "opacity": "Opaklık",
+        "visibility": "Görünürlük",
+        "priority": "Öncelik",
+        "sizeTarget": "Etiket boyutu ifadesi",
+        "colorTarget": "Etiket rengi ifadesi",
+        "opacityTarget": "Etiket opaklığı ifadesi",
+        "visibilityTarget": "Etiket görünürlüğü ifadesi",
+        "priorityTarget": "Etiket önceliği ifadesi",
+        "notSet": "Ayarlanmadı",
+        "clear": "İfadeyi temizle",
+        "hint": "Öğe başına MapLibre ifadeleri. Boyut, opaklık ve öncelik sayı üretir (öncelik değeri düşük etiketler önce yerleştirilir), renk bir renk, görünürlük doğru/yanlış üretir. Yinelenen etiket birleştirme etkinken yok sayılır. Opaklık ifadesi, etiketler için katman opaklığının yerine geçer."
+      }
     },
     "elevation3d": {
       "mode": "3B (Z değerleri)",
@@ -2800,9 +2865,10 @@
       "filterInvalid": "Geçersiz filtre — bir JSON dizisi ifadesi olmalıdır. Bu kural düzeltilene kadar atlanır.",
       "elseRuleColor": "Diğer kural rengi",
       "elseRuleColorPick": "Diğer kural rengini ekrandan seç",
-      "elseRuleEnabled": "Aksi halde kuralını etkinleştir",
+      "elseRuleEnabled": "Aksi halde kuralını etkinleştir (kapalıyken hiçbir kurala uymayan öğeler gizlenir)",
       "elseAllOtherFeatures": "Diğer (tüm diğer öğeler)",
       "applyHint": "Kural tabanlı işlemeyi etkinleştirmek için Uygula'ya tıklayın.",
+      "rulesApplyLive": "Kural değişiklikleri haritaya anında uygulanır — ayrı bir uygulama adımı gerekmez.",
       "proportionalSize": "Orantılı boyut",
       "sizeByValue": "Değere göre boyutlandır",
       "sizeField": "Boyut alanı",
@@ -2875,7 +2941,9 @@
       "schemeFirstValues": "İlk değerler",
       "errorChooseAttribute": "Bu stil modu için bir öznitelik seçin.",
       "errorGraduatedStops": "Kademeli stil en az iki sayısal durak gerektirir.",
-      "errorCategorizedStops": "Kategorize stil en az bir kategori gerektirir."
+      "errorCategorizedStops": "Kategorize stil en az bir kategori gerektirir.",
+      "invertedFill": "Ters dolgu",
+      "invertedFillHint": "Objelerin dışını doldur"
     },
     "selectLayerHint": "Stilini düzenlemek için bir katman seçin.",
     "layerOrderDefault": "Katman sırası (varsayılan)",
@@ -2908,6 +2976,73 @@
       "notArray": "{{label}} bir JSON dizi ifadesi olmalıdır.",
       "notOperator": "{{label}} bir operatörle başlamalıdır, örn. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} geçerli bir JSON değil: {{message}}"
+    },
+    "decorations": {
+      "heading": "Çizgi süslemesi",
+      "typeNone": "Yok",
+      "typeArrow": "Oklar",
+      "typeTriangle": "Üçgenler",
+      "typeCircle": "Daireler",
+      "typeSquare": "Kareler",
+      "color": "Süsleme rengi",
+      "size": "Sembol boyutu (px)",
+      "spacing": "Aralık (px)"
+    },
+    "generator": {
+      "heading": "Geometri üreteci",
+      "type": "Türetilmiş geometri",
+      "typeNone": "Yok",
+      "typeCentroid": "Merkezler",
+      "typeBoundingBox": "Sınırlayıcı kutular",
+      "typeConvexHull": "Dışbükey zarflar",
+      "typeBuffer": "Tamponlar",
+      "bufferDistance": "Tampon mesafesi (m)",
+      "fillColor": "Dolgu rengi",
+      "strokeColor": "Kontur rengi",
+      "strokeWidth": "Kontur genişliği (px)",
+      "opacity": "Dolgu saydamlığı",
+      "circleRadius": "Nokta yarıçapı (px)"
+    },
+    "attributeForm": {
+      "heading": "Öznitelik Formu",
+      "empty": "Yapılandırılmış alan yok. Bir alana düzenleme aracı, kısıtlama veya görünürlük kuralı atayın.",
+      "configureField": "Alanı yapılandır",
+      "field": "Alan",
+      "selectField": "Alan seçin…",
+      "widgetLabel": "Düzenleme aracı",
+      "widget": {
+        "text": "Metin",
+        "number": "Sayı",
+        "range": "Aralık",
+        "checkbox": "Onay kutusu",
+        "date": "Tarih",
+        "valueMap": "Değer haritası"
+      },
+      "alias": "Takma ad",
+      "required": "Zorunlu",
+      "requiredTag": "zorunlu",
+      "constraintTag": "kısıtlama",
+      "visibilityTag": "görünürlük",
+      "valueMap": "Değer haritası girdileri",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Her satıra bir girdi: değer veya değer=Etiket.",
+      "min": "Min",
+      "max": "Maks",
+      "step": "Adım",
+      "constraintExpression": "Kısıtlama ifadesi",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Kısıtlama açıklaması",
+      "constraintDescriptionPlaceholder": "Kısıtlama sağlanmadığında gösterilir",
+      "visibilityExpression": "Görünürlük ifadesi",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Geçersiz ifade",
+      "openBuilder": "İfade oluşturucuyu aç",
+      "edit": "Alan yapılandırmasını düzenle",
+      "remove": "Alan yapılandırmasını kaldır",
+      "cancel": "İptal",
+      "save": "Kaydet",
+      "noFields": "Katmanda yapılandırılacak öznitelik alanı yok.",
+      "minMaxInvalid": "Min, Maks değerinden küçük veya ona eşit olmalıdır."
     }
   },
   "layers": {
@@ -3127,5 +3262,16 @@
     "cogConvertFailed": "\"{{name}}\" bir Bulut Optimizeli GeoTIFF'e dönüştürülemedi. gdal_translate veya rio cogeo ile dönüştürmeyi deneyin, ardından sonucu yükleyin.",
     "rasterDownloadFailed": "\"{{name}}\" indirilemedi. Sunucu yavaş, erişilemez olabilir, çapraz kaynak isteklerini engelliyor olabilir, ya da dosya bellekte tutulamayacak kadar büyük olabilir. URL'yi kontrol edip tekrar deneyin.",
     "rasterNotGeotiff": "\"{{name}}\" bir GeoTIFF döndürmedi. Sunucu, bunun yerine bir hata veya oturum açma sayfası göndermiş olabilir. URL'yi kontrol edip tekrar deneyin."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Bir değer gerekli",
+      "number": "Bir sayı olmalı",
+      "range": "{{min}} ile {{max}} arasında olmalı",
+      "rangeMin": "En az {{min}} olmalı",
+      "rangeMax": "En fazla {{max}} olmalı",
+      "valueMap": "Değer izin verilen listede değil",
+      "constraint": "Kısıtlama sağlanmadı"
+    }
   }
 }

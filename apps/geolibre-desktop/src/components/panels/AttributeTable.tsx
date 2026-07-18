@@ -1,5 +1,13 @@
 import { useTranslation } from "react-i18next";
-import { isDuckDBQueryLayer, useAppStore } from "@geolibre/core";
+import {
+  coerceAttributeFormValue,
+  isDuckDBQueryLayer,
+  useAppStore,
+  validateAttributeFormValues,
+  type AttributeFormConfig,
+  type AttributeFormFieldConfig,
+  type AttributeFormFieldError,
+} from "@geolibre/core";
 import {
   getDuckDBLayerRows,
   getGeometryEditTargetLayerId,
@@ -56,6 +64,7 @@ import {
   RotateCcw,
   Save,
   Sigma,
+  SquareFunction,
   TableProperties,
   Telescope,
   Trash2,
@@ -92,6 +101,7 @@ import {
   fieldReference,
   type CalcOutputType,
 } from "../../lib/attribute-expression";
+import { attributeFormErrorMessage } from "../../lib/attribute-form-messages";
 import { computeRowSelection } from "../../lib/attribute-selection";
 import { RESERVED_PROPERTY_KEYS } from "../../lib/field-collection";
 import {
@@ -214,6 +224,7 @@ function hasDraftEdits(drafts: AttributeDrafts): boolean {
 function applyDraftsToFeatures(
   features: Feature[],
   drafts: AttributeDrafts,
+  formFields?: Map<string, AttributeFormFieldConfig>,
 ): Feature[] {
   return features.map((feature, index) => {
     const featureId = String(feature.id ?? index);
@@ -226,11 +237,72 @@ function applyDraftsToFeatures(
       // Skip drafts that are invalid JSON for an object-typed cell so we never
       // persist or export a type-corrupted value; the existing value is kept.
       if (isInvalidObjectDraft(draft, previousValue)) continue;
-      properties[column] = parseAttributeDraft(draft, previousValue);
+      // A column with an Attribute Form widget coerces by widget type (a
+      // number widget stores a number even into a previously-null cell);
+      // unconfigured columns keep the previous-value type inference.
+      const config = formFields?.get(column);
+      properties[column] = config
+        ? coerceAttributeFormValue(config, draft)
+        : parseAttributeDraft(draft, previousValue);
     }
 
     return { ...feature, properties };
   });
+}
+
+/**
+ * Validate drafted rows against the layer's Attribute Form config. Only edits
+ * that introduce (or keep, on an edited field) a violation are reported —
+ * pre-existing violations on untouched fields never block an unrelated edit.
+ * Iterates the drafts (few rows), not the whole table; `featureById` is the
+ * memoized feature index so no per-keystroke full scan happens here. Returns
+ * featureId → field → error for every blocking violation.
+ */
+function computeFormDraftErrors(
+  form: AttributeFormConfig | undefined,
+  drafts: AttributeDrafts,
+  featureById: Map<string, Feature> | null,
+): Record<string, Record<string, AttributeFormFieldError>> {
+  const result: Record<string, Record<string, AttributeFormFieldError>> = {};
+  if (!form?.fields.length || !featureById || !hasDraftEdits(drafts)) {
+    return result;
+  }
+
+  const formFields = new Map(form.fields.map((entry) => [entry.field, entry]));
+
+  for (const [featureId, rowDrafts] of Object.entries(drafts)) {
+    if (Object.keys(rowDrafts).length === 0) continue;
+    const feature = featureById.get(featureId);
+    if (!feature) continue;
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+
+    const candidate = { ...properties };
+    for (const [column, draft] of Object.entries(rowDrafts)) {
+      const previousValue = properties[column];
+      if (isInvalidObjectDraft(draft, previousValue)) continue;
+      const config = formFields.get(column);
+      candidate[column] = config
+        ? coerceAttributeFormValue(config, draft)
+        : parseAttributeDraft(draft, previousValue);
+    }
+
+    const validation = validateAttributeFormValues(form, candidate, {
+      feature,
+    });
+    if (validation.ok) continue;
+
+    const baseline = validateAttributeFormValues(form, properties, {
+      feature,
+    });
+    const rowErrors: Record<string, AttributeFormFieldError> = {};
+    for (const [field, error] of Object.entries(validation.errors)) {
+      if (rowDrafts[field] !== undefined || !baseline.errors[field]) {
+        rowErrors[field] = error;
+      }
+    }
+    if (Object.keys(rowErrors).length > 0) result[featureId] = rowErrors;
+  }
+  return result;
 }
 
 function duckDBRowsToAttributeRows(
@@ -357,6 +429,31 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
   const layer = layers.find((l) => l.id === selectedLayerId);
   const hasLayer = Boolean(layer);
+  // Columns materialized by persistent joins are derived data: every save
+  // re-derives them from the join table, so an edit, rename, or delete here
+  // would be silently undone. Render them read-only instead.
+  const joinDerivedColumns = useMemo(
+    () =>
+      new Set(
+        (layer?.joins ?? []).flatMap((join) => join.addedFields ?? []),
+      ),
+    [layer?.joins],
+  );
+  // Same for columns computed by virtual fields (expression-backed, re-derived
+  // on every data change): read-only here, managed in Layer properties.
+  const virtualFieldColumns = useMemo(
+    () =>
+      new Set(
+        (layer?.virtualFields ?? []).flatMap((field) =>
+          field.addedField ? [field.addedField] : [],
+        ),
+      ),
+    [layer?.virtualFields],
+  );
+  const derivedColumns = useMemo(
+    () => new Set([...joinDerivedColumns, ...virtualFieldColumns]),
+    [joinDerivedColumns, virtualFieldColumns],
+  );
   const features = layer?.geojson?.features ?? [];
   const isDuckDBLayer = isDuckDBQueryLayer(layer);
   const duckdbRows = layer && isDuckDBLayer ? getDuckDBLayerRows(layer.id) : [];
@@ -440,6 +537,34 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
       isInvalidObjectDraft(draft, row.properties[column]),
     );
   });
+  // Attribute Form designer config: per-column edit widgets plus constraint
+  // validation of drafted rows. DuckDB layers keep the plain text editor —
+  // the designer is only offered for store-backed geojson layers.
+  const attributeForm = isDuckDBLayer ? undefined : layer?.attributeForm;
+  const formFields = useMemo(
+    () =>
+      new Map(
+        (attributeForm?.fields ?? []).map((entry) => [entry.field, entry]),
+      ),
+    [attributeForm],
+  );
+  // Feature index for validation, rebuilt only when the layer data (not a
+  // draft keystroke) changes; null when no form config is active.
+  const formFeatureIndex = useMemo(() => {
+    if (!attributeForm?.fields.length) return null;
+    const geojsonFeatures = layer?.geojson?.features ?? [];
+    return new Map(
+      geojsonFeatures.map((feature, index): [string, Feature] => [
+        String(feature.id ?? index),
+        feature,
+      ]),
+    );
+  }, [attributeForm, layer?.geojson]);
+  const formDraftErrors = useMemo(
+    () => computeFormDraftErrors(attributeForm, drafts, formFeatureIndex),
+    [attributeForm, drafts, formFeatureIndex],
+  );
+  const hasFormErrors = Object.keys(formDraftErrors).length > 0;
 
   useEffect(() => {
     setIsEditing(false);
@@ -753,6 +878,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     );
   };
 
+  // Localize an Attribute Form validation error for a cell tooltip.
+  const formErrorText = (error: AttributeFormFieldError): string =>
+    attributeFormErrorMessage(t, error);
+
   const updateCellDraft = (
     featureId: string,
     column: string,
@@ -796,7 +925,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
   };
 
   const saveDrafts = () => {
-    if (!layer || !hasEdits || hasInvalidDrafts) return;
+    if (!layer || !hasEdits || hasInvalidDrafts || hasFormErrors) return;
 
     if (isDuckDBLayer) {
       updateDuckDBLayerRows(
@@ -812,7 +941,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     const geojson = {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
     };
 
     updateLayer(layer.id, { geojson });
@@ -825,7 +954,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
 
     return {
       ...layer.geojson,
-      features: applyDraftsToFeatures(layer.geojson.features, drafts),
+      features: applyDraftsToFeatures(layer.geojson.features, drafts, formFields),
     };
   };
 
@@ -976,10 +1105,17 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
     setAddingColumn(false);
   };
 
+  // The Field Calculator must not target a derived column (joined or virtual)
+  // either: the calculated value would be overwritten by the re-derivation in
+  // the same store update.
+  const calculatorTargetColumns = discoveredColumns.filter(
+    (col) => !derivedColumns.has(col),
+  );
+
   const openCalculator = () => {
-    const hasColumns = discoveredColumns.length > 0;
+    const hasColumns = calculatorTargetColumns.length > 0;
     setCalcMode(hasColumns ? "update" : "create");
-    setCalcTargetField(hasColumns ? discoveredColumns[0] : "");
+    setCalcTargetField(hasColumns ? calculatorTargetColumns[0] : "");
     setCalcNewName("");
     setCalcOutputType("auto");
     setCalcExpression("");
@@ -1256,8 +1392,28 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           type="button"
           className="flex h-full min-w-0 flex-1 items-center gap-1 pe-1 text-start font-medium"
           onClick={() => toggleSort(col)}
+          title={
+            virtualFieldColumns.has(col)
+              ? t("attributeTable.virtualColumnTitle")
+              : undefined
+          }
         >
-          <span className="truncate">{col}</span>
+          {/* Virtual (expression-computed) columns get a function glyph and
+              italics so their read-only, derived nature is visible at a
+              glance, as in QGIS. */}
+          {virtualFieldColumns.has(col) && (
+            <SquareFunction
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-hidden="true"
+            />
+          )}
+          <span
+            className={
+              virtualFieldColumns.has(col) ? "truncate italic" : "truncate"
+            }
+          >
+            {col}
+          </span>
           {renderSortIcon(col)}
         </button>
         <DropdownMenu>
@@ -1274,7 +1430,10 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => beginColumnRename(col)}>
+            <DropdownMenuItem
+              disabled={derivedColumns.has(col)}
+              onSelect={() => beginColumnRename(col)}
+            >
               <Pencil className="me-2 h-3.5 w-3.5" />
               {t("attributeTable.renameField")}
             </DropdownMenuItem>
@@ -1299,6 +1458,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
+              disabled={derivedColumns.has(col)}
               onSelect={() => setColumnPendingDelete(col)}
             >
               <Trash2 className="me-2 h-3.5 w-3.5" />
@@ -1410,12 +1570,14 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
           title={
             hasInvalidDrafts
               ? t("attributeTable.saveTitleInvalid")
-              : isDuckDBLayer
-                ? t("attributeTable.saveTitleDuckdb")
-                : t("attributeTable.saveEdits")
+              : hasFormErrors
+                ? t("attributeTable.saveTitleFormErrors")
+                : isDuckDBLayer
+                  ? t("attributeTable.saveTitleDuckdb")
+                  : t("attributeTable.saveEdits")
           }
           aria-label={t("attributeTable.saveEdits")}
-          disabled={!isEditing || !hasEdits || hasInvalidDrafts}
+          disabled={!isEditing || !hasEdits || hasInvalidDrafts || hasFormErrors}
           onClick={saveDrafts}
         >
           <Save className="h-3.5 w-3.5" />
@@ -1756,44 +1918,111 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                         const value = properties[col];
                         const draft = drafts[featureId]?.[col];
                         const changed = draft !== undefined;
+                        const formError = formDraftErrors[featureId]?.[col];
                         const invalid =
-                          draft !== undefined &&
-                          isInvalidObjectDraft(draft, value);
+                          (draft !== undefined &&
+                            isInvalidObjectDraft(draft, value)) ||
+                          formError !== undefined;
                         const inputClassName = invalid
                           ? "h-7 min-w-0 border-destructive bg-destructive/10 px-2 text-xs"
                           : changed
                             ? "h-7 min-w-0 border-primary/60 bg-primary/10 px-2 text-xs"
                             : "h-7 min-w-0 px-2 text-xs";
+                        const config = formFields.get(col);
+                        const current = draft ?? formatAttributeValue(value);
+                        const invalidTitle = invalid
+                          ? formError
+                            ? formErrorText(formError)
+                            : t("attributeTable.invalidJson")
+                          : undefined;
+                        const cellAria = t("attributeTable.editCellAria", {
+                          col,
+                          featureId,
+                        });
+                        const commitDraft = (next: string) =>
+                          updateCellDraft(featureId, col, next, value);
                         return (
                           <TableCell
                             key={col}
                             data-state={changed ? "edited" : undefined}
                             className="data-[state=edited]:bg-primary/10 data-[state=edited]:shadow-[inset_3px_0_0_hsl(var(--primary))]"
+                            title={
+                              virtualFieldColumns.has(col)
+                                ? t("attributeTable.virtualColumnTitle")
+                                : joinDerivedColumns.has(col)
+                                  ? t("attributeTable.joinedColumnTitle")
+                                  : undefined
+                            }
                           >
-                            {isEditing ? (
-                              <Input
-                                className={inputClassName}
-                                aria-invalid={invalid || undefined}
-                                title={
-                                  invalid
-                                    ? t("attributeTable.invalidJson")
-                                    : undefined
-                                }
-                                aria-label={t("attributeTable.editCellAria", {
-                                  col,
-                                  featureId,
-                                })}
-                                value={draft ?? formatAttributeValue(value)}
-                                onClick={(event) => event.stopPropagation()}
-                                onChange={(event) =>
-                                  updateCellDraft(
-                                    featureId,
-                                    col,
-                                    event.target.value,
-                                    value,
-                                  )
-                                }
-                              />
+                            {isEditing && !derivedColumns.has(col) ? (
+                              config?.widget === "valueMap" &&
+                              config.valueMap?.length ? (
+                                <Select
+                                  className={inputClassName}
+                                  aria-invalid={invalid || undefined}
+                                  title={invalidTitle}
+                                  aria-label={cellAria}
+                                  value={current}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    commitDraft(event.target.value)
+                                  }
+                                >
+                                  <option value="">—</option>
+                                  {/* Keep an out-of-map current value listed so
+                                      the select shows it instead of silently
+                                      snapping to the first entry. */}
+                                  {current !== "" &&
+                                    !config.valueMap.some(
+                                      (entry) => entry.value === current,
+                                    ) && (
+                                      <option value={current}>{current}</option>
+                                    )}
+                                  {config.valueMap.map((entry) => (
+                                    <option key={entry.value} value={entry.value}>
+                                      {entry.label ?? entry.value}
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : config?.widget === "checkbox" ? (
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4"
+                                  aria-invalid={invalid || undefined}
+                                  title={invalidTitle}
+                                  aria-label={cellAria}
+                                  checked={current === "true"}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    commitDraft(
+                                      event.target.checked ? "true" : "false",
+                                    )
+                                  }
+                                />
+                              ) : (
+                                <Input
+                                  className={inputClassName}
+                                  type={
+                                    config?.widget === "number" ||
+                                    config?.widget === "range"
+                                      ? "number"
+                                      : config?.widget === "date"
+                                        ? "date"
+                                        : "text"
+                                  }
+                                  min={config?.min}
+                                  max={config?.max}
+                                  step={config?.step}
+                                  aria-invalid={invalid || undefined}
+                                  title={invalidTitle}
+                                  aria-label={cellAria}
+                                  value={current}
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) =>
+                                    commitDraft(event.target.value)
+                                  }
+                                />
+                              )
                             ) : (
                               formatAttributeValue(value)
                             )}
@@ -2007,7 +2236,7 @@ export function AttributeTable({ mapControllerRef }: AttributeTableProps) {
                     value={calcTargetField}
                     onChange={(event) => setCalcTargetField(event.target.value)}
                   >
-                    {discoveredColumns.map((col) => (
+                    {calculatorTargetColumns.map((col) => (
                       <option key={col} value={col}>
                         {col}
                       </option>

@@ -3,9 +3,12 @@ import {
   type DiagramField,
   type DiagramSizeMode,
   type DiagramType,
+  type ExpressionVariable,
   type FillPattern,
+  type GeometryGeneratorType,
   type LabelStyle,
   type LayerType,
+  type LineDecoration,
   type MarkerShape,
   type PointRenderer,
   type StrokeWidthUnit,
@@ -20,8 +23,10 @@ import {
   interpolateRampColors,
   isStyleLibraryTargetLayer,
   parseJsonExpression,
+  removeTrailingJsonCommas,
   styleValue,
   useAppStore,
+  validateMapExpression,
 } from "@geolibre/core";
 import {
   Button,
@@ -42,10 +47,14 @@ import {
   SKETCHES_SOURCE_KIND,
   countAtlasDroppedDiagrams,
 } from "@geolibre/plugins";
-import type { MapController } from "@geolibre/map";
+import { type MapController } from "@geolibre/map";
 import type { ParseKeys, TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { AttributeFormSection } from "./AttributeFormSection";
+import { LayerJoinsSection } from "./LayerJoinsSection";
+import { VirtualFieldsSection } from "./VirtualFieldsSection";
 import { RasterSymbologySection } from "./RasterSymbologySection";
+import { ExpressionBuilderDialog } from "../expressions/ExpressionBuilderDialog";
 import {
   ChevronDown,
   ChevronUp,
@@ -56,6 +65,7 @@ import {
   PanelRightOpen,
   Plus,
   SlidersHorizontal,
+  SquareFunction,
   Trash2,
 } from "lucide-react";
 import {
@@ -69,6 +79,74 @@ import {
 } from "react";
 import { getIsMobileViewport } from "../../hooks/useIsMobileViewport";
 import { clamp } from "../../lib/clamp";
+import {
+  getAttributePropertyNames,
+  standardExpressionVariables,
+} from "../../lib/expression-inputs";
+
+/**
+ * Data-defined label overrides (GH #1320): one row per {@link LabelStyle}
+ * expression field, with the Expression Builder context enforcing each
+ * destination's result type (size/opacity/priority are numbers, color a
+ * color, visibility a boolean filter).
+ */
+const LABEL_OVERRIDE_PROPERTIES = [
+  {
+    key: "size",
+    field: "sizeExpression",
+    context: "number",
+    expectedType: "number",
+  },
+  {
+    key: "color",
+    field: "colorExpression",
+    context: "color",
+    expectedType: "color",
+  },
+  {
+    key: "opacity",
+    field: "opacityExpression",
+    context: "number",
+    expectedType: "number",
+  },
+  {
+    key: "visibility",
+    field: "visibilityExpression",
+    context: "filter",
+    expectedType: "boolean",
+  },
+  {
+    key: "priority",
+    field: "priorityExpression",
+    context: "number",
+    expectedType: "number",
+  },
+] as const;
+type LabelOverrideProperty = (typeof LABEL_OVERRIDE_PROPERTIES)[number];
+
+// Override validity is checked on every panel render, and compiling through
+// the style spec is far more expensive than a lookup, so results are memoized
+// by expected type + source (module scope: this section renders below the
+// component's early returns, where a useMemo would violate the rules of
+// hooks). Bounded so a pathological stream of distinct expressions cannot
+// grow it without limit.
+const labelOverrideValidityCache = new Map<string, boolean>();
+const LABEL_OVERRIDE_VALIDITY_CACHE_MAX = 256;
+
+function labelOverrideInvalid(
+  value: string,
+  expectedType: "number" | "color" | "boolean",
+): boolean {
+  const key = `${expectedType}:${value}`;
+  const cached = labelOverrideValidityCache.get(key);
+  if (cached !== undefined) return cached;
+  const invalid = !validateMapExpression(value, { expectedType }).ok;
+  if (labelOverrideValidityCache.size >= LABEL_OVERRIDE_VALIDITY_CACHE_MAX) {
+    labelOverrideValidityCache.clear();
+  }
+  labelOverrideValidityCache.set(key, invalid);
+  return invalid;
+}
 
 interface StylePanelProps {
   mapControllerRef: RefObject<MapController | null>;
@@ -436,61 +514,6 @@ function RuleNumberInput({
         }}
       />
     </label>
-  );
-}
-
-function getMetadataFieldNames(metadata: Record<string, unknown>): string[] {
-  const fieldValues = [
-    metadata.fields,
-    metadata.columns,
-    metadata.properties,
-    metadata.attributeFields,
-  ];
-  const names = new Set<string>();
-
-  for (const value of fieldValues) {
-    if (!Array.isArray(value)) continue;
-    for (const field of value) {
-      if (typeof field === "string") {
-        names.add(field);
-        continue;
-      }
-      if (
-        field &&
-        typeof field === "object" &&
-        "name" in field &&
-        typeof field.name === "string"
-      ) {
-        names.add(field.name);
-      }
-    }
-  }
-
-  return Array.from(names);
-}
-
-function getAttributePropertyNames(layer: {
-  geojson?: {
-    features?: Array<{
-      properties?: Record<string, unknown> | null;
-    }>;
-  };
-  metadata: Record<string, unknown>;
-}): string[] {
-  const names = new Set<string>();
-
-  for (const feature of layer.geojson?.features ?? []) {
-    for (const key of Object.keys(feature.properties ?? {})) {
-      names.add(key);
-    }
-  }
-
-  for (const key of getMetadataFieldNames(layer.metadata)) {
-    names.add(key);
-  }
-
-  return Array.from(names).sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }),
   );
 }
 
@@ -885,43 +908,6 @@ function validateExpressionJson(
   }
 }
 
-function removeTrailingJsonCommas(value: string): string {
-  let result = "";
-  let inString = false;
-  let escaped = false;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-
-    if (inString) {
-      result += char;
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      result += char;
-      continue;
-    }
-
-    if (char === ",") {
-      const nextSignificant = value.slice(index + 1).match(/\S/)?.[0];
-      if (nextSignificant === "]" || nextSignificant === "}") continue;
-    }
-
-    result += char;
-  }
-
-  return result;
-}
-
 // Shared shell classes for every expanded StylePanel return branch. On phones
 // (max-md) it overlays the map as a bottom sheet instead of squeezing it.
 const STYLE_PANEL_ASIDE_CLASS =
@@ -1209,6 +1195,7 @@ export function StylePanel({
   const setStyleManagerOpen = useAppStore((s) => s.setStyleManagerOpen);
   const updateLayer = useAppStore((s) => s.updateLayer);
   const moveLayer = useAppStore((s) => s.moveLayer);
+  const projectName = useAppStore((s) => s.projectName);
   const [internalCollapsed, setInternalCollapsed] = useState(getIsMobileViewport);
   // In the shared right-sidebar mode the parent owns collapse (controlled);
   // otherwise the panel manages it locally. `setIsCollapsed` routes to whichever
@@ -1288,6 +1275,26 @@ export function StylePanel({
     useState(DEFAULT_LAYER_STYLE.extrusionAdvancedStyleEnabled);
   const [vectorStyleError, setVectorStyleError] = useState<string | null>(null);
   const [extrusionError, setExtrusionError] = useState<string | null>(null);
+  // Which expression surface the shared Expression Builder is editing; null
+  // when the builder is closed. Targets carry the owning layer id so an edit
+  // can never be applied to a different layer than the one it was opened for
+  // (GH #1306).
+  const [expressionBuilderTarget, setExpressionBuilderTarget] = useState<
+    | { kind: "rule"; ruleId: string; index: number; layerId: string }
+    | { kind: "style"; layerId: string }
+    | { kind: "label"; layerId: string }
+    | {
+        kind: "labelOverride";
+        property: LabelOverrideProperty;
+        layerId: string;
+      }
+    | null
+  >(null);
+  // Close the builder when the selected layer changes: its fields, sample
+  // features, and target expression all belong to the previous layer.
+  useEffect(() => {
+    setExpressionBuilderTarget(null);
+  }, [selectedLayerId]);
 
   const layer = layers.find((l) => l.id === selectedLayerId);
 
@@ -1412,6 +1419,43 @@ export function StylePanel({
         : { hasPoint: true, hasLine: true, hasPolygon: true },
     [layer],
   );
+  // Expression Builder inputs, memoized for stable identities: the dialog
+  // memoizes its validation/preview/field-type work off these props, so fresh
+  // arrays on every panel render would defeat that memoization while the
+  // dialog is open (and, combined with the diagnostics console interceptor,
+  // could re-render in a loop). Kept before the early returns below so the
+  // hook order stays stable.
+  const builderFeatures = useMemo(
+    () => layer?.geojson?.features ?? [],
+    [layer],
+  );
+  const builderFieldNames = useMemo(
+    () => (layer ? getAttributePropertyNames(layer) : []),
+    [layer],
+  );
+  // Zoom and variables snapshot the camera via getState() when the builder
+  // opens instead of subscribing: the dialog is modal (the map cannot move
+  // while it is open), and mapView subscriptions would re-render this whole
+  // panel on every map move even with the builder closed.
+  const { zoom: builderZoom, variables: builderVariables } = useMemo<{
+    zoom: number;
+    variables: ExpressionVariable[];
+  }>(() => {
+    const { zoom, center } = useAppStore.getState().mapView;
+    return {
+      zoom,
+      variables: standardExpressionVariables({
+        projectName,
+        layerName: layer?.name ?? "",
+        featureCount: builderFeatures.length,
+        zoom,
+        centerLat: center[1],
+      }),
+    };
+    // expressionBuilderTarget is an intentional dep: it re-snapshots the
+    // camera each time the builder opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectName, layer, builderFeatures, expressionBuilderTarget]);
   // Diagram-loss notices: whether the feature cap truncates the drawable
   // dataset (derived from the real scan — features without an anchor or a
   // positive value don't consume the cap, so the raw count alone would
@@ -2073,21 +2117,104 @@ export function StylePanel({
     }
     setVectorRules([...currentRules, createVectorRule(true, color)]);
   };
+  const setElseRuleEnabled = (enabled: boolean) => {
+    if (elseRule) {
+      updateVectorRule(elseRule.id, { enabled: enabled ? undefined : false });
+      return;
+    }
+    // No else record yet (its absence means enabled): unchecking materializes
+    // a disabled one, which is what hides features matching no rule.
+    if (!enabled) {
+      setVectorRules([
+        ...currentRules,
+        { ...createVectorRule(true, style.fillColor), enabled: false },
+      ]);
+    }
+  };
+
+  // --- Shared Expression Builder (GH #1306) ---
+  // builderFeatures / builderFieldNames / builderVariables are memoized above
+  // the early returns so the dialog's props keep stable identities.
+  const builderRule =
+    expressionBuilderTarget?.kind === "rule"
+      ? currentRules.find((rule) => rule.id === expressionBuilderTarget.ruleId)
+      : undefined;
+  const builderInitialExpression =
+    expressionBuilderTarget?.kind === "rule"
+      ? (builderRule?.filter ?? "")
+      : expressionBuilderTarget?.kind === "style"
+        ? draftVectorStyleExpression
+        : expressionBuilderTarget?.kind === "labelOverride"
+          ? labels[expressionBuilderTarget.property.field] || ""
+          : labels.expression;
+  const builderTargetLabel =
+    expressionBuilderTarget?.kind === "rule"
+      ? t("style.symbology.ruleFilter", { index: expressionBuilderTarget.index })
+      : expressionBuilderTarget?.kind === "style"
+        ? t("style.symbology.colorExpression")
+        : expressionBuilderTarget?.kind === "labelOverride"
+          ? t(
+              `style.labels.dataDefined.${expressionBuilderTarget.property.key}Target`,
+            )
+          : t("style.labels.expression");
+  const applyBuilderExpression = (expression: string) => {
+    if (!expressionBuilderTarget) return;
+    // Never write through to a different layer than the builder was opened
+    // for (the selection-change effect closes the dialog, this is the guard
+    // against applying across a race).
+    if (expressionBuilderTarget.layerId !== layer.id) return;
+    if (expressionBuilderTarget.kind === "rule") {
+      updateVectorRule(expressionBuilderTarget.ruleId, { filter: expression });
+    } else if (expressionBuilderTarget.kind === "style") {
+      setDraftVectorStyleExpression(expression);
+      setVectorStyleError(null);
+    } else if (expressionBuilderTarget.kind === "labelOverride") {
+      updateLabels({
+        [expressionBuilderTarget.property.field]: expression,
+      } as Partial<LabelStyle>);
+    } else {
+      updateLabels({ expression });
+    }
+  };
+  // Only mounted while open: the dialog memoizes validation/preview work off
+  // props that this panel recreates each render, so keeping it mounted would
+  // rescan the layer's features on every unrelated panel re-render.
+  const expressionBuilderDialog = expressionBuilderTarget ? (
+    <ExpressionBuilderDialog
+      open
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setExpressionBuilderTarget(null);
+      }}
+      targetLabel={builderTargetLabel}
+      context={
+        expressionBuilderTarget.kind === "rule"
+          ? "filter"
+          : expressionBuilderTarget.kind === "style"
+            ? "color"
+            : expressionBuilderTarget.kind === "labelOverride"
+              ? expressionBuilderTarget.property.context
+              : "value"
+      }
+      initialExpression={builderInitialExpression}
+      features={builderFeatures}
+      fieldNames={builderFieldNames}
+      zoom={builderZoom}
+      variables={builderVariables}
+      onApply={applyBuilderExpression}
+    />
+  ) : null;
 
   // --- Geometry-gated sections (proportional size, fill pattern, markers) ---
   // geometryFlags is memoized above the early returns.
   const showProportionalControls =
     hasVectorPaintControls &&
     pointRenderer !== "heatmap" &&
-    // A marker symbol layer uses a baked icon (icon-size 1), so proportional
-    // circle-radius sizing would not apply; hide it for points to avoid a silent
-    // no-op. The marker gate stays inside the point branch so that proportional
-    // line-width controls remain available on layers that carry lines (markers
-    // never affect line rendering, even if markerEnabled is set on a mixed
-    // point+line layer via a hand-edited project file).
-    ((geometryFlags.hasPoint &&
-      pointRenderer === "single" &&
-      !styleValue(style, "markerEnabled")) ||
+    // Proportional sizing drives circle-radius, marker icon-size (the
+    // interpolate scales the baked sprite, see markerIconSizeValue in
+    // @geolibre/map), and line-width, so it applies to any single-renderer
+    // point layer (with or without a marker icon) and to layers that carry
+    // lines.
+    ((geometryFlags.hasPoint && pointRenderer === "single") ||
       geometryFlags.hasLine);
   const showFillPatternControls =
     hasVectorPaintControls && !extrusionEnabled && geometryFlags.hasPolygon;
@@ -2095,6 +2222,26 @@ export function StylePanel({
     hasVectorPaintControls &&
     supportsPointRenderer &&
     pointRenderer === "single";
+  // The symbology-pack renders (inverted mask, line decorations, geometry
+  // generator) are drawn by the core GeoJSON render path
+  // (applyVectorDataRenderLayers), so they don't apply to vector tiles,
+  // external deck layers, or control-painted (external native) layers — hide
+  // the controls there rather than offer a silent no-op.
+  const supportsDerivedGeometry =
+    layer.type === "geojson" &&
+    !!layer.geojson &&
+    !hasExternalDeckLayer(layer) &&
+    !hasExternalNativeLayers(layer);
+  const showLineDecorationControls =
+    hasVectorPaintControls &&
+    !extrusionEnabled &&
+    layer.type === "geojson" &&
+    !!layer.geojson &&
+    !hasExternalDeckLayer(layer) &&
+    !hasExternalNativeLayers(layer) &&
+    (geometryFlags.hasLine || geometryFlags.hasPolygon);
+  const showGeneratorControls =
+    hasVectorPaintControls && !extrusionEnabled && supportsDerivedGeometry;
 
   const proportionalEnabled = styleValue(style, "proportionalSizeEnabled");
   const proportionalProperty = styleValue(style, "proportionalSizeProperty");
@@ -2299,9 +2446,24 @@ export function StylePanel({
       )}
       {draftVectorStyleMode === "expression" && (
         <div className="space-y-2">
-          <Label htmlFor="vectorStyleExpression">
-            {t("style.symbology.colorExpression")}
-          </Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="vectorStyleExpression">
+              {t("style.symbology.colorExpression")}
+            </Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              title={t("style.expressionBuilder.openBuilder")}
+              aria-label={t("style.expressionBuilder.openBuilder")}
+              onClick={() =>
+                setExpressionBuilderTarget({ kind: "style", layerId: layer.id })
+              }
+            >
+              <SquareFunction className="h-3.5 w-3.5" />
+            </Button>
+          </div>
           <textarea
             id="vectorStyleExpression"
             className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
@@ -2409,17 +2571,41 @@ export function StylePanel({
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
-              <textarea
-                aria-label={t("style.symbology.ruleFilter", {
-                  index: index + 1,
-                })}
-                className="min-h-16 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
-                placeholder='["==", ["get", "TYPE"], "park"]'
-                value={rule.filter}
-                onChange={(event) =>
-                  updateVectorRule(rule.id, { filter: event.target.value })
-                }
-              />
+              <div className="flex items-start gap-1">
+                <textarea
+                  aria-label={t("style.symbology.ruleFilter", {
+                    index: index + 1,
+                  })}
+                  className="min-h-16 w-full flex-1 rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs placeholder:text-muted-foreground focus-visible:border-2 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-0"
+                  placeholder='["==", ["get", "TYPE"], "park"]'
+                  value={rule.filter}
+                  onChange={(event) =>
+                    updateVectorRule(rule.id, { filter: event.target.value })
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  title={t("style.expressionBuilder.openBuilderForRule", {
+                    index: index + 1,
+                  })}
+                  aria-label={t("style.expressionBuilder.openBuilderForRule", {
+                    index: index + 1,
+                  })}
+                  onClick={() =>
+                    setExpressionBuilderTarget({
+                      kind: "rule",
+                      ruleId: rule.id,
+                      index: index + 1,
+                      layerId: layer.id,
+                    })
+                  }
+                >
+                  <SquareFunction className="h-3.5 w-3.5" />
+                </Button>
+              </div>
               {rule.filter.trim() && !parseJsonExpression(rule.filter) ? (
                 <p className="text-xs text-destructive">
                   {t("style.symbology.filterInvalid")}
@@ -2554,22 +2740,16 @@ export function StylePanel({
             </div>
           ))}
           <div className="grid grid-cols-[auto_auto_1fr] items-center gap-2 rounded-md border border-dashed border-input p-2">
-            {elseRule ? (
-              // The enable toggle needs an else-rule record to write to; the
-              // default (no record yet) is always enabled, so it only shows
-              // once a rule exists - e.g. after an import that disabled it.
-              <input
-                type="checkbox"
-                checked={elseRule.enabled !== false}
-                title={t("style.symbology.elseRuleEnabled")}
-                aria-label={t("style.symbology.elseRuleEnabled")}
-                onChange={(event) =>
-                  updateVectorRule(elseRule.id, {
-                    enabled: event.target.checked ? undefined : false,
-                  })
-                }
-              />
-            ) : null}
+            {/* No else record yet means enabled; unchecking materializes a
+                disabled record so features matching no rule are hidden
+                (QGIS-style), not painted with the base style. */}
+            <input
+              type="checkbox"
+              checked={elseRule ? elseRule.enabled !== false : true}
+              title={t("style.symbology.elseRuleEnabled")}
+              aria-label={t("style.symbology.elseRuleEnabled")}
+              onChange={(event) => setElseRuleEnabled(event.target.checked)}
+            />
             <ColorField
               fill={false}
               aria-label={t("style.symbology.elseRuleColor")}
@@ -2585,15 +2765,27 @@ export function StylePanel({
           </div>
         </div>
       )}
-      <Button
-        type="button"
-        size="sm"
-        className="w-full"
-        disabled={!vectorStyleSettingsChanged}
-        onClick={applyVectorStyleSettings}
-      >
-        {t("style.symbology.applyStyleType")}
-      </Button>
+      {/* With rule-based already active, rule edits write straight to the
+          store and render live, so the Apply button would never enable again —
+          a permanently disabled button reads as "your edits are not applied".
+          Replace it with a hint saying edits are live; the button returns as
+          soon as the user drafts a different style type. */}
+      {draftVectorStyleMode === "rule-based" &&
+      draftVectorStyleMode === styleValue(style, "vectorStyleMode") ? (
+        <p className="text-xs text-muted-foreground">
+          {t("style.symbology.rulesApplyLive")}
+        </p>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          className="w-full"
+          disabled={!vectorStyleSettingsChanged}
+          onClick={applyVectorStyleSettings}
+        >
+          {t("style.symbology.applyStyleType")}
+        </Button>
+      )}
       {draftVectorStyleMode === "rule-based" &&
         draftVectorStyleMode !== styleValue(style, "vectorStyleMode") && (
           <p className="text-xs text-muted-foreground">
@@ -2736,6 +2928,26 @@ export function StylePanel({
   );
   const fillPatternControls = (
     <div className="space-y-3">
+      {supportsDerivedGeometry && (
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="invertedFillEnabled">
+            {t("style.symbology.invertedFill")}
+          </Label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              id="invertedFillEnabled"
+              type="checkbox"
+              checked={styleValue(style, "invertedFillEnabled")}
+              onChange={(event) =>
+                setLayerStyle(layer.id, {
+                  invertedFillEnabled: event.target.checked,
+                })
+              }
+            />
+            {t("style.symbology.invertedFillHint")}
+          </label>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="fillPattern">{t("style.symbology.fillPattern")}</Label>
         <Select
@@ -2881,6 +3093,190 @@ export function StylePanel({
               />
             </div>
           ) : null}
+        </>
+      )}
+    </div>
+  );
+  // --- Line decorations (repeated arrow/marker symbols along lines) ---
+  const lineDecoration = styleValue(style, "lineDecoration");
+  const lineDecorationControls = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="lineDecoration">
+          {t("style.decorations.heading")}
+        </Label>
+        <Select
+          id="lineDecoration"
+          value={lineDecoration}
+          onChange={(event) =>
+            setLayerStyle(layer.id, {
+              lineDecoration: event.target.value as LineDecoration,
+            })
+          }
+        >
+          <option value="none">{t("style.decorations.typeNone")}</option>
+          <option value="arrow">{t("style.decorations.typeArrow")}</option>
+          <option value="triangle">
+            {t("style.decorations.typeTriangle")}
+          </option>
+          <option value="circle">{t("style.decorations.typeCircle")}</option>
+          <option value="square">{t("style.decorations.typeSquare")}</option>
+        </Select>
+      </div>
+      {lineDecoration !== "none" && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="lineDecorationColor">
+              {t("style.decorations.color")}
+            </Label>
+            <ColorField
+              id="lineDecorationColor"
+              value={
+                styleValue(style, "lineDecorationColor") ||
+                styleValue(style, "strokeColor")
+              }
+              onChange={(lineDecorationColor) =>
+                setLayerStyle(layer.id, { lineDecorationColor })
+              }
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="lineDecorationSize"
+              label={t("style.decorations.size")}
+              min={4}
+              max={64}
+              step={1}
+              value={styleValue(style, "lineDecorationSize")}
+              onChange={(lineDecorationSize) =>
+                setLayerStyle(layer.id, { lineDecorationSize })
+              }
+            />
+            <NumericStyleInput
+              id="lineDecorationSpacing"
+              label={t("style.decorations.spacing")}
+              min={10}
+              max={500}
+              step={5}
+              value={styleValue(style, "lineDecorationSpacing")}
+              onChange={(lineDecorationSpacing) =>
+                setLayerStyle(layer.id, { lineDecorationSpacing })
+              }
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+  // --- Geometry generator (per-feature derived geometry symbology) ---
+  const generatorType = styleValue(style, "geometryGenerator");
+  const generatorControls = (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor="geometryGenerator">
+          {t("style.generator.type")}
+        </Label>
+        <Select
+          id="geometryGenerator"
+          value={generatorType}
+          onChange={(event) =>
+            setLayerStyle(layer.id, {
+              geometryGenerator: event.target
+                .value as GeometryGeneratorType,
+            })
+          }
+        >
+          <option value="none">{t("style.generator.typeNone")}</option>
+          <option value="centroid">
+            {t("style.generator.typeCentroid")}
+          </option>
+          <option value="bounding-box">
+            {t("style.generator.typeBoundingBox")}
+          </option>
+          <option value="convex-hull">
+            {t("style.generator.typeConvexHull")}
+          </option>
+          <option value="buffer">{t("style.generator.typeBuffer")}</option>
+        </Select>
+      </div>
+      {generatorType !== "none" && (
+        <>
+          {generatorType === "buffer" && (
+            <NumericStyleInput
+              id="geometryGeneratorBufferDistance"
+              label={t("style.generator.bufferDistance")}
+              min={-100000}
+              max={1000000}
+              step={10}
+              value={styleValue(style, "geometryGeneratorBufferDistance")}
+              onChange={(geometryGeneratorBufferDistance) =>
+                setLayerStyle(layer.id, { geometryGeneratorBufferDistance })
+              }
+            />
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="geometryGeneratorFillColor">
+                {t("style.generator.fillColor")}
+              </Label>
+              <ColorField
+                id="geometryGeneratorFillColor"
+                value={styleValue(style, "geometryGeneratorFillColor")}
+                onChange={(geometryGeneratorFillColor) =>
+                  setLayerStyle(layer.id, { geometryGeneratorFillColor })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="geometryGeneratorStrokeColor">
+                {t("style.generator.strokeColor")}
+              </Label>
+              <ColorField
+                id="geometryGeneratorStrokeColor"
+                value={styleValue(style, "geometryGeneratorStrokeColor")}
+                onChange={(geometryGeneratorStrokeColor) =>
+                  setLayerStyle(layer.id, { geometryGeneratorStrokeColor })
+                }
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericStyleInput
+              id="geometryGeneratorStrokeWidth"
+              label={t("style.generator.strokeWidth")}
+              min={0}
+              max={20}
+              step={0.5}
+              value={styleValue(style, "geometryGeneratorStrokeWidth")}
+              onChange={(geometryGeneratorStrokeWidth) =>
+                setLayerStyle(layer.id, { geometryGeneratorStrokeWidth })
+              }
+            />
+            <NumericStyleInput
+              id="geometryGeneratorOpacity"
+              label={t("style.generator.opacity")}
+              min={0}
+              max={1}
+              step={0.05}
+              value={styleValue(style, "geometryGeneratorOpacity")}
+              onChange={(geometryGeneratorOpacity) =>
+                setLayerStyle(layer.id, { geometryGeneratorOpacity })
+              }
+            />
+          </div>
+          {generatorType === "centroid" && (
+            <NumericStyleInput
+              id="geometryGeneratorCircleRadius"
+              label={t("style.generator.circleRadius")}
+              min={1}
+              max={40}
+              step={1}
+              value={styleValue(style, "geometryGeneratorCircleRadius")}
+              onChange={(geometryGeneratorCircleRadius) =>
+                setLayerStyle(layer.id, { geometryGeneratorCircleRadius })
+              }
+            />
+          )}
         </>
       )}
     </div>
@@ -3134,6 +3530,27 @@ export function StylePanel({
     </div>
   );
 
+  // One pass over the override fields for both the rows and the invalid
+  // banner; the style-spec compile behind the invalid flag is memoized per
+  // distinct expression (labelOverrideInvalid), so re-renders cost lookups,
+  // not recompiles. The `|| ""` guards against a hand-edited project file
+  // storing null for an expression field (the type says string, but the
+  // value comes from untrusted JSON); the invalid flag surfaces the
+  // renderer's fallback to the literal control (the builder's Apply is
+  // disabled for invalid expressions, but a hand-edited file can still carry
+  // one). Validation runs through the style spec with the row's expected
+  // result type, mirroring the builder's own check, so a type mismatch
+  // (e.g. a string-producing size expression) is flagged too, not just
+  // malformed JSON.
+  const labelOverrideStates = LABEL_OVERRIDE_PROPERTIES.map((property) => {
+    const value = (labels[property.field] || "").trim();
+    return {
+      property,
+      value,
+      invalid:
+        value !== "" && labelOverrideInvalid(value, property.expectedType),
+    };
+  });
   const labelControls = (
     <div className="space-y-3">
       <label
@@ -3387,9 +3804,24 @@ export function StylePanel({
             ) : null}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="labelExpression">
-              {t("style.labels.expression")}
-            </Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="labelExpression">
+                {t("style.labels.expression")}
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="h-7 w-7"
+                title={t("style.expressionBuilder.openBuilder")}
+                aria-label={t("style.expressionBuilder.openBuilder")}
+                onClick={() =>
+                  setExpressionBuilderTarget({ kind: "label", layerId: layer.id })
+                }
+              >
+                <SquareFunction className="h-3.5 w-3.5" />
+              </Button>
+            </div>
             <textarea
               id="labelExpression"
               aria-invalid={labelExpressionInvalid}
@@ -3414,6 +3846,77 @@ export function StylePanel({
               {labelExpressionInvalid
                 ? t("style.labels.expressionInvalid")
                 : t("style.labels.expressionHint")}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>{t("style.labels.dataDefined.heading")}</Label>
+            {labelOverrideStates.map(({ property, value, invalid }) => {
+              return (
+                <div key={property.key} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs">
+                    {t(`style.labels.dataDefined.${property.key}`)}
+                  </span>
+                  <code
+                    className={[
+                      "min-w-0 flex-1 truncate font-mono text-xs",
+                      invalid ? "text-destructive" : "text-muted-foreground",
+                    ].join(" ")}
+                    title={
+                      invalid
+                        ? t("style.labels.expressionInvalid")
+                        : value || undefined
+                    }
+                  >
+                    {value || t("style.labels.dataDefined.notSet")}
+                  </code>
+                  <Button
+                    type="button"
+                    variant={value ? "secondary" : "outline"}
+                    size="icon"
+                    className="h-7 w-7 shrink-0"
+                    title={t(
+                      `style.labels.dataDefined.${property.key}Target`,
+                    )}
+                    aria-label={t(
+                      `style.labels.dataDefined.${property.key}Target`,
+                    )}
+                    onClick={() =>
+                      setExpressionBuilderTarget({
+                        kind: "labelOverride",
+                        property,
+                        layerId: layer.id,
+                      })
+                    }
+                  >
+                    <SquareFunction className="h-3.5 w-3.5" />
+                  </Button>
+                  {value ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      title={t("style.labels.dataDefined.clear")}
+                      aria-label={t("style.labels.dataDefined.clear")}
+                      onClick={() =>
+                        updateLabels({
+                          [property.field]: "",
+                        } as Partial<LabelStyle>)
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {labelOverrideStates.some((state) => state.invalid) ? (
+              <p className="text-xs text-destructive">
+                {t("style.labels.expressionInvalid")}
+              </p>
+            ) : null}
+            <p className="text-xs text-muted-foreground">
+              {t("style.labels.dataDefined.hint")}
             </p>
           </div>
         </>
@@ -4167,6 +4670,12 @@ export function StylePanel({
                   {fillPatternControls}
                 </>
               )}
+              {showLineDecorationControls && (
+                <>
+                  <Separator />
+                  {lineDecorationControls}
+                </>
+              )}
               {showMarkerControls && (
                 <>
                   <Separator />
@@ -4182,6 +4691,15 @@ export function StylePanel({
                   {diagramControls}
                 </>
               )}
+              {showGeneratorControls && (
+                <>
+                  <Separator />
+                  <p className="text-sm font-semibold">
+                    {t("style.generator.heading")}
+                  </p>
+                  {generatorControls}
+                </>
+              )}
             </>
           )}
           {/* Attribute labels apply to vector features, not the heatmap density
@@ -4193,6 +4711,31 @@ export function StylePanel({
                 {t("style.labels.heading")}
               </p>
               {labelControls}
+            </>
+          ) : null}
+          {/* Persistent attribute joins need the layer's features in the store
+              (layer.geojson); tile/service layers without an inline attribute
+              table cannot be a join target. */}
+          {layer.geojson ? (
+            <>
+              <Separator />
+              {/* Keyed by layer so the add-join draft never survives a layer
+                  switch (a stale draft could reference the new target itself). */}
+              <LayerJoinsSection key={layer.id} layer={layer} />
+              <Separator />
+              {/* Virtual fields need the layer's features in the store too
+                  (the expressions evaluate against layer.geojson). Keyed for
+                  the same draft-lifetime reason as the joins section. */}
+              <VirtualFieldsSection key={`vf-${layer.id}`} layer={layer} />
+            </>
+          ) : null}
+          {/* The Attribute Form designer configures how attribute values are
+              edited, so it needs the layer's features in the store too. Keyed
+              like Joins so an open field draft never survives a layer switch. */}
+          {layer.geojson ? (
+            <>
+              <Separator />
+              <AttributeFormSection key={`af-${layer.id}`} layer={layer} />
             </>
           ) : null}
         </div>
@@ -4207,6 +4750,7 @@ export function StylePanel({
               ? t("style.footerDeck")
               : t("style.footerMaplibre")}
       </p>
+      {expressionBuilderDialog}
     </aside>
   );
 }

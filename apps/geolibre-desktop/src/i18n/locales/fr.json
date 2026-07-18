@@ -2620,6 +2620,8 @@
     "moveLeft": "Déplacer à gauche",
     "moveRight": "Déplacer à droite",
     "deleteField": "Supprimer le champ",
+    "joinedColumnTitle": "Colonne jointe, dérivée d'une table de jointure. Modifiez plutôt la table ou la définition de la jointure.",
+    "virtualColumnTitle": "Champ virtuel, calculé à partir d'une expression. Modifiez plutôt sa définition dans le panneau de style de la couche.",
     "deleteFieldConfirm": "Cela supprime définitivement le champ « {{field}} » de toutes les entités de « {{layer}} ». Le style ou les étiquettes qui le référencent seront effacés. Cette action est irréversible.",
     "addFieldDescription": "Ajoutez un nouveau champ à toutes les entités de « {{layer}} ».",
     "fieldName": "Nom du champ",
@@ -2650,7 +2652,8 @@
     "invalidExpression": "Expression invalide.",
     "calcCouldNotApply": "Impossible d'appliquer le calcul à cette couche.",
     "calcAppliedWithErrors": "Appliqué, mais {{errors}} entité(s) sur {{evaluated}} ont généré une erreur et ont été écrites comme null.",
-    "exportFailed": "Impossible d'exporter la couche sélectionnée."
+    "exportFailed": "Impossible d'exporter la couche sélectionnée.",
+    "saveTitleFormErrors": "Corrigez les violations du formulaire d'attributs avant d'enregistrer"
   },
   "style": {
     "panelLabel": "Style de la couche",
@@ -2685,6 +2688,52 @@
       "maxZoom": "Zoom max",
       "minZoomTooltip": "Niveau de zoom auquel cette couche apparaît. Des nombres plus élevés correspondent à un zoom plus rapproché.",
       "maxZoomTooltip": "Niveau de zoom auquel cette couche disparaît. Des nombres plus élevés correspondent à un zoom plus rapproché."
+    },
+    "joins": {
+      "heading": "Jointures",
+      "empty": "Ajoutez des colonnes d'une autre couche ou table en faisant correspondre des champs clés. Les colonnes jointes se mettent à jour quand la table change et sont enregistrées avec le projet.",
+      "addJoin": "Ajouter une jointure",
+      "joinLayer": "Couche de jointure",
+      "selectLayer": "Sélectionner une couche…",
+      "joinField": "Champ de jointure",
+      "targetField": "Champ cible",
+      "selectField": "Sélectionner un champ…",
+      "fields": "Champs à joindre",
+      "fieldCount_one": "{{count}} champ",
+      "fieldCount_other": "{{count}} champs",
+      "prefix": "Préfixe des noms de champ",
+      "prefixPlaceholder": "ex. census_",
+      "add": "Ajouter",
+      "cancel": "Annuler",
+      "remove": "Supprimer la jointure",
+      "enabledTitle": "Appliquer cette jointure",
+      "missingLayer": "Couche de jointure introuvable",
+      "noCandidates": "Aucune autre couche n'a de table attributaire à joindre",
+      "statsMatched": "{{matched}} entités sur {{total}} appariées",
+      "statsUnmatchedJoin_one": "{{count}} ligne de la table sans correspondance",
+      "statsUnmatchedJoin_other": "{{count}} lignes de la table sans correspondance"
+    },
+    "virtualFields": {
+      "heading": "Champs virtuels",
+      "empty": "Ajoutez des colonnes basées sur des expressions, recalculées à chaque changement des données. Les champs virtuels sont enregistrés avec le projet et apparaissent partout où les champs apparaissent : table attributaire, style, étiquettes et sélection.",
+      "addField": "Ajouter un champ virtuel",
+      "name": "Nom du champ",
+      "namePlaceholder": "ex. density",
+      "nameTaken": "Une colonne portant ce nom existe déjà",
+      "nameConflict": "Non appliqué : le nom entre en conflit avec une colonne existante",
+      "expression": "Expression",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Expression du champ virtuel",
+      "openBuilder": "Ouvrir l'éditeur",
+      "invalidExpression": "Expression invalide",
+      "add": "Ajouter",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "edit": "Modifier le champ virtuel",
+      "remove": "Supprimer le champ virtuel",
+      "enabledTitle": "Appliquer ce champ virtuel",
+      "evaluationErrors_one": "{{count}} entité n'a pas pu être évaluée (cellule nulle)",
+      "evaluationErrors_other": "{{count}} entités n'ont pas pu être évaluées (cellules nulles)"
     },
     "labels": {
       "heading": "Étiquettes",
@@ -2727,7 +2776,23 @@
       "dedupeHint": "Regroupe les points empilés à la même coordonnée. Utilise le champ d'étiquette sur les couches de points locales.",
       "expression": "Expression (facultatif)",
       "expressionHint": "Une expression MapLibre (JSON). Remplace le champ lorsqu'elle est définie.",
-      "expressionInvalid": "Ce n'est pas une expression MapLibre valide (doit être un tableau JSON). Cette valeur est ignorée."
+      "expressionInvalid": "Ce n'est pas une expression MapLibre valide (doit être un tableau JSON). Cette valeur est ignorée.",
+      "dataDefined": {
+        "heading": "Substitutions définies par les données",
+        "size": "Taille",
+        "color": "Couleur",
+        "opacity": "Opacité",
+        "visibility": "Visibilité",
+        "priority": "Priorité",
+        "sizeTarget": "Expression de taille d'étiquette",
+        "colorTarget": "Expression de couleur d'étiquette",
+        "opacityTarget": "Expression d'opacité d'étiquette",
+        "visibilityTarget": "Expression de visibilité d'étiquette",
+        "priorityTarget": "Expression de priorité d'étiquette",
+        "notSet": "Non défini",
+        "clear": "Effacer l'expression",
+        "hint": "Expressions MapLibre par entité. La taille, l'opacité et la priorité produisent des nombres (les étiquettes aux valeurs de priorité les plus basses sont placées en premier), la couleur une couleur, la visibilité vrai/faux. Ignorées tant que le regroupement des étiquettes en double est actif. Une expression d'opacité remplace l'opacité de la couche pour les étiquettes."
+      }
     },
     "elevation3d": {
       "mode": "3D (valeurs Z)",
@@ -2800,9 +2865,10 @@
       "filterInvalid": "Filtre invalide — doit être une expression de tableau JSON. Cette règle est ignorée jusqu'à sa correction.",
       "elseRuleColor": "Couleur de la règle Sinon",
       "elseRuleColorPick": "Choisir la couleur de la règle Sinon à l'écran",
-      "elseRuleEnabled": "Activer la règle «sinon»",
+      "elseRuleEnabled": "Activer la règle «sinon» (désactivée, les entités ne correspondant à aucune règle sont masquées)",
       "elseAllOtherFeatures": "Sinon (toutes les autres entités)",
       "applyHint": "Cliquez sur Appliquer pour activer le rendu basé sur des règles.",
+      "rulesApplyLive": "Les modifications des règles s'appliquent immédiatement à la carte — aucune étape d'application distincte n'est nécessaire.",
       "proportionalSize": "Taille proportionnelle",
       "sizeByValue": "Taille selon la valeur",
       "sizeField": "Champ de taille",
@@ -2875,7 +2941,9 @@
       "schemeFirstValues": "Premières valeurs",
       "errorChooseAttribute": "Choisissez un attribut pour ce mode de style.",
       "errorGraduatedStops": "Le style gradué nécessite au moins deux paliers numériques.",
-      "errorCategorizedStops": "Le style catégorisé nécessite au moins une catégorie."
+      "errorCategorizedStops": "Le style catégorisé nécessite au moins une catégorie.",
+      "invertedFill": "Remplissage inversé",
+      "invertedFillHint": "Remplir hors des entités"
     },
     "selectLayerHint": "Sélectionnez une couche pour modifier son style.",
     "layerOrderDefault": "Ordre des couches (par défaut)",
@@ -2908,6 +2976,73 @@
       "notArray": "{{label}} doit être une expression de tableau JSON.",
       "notOperator": "{{label}} doit commencer par un opérateur, p. ex. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} n'est pas un JSON valide : {{message}}"
+    },
+    "decorations": {
+      "heading": "Décoration de ligne",
+      "typeNone": "Aucune",
+      "typeArrow": "Flèches",
+      "typeTriangle": "Triangles",
+      "typeCircle": "Cercles",
+      "typeSquare": "Carrés",
+      "color": "Couleur de décoration",
+      "size": "Taille du symbole (px)",
+      "spacing": "Espacement (px)"
+    },
+    "generator": {
+      "heading": "Générateur de géométrie",
+      "type": "Géométrie dérivée",
+      "typeNone": "Aucune",
+      "typeCentroid": "Centroïdes",
+      "typeBoundingBox": "Emprises",
+      "typeConvexHull": "Enveloppes convexes",
+      "typeBuffer": "Tampons",
+      "bufferDistance": "Distance de tampon (m)",
+      "fillColor": "Couleur de remplissage",
+      "strokeColor": "Couleur de contour",
+      "strokeWidth": "Largeur de contour (px)",
+      "opacity": "Opacité du remplissage",
+      "circleRadius": "Rayon de point (px)"
+    },
+    "attributeForm": {
+      "heading": "Formulaire d'attributs",
+      "empty": "Aucun champ configuré. Attribuez un widget d'édition, une contrainte ou une règle de visibilité à un champ.",
+      "configureField": "Configurer le champ",
+      "field": "Champ",
+      "selectField": "Sélectionner un champ…",
+      "widgetLabel": "Widget d'édition",
+      "widget": {
+        "text": "Texte",
+        "number": "Nombre",
+        "range": "Plage",
+        "checkbox": "Case à cocher",
+        "date": "Date",
+        "valueMap": "Carte de valeurs"
+      },
+      "alias": "Alias",
+      "required": "Obligatoire",
+      "requiredTag": "obligatoire",
+      "constraintTag": "contrainte",
+      "visibilityTag": "visibilité",
+      "valueMap": "Entrées de la carte de valeurs",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Une entrée par ligne : valeur ou valeur=Étiquette.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Pas",
+      "constraintExpression": "Expression de contrainte",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Description de la contrainte",
+      "constraintDescriptionPlaceholder": "Affichée lorsque la contrainte échoue",
+      "visibilityExpression": "Expression de visibilité",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Expression non valide",
+      "openBuilder": "Ouvrir le générateur d'expressions",
+      "edit": "Modifier la configuration du champ",
+      "remove": "Supprimer la configuration du champ",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "noFields": "La couche n'a aucun champ d'attribut à configurer.",
+      "minMaxInvalid": "Le minimum doit être inférieur ou égal au maximum."
     }
   },
   "layers": {
@@ -3127,5 +3262,16 @@
     "cogConvertFailed": "Impossible de convertir « {{name}} » en GeoTIFF Cloud-Optimized. Essayez de le convertir avec gdal_translate ou rio cogeo, puis chargez le résultat.",
     "rasterDownloadFailed": "Impossible de télécharger « {{name}} ». Le serveur est peut-être lent, inaccessible ou bloque les requêtes cross-origin, ou le fichier est peut-être trop volumineux pour tenir en mémoire. Vérifiez l'URL et réessayez.",
     "rasterNotGeotiff": "« {{name}} » n'a pas renvoyé de GeoTIFF. Le serveur a peut-être envoyé une erreur ou une page de connexion à la place. Vérifiez l'URL et réessayez."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Une valeur est requise",
+      "number": "Doit être un nombre",
+      "range": "Doit être entre {{min}} et {{max}}",
+      "rangeMin": "Doit être au moins {{min}}",
+      "rangeMax": "Doit être au plus {{max}}",
+      "valueMap": "La valeur ne figure pas dans la liste autorisée",
+      "constraint": "Contrainte non satisfaite"
+    }
   }
 }

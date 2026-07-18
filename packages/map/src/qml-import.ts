@@ -790,6 +790,7 @@ function classifyRules(
   let elseLabel = "";
   let elseInfo: SymbolInfo | undefined;
   let elseDisabled = false;
+  let sawElse = false;
   let index = 0;
   let matched = 0;
   const walk = (nodes: unknown[], parentId: string | undefined): void => {
@@ -812,6 +813,7 @@ function classifyRules(
           elseLabel = label;
           elseInfo = info;
           elseDisabled = attr(rule, "checkstate") === "0";
+          sawElse = true;
           matched += 1;
           continue;
         }
@@ -874,7 +876,10 @@ function classifyRules(
     filter: "",
     color: fallback,
     isElse: true,
-    ...(elseDisabled ? { enabled: false } : {}),
+    // In QGIS a rule tree without an ELSE rule (or with it unchecked) does not
+    // draw features matching no rule, so the imported else record is disabled
+    // in both cases — the renderer then hides unmatched features the same way.
+    ...(elseDisabled || !sawElse ? { enabled: false } : {}),
     // The else symbol keeps its own look (as overrides) when it differs from
     // the first symbol, whose flat values were applied to the layer.
     ...symbolOverrides(elseInfo, base),

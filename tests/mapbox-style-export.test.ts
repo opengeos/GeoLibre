@@ -436,3 +436,68 @@ describe("graceful degradation warnings", () => {
     assert.equal(circle.layout.visibility, "none");
   });
 });
+
+describe("switched-off else rule (#1312)", () => {
+  it("folds the hide-unmatched filter into every render layer", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "big",
+              filter: JSON.stringify([">", ["get", "value"], 10]),
+              color: "#abcdef",
+              isElse: false,
+            },
+            {
+              id: "r2",
+              label: "",
+              filter: "",
+              color: "#000000",
+              isElse: true,
+              enabled: false,
+            },
+          ],
+        }),
+      }),
+      points(),
+    );
+    const circle = layerById(doc, "my-layer-circle") as { filter: unknown };
+    assert.deepEqual(circle.filter, [
+      "all",
+      ["match", ["geometry-type"], ["Point", "MultiPoint"], true, false],
+      ["any", [">", ["get", "value"], 10]],
+    ]);
+  });
+
+  it("keeps the plain geometry filter while the else rule is enabled", () => {
+    const { style: doc } = buildMapboxStyle(
+      layer({
+        style: style({
+          vectorStyleMode: "rule-based",
+          vectorRules: [
+            {
+              id: "r1",
+              label: "big",
+              filter: JSON.stringify([">", ["get", "value"], 10]),
+              color: "#abcdef",
+              isElse: false,
+            },
+            { id: "r2", label: "", filter: "", color: "#000000", isElse: true },
+          ],
+        }),
+      }),
+      points(),
+    );
+    const circle = layerById(doc, "my-layer-circle") as { filter: unknown };
+    assert.deepEqual(circle.filter, [
+      "match",
+      ["geometry-type"],
+      ["Point", "MultiPoint"],
+      true,
+      false,
+    ]);
+  });
+});

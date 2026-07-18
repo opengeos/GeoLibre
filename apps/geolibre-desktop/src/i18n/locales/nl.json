@@ -2620,6 +2620,8 @@
     "moveLeft": "Naar links verplaatsen",
     "moveRight": "Naar rechts verplaatsen",
     "deleteField": "Veld verwijderen",
+    "joinedColumnTitle": "Gekoppelde kolom, afgeleid uit een koppelingstabel. Bewerk in plaats daarvan de tabel of de koppelingsdefinitie.",
+    "virtualColumnTitle": "Virtueel veld, berekend uit een expressie. Bewerk in plaats daarvan de definitie in het stijlpaneel van de laag.",
     "deleteFieldConfirm": "Hiermee wordt het veld \"{{field}}\" permanent verwijderd uit elk object in \"{{layer}}\". Stijlen of labels die ernaar verwijzen, worden gewist. Dit kan niet ongedaan worden gemaakt.",
     "addFieldDescription": "Voeg een nieuw veld toe aan elk object in \"{{layer}}\".",
     "fieldName": "Veldnaam",
@@ -2650,7 +2652,8 @@
     "invalidExpression": "Ongeldige expressie.",
     "calcCouldNotApply": "Kon de berekening niet toepassen op deze laag.",
     "calcAppliedWithErrors": "Toegepast, maar {{errors}} van {{evaluated}} object(en) gaven een fout en zijn als null geschreven.",
-    "exportFailed": "Kon de geselecteerde laag niet exporteren."
+    "exportFailed": "Kon de geselecteerde laag niet exporteren.",
+    "saveTitleFormErrors": "Los schendingen van het attributenformulier op voordat u opslaat"
   },
   "style": {
     "panelLabel": "Laagstijl",
@@ -2685,6 +2688,52 @@
       "maxZoom": "Max. zoom",
       "minZoomTooltip": "Zoomniveau waarop deze laag verschijnt. Hogere getallen betekenen meer ingezoomd.",
       "maxZoomTooltip": "Zoomniveau waarop deze laag verdwijnt. Hogere getallen betekenen meer ingezoomd."
+    },
+    "joins": {
+      "heading": "Koppelingen",
+      "empty": "Voeg kolommen uit een andere laag of tabel toe door sleutelvelden te matchen. Gekoppelde kolommen worden bijgewerkt wanneer de tabel verandert en worden met het project opgeslagen.",
+      "addJoin": "Koppeling toevoegen",
+      "joinLayer": "Koppelingslaag",
+      "selectLayer": "Selecteer een laag…",
+      "joinField": "Koppelveld",
+      "targetField": "Doelveld",
+      "selectField": "Selecteer een veld…",
+      "fields": "Te koppelen velden",
+      "fieldCount_one": "{{count}} veld",
+      "fieldCount_other": "{{count}} velden",
+      "prefix": "Voorvoegsel veldnaam",
+      "prefixPlaceholder": "bijv. census_",
+      "add": "Toevoegen",
+      "cancel": "Annuleren",
+      "remove": "Koppeling verwijderen",
+      "enabledTitle": "Deze koppeling toepassen",
+      "missingLayer": "Koppelingslaag niet gevonden",
+      "noCandidates": "Geen andere laag heeft een attributentabel om te koppelen",
+      "statsMatched": "{{matched}} van {{total}} objecten gematcht",
+      "statsUnmatchedJoin_one": "{{count}} tabelrij zonder match",
+      "statsUnmatchedJoin_other": "{{count}} tabelrijen zonder match"
+    },
+    "virtualFields": {
+      "heading": "Virtuele velden",
+      "empty": "Voeg op expressies gebaseerde kolommen toe die opnieuw worden berekend wanneer de gegevens veranderen. Virtuele velden worden met het project opgeslagen en verschijnen overal waar velden voorkomen: de attributentabel, stijlen, labels en selectie.",
+      "addField": "Virtueel veld toevoegen",
+      "name": "Veldnaam",
+      "namePlaceholder": "bijv. density",
+      "nameTaken": "Er bestaat al een kolom met deze naam",
+      "nameConflict": "Niet toegepast: de naam botst met een bestaande kolom",
+      "expression": "Expressie",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Expressie van virtueel veld",
+      "openBuilder": "Builder openen",
+      "invalidExpression": "Ongeldige expressie",
+      "add": "Toevoegen",
+      "save": "Opslaan",
+      "cancel": "Annuleren",
+      "edit": "Virtueel veld bewerken",
+      "remove": "Virtueel veld verwijderen",
+      "enabledTitle": "Dit virtuele veld toepassen",
+      "evaluationErrors_one": "{{count}} object kon niet worden geëvalueerd (null-cel)",
+      "evaluationErrors_other": "{{count}} objecten konden niet worden geëvalueerd (null-cellen)"
     },
     "labels": {
       "heading": "Labels",
@@ -2727,7 +2776,23 @@
       "dedupeHint": "Voegt punten samen die op dezelfde coördinaat liggen. Gebruikt het labelveld bij lokale puntlagen.",
       "expression": "Expressie (optioneel)",
       "expressionHint": "Een MapLibre-expressie (JSON). Overschrijft het veld indien ingesteld.",
-      "expressionInvalid": "Geen geldige MapLibre-expressie (moet een JSON-array zijn). Deze waarde wordt genegeerd."
+      "expressionInvalid": "Geen geldige MapLibre-expressie (moet een JSON-array zijn). Deze waarde wordt genegeerd.",
+      "dataDefined": {
+        "heading": "Datagestuurde overschrijvingen",
+        "size": "Grootte",
+        "color": "Kleur",
+        "opacity": "Dekking",
+        "visibility": "Zichtbaarheid",
+        "priority": "Prioriteit",
+        "sizeTarget": "Expressie voor labelgrootte",
+        "colorTarget": "Expressie voor labelkleur",
+        "opacityTarget": "Expressie voor labeldekking",
+        "visibilityTarget": "Expressie voor labelzichtbaarheid",
+        "priorityTarget": "Expressie voor labelprioriteit",
+        "notSet": "Niet ingesteld",
+        "clear": "Expressie wissen",
+        "hint": "MapLibre-expressies per feature. Grootte, dekking en prioriteit leveren getallen op (labels met lagere prioriteitswaarden worden eerst geplaatst), kleur een kleur, zichtbaarheid waar/onwaar. Genegeerd zolang het samenvoegen van dubbele labels actief is. Een dekkingsexpressie vervangt de laagdekking voor labels."
+      }
     },
     "elevation3d": {
       "mode": "3D (Z-waarden)",
@@ -2800,9 +2865,10 @@
       "filterInvalid": "Ongeldig filter — moet een JSON-arrayexpressie zijn. Deze regel wordt overgeslagen totdat dit is hersteld.",
       "elseRuleColor": "Kleur else-regel",
       "elseRuleColorPick": "Kleur voor de else-regel van het scherm oppikken",
-      "elseRuleEnabled": "Anders-regel inschakelen",
+      "elseRuleEnabled": "Anders-regel inschakelen (uitgeschakeld worden objecten die met geen enkele regel overeenkomen verborgen)",
       "elseAllOtherFeatures": "Else (alle overige objecten)",
       "applyHint": "Klik op Toepassen om weergave op basis van regels te activeren.",
+      "rulesApplyLive": "Regelwijzigingen worden direct op de kaart toegepast — een aparte toepasstap is niet nodig.",
       "proportionalSize": "Proportionele grootte",
       "sizeByValue": "Grootte op basis van waarde",
       "sizeField": "Grootteveld",
@@ -2875,7 +2941,9 @@
       "schemeFirstValues": "Eerste waarden",
       "errorChooseAttribute": "Kies een attribuut voor deze stijlmodus.",
       "errorGraduatedStops": "Gegradueerde stijl vereist minstens twee numerieke stops.",
-      "errorCategorizedStops": "Gecategoriseerde stijl vereist minstens één categorie."
+      "errorCategorizedStops": "Gecategoriseerde stijl vereist minstens één categorie.",
+      "invertedFill": "Omgekeerde vulling",
+      "invertedFillHint": "Buiten objecten vullen"
     },
     "selectLayerHint": "Selecteer een laag om de stijl ervan te bewerken.",
     "layerOrderDefault": "Laagvolgorde (standaard)",
@@ -2908,6 +2976,73 @@
       "notArray": "{{label}} moet een JSON-arrayexpressie zijn.",
       "notOperator": "{{label}} moet beginnen met een operator, bijv. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} is geen geldige JSON: {{message}}"
+    },
+    "decorations": {
+      "heading": "Lijndecoratie",
+      "typeNone": "Geen",
+      "typeArrow": "Pijlen",
+      "typeTriangle": "Driehoeken",
+      "typeCircle": "Cirkels",
+      "typeSquare": "Vierkanten",
+      "color": "Decoratiekleur",
+      "size": "Symboolgrootte (px)",
+      "spacing": "Afstand (px)"
+    },
+    "generator": {
+      "heading": "Geometriegenerator",
+      "type": "Afgeleide geometrie",
+      "typeNone": "Geen",
+      "typeCentroid": "Zwaartepunten",
+      "typeBoundingBox": "Begrenzingsvakken",
+      "typeConvexHull": "Convexe omhullenden",
+      "typeBuffer": "Buffers",
+      "bufferDistance": "Bufferafstand (m)",
+      "fillColor": "Vulkleur",
+      "strokeColor": "Omtrekkleur",
+      "strokeWidth": "Omtrekbreedte (px)",
+      "opacity": "Vuldekking",
+      "circleRadius": "Puntstraal (px)"
+    },
+    "attributeForm": {
+      "heading": "Attributenformulier",
+      "empty": "Geen velden geconfigureerd. Wijs een bewerkingswidget, beperking of zichtbaarheidsregel toe aan een veld.",
+      "configureField": "Veld configureren",
+      "field": "Veld",
+      "selectField": "Veld selecteren…",
+      "widgetLabel": "Bewerkingswidget",
+      "widget": {
+        "text": "Tekst",
+        "number": "Getal",
+        "range": "Bereik",
+        "checkbox": "Selectievakje",
+        "date": "Datum",
+        "valueMap": "Waardetoewijzing"
+      },
+      "alias": "Alias",
+      "required": "Verplicht",
+      "requiredTag": "verplicht",
+      "constraintTag": "beperking",
+      "visibilityTag": "zichtbaarheid",
+      "valueMap": "Items van de waardetoewijzing",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Eén item per regel: waarde of waarde=Label.",
+      "min": "Min",
+      "max": "Max",
+      "step": "Stap",
+      "constraintExpression": "Beperkingsexpressie",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Beschrijving van de beperking",
+      "constraintDescriptionPlaceholder": "Getoond wanneer de beperking faalt",
+      "visibilityExpression": "Zichtbaarheidsexpressie",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Ongeldige expressie",
+      "openBuilder": "Expressiebouwer openen",
+      "edit": "Veldconfiguratie bewerken",
+      "remove": "Veldconfiguratie verwijderen",
+      "cancel": "Annuleren",
+      "save": "Opslaan",
+      "noFields": "De laag heeft geen attribuutvelden om te configureren.",
+      "minMaxInvalid": "Min moet kleiner dan of gelijk aan Max zijn."
     }
   },
   "layers": {
@@ -3127,5 +3262,16 @@
     "cogConvertFailed": "\"{{name}}\" kon niet worden omgezet naar een Cloud-Optimized GeoTIFF. Probeer het te converteren met gdal_translate of rio cogeo en laad vervolgens het resultaat.",
     "rasterDownloadFailed": "\"{{name}}\" kon niet worden gedownload. De server is mogelijk traag, onbereikbaar of blokkeert cross-origin-verzoeken, of het bestand is te groot om in het geheugen te laden. Controleer de URL en probeer het opnieuw.",
     "rasterNotGeotiff": "\"{{name}}\" leverde geen GeoTIFF op. De server heeft mogelijk een foutmelding of inlogpagina teruggestuurd. Controleer de URL en probeer het opnieuw."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Een waarde is vereist",
+      "number": "Moet een getal zijn",
+      "range": "Moet tussen {{min}} en {{max}} liggen",
+      "rangeMin": "Moet minimaal {{min}} zijn",
+      "rangeMax": "Mag maximaal {{max}} zijn",
+      "valueMap": "Waarde staat niet in de toegestane lijst",
+      "constraint": "Beperking niet voldaan"
+    }
   }
 }

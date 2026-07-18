@@ -2576,6 +2576,8 @@
     "moveLeft": "Pindahkan ke kiri",
     "moveRight": "Pindahkan ke kanan",
     "deleteField": "Hapus bidang",
+    "joinedColumnTitle": "Kolom gabungan, diturunkan dari tabel gabungan. Edit tabel atau definisi gabungan sebagai gantinya.",
+    "virtualColumnTitle": "Bidang virtual, dihitung dari ekspresi. Edit definisinya di panel gaya layer sebagai gantinya.",
     "deleteFieldConfirm": "Ini menghapus bidang \"{{field}}\" secara permanen dari setiap fitur di \"{{layer}}\". Penataan gaya atau label yang mengacu padanya akan dihapus. Ini tidak dapat dibatalkan.",
     "addFieldDescription": "Tambahkan bidang baru ke setiap fitur di \"{{layer}}\".",
     "fieldName": "Nama bidang",
@@ -2606,7 +2608,8 @@
     "invalidExpression": "Ekspresi tidak valid.",
     "calcCouldNotApply": "Tidak dapat menerapkan perhitungan ke layer ini.",
     "calcAppliedWithErrors": "Diterapkan, tetapi {{errors}} dari {{evaluated}} fitur bermasalah dan ditulis sebagai null.",
-    "exportFailed": "Tidak dapat mengekspor layer yang dipilih."
+    "exportFailed": "Tidak dapat mengekspor layer yang dipilih.",
+    "saveTitleFormErrors": "Perbaiki pelanggaran formulir atribut sebelum menyimpan"
   },
   "style": {
     "panelLabel": "Gaya layer",
@@ -2641,6 +2644,49 @@
       "maxZoom": "Zoom maksimum",
       "minZoomTooltip": "Tingkat zoom saat layer ini muncul. Angka lebih tinggi berarti lebih diperbesar.",
       "maxZoomTooltip": "Tingkat zoom saat layer ini menghilang. Angka lebih tinggi berarti lebih diperbesar."
+    },
+    "joins": {
+      "heading": "Gabungan",
+      "empty": "Tambahkan kolom dari layer atau tabel lain dengan mencocokkan bidang kunci. Kolom gabungan diperbarui saat tabel berubah dan tersimpan bersama proyek.",
+      "addJoin": "Tambah gabungan",
+      "joinLayer": "Layer gabungan",
+      "selectLayer": "Pilih layer…",
+      "joinField": "Bidang gabungan",
+      "targetField": "Bidang target",
+      "selectField": "Pilih bidang…",
+      "fields": "Bidang yang digabungkan",
+      "fieldCount_other": "{{count}} bidang",
+      "prefix": "Awalan nama bidang",
+      "prefixPlaceholder": "mis. census_",
+      "add": "Tambah",
+      "cancel": "Batal",
+      "remove": "Hapus gabungan",
+      "enabledTitle": "Terapkan gabungan ini",
+      "missingLayer": "Layer gabungan tidak ditemukan",
+      "noCandidates": "Tidak ada layer lain dengan tabel atribut untuk digabungkan",
+      "statsMatched": "{{matched}} dari {{total}} fitur cocok",
+      "statsUnmatchedJoin_other": "{{count}} baris tabel tanpa kecocokan"
+    },
+    "virtualFields": {
+      "heading": "Bidang virtual",
+      "empty": "Tambahkan kolom berbasis ekspresi yang dihitung ulang setiap kali data berubah. Bidang virtual tersimpan bersama proyek dan muncul di semua tempat bidang digunakan: tabel atribut, penataan gaya, label, dan seleksi.",
+      "addField": "Tambah bidang virtual",
+      "name": "Nama bidang",
+      "namePlaceholder": "mis. density",
+      "nameTaken": "Kolom dengan nama ini sudah ada",
+      "nameConflict": "Tidak diterapkan: nama bertabrakan dengan kolom yang sudah ada",
+      "expression": "Ekspresi",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Ekspresi bidang virtual",
+      "openBuilder": "Buka pembangun",
+      "invalidExpression": "Ekspresi tidak valid",
+      "add": "Tambah",
+      "save": "Simpan",
+      "cancel": "Batal",
+      "edit": "Edit bidang virtual",
+      "remove": "Hapus bidang virtual",
+      "enabledTitle": "Terapkan bidang virtual ini",
+      "evaluationErrors_other": "{{count}} fitur gagal dievaluasi (sel null)"
     },
     "labels": {
       "heading": "Label",
@@ -2683,7 +2729,23 @@
       "dedupeHint": "Menciutkan titik yang bertumpuk pada koordinat yang sama. Menggunakan bidang label pada layer titik lokal.",
       "expression": "Ekspresi (opsional)",
       "expressionHint": "Ekspresi MapLibre (JSON). Mengesampingkan bidang jika diisi.",
-      "expressionInvalid": "Bukan ekspresi MapLibre yang valid (harus berupa array JSON). Nilai ini diabaikan."
+      "expressionInvalid": "Bukan ekspresi MapLibre yang valid (harus berupa array JSON). Nilai ini diabaikan.",
+      "dataDefined": {
+        "heading": "Penggantian berbasis data",
+        "size": "Ukuran",
+        "color": "Warna",
+        "opacity": "Opasitas",
+        "visibility": "Visibilitas",
+        "priority": "Prioritas",
+        "sizeTarget": "Ekspresi ukuran label",
+        "colorTarget": "Ekspresi warna label",
+        "opacityTarget": "Ekspresi opasitas label",
+        "visibilityTarget": "Ekspresi visibilitas label",
+        "priorityTarget": "Ekspresi prioritas label",
+        "notSet": "Belum diatur",
+        "clear": "Hapus ekspresi",
+        "hint": "Ekspresi MapLibre per fitur. Ukuran, opasitas, dan prioritas menghasilkan angka (label dengan nilai prioritas lebih rendah ditempatkan lebih dulu), warna sebuah warna, visibilitas benar/salah. Diabaikan saat penggabungan label duplikat aktif. Ekspresi opasitas menggantikan opasitas lapisan untuk label."
+      }
     },
     "elevation3d": {
       "mode": "3D (nilai Z)",
@@ -2756,9 +2818,10 @@
       "filterInvalid": "Filter tidak valid — harus berupa ekspresi array JSON. Aturan ini dilewati hingga diperbaiki.",
       "elseRuleColor": "Warna aturan else",
       "elseRuleColorPick": "Pilih warna aturan else dari layar",
-      "elseRuleEnabled": "Aktifkan aturan lainnya",
+      "elseRuleEnabled": "Aktifkan aturan lainnya (jika nonaktif, fitur yang tidak cocok dengan aturan mana pun disembunyikan)",
       "elseAllOtherFeatures": "Else (semua fitur lainnya)",
       "applyHint": "Klik Terapkan untuk mengaktifkan rendering berbasis aturan.",
+      "rulesApplyLive": "Perubahan aturan langsung diterapkan ke peta — tidak perlu langkah penerapan terpisah.",
       "proportionalSize": "Ukuran proporsional",
       "sizeByValue": "Ukuran berdasarkan nilai",
       "sizeField": "Bidang ukuran",
@@ -2831,7 +2894,9 @@
       "schemeFirstValues": "Nilai pertama",
       "errorChooseAttribute": "Pilih atribut untuk mode gaya ini.",
       "errorGraduatedStops": "Gaya bertingkat memerlukan setidaknya dua titik henti numerik.",
-      "errorCategorizedStops": "Gaya berkategori memerlukan setidaknya satu kategori."
+      "errorCategorizedStops": "Gaya berkategori memerlukan setidaknya satu kategori.",
+      "invertedFill": "Isian terbalik",
+      "invertedFillHint": "Isi di luar fitur"
     },
     "selectLayerHint": "Pilih layer untuk mengedit gayanya.",
     "layerOrderDefault": "Urutan layer (default)",
@@ -2864,6 +2929,73 @@
       "notArray": "{{label}} harus berupa ekspresi array JSON.",
       "notOperator": "{{label}} harus dimulai dengan operator, mis. [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} bukan JSON yang valid: {{message}}"
+    },
+    "decorations": {
+      "heading": "Dekorasi garis",
+      "typeNone": "Tidak ada",
+      "typeArrow": "Panah",
+      "typeTriangle": "Segitiga",
+      "typeCircle": "Lingkaran",
+      "typeSquare": "Persegi",
+      "color": "Warna dekorasi",
+      "size": "Ukuran simbol (px)",
+      "spacing": "Jarak (px)"
+    },
+    "generator": {
+      "heading": "Generator geometri",
+      "type": "Geometri turunan",
+      "typeNone": "Tidak ada",
+      "typeCentroid": "Sentroid",
+      "typeBoundingBox": "Kotak pembatas",
+      "typeConvexHull": "Cangkang cembung",
+      "typeBuffer": "Buffer",
+      "bufferDistance": "Jarak buffer (m)",
+      "fillColor": "Warna isian",
+      "strokeColor": "Warna garis luar",
+      "strokeWidth": "Lebar garis luar (px)",
+      "opacity": "Opasitas isian",
+      "circleRadius": "Radius titik (px)"
+    },
+    "attributeForm": {
+      "heading": "Formulir Atribut",
+      "empty": "Belum ada bidang yang dikonfigurasi. Tetapkan widget penyuntingan, batasan, atau aturan visibilitas ke sebuah bidang.",
+      "configureField": "Konfigurasikan bidang",
+      "field": "Bidang",
+      "selectField": "Pilih bidang…",
+      "widgetLabel": "Widget penyuntingan",
+      "widget": {
+        "text": "Teks",
+        "number": "Angka",
+        "range": "Rentang",
+        "checkbox": "Kotak centang",
+        "date": "Tanggal",
+        "valueMap": "Peta nilai"
+      },
+      "alias": "Alias",
+      "required": "Wajib",
+      "requiredTag": "wajib",
+      "constraintTag": "batasan",
+      "visibilityTag": "visibilitas",
+      "valueMap": "Entri peta nilai",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Satu entri per baris: nilai atau nilai=Label.",
+      "min": "Min",
+      "max": "Maks",
+      "step": "Langkah",
+      "constraintExpression": "Ekspresi batasan",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Deskripsi batasan",
+      "constraintDescriptionPlaceholder": "Ditampilkan saat batasan gagal",
+      "visibilityExpression": "Ekspresi visibilitas",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Ekspresi tidak valid",
+      "openBuilder": "Buka pembuat ekspresi",
+      "edit": "Edit konfigurasi bidang",
+      "remove": "Hapus konfigurasi bidang",
+      "cancel": "Batal",
+      "save": "Simpan",
+      "noFields": "Lapisan tidak memiliki bidang atribut untuk dikonfigurasi.",
+      "minMaxInvalid": "Min harus kurang dari atau sama dengan Maks."
     }
   },
   "layers": {
@@ -3083,5 +3215,16 @@
     "cogConvertFailed": "Tidak dapat mengonversi \"{{name}}\" menjadi Cloud-Optimized GeoTIFF. Coba konversi dengan gdal_translate atau rio cogeo, lalu muat hasilnya.",
     "rasterDownloadFailed": "Tidak dapat mengunduh \"{{name}}\". Server mungkin lambat, tidak dapat dijangkau, atau memblokir permintaan lintas asal, atau file mungkin terlalu besar untuk disimpan dalam memori. Periksa URL dan coba lagi.",
     "rasterNotGeotiff": "\"{{name}}\" tidak mengembalikan GeoTIFF. Server mungkin mengirim halaman kesalahan atau login sebagai gantinya. Periksa URL dan coba lagi."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Nilai diperlukan",
+      "number": "Harus berupa angka",
+      "range": "Harus antara {{min}} dan {{max}}",
+      "rangeMin": "Harus minimal {{min}}",
+      "rangeMax": "Harus maksimal {{max}}",
+      "valueMap": "Nilai tidak ada dalam daftar yang diizinkan",
+      "constraint": "Batasan tidak terpenuhi"
+    }
   }
 }

@@ -3,11 +3,15 @@ import {
   type GeoLibreLayer,
   geojsonHasZCoordinates,
   type LayerStyle,
+  proportionalRadiusExpression,
+  ruleBasedVisibilityFilter,
   shouldUseTiledRendering,
   styleValue,
+  validateMapExpression,
 } from "@geolibre/core";
 import { addProtocol, config } from "maplibre-gl";
 import type maplibregl from "maplibre-gl";
+import type { PropertyValueSpecification } from "maplibre-gl";
 import { FileSource, PMTiles, Protocol } from "pmtiles";
 import {
   ensureGeoJsonVtProtocol,
@@ -25,18 +29,31 @@ import {
   detectGeometryProfile,
   fillExtrusionLayerId,
   fillLayerId,
+  generatorCircleLayerId,
+  generatorFillLayerId,
+  generatorLineLayerId,
+  generatorSourceId,
   heatmapLayerId,
+  invertedFillLayerId,
+  invertedSourceId,
   labelLayerId,
   labelSourceId,
+  lineDecorationLayerId,
   lineLayerId,
   markerLayerId,
   sourceId,
   textLayerId,
 } from "./geojson-loader";
 import { buildDedupedLabelFeatures } from "./label-dedup";
+import {
+  buildGeneratedGeometry,
+  buildInvertedMask,
+  generatedGeometryKinds,
+} from "./derived-geometry";
 import { ensureGeneratedImageHandler } from "./generated-images";
 import { prepareFillPattern } from "./fill-patterns";
-import { prepareMarker } from "./markers";
+import { prepareLineDecoration } from "./line-decorations";
+import { markerIconSizeValue, prepareMarker } from "./markers";
 import { isPlaceholderLayer } from "./placeholders";
 import {
   circlePaint,
@@ -119,45 +136,53 @@ function unclusteredPointFilter(
 }
 
 /**
- * Combine a sub-layer's geometry filter with the layer's transient
- * {@link GeoLibreLayer.timeFilter}, when set, so a Time-Slider-bound vector
- * layer only renders features inside the current timeline window. Returns the
- * geometry filter unchanged when no time filter is set, so the common (unbound)
- * path produces an identical spec and `ensureLayer` performs no filter update.
+ * Combine a sub-layer's geometry filter with the layer's per-feature filters:
+ * the transient {@link GeoLibreLayer.timeFilter} (a Time-Slider-bound layer
+ * only renders features inside the current timeline window) and the rule-based
+ * visibility filter (a rule-based layer whose else rule is switched off hides
+ * features matching no rule — see {@link ruleBasedVisibilityFilter}). Returns
+ * the geometry filter unchanged when neither applies, so the common path
+ * produces an identical spec and `ensureLayer` performs no filter update.
  *
  * Aggregate cluster layers (the bubble and its count) intentionally do not pass
- * through here: a cluster feature carries no time property, so an `["all", ...]`
- * wrap would drop every cluster whenever a window is active. Per-feature layers
- * (fill, line, point, heatmap, text) filter correctly.
+ * through here: a cluster feature carries no time or rule property, so an
+ * `["all", ...]` wrap would drop every cluster whenever a window or rule filter
+ * is active. Per-feature layers (fill, line, point, heatmap, text) filter
+ * correctly.
  *
  * @param layer - The store layer being synced.
  * @param geometryFilter - The sub-layer's own geometry-type filter.
- * @returns The combined filter, or the original when no time filter applies.
+ * @returns The combined filter, or the original when no extra filter applies.
  */
-function withTimeFilter(
+function withFeatureFilters(
   layer: GeoLibreLayer,
   geometryFilter: maplibregl.FilterSpecification,
 ): maplibregl.FilterSpecification {
+  const filters: unknown[] = [];
   const timeFilter = layer.timeFilter;
-  if (!Array.isArray(timeFilter) || timeFilter.length === 0) {
-    return geometryFilter;
+  if (Array.isArray(timeFilter) && timeFilter.length > 0) {
+    filters.push(timeFilter);
   }
+  const ruleFilter = ruleBasedVisibilityFilter(layer.style);
+  if (ruleFilter) filters.push(ruleFilter);
+  if (filters.length === 0) return geometryFilter;
   return [
     "all",
     geometryFilter,
-    timeFilter,
+    ...filters,
   ] as unknown as maplibregl.FilterSpecification;
 }
 
-// Tracked filter state for external-native vector layers whose Time Slider
-// window GeoLibre applies. `base` is the control's own filter, captured the
-// first time a window is applied so the window can be combined without nesting
-// and fully restored when the binding is removed; `appliedKey` is the JSON of
-// the combined filter we last pushed, compared against the next combined filter
-// (both built here, so they round-trip) to avoid calling `setFilter` on every
-// sync tick. Keyed first by the map instance (a WeakMap, so entries are
-// garbage-collected when a map is destroyed and a fresh map never inherits
-// stale base filters) then by native MapLibre layer id.
+// Tracked filter state for external-native vector layers whose per-feature
+// filters (a Time Slider window and/or the rule-based hide-unmatched filter)
+// GeoLibre applies. `base` is the control's own filter, captured the first time
+// a filter is applied so it can be combined without nesting and fully restored
+// when the last filter is removed; `appliedKey` is the JSON of the combined
+// filter we last pushed, compared against the next combined filter (both built
+// here, so they round-trip) to avoid calling `setFilter` on every sync tick.
+// Keyed first by the map instance (a WeakMap, so entries are garbage-collected
+// when a map is destroyed and a fresh map never inherits stale base filters)
+// then by native MapLibre layer id.
 interface NativeFilterState {
   base: maplibregl.FilterSpecification | null;
   appliedKey: string;
@@ -194,29 +219,68 @@ function nativeLayerSupportsFilter(type: string): boolean {
 }
 
 /**
- * Apply (or clear) a Time-Slider window on an external-native vector layer that
- * a control owns and paints itself (e.g. the Add Vector Layer control). The
- * control segregates geometry across its own native layers with a base filter
- * such as `["==", ["geometry-type"], "Point"]`; this combines that base filter
- * with the layer's transient {@link GeoLibreLayer.timeFilter} via `["all", ...]`
- * so the window narrows the visible features without disturbing the control's
- * paint. The control's base filter is captured once and restored on unbind.
+ * The active per-feature filters GeoLibre applies on top of an external
+ * layer's own filters: the transient Time-Slider window and the rule-based
+ * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}). Empty when
+ * neither applies.
+ */
+function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
+  const extras: unknown[] = [];
+  const timeFilter = layer.timeFilter;
+  if (Array.isArray(timeFilter) && timeFilter.length > 0) {
+    extras.push(timeFilter);
+  }
+  const ruleFilter = ruleBasedVisibilityFilter(layer.style);
+  if (ruleFilter) extras.push(ruleFilter);
+  return extras;
+}
+
+/**
+ * Combine a base filter (an external layer's own filter, possibly null) with
+ * the active per-feature extras into one MapLibre filter. Returns the base
+ * unchanged (null stays null) when no extras apply.
+ */
+function combineExternalFilters(
+  base: maplibregl.FilterSpecification | null,
+  extras: unknown[],
+): maplibregl.FilterSpecification | null {
+  if (extras.length === 0) return base;
+  return (
+    base
+      ? ["all", base, ...extras]
+      : extras.length === 1
+        ? extras[0]
+        : ["all", ...extras]
+  ) as unknown as maplibregl.FilterSpecification;
+}
+
+/**
+ * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window and
+ * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter})
+ * — on an external-native vector layer that a control owns and paints itself
+ * (e.g. the Add Vector Layer control). The control segregates geometry across
+ * its own native layers with a base filter such as
+ * `["==", ["geometry-type"], "Point"]`; this combines that base filter with the
+ * active per-feature filters via `["all", ...]` so they narrow the visible
+ * features without disturbing the control's paint. The control's base filter is
+ * captured once and restored when the last per-feature filter is removed.
  *
  * @param map - The MapLibre map.
  * @param nativeLayerId - A control-owned native layer id.
- * @param timeFilter - The layer's current time filter, or undefined when none.
+ * @param layer - The store layer (reads `timeFilter` and the rule filter).
  */
-function applyExternalNativeTimeFilter(
+function applyExternalNativeFeatureFilters(
   map: maplibregl.Map,
   nativeLayerId: string,
-  timeFilter: unknown[] | undefined,
+  layer: GeoLibreLayer,
 ): void {
   if (!map.getLayer(nativeLayerId)) return;
   const states = nativeFilterStatesFor(map);
-  const hasTimeFilter = Array.isArray(timeFilter) && timeFilter.length > 0;
+  const extras = externalFeatureFilterExtras(layer);
 
-  if (!hasTimeFilter) {
-    // No window: restore the control's own filter (once) and stop tracking.
+  if (extras.length === 0) {
+    // Nothing to narrow: restore the control's own filter (once) and stop
+    // tracking.
     const state = states.get(nativeLayerId);
     if (state) {
       map.setFilter(nativeLayerId, state.base ?? undefined);
@@ -225,8 +289,8 @@ function applyExternalNativeTimeFilter(
     return;
   }
 
-  // Window active: capture the control's base filter the first time, then keep
-  // reusing it so repeated ticks combine rather than nest.
+  // Filters active: capture the control's base filter the first time, then
+  // keep reusing it so repeated ticks combine rather than nest.
   let state = states.get(nativeLayerId);
   if (!state) {
     const base =
@@ -234,11 +298,9 @@ function applyExternalNativeTimeFilter(
     state = { base, appliedKey: "" };
     states.set(nativeLayerId, state);
   }
-  const combined = (
-    state.base ? ["all", state.base, timeFilter] : timeFilter
-  ) as unknown as maplibregl.FilterSpecification;
+  const combined = combineExternalFilters(state.base, extras)!;
   // Compare against the last filter we applied (not `getFilter`, which MapLibre
-  // may have normalized) so an unchanged window does not re-push on every tick.
+  // may have normalized) so an unchanged filter does not re-push on every tick.
   const combinedKey = JSON.stringify(combined);
   if (state.appliedKey !== combinedKey) {
     map.setFilter(nativeLayerId, combined);
@@ -382,14 +444,16 @@ function syncExternalNativeLayer(
     for (const nativeLayerId of nativeLayerIds) {
       moveLayer(map, nativeLayerId, beforeId);
       // Control-painted vector layers (e.g. Add Vector Layer's circle/fill/line
-      // layers) still honor a Time Slider window: filtering is independent of
-      // the paint the control owns. Native layers without a filter (deck.gl /
-      // 3D Tiles custom layers) are skipped by the type guard.
+      // layers) still honor a Time Slider window and the rule-based
+      // hide-unmatched filter: filtering is independent of the paint the
+      // control owns. Native layers without a filter (deck.gl / 3D Tiles
+      // custom layers) are skipped by the type guard.
       const nativeLayer = map.getLayer(nativeLayerId);
       if (nativeLayer && nativeLayerSupportsFilter(nativeLayer.type)) {
-        applyExternalNativeTimeFilter(map, nativeLayerId, layer.timeFilter);
+        applyExternalNativeFeatureFilters(map, nativeLayerId, layer);
       }
     }
+    syncVectorControlPointSymbology(map, layer, beforeId);
     // A deck.gl raster has no real MapLibre style layer to move (it renders in a
     // `deck-layer-group-*` keyed by its beforeId prop), so forward the computed
     // beforeId to the control that owns it.
@@ -444,6 +508,20 @@ function syncExternalNativeLayer(
 
     for (const fillLayerSpec of nativeFillLayerSpecs) {
       const extrusionLayerId = externalExtrusionLayerId(fillLayerSpec.id);
+      // The synthetic extrusion layer must honor the same per-feature filters
+      // (Time Slider window, rule-based hide-unmatched) as the fill it
+      // replaces. The copied fill filter may still carry a previously pushed
+      // combined filter, so prefer the tracked base — the fill's own filter —
+      // and re-apply the current extras on top so they never compound or go
+      // stale.
+      const tracked = nativeFilterStatesFor(map).get(fillLayerSpec.id);
+      const baseFilter = tracked
+        ? tracked.base
+        : ((fillLayerSpec.filter as maplibregl.FilterSpecification) ?? null);
+      const filter = combineExternalFilters(
+        baseFilter,
+        externalFeatureFilterExtras(layer),
+      );
       ensureLayer(
         map,
         extrusionLayerId,
@@ -452,7 +530,7 @@ function syncExternalNativeLayer(
           type: "fill-extrusion",
           source: fillLayerSpec.source,
           "source-layer": fillLayerSpec["source-layer"],
-          filter: fillLayerSpec.filter,
+          filter: filter ?? undefined,
           ...intersectZoomRange(fillLayerSpec, layer.style),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility: layer.visible ? "visible" : "none" },
@@ -478,10 +556,11 @@ function syncExternalNativeLayer(
     );
 
     // Narrow the control-painted features to the Time Slider window (if the
-    // layer is bound). Filtering is independent of paint, so this applies even
-    // when the control owns the paint.
+    // layer is bound) and to the rule-based hide-unmatched filter (if the else
+    // rule is switched off). Filtering is independent of paint, so this
+    // applies even when the control owns the paint.
     if (nativeLayerSupportsFilter(nativeLayer.type)) {
-      applyExternalNativeTimeFilter(map, nativeLayerId, layer.timeFilter);
+      applyExternalNativeFeatureFilters(map, nativeLayerId, layer);
     }
 
     if (!controlOwnsPaint(layer)) {
@@ -737,7 +816,11 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: ["==", ["geometry-type"], "Polygon"],
+        filter: withFeatureFilters(layer, [
+          "==",
+          ["geometry-type"],
+          "Polygon",
+        ]),
         paint: fillPaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -753,11 +836,11 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: [
+        filter: withFeatureFilters(layer, [
           "any",
           ["==", ["geometry-type"], "LineString"],
           ["==", ["geometry-type"], "Polygon"],
-        ],
+        ]),
         paint: linePaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -773,7 +856,7 @@ function ensurePMTilesExternalLayer(
         source: sourceId,
         "source-layer": sourceLayer,
         ...styleLayerZoomRange(layer.style),
-        filter: ["==", ["geometry-type"], "Point"],
+        filter: withFeatureFilters(layer, ["==", ["geometry-type"], "Point"]),
         paint: circlePaint(layer.style, layer.opacity),
         layout: { visibility: layer.visible ? "visible" : "none" },
       },
@@ -1384,6 +1467,158 @@ export function externalExtrusionLayerId(nativeLayerId: string): string {
   return `${nativeLayerId}-geolibre-extrusion`;
 }
 
+/**
+ * Marker-icon and proportional-size rendering for a point layer owned by the
+ * Add Vector Layer control (maplibre-gl-vector). The control's VectorLayerStyle
+ * carries no marker or data-driven-radius concept, so those Style-panel
+ * options would otherwise silently no-op on control-managed layers. Following
+ * the synthetic-extrusion pattern in {@link syncExternalNativeLayer}, GeoLibre
+ * renders them itself on top of the control's own source:
+ *
+ * - Marker enabled: the control's circle layer is hidden and a GeoLibre-owned
+ *   symbol layer ({@link markerLayerId}) draws the baked sprite per point,
+ *   honoring proportional sizing through its `icon-size` interpolate.
+ * - Proportional size without a marker: the control circle's `circle-radius`
+ *   is overridden with the shared interpolate; when proportional sizing turns
+ *   off the flat radius is restored and the control owns the paint again.
+ *
+ * Scoped to the control's single-point render (GeoLibre's "single" renderer /
+ * the control's "circle" pointMode); the cluster and heatmap renderers keep
+ * the control's own layers untouched.
+ */
+function syncVectorControlPointSymbology(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  beforeId?: string,
+): void {
+  if (layer.metadata.sourceKind !== "maplibre-gl-vector") return;
+  const syntheticMarkerId = markerLayerId(layer.id);
+  const singleRenderer = styleValue(layer.style, "pointRenderer") === "single";
+  const circleNativeId = getExternalNativeLayerIds(layer).find(
+    (id) => map.getLayer(id)?.type === "circle",
+  );
+  if (!singleRenderer || !circleNativeId) {
+    // Cluster/heatmap modes rebuild the control's native layers, so the old
+    // overlay (if any) just needs dropping. If the control ever reused a
+    // still-live circle id across the mode switch, also hand back its radius
+    // so a stale proportional interpolate cannot bleed into the new renderer.
+    removeIfExists(map, syntheticMarkerId);
+    if (circleNativeId) {
+      restoreOverriddenCircleRadius(map, circleNativeId, layer);
+    }
+    return;
+  }
+
+  const circleSpec = getStyleLayerSpec(map, circleNativeId);
+  ensureGeneratedImageHandler(map);
+  const markerImageId = prepareMarker(layer.style);
+
+  if (markerImageId && circleSpec) {
+    // Reuse the control's own base filter (the tracked base when Time-Slider /
+    // rule extras are active, so they never nest) combined with the current
+    // extras, mirroring applyExternalNativeFeatureFilters.
+    const tracked = nativeFilterStatesFor(map).get(circleNativeId);
+    const base = tracked
+      ? tracked.base
+      : (("filter" in circleSpec
+          ? (circleSpec.filter as maplibregl.FilterSpecification)
+          : null) ?? null);
+    const filter = combineExternalFilters(
+      base,
+      externalFeatureFilterExtras(layer),
+    );
+    const sourceLayer =
+      "source-layer" in circleSpec ? circleSpec["source-layer"] : undefined;
+    ensureLayer(
+      map,
+      syntheticMarkerId,
+      {
+        id: syntheticMarkerId,
+        type: "symbol",
+        source: (circleSpec as { source: string }).source,
+        ...(sourceLayer ? { "source-layer": sourceLayer } : {}),
+        ...styleLayerZoomRange(layer.style),
+        // Always present so clearing the extras also clears the layer filter
+        // on the update path (ensureLayer only diffs keys that exist).
+        filter: filter ?? undefined,
+        layout: {
+          "icon-image": markerImageId,
+          "icon-size": markerIconSizeValue(
+            layer.style,
+          ) as PropertyValueSpecification<number>,
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          visibility: layer.visible ? "visible" : "none",
+        },
+        paint: { "icon-opacity": layer.opacity },
+      },
+      beforeId,
+    );
+    // The control keeps managing its circle's visibility (and re-shows it on
+    // its own toggles), but every sync re-hides it while the marker overlay is
+    // active, so the points never render twice.
+    setNativeLayerVisibility(map, circleNativeId, "none");
+    return;
+  }
+
+  // No marker: drop the overlay and hand the point render back to the control.
+  if (map.getLayer(syntheticMarkerId)) {
+    removeIfExists(map, syntheticMarkerId);
+    setNativeLayerVisibility(
+      map,
+      circleNativeId,
+      layer.visible ? "visible" : "none",
+    );
+  }
+
+  // Proportional size on the control's flat circle: hold the override while
+  // active; once off, restore the flat radius and leave the paint to the
+  // control again. Deliberately proportional-only (not circleRadiusValue):
+  // rule-based per-rule sizes stay a store-managed-layer feature, since none
+  // of the other rule-based paint overrides apply to control-owned layers.
+  const radius = proportionalRadiusExpression(layer.style);
+  if (radius) {
+    map.setPaintProperty(circleNativeId, "circle-radius", radius);
+    overriddenRadiusIdsFor(map).add(circleNativeId);
+  } else {
+    restoreOverriddenCircleRadius(map, circleNativeId, layer);
+  }
+}
+
+// Control-owned circle layers whose circle-radius GeoLibre has overridden with
+// the proportional interpolate. Tracked (like externalNativeBaseFilters, keyed
+// per map so two maps sharing a native layer id never see each other's state)
+// so the restore only ever touches a layer this module actually overrode —
+// never a control-authored expression such as the cluster renderer's stepped
+// radius.
+const overriddenRadiusNativeLayerIds = new WeakMap<
+  maplibregl.Map,
+  Set<string>
+>();
+
+function overriddenRadiusIdsFor(map: maplibregl.Map): Set<string> {
+  let ids = overriddenRadiusNativeLayerIds.get(map);
+  if (!ids) {
+    ids = new Set();
+    overriddenRadiusNativeLayerIds.set(map, ids);
+  }
+  return ids;
+}
+
+/** Hand an overridden circle-radius back to the control's flat value. */
+function restoreOverriddenCircleRadius(
+  map: maplibregl.Map,
+  circleNativeId: string,
+  layer: GeoLibreLayer,
+): void {
+  if (!overriddenRadiusIdsFor(map).delete(circleNativeId)) return;
+  map.setPaintProperty(
+    circleNativeId,
+    "circle-radius",
+    styleValue(layer.style, "circleRadius"),
+  );
+}
+
 function setExternalNativeLayerPaint(
   map: maplibregl.Map,
   nativeLayerId: string,
@@ -1590,6 +1825,14 @@ function applyVectorDataRenderLayers(
   ensureGeneratedImageHandler(map);
   const fillPatternId = prepareFillPattern(layer.style);
   const markerImageId = prepareMarker(layer.style);
+  // Derived companion symbology (inverted mask, geometry generator, dedup
+  // labels) is built from the raw features, so no MapLibre filter applies to
+  // it. While a Time Slider window or a rule-based visibility filter is
+  // active, those derivations would disagree with the visible data — skip
+  // them for the duration, mirroring the dedup-label behavior.
+  const hasFeatureFilter =
+    (Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0) ||
+    ruleBasedVisibilityFilter(layer.style) !== null;
 
   if (profile.hasPolygon) {
     if (layer.style.extrusionEnabled) {
@@ -1602,7 +1845,7 @@ function applyVectorDataRenderLayers(
           type: "fill-extrusion",
           ...sourceSpec,
           ...styleLayerZoomRange(layer.style),
-          filter: withTimeFilter(layer, [
+          filter: withFeatureFilters(layer, [
             "match",
             ["geometry-type"],
             ["Polygon", "MultiPolygon"],
@@ -1616,40 +1859,97 @@ function applyVectorDataRenderLayers(
       );
     } else {
       removeIfExists(map, fillExtrusionLayerId(layer.id));
-      ensureLayer(
-        map,
-        fillLayerId(layer.id),
-        {
-          id: fillLayerId(layer.id),
-          type: "fill",
-          ...sourceSpec,
-          ...styleLayerZoomRange(layer.style),
-          filter: withTimeFilter(layer, [
-            "match",
-            ["geometry-type"],
-            ["Polygon", "MultiPolygon"],
-            true,
-            false,
-          ]),
-          paint: {
-            ...fillPaint(layer.style, opacity),
-            // A set fill-pattern replaces fill-color with the recolorable
-            // sprite tile; null resets it on the setPaintProperty update path in
-            // ensureLayer (MapLibre documents null, not undefined, as the value
-            // that removes a paint property — undefined can silently no-op and
-            // leave a stale pattern rendered after the user selects "None"). The
-            // cast is needed because FillLayerSpecification's paint type omits
-            // null even though setPaintProperty accepts it as the reset value.
-            "fill-pattern": (fillPatternId ?? null) as unknown as string,
+      const fillPaintSpec = {
+        ...fillPaint(layer.style, opacity),
+        // A set fill-pattern replaces fill-color with the recolorable
+        // sprite tile; null resets it on the setPaintProperty update path in
+        // ensureLayer (MapLibre documents null, not undefined, as the value
+        // that removes a paint property — undefined can silently no-op and
+        // leave a stale pattern rendered after the user selects "None"). The
+        // cast is needed because FillLayerSpecification's paint type omits
+        // null even though setPaintProperty accepts it as the reset value.
+        "fill-pattern": (fillPatternId ?? null) as unknown as string,
+      };
+      // Inverted fill (QGIS "Inverted polygons"): the mask — everything
+      // outside the features — takes the layer's fill, and the normal fill
+      // layer is dropped so the features read as holes. The mask derives from
+      // the raw features (no MapLibre filter applies to it), so while a
+      // time-slider / rule-visibility filter is active — or when the mask
+      // cannot be built (no polygons, oversized layer, clipper failure) — it
+      // falls back to the normal filtered fill rather than disagreeing with
+      // the visible data or rendering nothing.
+      const invertedMask =
+        styleValue(layer.style, "invertedFillEnabled") &&
+        !hasFeatureFilter &&
+        layer.geojson
+          ? buildInvertedMask(layer.geojson)
+          : null;
+      if (invertedMask) {
+        removeIfExists(map, fillLayerId(layer.id));
+        const maskSrc = invertedSourceId(layer.id);
+        if (map.getSource(maskSrc)) {
+          (map.getSource(maskSrc) as maplibregl.GeoJSONSource).setData(
+            invertedMask,
+          );
+        } else {
+          map.addSource(maskSrc, { type: "geojson", data: invertedMask });
+        }
+        ensureLayer(
+          map,
+          invertedFillLayerId(layer.id),
+          {
+            id: invertedFillLayerId(layer.id),
+            type: "fill",
+            source: maskSrc,
+            ...styleLayerZoomRange(layer.style),
+            metadata: { "geolibre:internal": true },
+            paint: {
+              ...fillPaintSpec,
+              // The mask's outer ring is the world rectangle; its hairline
+              // outline would draw a visible seam at the antimeridian/poles.
+              // Hole edges are already outlined by the layer's line layer.
+              "fill-outline-color": "rgba(0, 0, 0, 0)",
+            },
+            layout: { visibility },
           },
-          layout: { visibility },
-        },
-        beforeId,
-      );
+          beforeId,
+        );
+      } else {
+        removeIfExists(map, invertedFillLayerId(layer.id));
+        removeSourceIfExists(map, invertedSourceId(layer.id));
+        ensureLayer(
+          map,
+          fillLayerId(layer.id),
+          {
+            id: fillLayerId(layer.id),
+            type: "fill",
+            ...sourceSpec,
+            ...styleLayerZoomRange(layer.style),
+            filter: withFeatureFilters(layer, [
+              "match",
+              ["geometry-type"],
+              ["Polygon", "MultiPolygon"],
+              true,
+              false,
+            ]),
+            paint: fillPaintSpec,
+            layout: { visibility },
+          },
+          beforeId,
+        );
+      }
     }
   } else {
     removeIfExists(map, fillLayerId(layer.id));
     removeIfExists(map, fillExtrusionLayerId(layer.id));
+  }
+  if (
+    !profile.hasPolygon ||
+    layer.style.extrusionEnabled ||
+    !styleValue(layer.style, "invertedFillEnabled")
+  ) {
+    removeIfExists(map, invertedFillLayerId(layer.id));
+    removeSourceIfExists(map, invertedSourceId(layer.id));
   }
 
   if (
@@ -1664,7 +1964,7 @@ function applyVectorDataRenderLayers(
         type: "line",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: withTimeFilter(layer, [
+        filter: withFeatureFilters(layer, [
           "match",
           ["geometry-type"],
           ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
@@ -1678,6 +1978,56 @@ function applyVectorDataRenderLayers(
     );
   } else {
     removeIfExists(map, lineLayerId(layer.id));
+  }
+
+  // Line decorations (QGIS marker-line / arrow lines): a symbol layer that
+  // repeats the generated decoration icon along line features and polygon
+  // outlines. With line placement MapLibre rotates the icon to follow the
+  // line, so the arrow shape points along the feature's direction.
+  const decorationImageId = prepareLineDecoration(layer.style);
+  if (
+    !layer.style.extrusionEnabled &&
+    decorationImageId &&
+    (profile.hasLine || profile.hasPolygon)
+  ) {
+    ensureLayer(
+      map,
+      lineDecorationLayerId(layer.id),
+      {
+        id: lineDecorationLayerId(layer.id),
+        type: "symbol",
+        ...sourceSpec,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: withFeatureFilters(layer, [
+          "match",
+          ["geometry-type"],
+          ["LineString", "MultiLineString", "Polygon", "MultiPolygon"],
+          true,
+          false,
+        ]),
+        layout: {
+          "icon-image": decorationImageId,
+          // The sprite is baked at its display size, matching the marker path.
+          "icon-size": 1,
+          "symbol-placement": "line",
+          "symbol-spacing": Math.max(
+            1,
+            styleValue(layer.style, "lineDecorationSpacing"),
+          ),
+          // Decorations are deliberate symbology, so they must not thin out
+          // under MapLibre's collision placement.
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+          "icon-rotation-alignment": "map",
+          visibility,
+        },
+        paint: { "icon-opacity": opacity },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, lineDecorationLayerId(layer.id));
   }
 
   if (!layer.style.extrusionEnabled && profile.hasPoint && renderer === "heatmap") {
@@ -1696,7 +2046,7 @@ function applyVectorDataRenderLayers(
         ...styleLayerZoomRange(layer.style),
         // Keep text-marker points out of the density, mirroring single mode;
         // they still render through the text symbol layer below.
-        filter: withTimeFilter(
+        filter: withFeatureFilters(
           layer,
           hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
         ),
@@ -1763,7 +2113,7 @@ function applyVectorDataRenderLayers(
         ...styleLayerZoomRange(layer.style),
         // Unclustered points, excluding text markers (which the symbol layer
         // renders) so they don't also appear as plain circles.
-        filter: withTimeFilter(layer, unclusteredPointFilter(hasTextMarkers)),
+        filter: withFeatureFilters(layer, unclusteredPointFilter(hasTextMarkers)),
         paint: circlePaint(layer.style, opacity),
         layout: { visibility },
       },
@@ -1775,7 +2125,7 @@ function applyVectorDataRenderLayers(
     removeIfExists(map, heatmapLayerId(layer.id));
     removeIfExists(map, clusterLayerId(layer.id));
     removeIfExists(map, clusterCountLayerId(layer.id));
-    const pointFilter = withTimeFilter(
+    const pointFilter = withFeatureFilters(
       layer,
       hasTextMarkers ? nonTextMarkerPointFilter : pointGeometryFilter,
     );
@@ -1792,8 +2142,11 @@ function applyVectorDataRenderLayers(
           filter: pointFilter,
           layout: {
             "icon-image": markerImageId,
-            // The sprite is baked at its display size, so keep icon-size at 1.
-            "icon-size": 1,
+            // The sprite is baked at its display size, so icon-size stays 1
+            // unless proportional sizing scales it per feature.
+            "icon-size": markerIconSizeValue(
+              layer.style,
+            ) as PropertyValueSpecification<number>,
             "icon-allow-overlap": true,
             "icon-ignore-placement": true,
             visibility,
@@ -1836,7 +2189,7 @@ function applyVectorDataRenderLayers(
         type: "symbol",
         ...sourceSpec,
         ...styleLayerZoomRange(layer.style),
-        filter: withTimeFilter(layer, textMarkerFilter),
+        filter: withFeatureFilters(layer, textMarkerFilter),
         layout: {
           "text-allow-overlap": true,
           "text-font": textFontForMapStyle(map),
@@ -1888,16 +2241,16 @@ function applyVectorDataRenderLayers(
   // source, and dedup keys off the field value rather than the expression. It is
   // gated to point-only layers: the aggregated source holds just points, so a
   // mixed-geometry layer would silently lose its line/polygon labels. It is also
-  // skipped while a Time Slider filter is active: the aggregated source is built
-  // from the raw features (no MapLibre filter applies to it), so dedup labels
-  // would otherwise ignore the time window and disagree with the visible data.
-  const hasTimeFilter =
-    Array.isArray(layer.timeFilter) && layer.timeFilter.length > 0;
+  // skipped while a Time Slider filter or a rule-based visibility filter is
+  // active (`hasFeatureFilter`, computed at the top of this function): the
+  // aggregated source is built from the raw features (no MapLibre filter
+  // applies to it), so dedup labels would otherwise ignore the time window /
+  // hidden features and disagree with the visible data.
   const dedupedLabelFc =
     labels.enabled &&
     labels.dedupe !== "off" &&
     !sourceLayer &&
-    !hasTimeFilter &&
+    !hasFeatureFilter &&
     layer.geojson &&
     labels.field &&
     profile.hasPoint &&
@@ -1987,6 +2340,42 @@ function applyVectorDataRenderLayers(
         "!",
         textMarkerShapeFilter,
       ] as unknown as maplibregl.FilterSpecification;
+      // Data-defined overrides (GH #1320): expression-driven size / color /
+      // opacity, per-feature placement priority (symbol-sort-key), and
+      // attribute-gated visibility. They read source feature attributes, so
+      // they are skipped on the dedup path, whose synthetic features carry
+      // only the aggregated label value. An override that is invalid for its
+      // destination — malformed JSON, not an expression, or the wrong result
+      // type — parses to null and falls back to the literal control; the
+      // style-spec check matters because addLayer validates the whole layer
+      // spec, so an unchecked type-mismatched value would reject the entire
+      // label layer on first add rather than just that property.
+      const labelOverride = (
+        source: string,
+        expectedType: "number" | "color" | "boolean",
+      ) =>
+        dedupedLabelFc ? null : parseLabelOverride(source, expectedType);
+      const sizeOverride = labelOverride(labels.sizeExpression, "number");
+      const colorOverride = labelOverride(labels.colorExpression, "color");
+      const opacityOverride = labelOverride(labels.opacityExpression, "number");
+      const priorityOverride = labelOverride(
+        labels.priorityExpression,
+        "number",
+      );
+      const visibilityOverride = labelOverride(
+        labels.visibilityExpression,
+        "boolean",
+      );
+      // The visibility expression joins the marker exclusion before the
+      // layer-wide feature filters, so a feature evaluating false simply gets
+      // no label.
+      const labelBaseFilter = visibilityOverride
+        ? ([
+            "all",
+            nonMarkerFilter,
+            visibilityOverride,
+          ] as unknown as maplibregl.FilterSpecification)
+        : nonMarkerFilter;
       const sourceRef = dedupedLabelFc
         ? { source: dedupSourceId }
         : sourceSpec;
@@ -2000,11 +2389,11 @@ function applyVectorDataRenderLayers(
           ...labelZoom,
           ...(dedupedLabelFc
             ? {}
-            : { filter: withTimeFilter(layer, nonMarkerFilter) }),
+            : { filter: withFeatureFilters(layer, labelBaseFilter) }),
           layout: {
             "text-field": textField,
             "text-font": textFontForMapStyle(map),
-            "text-size": Math.max(1, labels.size),
+            "text-size": sizeOverride ?? Math.max(1, labels.size),
             // The dedup source is points, so it cannot use line placement.
             "symbol-placement":
               !dedupedLabelFc && labels.placement === "line"
@@ -2017,13 +2406,21 @@ function applyVectorDataRenderLayers(
             "text-rotate": labels.rotation,
             "text-max-width": Math.max(1, labels.maxWidth),
             "text-transform": labels.transform,
+            // Lower sort keys place first, so they win when space is tight.
+            // `null` resets a previously applied priority (stripped on first
+            // add by ensureLayer).
+            "symbol-sort-key":
+              priorityOverride as unknown as PropertyValueSpecification<number>,
             visibility,
           },
           paint: {
-            "text-color": labels.color,
+            "text-color": colorOverride ?? labels.color,
             "text-halo-color": labels.haloColor,
             "text-halo-width": Math.max(0, labels.haloWidth),
-            "text-opacity": opacity,
+            // The opacity override replaces the layer opacity rather than
+            // multiplying into it: wrapping the expression would invalidate
+            // top-level `["zoom"]` interpolations.
+            "text-opacity": opacityOverride ?? opacity,
           },
         },
         beforeId,
@@ -2037,6 +2434,162 @@ function applyVectorDataRenderLayers(
   } else {
     removeIfExists(map, labelLayerId(layer.id));
     removeSourceIfExists(map, labelSourceId(layer.id));
+  }
+
+  applyGeometryGeneratorLayers(
+    map,
+    layer,
+    visibility,
+    opacity,
+    hasFeatureFilter,
+    beforeId,
+  );
+}
+
+/**
+ * Geometry generator (QGIS geometry-generator symbol layers): renders each
+ * feature's derived geometry — centroid, bounding box, convex hull, or buffer
+ * — as extra symbology over the layer's normal rendering, through a companion
+ * GeoJSON source. Derived from the raw features (no MapLibre filter applies),
+ * so, like dedup labels, it is suppressed while a time-slider /
+ * rule-visibility filter is active rather than rendering hidden features.
+ */
+function applyGeometryGeneratorLayers(
+  map: maplibregl.Map,
+  layer: GeoLibreLayer,
+  visibility: "visible" | "none",
+  opacity: number,
+  hasFeatureFilter: boolean,
+  beforeId?: string,
+): void {
+  // Match inverted fill and line decorations: no flat companion symbology
+  // while the layer renders as a 3D extrusion. The Style Panel hides the
+  // generator controls in extrusion mode without resetting the setting, so
+  // this guard is what actually turns the layers off.
+  const generatorType =
+    layer.style.extrusionEnabled || hasFeatureFilter
+      ? "none"
+      : styleValue(layer.style, "geometryGenerator");
+  const generated =
+    generatorType !== "none" && layer.geojson
+      ? buildGeneratedGeometry(
+          layer.geojson,
+          generatorType,
+          styleValue(layer.style, "geometryGeneratorBufferDistance"),
+        )
+      : null;
+  if (!generated || generated.features.length === 0) {
+    removeIfExists(map, generatorFillLayerId(layer.id));
+    removeIfExists(map, generatorLineLayerId(layer.id));
+    removeIfExists(map, generatorCircleLayerId(layer.id));
+    removeSourceIfExists(map, generatorSourceId(layer.id));
+    return;
+  }
+
+  const genSrc = generatorSourceId(layer.id);
+  if (map.getSource(genSrc)) {
+    (map.getSource(genSrc) as maplibregl.GeoJSONSource).setData(generated);
+  } else {
+    map.addSource(genSrc, { type: "geojson", data: generated });
+  }
+
+  const kinds = generatedGeometryKinds(generated);
+  const fillColor = styleValue(layer.style, "geometryGeneratorFillColor");
+  const strokeColor = styleValue(layer.style, "geometryGeneratorStrokeColor");
+  const strokeWidth = Math.max(
+    0,
+    styleValue(layer.style, "geometryGeneratorStrokeWidth"),
+  );
+  const genOpacity =
+    Math.min(1, Math.max(0, styleValue(layer.style, "geometryGeneratorOpacity"))) *
+    opacity;
+
+  if (kinds.hasPolygon) {
+    ensureLayer(
+      map,
+      generatorFillLayerId(layer.id),
+      {
+        id: generatorFillLayerId(layer.id),
+        type: "fill",
+        source: genSrc,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: { "fill-color": fillColor, "fill-opacity": genOpacity },
+        layout: { visibility },
+      },
+      beforeId,
+    );
+    ensureLayer(
+      map,
+      generatorLineLayerId(layer.id),
+      {
+        id: generatorLineLayerId(layer.id),
+        type: "line",
+        source: genSrc,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Polygon", "MultiPolygon"],
+          true,
+          false,
+        ],
+        paint: {
+          "line-color": strokeColor,
+          "line-width": strokeWidth,
+          "line-opacity": opacity,
+        },
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, generatorFillLayerId(layer.id));
+    removeIfExists(map, generatorLineLayerId(layer.id));
+  }
+
+  if (kinds.hasPoint) {
+    ensureLayer(
+      map,
+      generatorCircleLayerId(layer.id),
+      {
+        id: generatorCircleLayerId(layer.id),
+        type: "circle",
+        source: genSrc,
+        ...styleLayerZoomRange(layer.style),
+        metadata: { "geolibre:internal": true },
+        filter: [
+          "match",
+          ["geometry-type"],
+          ["Point", "MultiPoint"],
+          true,
+          false,
+        ],
+        paint: {
+          "circle-color": fillColor,
+          "circle-radius": Math.max(
+            1,
+            styleValue(layer.style, "geometryGeneratorCircleRadius"),
+          ),
+          "circle-opacity": genOpacity,
+          "circle-stroke-color": strokeColor,
+          "circle-stroke-width": strokeWidth,
+          "circle-stroke-opacity": opacity,
+        },
+        layout: { visibility },
+      },
+      beforeId,
+    );
+  } else {
+    removeIfExists(map, generatorCircleLayerId(layer.id));
   }
 }
 
@@ -2072,6 +2625,47 @@ function getDedupedLabelFeatures(
 
 function removeSourceIfExists(map: maplibregl.Map, id: string): void {
   if (map.getSource(id)) map.removeSource(id);
+}
+
+// Data-defined label overrides are re-read on every sync (which can fire per
+// frame, e.g. while dragging the opacity slider), and validating through the
+// style spec is far more expensive than the reads, so results are memoized by
+// expected type + source. Bounded so a pathological stream of distinct
+// expressions cannot grow it without limit.
+const labelOverrideCache = new Map<
+  string,
+  maplibregl.ExpressionSpecification | null
+>();
+const LABEL_OVERRIDE_CACHE_MAX = 256;
+
+/**
+ * Parses and validates a data-defined label override (a MapLibre expression
+ * stored as a JSON string) against its destination's expected result type.
+ * Returns null — falling back to the literal control — for anything invalid:
+ * malformed JSON, a non-expression value, or a type the destination cannot
+ * accept. The `|| ""` guards against a hand-edited project file storing null
+ * for an expression field (the type says string, but the value comes from
+ * untrusted JSON).
+ */
+function parseLabelOverride(
+  source: string,
+  expectedType: "number" | "color" | "boolean",
+): maplibregl.ExpressionSpecification | null {
+  const trimmed = (source || "").trim();
+  if (!trimmed) return null;
+  const key = `${expectedType}:${trimmed}`;
+  const cached = labelOverrideCache.get(key);
+  if (cached !== undefined) return cached;
+  const validation = validateMapExpression(trimmed, { expectedType });
+  const result =
+    validation.ok && validation.parsed
+      ? (validation.parsed as unknown as maplibregl.ExpressionSpecification)
+      : null;
+  if (labelOverrideCache.size >= LABEL_OVERRIDE_CACHE_MAX) {
+    labelOverrideCache.clear();
+  }
+  labelOverrideCache.set(key, result);
+  return result;
 }
 
 // Keep this predicate aligned with textMarkerFilter: any text-marker-shaped
@@ -2858,21 +3452,27 @@ function ensureLayer(
   const validBeforeId =
     beforeId && map.getLayer(beforeId) ? beforeId : undefined;
   // MapLibre's addLayer rejects (and silently drops, without throwing) a layer
-  // whose paint carries an explicit `null`. `null` is only valid as a
-  // setPaintProperty reset, which the update branch above uses; on first add it
-  // must be stripped so e.g. `fill-pattern: null` (the "no pattern" reset) does
-  // not blank the whole fill layer. Properties simply absent default correctly.
-  // Scoped to `paint` deliberately: `fill-pattern` is the only reset-via-null in
-  // this file. Extend to `layout` here if a layout property ever uses the same
-  // null-reset pattern.
+  // whose paint or layout carries an explicit `null`. `null` is only valid as
+  // a set*Property reset, which the update branch above uses (`fill-pattern`
+  // in paint, `symbol-sort-key` in layout); on first add it must be stripped
+  // so a reset value does not blank the whole layer. Properties simply absent
+  // default correctly.
+  const stripNulls = (
+    record: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined =>
+    record && Object.values(record).some((value) => value === null)
+      ? Object.fromEntries(
+          Object.entries(record).filter(([, value]) => value !== null),
+        )
+      : record;
+  const strippedPaint = stripNulls(spec.paint);
+  const strippedLayout = stripNulls(spec.layout);
   const addSpec =
-    spec.paint &&
-    Object.values(spec.paint).some((value) => value === null)
+    strippedPaint !== spec.paint || strippedLayout !== spec.layout
       ? {
           ...spec,
-          paint: Object.fromEntries(
-            Object.entries(spec.paint).filter(([, value]) => value !== null),
-          ),
+          ...(strippedPaint ? { paint: strippedPaint } : {}),
+          ...(strippedLayout ? { layout: strippedLayout } : {}),
         }
       : spec;
   map.addLayer(addSpec, validBeforeId);
@@ -2990,6 +3590,11 @@ export function removeLayerFromMap(
     textLayerId(layerId),
     markerLayerId(layerId),
     labelLayerId(layerId),
+    invertedFillLayerId(layerId),
+    lineDecorationLayerId(layerId),
+    generatorFillLayerId(layerId),
+    generatorLineLayerId(layerId),
+    generatorCircleLayerId(layerId),
     `layer-${layerId}-raster`,
     `layer-${layerId}-video`,
     `layer-${layerId}-image`,
@@ -3005,8 +3610,18 @@ export function removeLayerFromMap(
     ...getExternalSourceIds(layer),
     sourceId(layerId),
     labelSourceId(layerId),
+    invertedSourceId(layerId),
+    generatorSourceId(layerId),
   ]) {
     if (src && map.getSource(src)) map.removeSource(src);
+  }
+  // Drop radius-override tracking for the removed layer's native ids so a
+  // later layer reusing an id never inherits a stale restore.
+  const overriddenRadiusIds = overriddenRadiusNativeLayerIds.get(map);
+  if (overriddenRadiusIds) {
+    for (const id of getExternalNativeLayerIds(layer)) {
+      overriddenRadiusIds.delete(id);
+    }
   }
   // Free any client-side tile index built for this layer's tiled render path.
   unregisterGeoJsonVtSource(layerId);

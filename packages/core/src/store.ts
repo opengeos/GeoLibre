@@ -41,6 +41,9 @@ import {
   type GeoLibreLayer,
   type GeoLibreProject,
   type LayerGroup,
+  type AttributeFormConfig,
+  type LayerJoin,
+  type LayerVirtualField,
   type LayerStyle,
   type LegendConfig,
   type MapGridLayout,
@@ -57,6 +60,11 @@ import {
   type StyleLibraryEntry,
 } from "./types";
 import { hasSimpleStyleProperties } from "./vector-color";
+import {
+  applyJoinsToLayer,
+  cascadeLayerJoinRefresh,
+  reapplyLayerJoins,
+} from "./joins";
 import {
   DEFAULT_ELLIPSOID_ID,
   getPlanetaryBasemapByStyleUrl,
@@ -146,6 +154,23 @@ export type RasterToolKind =
   | "mosaic"
   | "focal";
 
+/**
+ * Latest live device-GPS fix published by the GPS Tracking tool (issue #1316),
+ * read by the status bar readout. Device state, not project state: excluded
+ * from undo history (partialize never lists it) and from project files, and
+ * deliberately left untouched on project switches.
+ */
+export interface GpsStatusFix {
+  lng: number;
+  lat: number;
+  /** Horizontal accuracy radius in meters. */
+  accuracy: number;
+  /** Ground speed in m/s, or null when the device doesn't report one. */
+  speed: number | null;
+  /** Fix time in epoch milliseconds. */
+  timestamp: number;
+}
+
 export interface AppState {
   projectName: string;
   projectPath: string | null;
@@ -205,6 +230,8 @@ export interface AppState {
   selectedFeatureIds: string[];
   identifyLayerId: string | null;
   pointerCoords: [number, number] | null;
+  /** Live GPS fix for the status bar, or null while GPS tracking is off. */
+  gpsStatus: GpsStatusFix | null;
   metadata: Record<string, unknown>;
   recentProjects: RecentProjectEntry[];
   attributeFilter: string;
@@ -256,6 +283,17 @@ export interface AppState {
     styleManagerOpen: boolean;
     /** Processing History panel visibility (#1292). */
     processingHistoryOpen: boolean;
+    /** Select by Expression dialog visibility (#1314). */
+    selectByExpressionOpen: boolean;
+    // Layer preselected in the Select by Expression dialog when it is opened
+    // from a layer's context menu, or null when opened without a target.
+    // Deliberately not selectLayer(): that would clear the live selection the
+    // dialog's add/remove/intersect modes need to combine with.
+    selectByExpressionLayerId: string | null;
+    /** Select by Location dialog visibility (#1314). */
+    selectByLocationOpen: boolean;
+    /** Same contract as `selectByExpressionLayerId`, for Select by Location. */
+    selectByLocationLayerId: string | null;
     /**
      * Pending "re-run from History" request. Written by the History panel just
      * before it opens the target processing dialog; consumed and cleared by
@@ -270,6 +308,7 @@ export interface AppState {
   };
 
   setPointerCoords: (coords: [number, number] | null) => void;
+  setGpsStatus: (fix: GpsStatusFix | null) => void;
   setCollaboration: (patch: Partial<CollaborationState>) => void;
   updateCollaborationPresence: (
     clientId: string,
@@ -375,6 +414,10 @@ export interface AppState {
   setStorymapComposing: (chapterId: string | null) => void;
   setModelBuilderOpen: (open: boolean) => void;
   setProcessingHistoryOpen: (open: boolean) => void;
+  /** Open/close Select by Expression, optionally preselecting a target layer. */
+  setSelectByExpressionOpen: (open: boolean, layerId?: string | null) => void;
+  /** Open/close Select by Location, optionally preselecting a target layer. */
+  setSelectByLocationOpen: (open: boolean, layerId?: string | null) => void;
   setProcessingRerun: (request: ProcessingRerunRequest | null) => void;
   setCollaborateDialogOpen: (open: boolean) => void;
   setZoomToSelectedFeature: (enabled: boolean) => void;
@@ -460,6 +503,27 @@ export interface AppState {
   setLayerVisibility: (id: string, visible: boolean) => void;
   setLayerOpacity: (id: string, opacity: number) => void;
   setLayerStyle: (id: string, style: Partial<LayerStyle>) => void;
+  /**
+   * Replace a layer's persistent attribute joins and immediately re-derive its
+   * joined columns (strip what the previous joins added, apply the new list).
+   * Pass an empty array to detach every join and restore the base attributes.
+   */
+  setLayerJoins: (id: string, joins: LayerJoin[]) => void;
+  /**
+   * Replace the layer's Attribute Form designer configuration (per-field edit
+   * widgets, constraints, conditional visibility). Pass `undefined` to remove
+   * the form config entirely.
+   */
+  setLayerAttributeForm: (
+    id: string,
+    attributeForm: AttributeFormConfig | undefined,
+  ) => void;
+  /**
+   * Replace a layer's virtual fields and immediately re-derive its computed
+   * columns (strip what the previous fields added, evaluate the new list).
+   * Pass an empty array to detach every virtual field.
+   */
+  setLayerVirtualFields: (id: string, fields: LayerVirtualField[]) => void;
   reorderLayer: (id: string, direction: "up" | "down") => void;
   moveLayer: (id: string, targetIndex: number) => void;
   addGeoJsonLayer: (
@@ -726,6 +790,7 @@ export const useAppStore = create<AppState>()(
       selectedFeatureIds: [],
       identifyLayerId: null,
       pointerCoords: null,
+      gpsStatus: null,
       metadata: {},
       recentProjects: [],
       attributeFilter: "",
@@ -758,12 +823,17 @@ export const useAppStore = create<AppState>()(
         modelBuilderOpen: false,
         styleManagerOpen: false,
         processingHistoryOpen: false,
+        selectByExpressionOpen: false,
+        selectByExpressionLayerId: null,
+        selectByLocationOpen: false,
+        selectByLocationLayerId: null,
         processingRerun: null,
         zoomToSelectedFeature: false,
         collaborateDialogOpen: false,
       },
 
       setPointerCoords: (coords) => set({ pointerCoords: coords }),
+      setGpsStatus: (fix) => set({ gpsStatus: fix }),
       setCollaboration: (patch) =>
         set((s) => ({ collaboration: { ...s.collaboration, ...patch } })),
       // Add or remove a single remote participant's presence without rebuilding
@@ -1053,6 +1123,22 @@ export const useAppStore = create<AppState>()(
         set((s) => ({ ui: { ...s.ui, processingHistoryOpen: open } })),
       setProcessingRerun: (request) =>
         set((s) => ({ ui: { ...s.ui, processingRerun: request } })),
+      setSelectByExpressionOpen: (open, layerId) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            selectByExpressionOpen: open,
+            selectByExpressionLayerId: open ? (layerId ?? null) : null,
+          },
+        })),
+      setSelectByLocationOpen: (open, layerId) =>
+        set((s) => ({
+          ui: {
+            ...s.ui,
+            selectByLocationOpen: open,
+            selectByLocationLayerId: open ? (layerId ?? null) : null,
+          },
+        })),
       setCollaborateDialogOpen: (open) =>
         set((s) => ({ ui: { ...s.ui, collaborateDialogOpen: open } })),
       setZoomToSelectedFeature: (enabled) =>
@@ -1289,7 +1375,14 @@ export const useAppStore = create<AppState>()(
 
       removeLayer: (id) =>
         set((s) => ({
-          layers: s.layers.filter((l) => l.id !== id),
+          // Re-derive any layer whose joins consumed the removed layer: with
+          // the source gone the join resolves to nothing, so its previously
+          // materialized columns strip away instead of staying frozen (the
+          // join definition itself stays, shown as missing in the Joins UI).
+          layers: cascadeLayerJoinRefresh(
+            s.layers.filter((l) => l.id !== id),
+            id,
+          ),
           // Drop any per-pane visibility override for the removed layer so stale
           // ids don't accumulate (and serialize) in secondary panes over time.
           secondaryMapViews: s.secondaryMapViews.map((pane) => {
@@ -1310,10 +1403,62 @@ export const useAppStore = create<AppState>()(
         })),
 
       updateLayer: (id, patch) =>
-        set((s) => ({
-          layers: s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
-          isDirty: true,
-        })),
+        set((s) => {
+          let layers = s.layers.map((l) => (l.id === id ? { ...l, ...patch } : l));
+          // A geojson replacement re-derives the layer's derived columns
+          // (persistent joins, then virtual fields): on the layer itself
+          // (file reload, attribute edits, processing writes — derived
+          // columns stay derived, QGIS-style), then transitively on every
+          // layer whose joins consume the updated one, so editing a join
+          // table refreshes its targets and their dependents in turn. The
+          // `patch.joins`/`patch.virtualFields` guard exists for external
+          // callers of this public store API (plugins, programmatic loads):
+          // a patch that carries `geojson` alongside the definitions is taken
+          // verbatim as already-derived state — no in-repo caller does this
+          // today.
+          if (patch.geojson !== undefined) {
+            if (
+              patch.joins === undefined &&
+              patch.virtualFields === undefined
+            ) {
+              layers = layers.map((l) =>
+                l.id === id && (l.joins?.length || l.virtualFields?.length)
+                  ? applyJoinsToLayer(l, layers)
+                  : l,
+              );
+            }
+            layers = cascadeLayerJoinRefresh(layers, id);
+          }
+          return { layers, isDirty: true };
+        }),
+
+      setLayerJoins: (id, joins) =>
+        set((s) => {
+          let layers = s.layers.map((l) =>
+            l.id === id ? applyJoinsToLayer(l, s.layers, joins) : l,
+          );
+          // Changing this layer's joins changes its materialized columns, so
+          // layers joining against it (directly or transitively) re-derive too.
+          layers = cascadeLayerJoinRefresh(layers, id);
+          return { layers, isDirty: true };
+        }),
+
+      setLayerAttributeForm: (id, attributeForm) =>
+        get().updateLayer(id, { attributeForm }),
+
+      setLayerVirtualFields: (id, fields) =>
+        set((s) => {
+          let layers = s.layers.map((l) =>
+            l.id === id
+              ? applyJoinsToLayer(l, s.layers, undefined, fields)
+              : l,
+          );
+          // Virtual columns are ordinary materialized properties, so a layer
+          // joining against this one (directly or transitively) sees them and
+          // must re-derive too.
+          layers = cascadeLayerJoinRefresh(layers, id);
+          return { layers, isDirty: true };
+        }),
 
       setLayerVisibility: (id, visible) => get().updateLayer(id, { visible }),
 
@@ -1626,6 +1771,12 @@ export const useAppStore = create<AppState>()(
             storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
+            // An open selection dialog (and its preselected layer id) belongs
+            // to the previous project's layers.
+            selectByExpressionOpen: false,
+            selectByExpressionLayerId: null,
+            selectByLocationOpen: false,
+            selectByLocationLayerId: null,
           },
         }));
         clearHistory();
@@ -1633,6 +1784,10 @@ export const useAppStore = create<AppState>()(
 
       loadProject: (project, path = null, options = {}) => {
         const applied = applyProjectToStore(project);
+        // Re-resolve persistent attribute joins against the loaded layer set,
+        // so joined columns reflect the join tables as saved (and a stale
+        // saved copy of the joined output self-heals).
+        applied.layers = reapplyLayerJoins(applied.layers);
         // A project that ships a story map opens straight into the presentation
         // so the reader sees the story, not the editor. Projects without a story
         // (or with an empty one) open normally. Callers that open a project for
@@ -1658,6 +1813,12 @@ export const useAppStore = create<AppState>()(
             storymapReturnToEditor: false,
             storymapPanelOpen: false,
             storymapComposingId: null,
+            // An open selection dialog (and its preselected layer id) belongs
+            // to the previous project's layers.
+            selectByExpressionOpen: false,
+            selectByExpressionLayerId: null,
+            selectByLocationOpen: false,
+            selectByLocationLayerId: null,
           },
         }));
         clearHistory();

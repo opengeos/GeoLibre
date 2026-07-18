@@ -196,6 +196,33 @@ export type MarkerShape =
 export type PointRenderer = "single" | "heatmap" | "cluster";
 
 /**
+ * The repeated decoration symbol drawn along line features (and polygon
+ * outlines), or `"none"` when decorations are off. Mirrors the QGIS
+ * marker-line / arrow symbol layers: `"arrow"` renders directional arrowheads
+ * that follow the line, the other shapes render as repeated markers.
+ */
+export type LineDecoration =
+  | "none"
+  | "arrow"
+  | "triangle"
+  | "circle"
+  | "square";
+
+/**
+ * The per-feature derived geometry rendered by the geometry generator, or
+ * `"none"` when the generator is off. Mirrors QGIS geometry-generator symbol
+ * layers: each feature's derived geometry (its centroid, bounding box, convex
+ * hull, or a buffer) is drawn as an extra symbol over the layer's normal
+ * symbology. `"centroid"` derives points; the rest derive polygons.
+ */
+export type GeometryGeneratorType =
+  | "none"
+  | "centroid"
+  | "bounding-box"
+  | "convex-hull"
+  | "buffer";
+
+/**
  * Unit a stroke/line width is measured in. `"pixels"` is constant screen space;
  * `"meters"` is ground distance, so the rendered width scales with the map
  * scale (zoom). See {@link LayerStyle.strokeWidthUnit}.
@@ -292,6 +319,39 @@ export interface LabelStyle {
    * {@link field} (not {@link expression}) as the label value.
    */
   dedupe: LabelDedupe;
+  /**
+   * Data-defined override for {@link size}: a MapLibre expression (JSON
+   * string) producing a number, e.g. sizing labels by population. Empty means
+   * "use the literal {@link size}". Like the other data-defined overrides
+   * below, it reads source feature attributes, so it is skipped while
+   * {@link dedupe} collapsing is active (the aggregated features carry only
+   * the label value).
+   */
+  sizeExpression: string;
+  /**
+   * Data-defined override for {@link color}: a MapLibre expression (JSON
+   * string) producing a color, e.g. coloring labels by category.
+   */
+  colorExpression: string;
+  /**
+   * Data-defined label opacity: a MapLibre expression (JSON string) producing
+   * a number in 0..1. When set it replaces the layer-wide opacity for labels
+   * (wrapping it would invalidate top-level `["zoom"]` interpolations).
+   */
+  opacityExpression: string;
+  /**
+   * Per-feature label visibility: a MapLibre expression (JSON string)
+   * producing a boolean. Features evaluating false get no label (e.g. hide
+   * labels below an attribute threshold). Combined with the layer's other
+   * feature filters.
+   */
+  visibilityExpression: string;
+  /**
+   * Per-feature placement priority: a MapLibre expression (JSON string)
+   * producing a number, applied as `symbol-sort-key`. Labels with lower
+   * values are placed first, so they win when space is tight.
+   */
+  priorityExpression: string;
 }
 
 /** MapLibre `text-anchor` positions offered for {@link LabelStyle.anchor}. */
@@ -443,6 +503,47 @@ export interface LayerStyle {
   heatmapIntensity: number;
   clusterRadius: number;
   clusterMaxZoom: number;
+  /**
+   * When true, the polygon fill renders *inverted*: the area outside the
+   * features is filled (with {@link fillColor}/{@link fillOpacity}) and the
+   * features themselves become holes, mirroring the QGIS "Inverted polygons"
+   * renderer. Feature outlines still render normally. Only applies to layers
+   * with polygon geometry; ignored while {@link extrusionEnabled} is on.
+   */
+  invertedFillEnabled: boolean;
+  /**
+   * Repeated decoration symbol drawn along line features and polygon outlines
+   * (QGIS marker-line / arrow lines). `"none"` disables it. See
+   * {@link LineDecoration}.
+   */
+  lineDecoration: LineDecoration;
+  /**
+   * Decoration symbol color (6-digit hex). An empty string inherits
+   * {@link strokeColor} so decorations follow the stroke by default.
+   */
+  lineDecorationColor: string;
+  /** Decoration symbol size in pixels. */
+  lineDecorationSize: number;
+  /** Distance between consecutive decoration symbols in pixels. */
+  lineDecorationSpacing: number;
+  /**
+   * Per-feature derived geometry drawn over the layer's normal symbology
+   * (QGIS geometry generator). `"none"` disables it. See
+   * {@link GeometryGeneratorType}.
+   */
+  geometryGenerator: GeometryGeneratorType;
+  /** Buffer distance in meters for the `"buffer"` generator. */
+  geometryGeneratorBufferDistance: number;
+  /** Fill color (6-digit hex) for generated polygons and centroid points. */
+  geometryGeneratorFillColor: string;
+  /** Outline color (6-digit hex) for generated geometry. */
+  geometryGeneratorStrokeColor: string;
+  /** Outline width in pixels for generated geometry. */
+  geometryGeneratorStrokeWidth: number;
+  /** Fill opacity (0..1) for generated polygons and centroid points. */
+  geometryGeneratorOpacity: number;
+  /** Circle radius in pixels for generated centroid points. */
+  geometryGeneratorCircleRadius: number;
   rasterBrightnessMin: number;
   rasterBrightnessMax: number;
   rasterSaturation: number;
@@ -482,6 +583,11 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
     maxWidth: 10,
     transform: "none",
     dedupe: "off",
+    sizeExpression: "",
+    colorExpression: "",
+    opacityExpression: "",
+    visibilityExpression: "",
+    priorityExpression: "",
   },
   extrusionEnabled: false,
   extrusionColor: "#3b82f6",
@@ -533,6 +639,18 @@ export const DEFAULT_LAYER_STYLE: LayerStyle = {
   heatmapIntensity: 1,
   clusterRadius: 50,
   clusterMaxZoom: 14,
+  invertedFillEnabled: false,
+  lineDecoration: "none",
+  lineDecorationColor: "",
+  lineDecorationSize: 12,
+  lineDecorationSpacing: 80,
+  geometryGenerator: "none",
+  geometryGeneratorBufferDistance: 1000,
+  geometryGeneratorFillColor: "#f59e0b",
+  geometryGeneratorStrokeColor: "#b45309",
+  geometryGeneratorStrokeWidth: 2,
+  geometryGeneratorOpacity: 0.4,
+  geometryGeneratorCircleRadius: 5,
   rasterBrightnessMin: 0,
   rasterBrightnessMax: 1,
   rasterSaturation: 0,
@@ -577,6 +695,169 @@ export function shouldUseTiledRendering(
   );
 }
 
+/**
+ * Match statistics from the last time a {@link LayerJoin} was applied, shown in
+ * the Joins UI so silent key mismatches are visible (mirrors QGIS's join
+ * feedback). Recomputed on every apply; persisted harmlessly with the join.
+ */
+export interface LayerJoinStats {
+  /** Target features whose key matched a join-table row. */
+  matchedCount: number;
+  /** Target features with no matching join-table row (their joined columns are null). */
+  unmatchedTargetCount: number;
+  /** Join-table rows (with a non-empty key) that matched no target feature. */
+  unmatchedJoinCount: number;
+}
+
+/**
+ * A persistent attribute join attached to a layer (QGIS Layer Properties →
+ * Joins): a live left join that augments the layer's attribute table with
+ * columns from another layer (typically a geometry-less table added via
+ * Delimited Text with no coordinate fields) matched on a key field. Unlike the
+ * Processing → Vector attribute join, the layer keeps its identity — styles,
+ * labels, and position — and the joined columns refresh whenever the join
+ * table's data changes. Definitions persist in `.geolibre.json` and re-resolve
+ * on project load. See `joins.ts` for the engine.
+ */
+export interface LayerJoin {
+  /** Stable id for list edits. */
+  id: string;
+  /** Id of the layer providing the joined columns (its geometry is ignored). */
+  joinLayerId: string;
+  /** Key field on the layer that owns this join. */
+  targetField: string;
+  /** Key field on the join layer. */
+  joinField: string;
+  /**
+   * Join-layer fields to bring over; `undefined` brings every field except the
+   * key. Names are the join layer's own (pre-prefix) field names.
+   */
+  fields?: string[];
+  /** Optional prefix prepended to every joined column name (as in QGIS). */
+  prefix?: string;
+  /** `false` detaches the joined columns without deleting the definition. */
+  enabled?: boolean;
+  /**
+   * Bookkeeping written by the engine: the output column names this join added
+   * to the layer's features. Applying joins strips these first, which makes
+   * re-application idempotent without keeping a duplicate copy of the base
+   * data (base columns always win a name collision, so a joined column never
+   * shadows one). Not user-editable.
+   */
+  addedFields?: string[];
+  /** Last-run match statistics; see {@link LayerJoinStats}. */
+  stats?: LayerJoinStats;
+}
+
+/** Edit-widget kinds the Attribute Form designer can assign to a field. */
+export type AttributeFormWidget =
+  | "text"
+  | "number"
+  | "range"
+  | "checkbox"
+  | "date"
+  | "valueMap";
+
+/** One selectable entry of a `valueMap` widget (stored value + display label). */
+export interface AttributeFormValueMapEntry {
+  /** The value written to the feature property (compared as a string). */
+  value: string;
+  /** Human-readable label shown in the dropdown; defaults to {@link value}. */
+  label?: string;
+}
+
+/**
+ * Per-field configuration authored in the Attribute Form designer (layer
+ * properties → Attributes Form, QGIS-style): which edit widget the attribute
+ * editing surfaces render for the field, plus optional expression-based
+ * constraints and conditional visibility. Consumed by the attribute table's
+ * inline editor and the Field Collection capture form; helpers live in
+ * `attribute-form.ts`.
+ */
+export interface AttributeFormFieldConfig {
+  /** Feature property key this configuration applies to. */
+  field: string;
+  widget: AttributeFormWidget;
+  /** Display label override shown in forms instead of the raw field name. */
+  alias?: string;
+  /**
+   * When true, a null/empty value fails validation. Checkbox widgets are
+   * exempt: unchecked is a valid state, not a missing value.
+   */
+  required?: boolean;
+  /** Dropdown entries for the `valueMap` widget. */
+  valueMap?: AttributeFormValueMapEntry[];
+  /** Lower bound for `number`/`range` widgets (inclusive). */
+  min?: number;
+  /** Upper bound for `number`/`range` widgets (inclusive). */
+  max?: number;
+  /** Step for the `range` widget's input. */
+  step?: number;
+  /**
+   * Boolean MapLibre expression that must evaluate to `true` against the
+   * feature's (candidate) properties for the value to be accepted, e.g.
+   * `[">", ["get", "population"], 0]`. Stored as the expression source string
+   * the Expression Builder edits.
+   */
+  constraintExpression?: string;
+  /** Human-readable message shown when the constraint fails. */
+  constraintDescription?: string;
+  /**
+   * Boolean MapLibre expression controlling whether the field is shown in
+   * attribute forms; `false` hides the field (and skips its validation).
+   * Empty/invalid expressions fail open so a typo cannot hide data entry.
+   */
+  visibilityExpression?: string;
+}
+
+/** The Attribute Form designer's whole per-layer configuration. */
+export interface AttributeFormConfig {
+  fields: AttributeFormFieldConfig[];
+}
+
+/**
+ * A virtual field attached to a vector layer (QGIS Field Calculator → "Create
+ * virtual field", issue #1321): a column defined by a MapLibre expression that
+ * recomputes live instead of being written once as static values. The engine
+ * (`virtual-fields.ts`) materializes the computed values into the layer's
+ * feature properties — so the attribute table, Expression Builder,
+ * data-driven styling, labels, and selection all see the column with no
+ * further wiring — and re-derives them whenever the layer's data (or its
+ * joins) change. Definitions persist in `.geolibre.json` and re-resolve on
+ * project load; the expression is a declarative MapLibre expression (never
+ * arbitrary code), so re-evaluating it from a shared project file is safe.
+ */
+export interface LayerVirtualField {
+  /** Stable id for list edits. */
+  id: string;
+  /** The output column name. A name already taken by a base column is skipped. */
+  name: string;
+  /**
+   * MapLibre expression source (JSON text, e.g. `["/", ["get", "pop"],
+   * ["get", "area_km2"]]`) evaluated against each feature.
+   */
+  expression: string;
+  /** `false` detaches the computed column without deleting the definition. */
+  enabled?: boolean;
+  /**
+   * Bookkeeping written by the engine: the column name actually materialized
+   * on the last apply, absent when the field was disabled, failed to compile,
+   * or was skipped because the name collided with an existing column.
+   * Applying virtual fields strips these first, which makes re-application
+   * idempotent (an existing column is never shadowed, so stripping exactly
+   * restores the pre-apply properties). Not user-editable.
+   */
+  addedField?: string;
+  /** Compile error from the last apply, when the expression failed to parse. */
+  error?: string;
+  /**
+   * Features whose evaluation threw at runtime on the last apply (their cell
+   * is null). Surfaced so the UI can warn without one bad feature aborting
+   * the whole column.
+   */
+  errorCount?: number;
+}
+
 export interface GeoLibreLayer {
   id: string;
   name: string;
@@ -588,6 +869,27 @@ export interface GeoLibreLayer {
   metadata: Record<string, unknown>;
   beforeId?: string;
   geojson?: FeatureCollection;
+  /**
+   * Per-field edit-widget, constraint, and visibility configuration authored
+   * in the Attribute Form designer. Applied by the attribute editing surfaces
+   * (attribute table inline editor, Field Collection capture form); persists
+   * with the project like {@link joins}.
+   */
+  attributeForm?: AttributeFormConfig;
+  /**
+   * Persistent attribute joins applied to this layer's features, in order.
+   * The joined columns are materialized into `geojson` feature properties (so
+   * the attribute table, Expression Builder, styling, and labels all see them)
+   * and re-derived whenever the layer's or a join table's data changes.
+   */
+  joins?: LayerJoin[];
+  /**
+   * Expression-backed virtual fields computed for this layer's features, in
+   * order. Applied after joins (so an expression can read joined columns) and
+   * materialized into `geojson` feature properties; re-derived whenever the
+   * layer's data changes. See {@link LayerVirtualField}.
+   */
+  virtualFields?: LayerVirtualField[];
   /**
    * Transient MapLibre filter expression applied on top of every rendered
    * sub-layer's geometry filter. The Time Slider plugin sets this on a bound

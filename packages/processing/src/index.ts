@@ -5,7 +5,15 @@ export {
   calculateBoundsAlgorithm,
   countFeaturesAlgorithm,
 } from "./registry";
-export { VECTOR_TOOLS, getVectorTool } from "./vector-tools";
+export {
+  VECTOR_TOOLS,
+  getVectorTool,
+  matchFeaturesByLocation,
+  MAX_CLIENT_PAIRS,
+  SELECT_LOCATION_PREDICATES,
+  type LocationMatches,
+  type SelectLocationPredicate,
+} from "./vector-tools";
 export {
   TOPOLOGY_TOOLS,
   TOPOLOGY_RULES,

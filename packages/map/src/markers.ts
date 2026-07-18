@@ -1,5 +1,6 @@
 import {
   normalizeHexColor,
+  proportionalSizeRange,
   styleValue,
   type LayerStyle,
   type MarkerShape,
@@ -179,14 +180,69 @@ function loadSvgMarker(
 }
 
 /**
+ * The pixel size the marker sprite is baked at. Normally the configured
+ * `markerSize`, but with proportional sizing active (the shared
+ * `proportionalSizeRange` guard from `@geolibre/core`, so marker activation
+ * can never drift from circle-radius activation) the bake grows to cover
+ * the largest proportional diameter (clamped to the canvas-safety maximum), so
+ * `icon-size` mostly scales the sprite *down* instead of blowing a small bake
+ * up ~10x into a blurry icon. Downscaling stays crisp; the residual upscale
+ * past the 96 px clamp is at most ~2x, which the 2x bake pixel ratio absorbs
+ * on standard-DPI displays.
+ */
+function markerBakedSize(style: LayerStyle): number {
+  const base = markerSize(style);
+  const range = proportionalSizeRange(style);
+  if (!range) return base;
+  const maxDiameter = 2 * Math.max(range.minRadius, range.maxRadius);
+  if (maxDiameter <= base) return base;
+  return Math.min(MAX_MARKER_SIZE, Math.round(maxDiameter));
+}
+
+/**
+ * Builds the `icon-size` layout value for a marker symbol layer, honoring
+ * proportional (graduated) symbol sizing. The marker sprite is baked at
+ * {@link markerBakedSize}, so the constant value is `1`; when proportional
+ * sizing applies (the shared `proportionalSizeRange` guard from
+ * `@geolibre/core`), returns an `interpolate` whose outputs scale the sprite
+ * so its on-screen width matches the diameter a proportional circle of the
+ * same radius would span (`2 * radius / bakedSize`).
+ *
+ * Note: per-rule symbol-size overrides (rule-based mode) apply only to circle
+ * rendering (`circleRadiusValue`'s `ruleOverrideValue` wrapper); marker
+ * icon-size deliberately uses the layer-level proportional base only.
+ *
+ * @param style - The layer style.
+ * @returns `1`, or a MapLibre `interpolate` expression for `icon-size`.
+ */
+export function markerIconSizeValue(style: LayerStyle): number | unknown[] {
+  const range = proportionalSizeRange(style);
+  if (!range) return 1;
+  const size = markerBakedSize(style);
+  // icon-size must not go negative; clamp so a hand-edited project with a
+  // negative radius degrades to an invisible marker instead of a style error.
+  return [
+    "interpolate",
+    ["linear"],
+    ["to-number", ["get", range.property], range.minValue],
+    range.minValue,
+    Math.max(0, (2 * range.minRadius) / size),
+    range.maxValue,
+    Math.max(0, (2 * range.maxRadius) / size),
+  ];
+}
+
+/**
  * Resolve the `icon-image` id for a point layer's marker, registering the lazy
  * factory that draws it. Returns `null` when markers are disabled or a custom
  * SVG marker has no markup, in which case the caller renders a plain circle
  * instead.
  *
  * The id encodes shape, color, and size so a recolor or resize produces a
- * distinct image; the marker is baked at its display size with `icon-size` left
- * at `1`. See {@link ensureGeneratedImageHandler} for materialization.
+ * distinct image; the marker is baked at {@link markerBakedSize} with
+ * `icon-size` left at `1` (or scaled down per feature by
+ * {@link markerIconSizeValue} when proportional sizing applies). See
+ * {@link ensureGeneratedImageHandler} for materialization.
  *
  * @param style - The layer style.
  * @returns The image id, or `null` when no marker applies.
@@ -194,7 +250,7 @@ function loadSvgMarker(
 export function prepareMarker(style: LayerStyle): string | null {
   if (!styleValue(style, "markerEnabled")) return null;
   const shape = styleValue(style, "markerShape");
-  const size = markerSize(style);
+  const size = markerBakedSize(style);
 
   if (shape === "custom") {
     const markup = styleValue(style, "markerSvg").trim();

@@ -2620,6 +2620,8 @@
     "moveLeft": "Mover a la izquierda",
     "moveRight": "Mover a la derecha",
     "deleteField": "Eliminar campo",
+    "joinedColumnTitle": "Columna unida, derivada de una tabla de unión. Edita la tabla o la definición de la unión en su lugar.",
+    "virtualColumnTitle": "Campo virtual, calculado a partir de una expresión. Edita su definición en el panel de estilo de la capa en su lugar.",
     "deleteFieldConfirm": "Esto elimina permanentemente el campo \"{{field}}\" de todas las entidades de \"{{layer}}\". El estilo o las etiquetas que lo referencian se borrarán. Esto no se puede deshacer.",
     "addFieldDescription": "Añada un nuevo campo a todas las entidades de \"{{layer}}\".",
     "fieldName": "Nombre del campo",
@@ -2650,7 +2652,8 @@
     "invalidExpression": "Expresión no válida.",
     "calcCouldNotApply": "No se pudo aplicar el cálculo a esta capa.",
     "calcAppliedWithErrors": "Aplicado, pero {{errors}} de {{evaluated}} entidad(es) generaron un error y se escribieron como null.",
-    "exportFailed": "No se pudo exportar la capa seleccionada."
+    "exportFailed": "No se pudo exportar la capa seleccionada.",
+    "saveTitleFormErrors": "Corrija las infracciones del formulario de atributos antes de guardar"
   },
   "style": {
     "panelLabel": "Estilo de capa",
@@ -2685,6 +2688,52 @@
       "maxZoom": "Zoom máximo",
       "minZoomTooltip": "Nivel de zoom en el que aparece esta capa. Los números más altos indican más acercamiento.",
       "maxZoomTooltip": "Nivel de zoom en el que desaparece esta capa. Los números más altos indican más acercamiento."
+    },
+    "joins": {
+      "heading": "Uniones",
+      "empty": "Añade columnas de otra capa o tabla haciendo coincidir campos clave. Las columnas unidas se actualizan cuando cambia la tabla y se guardan con el proyecto.",
+      "addJoin": "Añadir unión",
+      "joinLayer": "Capa de unión",
+      "selectLayer": "Selecciona una capa…",
+      "joinField": "Campo de unión",
+      "targetField": "Campo de destino",
+      "selectField": "Selecciona un campo…",
+      "fields": "Campos a unir",
+      "fieldCount_one": "{{count}} campo",
+      "fieldCount_other": "{{count}} campos",
+      "prefix": "Prefijo de nombre de campo",
+      "prefixPlaceholder": "p. ej. census_",
+      "add": "Añadir",
+      "cancel": "Cancelar",
+      "remove": "Eliminar unión",
+      "enabledTitle": "Aplicar esta unión",
+      "missingLayer": "Capa de unión no encontrada",
+      "noCandidates": "Ninguna otra capa tiene una tabla de atributos para unir",
+      "statsMatched": "{{matched}} de {{total}} entidades coincidentes",
+      "statsUnmatchedJoin_one": "{{count}} fila de la tabla sin coincidencia",
+      "statsUnmatchedJoin_other": "{{count}} filas de la tabla sin coincidencia"
+    },
+    "virtualFields": {
+      "heading": "Campos virtuales",
+      "empty": "Añade columnas basadas en expresiones que se recalculan cada vez que cambian los datos. Los campos virtuales se guardan con el proyecto y aparecen en todos los lugares donde aparecen los campos: la tabla de atributos, el estilo, las etiquetas y la selección.",
+      "addField": "Añadir campo virtual",
+      "name": "Nombre del campo",
+      "namePlaceholder": "p. ej. density",
+      "nameTaken": "Ya existe una columna con este nombre",
+      "nameConflict": "No aplicado: el nombre entra en conflicto con una columna existente",
+      "expression": "Expresión",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "Expresión del campo virtual",
+      "openBuilder": "Abrir el editor",
+      "invalidExpression": "Expresión no válida",
+      "add": "Añadir",
+      "save": "Guardar",
+      "cancel": "Cancelar",
+      "edit": "Editar campo virtual",
+      "remove": "Eliminar campo virtual",
+      "enabledTitle": "Aplicar este campo virtual",
+      "evaluationErrors_one": "{{count}} entidad no se pudo evaluar (celda nula)",
+      "evaluationErrors_other": "{{count}} entidades no se pudieron evaluar (celdas nulas)"
     },
     "labels": {
       "heading": "Etiquetas",
@@ -2727,7 +2776,23 @@
       "dedupeHint": "Combina los puntos apilados en la misma coordenada. Usa el campo de etiqueta en las capas de puntos locales.",
       "expression": "Expresión (opcional)",
       "expressionHint": "Una expresión de MapLibre (JSON). Reemplaza el campo cuando se establece.",
-      "expressionInvalid": "No es una expresión de MapLibre válida (debe ser un array JSON). Este valor se ignora."
+      "expressionInvalid": "No es una expresión de MapLibre válida (debe ser un array JSON). Este valor se ignora.",
+      "dataDefined": {
+        "heading": "Sustituciones definidas por datos",
+        "size": "Tamaño",
+        "color": "Color",
+        "opacity": "Opacidad",
+        "visibility": "Visibilidad",
+        "priority": "Prioridad",
+        "sizeTarget": "Expresión de tamaño de etiqueta",
+        "colorTarget": "Expresión de color de etiqueta",
+        "opacityTarget": "Expresión de opacidad de etiqueta",
+        "visibilityTarget": "Expresión de visibilidad de etiqueta",
+        "priorityTarget": "Expresión de prioridad de etiqueta",
+        "notSet": "Sin definir",
+        "clear": "Borrar expresión",
+        "hint": "Expresiones MapLibre por entidad. Tamaño, opacidad y prioridad producen números (las etiquetas con valores de prioridad más bajos se colocan primero), color un color y visibilidad verdadero/falso. Se ignoran mientras la combinación de etiquetas duplicadas está activa. Una expresión de opacidad reemplaza la opacidad de la capa para las etiquetas."
+      }
     },
     "elevation3d": {
       "mode": "3D (valores Z)",
@@ -2800,9 +2865,10 @@
       "filterInvalid": "Filtro no válido: debe ser una expresión de array JSON. Esta regla se omite hasta que se corrija.",
       "elseRuleColor": "Color de la regla Else",
       "elseRuleColorPick": "Elegir el color de la regla Else de la pantalla",
-      "elseRuleEnabled": "Activar la regla «si no»",
+      "elseRuleEnabled": "Activar la regla «si no» (si está desactivada, se ocultan los elementos que no coinciden con ninguna regla)",
       "elseAllOtherFeatures": "Else (todas las demás entidades)",
       "applyHint": "Haga clic en Aplicar para activar el renderizado basado en reglas.",
+      "rulesApplyLive": "Los cambios en las reglas se aplican al mapa de inmediato; no hace falta un paso de aplicación aparte.",
       "proportionalSize": "Tamaño proporcional",
       "sizeByValue": "Tamaño según valor",
       "sizeField": "Campo de tamaño",
@@ -2875,7 +2941,9 @@
       "schemeFirstValues": "Primeros valores",
       "errorChooseAttribute": "Elija un atributo para este modo de estilo.",
       "errorGraduatedStops": "El estilo graduado requiere al menos dos paradas numéricas.",
-      "errorCategorizedStops": "El estilo categorizado requiere al menos una categoría."
+      "errorCategorizedStops": "El estilo categorizado requiere al menos una categoría.",
+      "invertedFill": "Relleno invertido",
+      "invertedFillHint": "Rellenar fuera de los elementos"
     },
     "selectLayerHint": "Seleccione una capa para editar su estilo.",
     "layerOrderDefault": "Orden de capas (predeterminado)",
@@ -2908,6 +2976,73 @@
       "notArray": "{{label}} debe ser una expresión de array JSON.",
       "notOperator": "{{label}} debe comenzar con un operador, p. ej., [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}} no es JSON válido: {{message}}"
+    },
+    "decorations": {
+      "heading": "Decoración de línea",
+      "typeNone": "Ninguna",
+      "typeArrow": "Flechas",
+      "typeTriangle": "Triángulos",
+      "typeCircle": "Círculos",
+      "typeSquare": "Cuadrados",
+      "color": "Color de decoración",
+      "size": "Tamaño del símbolo (px)",
+      "spacing": "Espaciado (px)"
+    },
+    "generator": {
+      "heading": "Generador de geometría",
+      "type": "Geometría derivada",
+      "typeNone": "Ninguna",
+      "typeCentroid": "Centroides",
+      "typeBoundingBox": "Cuadros delimitadores",
+      "typeConvexHull": "Envolventes convexas",
+      "typeBuffer": "Zonas de influencia",
+      "bufferDistance": "Distancia de influencia (m)",
+      "fillColor": "Color de relleno",
+      "strokeColor": "Color de contorno",
+      "strokeWidth": "Ancho de contorno (px)",
+      "opacity": "Opacidad de relleno",
+      "circleRadius": "Radio de punto (px)"
+    },
+    "attributeForm": {
+      "heading": "Formulario de atributos",
+      "empty": "No hay campos configurados. Asigne un widget de edición, una restricción o una regla de visibilidad a un campo.",
+      "configureField": "Configurar campo",
+      "field": "Campo",
+      "selectField": "Seleccionar campo…",
+      "widgetLabel": "Widget de edición",
+      "widget": {
+        "text": "Texto",
+        "number": "Número",
+        "range": "Rango",
+        "checkbox": "Casilla de verificación",
+        "date": "Fecha",
+        "valueMap": "Mapa de valores"
+      },
+      "alias": "Alias",
+      "required": "Obligatorio",
+      "requiredTag": "obligatorio",
+      "constraintTag": "restricción",
+      "visibilityTag": "visibilidad",
+      "valueMap": "Entradas del mapa de valores",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "Una entrada por línea: valor o valor=Etiqueta.",
+      "min": "Mín",
+      "max": "Máx",
+      "step": "Paso",
+      "constraintExpression": "Expresión de restricción",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "Descripción de la restricción",
+      "constraintDescriptionPlaceholder": "Se muestra cuando la restricción falla",
+      "visibilityExpression": "Expresión de visibilidad",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "Expresión no válida",
+      "openBuilder": "Abrir el generador de expresiones",
+      "edit": "Editar configuración del campo",
+      "remove": "Eliminar configuración del campo",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "noFields": "La capa no tiene campos de atributos para configurar.",
+      "minMaxInvalid": "El mínimo debe ser menor o igual que el máximo."
     }
   },
   "layers": {
@@ -3127,5 +3262,16 @@
     "cogConvertFailed": "No se pudo convertir «{{name}}» a un GeoTIFF optimizado para la nube. Intente convertirlo con gdal_translate o rio cogeo y luego cargue el resultado.",
     "rasterDownloadFailed": "No se pudo descargar «{{name}}». Es posible que el servidor esté lento, no esté disponible o bloquee solicitudes entre orígenes, o que el archivo sea demasiado grande para mantenerlo en memoria. Compruebe la URL e inténtelo de nuevo.",
     "rasterNotGeotiff": "«{{name}}» no devolvió un GeoTIFF. Es posible que el servidor haya enviado una página de error o de inicio de sesión en su lugar. Compruebe la URL e inténtelo de nuevo."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "Se requiere un valor",
+      "number": "Debe ser un número",
+      "range": "Debe estar entre {{min}} y {{max}}",
+      "rangeMin": "Debe ser al menos {{min}}",
+      "rangeMax": "Debe ser como máximo {{max}}",
+      "valueMap": "El valor no está en la lista permitida",
+      "constraint": "Restricción no satisfecha"
+    }
   }
 }

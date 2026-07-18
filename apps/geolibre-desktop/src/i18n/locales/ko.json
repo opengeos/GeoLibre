@@ -2576,6 +2576,8 @@
     "moveLeft": "왼쪽으로 이동",
     "moveRight": "오른쪽으로 이동",
     "deleteField": "필드 삭제",
+    "joinedColumnTitle": "조인 테이블에서 파생된 조인 열입니다. 대신 조인 테이블이나 조인 정의를 편집하세요.",
+    "virtualColumnTitle": "표현식으로 계산되는 가상 필드입니다. 대신 레이어의 스타일 패널에서 정의를 편집하세요.",
     "deleteFieldConfirm": "이 작업은 \"{{layer}}\"의 모든 피처에서 필드 \"{{field}}\"를 영구적으로 제거합니다. 이를 참조하는 스타일이나 라벨은 지워집니다. 이 작업은 되돌릴 수 없습니다.",
     "addFieldDescription": "\"{{layer}}\"의 모든 피처에 새 필드를 추가합니다.",
     "fieldName": "필드 이름",
@@ -2606,7 +2608,8 @@
     "invalidExpression": "잘못된 표현식입니다.",
     "calcCouldNotApply": "이 레이어에 계산을 적용할 수 없습니다.",
     "calcAppliedWithErrors": "적용했지만 {{evaluated}}개 피처 중 {{errors}}개에서 오류가 발생하여 null로 기록되었습니다.",
-    "exportFailed": "선택한 레이어를 내보낼 수 없습니다."
+    "exportFailed": "선택한 레이어를 내보낼 수 없습니다.",
+    "saveTitleFormErrors": "저장하기 전에 속성 폼 위반을 수정하세요"
   },
   "style": {
     "panelLabel": "레이어 스타일",
@@ -2641,6 +2644,49 @@
       "maxZoom": "최대 줌",
       "minZoomTooltip": "이 레이어가 나타나는 줌 레벨입니다. 숫자가 클수록 더 확대된 상태입니다.",
       "maxZoomTooltip": "이 레이어가 사라지는 줌 레벨입니다. 숫자가 클수록 더 확대된 상태입니다."
+    },
+    "joins": {
+      "heading": "조인",
+      "empty": "키 필드를 일치시켜 다른 레이어나 테이블의 열을 추가합니다. 조인된 열은 테이블이 바뀌면 갱신되며 프로젝트와 함께 저장됩니다.",
+      "addJoin": "조인 추가",
+      "joinLayer": "조인 레이어",
+      "selectLayer": "레이어 선택…",
+      "joinField": "조인 필드",
+      "targetField": "대상 필드",
+      "selectField": "필드 선택…",
+      "fields": "조인할 필드",
+      "fieldCount_other": "필드 {{count}}개",
+      "prefix": "필드 이름 접두사",
+      "prefixPlaceholder": "예: census_",
+      "add": "추가",
+      "cancel": "취소",
+      "remove": "조인 제거",
+      "enabledTitle": "이 조인 적용",
+      "missingLayer": "조인 레이어를 찾을 수 없음",
+      "noCandidates": "조인할 속성 테이블이 있는 다른 레이어가 없습니다",
+      "statsMatched": "{{total}}개 중 {{matched}}개 피처 일치",
+      "statsUnmatchedJoin_other": "일치하지 않은 테이블 행 {{count}}개"
+    },
+    "virtualFields": {
+      "heading": "가상 필드",
+      "empty": "데이터가 바뀔 때마다 다시 계산되는 표현식 기반 열을 추가합니다. 가상 필드는 프로젝트와 함께 저장되며 속성 테이블, 스타일, 라벨, 선택 등 필드가 쓰이는 모든 곳에 표시됩니다.",
+      "addField": "가상 필드 추가",
+      "name": "필드 이름",
+      "namePlaceholder": "예: density",
+      "nameTaken": "이 이름의 열이 이미 있습니다",
+      "nameConflict": "적용되지 않음: 이름이 기존 열과 충돌합니다",
+      "expression": "표현식",
+      "expressionPlaceholder": "[\"/\", [\"get\", \"pop\"], [\"get\", \"area_km2\"]]",
+      "expressionTarget": "가상 필드 표현식",
+      "openBuilder": "빌더 열기",
+      "invalidExpression": "잘못된 표현식",
+      "add": "추가",
+      "save": "저장",
+      "cancel": "취소",
+      "edit": "가상 필드 편집",
+      "remove": "가상 필드 제거",
+      "enabledTitle": "이 가상 필드 적용",
+      "evaluationErrors_other": "피처 {{count}}개의 평가에 실패했습니다(null 셀)"
     },
     "labels": {
       "heading": "라벨",
@@ -2683,7 +2729,23 @@
       "dedupeHint": "같은 좌표에 겹쳐진 점을 하나로 합칩니다. 로컬 점 레이어에서는 라벨 필드를 사용합니다.",
       "expression": "표현식(선택 사항)",
       "expressionHint": "MapLibre 표현식(JSON)입니다. 설정 시 필드보다 우선합니다.",
-      "expressionInvalid": "유효한 MapLibre 표현식이 아닙니다(JSON 배열이어야 함). 이 값은 무시됩니다."
+      "expressionInvalid": "유효한 MapLibre 표현식이 아닙니다(JSON 배열이어야 함). 이 값은 무시됩니다.",
+      "dataDefined": {
+        "heading": "데이터 정의 재정의",
+        "size": "크기",
+        "color": "색상",
+        "opacity": "불투명도",
+        "visibility": "표시 여부",
+        "priority": "우선순위",
+        "sizeTarget": "라벨 크기 표현식",
+        "colorTarget": "라벨 색상 표현식",
+        "opacityTarget": "라벨 불투명도 표현식",
+        "visibilityTarget": "라벨 표시 표현식",
+        "priorityTarget": "라벨 우선순위 표현식",
+        "notSet": "설정 안 됨",
+        "clear": "표현식 지우기",
+        "hint": "피처별 MapLibre 표현식입니다. 크기·불투명도·우선순위는 숫자(우선순위 값이 낮은 라벨이 먼저 배치됨), 색상은 색상, 표시 여부는 참/거짓을 반환합니다. 중복 라벨 병합이 활성화된 동안에는 무시됩니다. 불투명도 표현식은 라벨에 대해 레이어 불투명도를 대체합니다."
+      }
     },
     "elevation3d": {
       "mode": "3D(Z 값)",
@@ -2756,9 +2818,10 @@
       "filterInvalid": "잘못된 필터입니다. JSON 배열 표현식이어야 합니다. 수정할 때까지 이 규칙은 건너뜁니다.",
       "elseRuleColor": "Else 규칙 색상",
       "elseRuleColorPick": "화면에서 Else 규칙 색상 선택",
-      "elseRuleEnabled": "기타 규칙 활성화",
+      "elseRuleEnabled": "기타 규칙 활성화(끄면 어떤 규칙과도 일치하지 않는 피처가 숨겨집니다)",
       "elseAllOtherFeatures": "Else(나머지 모든 피처)",
       "applyHint": "적용을 클릭하여 규칙 기반 렌더링을 활성화하세요.",
+      "rulesApplyLive": "규칙 변경 사항은 지도에 즉시 적용됩니다. 별도의 적용 단계가 필요하지 않습니다.",
       "proportionalSize": "비례 크기",
       "sizeByValue": "값에 따른 크기",
       "sizeField": "크기 필드",
@@ -2831,7 +2894,9 @@
       "schemeFirstValues": "처음 값",
       "errorChooseAttribute": "이 스타일 모드에 사용할 속성을 선택하세요.",
       "errorGraduatedStops": "단계 구분 스타일에는 숫자 구분점이 두 개 이상 필요합니다.",
-      "errorCategorizedStops": "범주 구분 스타일에는 카테고리가 하나 이상 필요합니다."
+      "errorCategorizedStops": "범주 구분 스타일에는 카테고리가 하나 이상 필요합니다.",
+      "invertedFill": "반전 채우기",
+      "invertedFillHint": "피처 바깥쪽 채우기"
     },
     "selectLayerHint": "스타일을 편집할 레이어를 선택하세요.",
     "layerOrderDefault": "레이어 순서(기본값)",
@@ -2864,6 +2929,73 @@
       "notArray": "{{label}}은(는) JSON 배열 표현식이어야 합니다.",
       "notOperator": "{{label}}은(는) 연산자로 시작해야 합니다. 예: [\"==\", [\"get\", \"field\"], value].",
       "notJson": "{{label}}은(는) 유효한 JSON이 아닙니다: {{message}}"
+    },
+    "decorations": {
+      "heading": "선 장식",
+      "typeNone": "없음",
+      "typeArrow": "화살표",
+      "typeTriangle": "삼각형",
+      "typeCircle": "원",
+      "typeSquare": "사각형",
+      "color": "장식 색상",
+      "size": "기호 크기 (px)",
+      "spacing": "간격 (px)"
+    },
+    "generator": {
+      "heading": "지오메트리 생성기",
+      "type": "파생 지오메트리",
+      "typeNone": "없음",
+      "typeCentroid": "중심점",
+      "typeBoundingBox": "경계 상자",
+      "typeConvexHull": "볼록 껍질",
+      "typeBuffer": "버퍼",
+      "bufferDistance": "버퍼 거리 (m)",
+      "fillColor": "채우기 색상",
+      "strokeColor": "윤곽선 색상",
+      "strokeWidth": "윤곽선 너비 (px)",
+      "opacity": "채우기 불투명도",
+      "circleRadius": "점 반지름 (px)"
+    },
+    "attributeForm": {
+      "heading": "속성 폼",
+      "empty": "구성된 필드가 없습니다. 필드에 편집 위젯, 제약 조건 또는 표시 규칙을 지정하세요.",
+      "configureField": "필드 구성",
+      "field": "필드",
+      "selectField": "필드 선택…",
+      "widgetLabel": "편집 위젯",
+      "widget": {
+        "text": "텍스트",
+        "number": "숫자",
+        "range": "범위",
+        "checkbox": "체크박스",
+        "date": "날짜",
+        "valueMap": "값 맵"
+      },
+      "alias": "별칭",
+      "required": "필수",
+      "requiredTag": "필수",
+      "constraintTag": "제약",
+      "visibilityTag": "표시",
+      "valueMap": "값 맵 항목",
+      "valueMapPlaceholder": "residential=Residential\ncommercial=Commercial",
+      "valueMapHint": "한 줄에 한 항목: 값 또는 값=레이블.",
+      "min": "최소",
+      "max": "최대",
+      "step": "단계",
+      "constraintExpression": "제약 조건 표현식",
+      "constraintPlaceholder": "[\">\", [\"get\", \"population\"], 0]",
+      "constraintDescription": "제약 조건 설명",
+      "constraintDescriptionPlaceholder": "제약 조건이 충족되지 않을 때 표시됩니다",
+      "visibilityExpression": "표시 표현식",
+      "visibilityPlaceholder": "[\"==\", [\"get\", \"type\"], \"school\"]",
+      "invalidExpression": "잘못된 표현식",
+      "openBuilder": "표현식 빌더 열기",
+      "edit": "필드 구성 편집",
+      "remove": "필드 구성 제거",
+      "cancel": "취소",
+      "save": "저장",
+      "noFields": "레이어에 구성할 속성 필드가 없습니다.",
+      "minMaxInvalid": "최소값은 최대값보다 작거나 같아야 합니다."
     }
   },
   "layers": {
@@ -3083,5 +3215,16 @@
     "cogConvertFailed": "\"{{name}}\"을(를) Cloud-Optimized GeoTIFF로 변환할 수 없습니다. gdal_translate 또는 rio cogeo로 변환한 후 결과를 불러오세요.",
     "rasterDownloadFailed": "\"{{name}}\"을(를) 다운로드할 수 없습니다. 서버가 느리거나 응답하지 않거나 교차 출처 요청을 차단하고 있을 수 있으며, 또는 파일이 너무 커서 메모리에 담을 수 없을 수 있습니다. URL을 확인한 후 다시 시도하세요.",
     "rasterNotGeotiff": "\"{{name}}\"이(가) GeoTIFF를 반환하지 않았습니다. 서버가 대신 오류 또는 로그인 페이지를 보냈을 수 있습니다. URL을 확인한 후 다시 시도하세요."
+  },
+  "attributeForm": {
+    "error": {
+      "required": "값이 필요합니다",
+      "number": "숫자여야 합니다",
+      "range": "{{min}}에서 {{max}} 사이여야 합니다",
+      "rangeMin": "{{min}} 이상이어야 합니다",
+      "rangeMax": "{{max}} 이하여야 합니다",
+      "valueMap": "값이 허용 목록에 없습니다",
+      "constraint": "제약 조건이 충족되지 않았습니다"
+    }
   }
 }
