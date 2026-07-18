@@ -819,7 +819,8 @@ export function parseMapboxStyle(input: unknown): MapboxStyleImportResult {
  * switched off the exporter folds `["any", filter1, …]` (the rule visibility
  * filter) into each render layer's filter. When a render layer carries an
  * `["all", …]` filter with an `["any", …]` arm whose members are exactly the
- * recovered rules' filters, the style hides features matching no rule, which
+ * recovered rules' filters (as a multiset — duplicate-filter rules stay
+ * duplicated in both), the style hides features matching no rule, which
  * GeoLibre represents as a disabled else record. The exact-match requirement
  * keeps hand-written `any` filters that are unrelated to the rules from
  * spuriously disabling the else rule.
@@ -829,11 +830,12 @@ function detectHiddenElse(
   renderLayers: (RawStyleLayer | undefined)[],
 ): void {
   if (patch.vectorStyleMode !== "rule-based" || !patch.vectorRules) return;
-  const expected = new Set(
-    patch.vectorRules
-      .filter((rule) => !rule.isElse)
-      .map((rule) => rule.filter),
-  );
+  // Sorted arrays (not a Set) so two rules sharing one filter — same
+  // condition, different overrides — still compare equal member-for-member.
+  const expected = patch.vectorRules
+    .filter((rule) => !rule.isElse)
+    .map((rule) => rule.filter)
+    .sort();
   const filter = asArray(
     renderLayers.find((layer) => layer && Array.isArray(layer.filter))?.filter,
   );
@@ -843,9 +845,12 @@ function detectHiddenElse(
     .map(asArray)
     .find((arm) => arm !== null && arm[0] === "any");
   if (!anyArm) return;
-  const members = anyArm.slice(1).map((member) => JSON.stringify(member));
-  if (members.length !== expected.size) return;
-  if (!members.every((member) => expected.has(member))) return;
+  const members = anyArm
+    .slice(1)
+    .map((member) => JSON.stringify(member))
+    .sort();
+  if (members.length !== expected.length) return;
+  if (!members.every((member, index) => member === expected[index])) return;
   patch.vectorRules = patch.vectorRules.map((rule) =>
     rule.isElse ? { ...rule, enabled: false } : rule,
   );

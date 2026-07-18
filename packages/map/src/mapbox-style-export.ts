@@ -162,7 +162,12 @@ function labelTextField(
   return null;
 }
 
-/** The symbol (label) layer for a layer whose labels are enabled. */
+/**
+ * The symbol (label) layer for a layer whose labels are enabled. `ruleFilter`
+ * is the rule-based hide-unmatched filter (or null) — the live map filters
+ * labels too, so the exported label layer must not label features the render
+ * layers drop.
+ */
 function buildLabelLayer(
   layer: ExportableLayer,
   sourceKey: string,
@@ -170,6 +175,7 @@ function buildLabelLayer(
   visibility: "visible" | "none",
   pointOnly: boolean,
   warnings: string[],
+  ruleFilter: unknown[] | null,
 ): LayerSpecification | null {
   const style = layer.style;
   const labels = style.labels ?? DEFAULT_LAYER_STYLE.labels;
@@ -209,6 +215,9 @@ function buildLabelLayer(
     type: "symbol",
     source: sourceKey,
     ...range,
+    ...(ruleFilter
+      ? { filter: ruleFilter as unknown as ExpressionSpecification }
+      : {}),
     layout: {
       "text-field": textField,
       "text-font": DEFAULT_TEXT_FONT,
@@ -418,15 +427,9 @@ export function buildMapboxStyle(
           visibility,
           pointOnly,
           warnings,
+          ruleFilter,
         );
-  if (labelLayer) {
-    // Labels on a hide-unmatched rule layer are filtered live too, so the
-    // exported label layer must not label features the render layers drop.
-    if (ruleFilter) {
-      (labelLayer as { filter?: unknown }).filter = ruleFilter;
-    }
-    layers.push(labelLayer);
-  }
+  if (labelLayer) layers.push(labelLayer);
 
   // Text labels need a glyphs (font) endpoint, so reference one only when a
   // label layer is emitted. Treat a blank glyphsUrl as "not provided" so a

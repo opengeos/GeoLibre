@@ -203,6 +203,42 @@ function nativeLayerSupportsFilter(type: string): boolean {
 }
 
 /**
+ * The active per-feature filters GeoLibre applies on top of an external
+ * layer's own filters: the transient Time-Slider window and the rule-based
+ * hide-unmatched filter (see {@link ruleBasedVisibilityFilter}). Empty when
+ * neither applies.
+ */
+function externalFeatureFilterExtras(layer: GeoLibreLayer): unknown[] {
+  const extras: unknown[] = [];
+  const timeFilter = layer.timeFilter;
+  if (Array.isArray(timeFilter) && timeFilter.length > 0) {
+    extras.push(timeFilter);
+  }
+  const ruleFilter = ruleBasedVisibilityFilter(layer.style);
+  if (ruleFilter) extras.push(ruleFilter);
+  return extras;
+}
+
+/**
+ * Combine a base filter (an external layer's own filter, possibly null) with
+ * the active per-feature extras into one MapLibre filter. Returns the base
+ * unchanged (null stays null) when no extras apply.
+ */
+function combineExternalFilters(
+  base: maplibregl.FilterSpecification | null,
+  extras: unknown[],
+): maplibregl.FilterSpecification | null {
+  if (extras.length === 0) return base;
+  return (
+    base
+      ? ["all", base, ...extras]
+      : extras.length === 1
+        ? extras[0]
+        : ["all", ...extras]
+  ) as unknown as maplibregl.FilterSpecification;
+}
+
+/**
  * Apply (or clear) GeoLibre's per-feature filters — a Time-Slider window and
  * the rule-based hide-unmatched filter (see {@link ruleBasedVisibilityFilter})
  * — on an external-native vector layer that a control owns and paints itself
@@ -224,13 +260,7 @@ function applyExternalNativeFeatureFilters(
 ): void {
   if (!map.getLayer(nativeLayerId)) return;
   const states = nativeFilterStatesFor(map);
-  const extras: unknown[] = [];
-  const timeFilter = layer.timeFilter;
-  if (Array.isArray(timeFilter) && timeFilter.length > 0) {
-    extras.push(timeFilter);
-  }
-  const ruleFilter = ruleBasedVisibilityFilter(layer.style);
-  if (ruleFilter) extras.push(ruleFilter);
+  const extras = externalFeatureFilterExtras(layer);
 
   if (extras.length === 0) {
     // Nothing to narrow: restore the control's own filter (once) and stop
@@ -252,13 +282,7 @@ function applyExternalNativeFeatureFilters(
     state = { base, appliedKey: "" };
     states.set(nativeLayerId, state);
   }
-  const combined = (
-    state.base
-      ? ["all", state.base, ...extras]
-      : extras.length === 1
-        ? extras[0]
-        : ["all", ...extras]
-  ) as unknown as maplibregl.FilterSpecification;
+  const combined = combineExternalFilters(state.base, extras)!;
   // Compare against the last filter we applied (not `getFilter`, which MapLibre
   // may have normalized) so an unchanged filter does not re-push on every tick.
   const combinedKey = JSON.stringify(combined);
@@ -467,6 +491,20 @@ function syncExternalNativeLayer(
 
     for (const fillLayerSpec of nativeFillLayerSpecs) {
       const extrusionLayerId = externalExtrusionLayerId(fillLayerSpec.id);
+      // The synthetic extrusion layer must honor the same per-feature filters
+      // (Time Slider window, rule-based hide-unmatched) as the fill it
+      // replaces. The copied fill filter may still carry a previously pushed
+      // combined filter, so prefer the tracked base — the fill's own filter —
+      // and re-apply the current extras on top so they never compound or go
+      // stale.
+      const tracked = nativeFilterStatesFor(map).get(fillLayerSpec.id);
+      const baseFilter = tracked
+        ? tracked.base
+        : ((fillLayerSpec.filter as maplibregl.FilterSpecification) ?? null);
+      const filter = combineExternalFilters(
+        baseFilter,
+        externalFeatureFilterExtras(layer),
+      );
       ensureLayer(
         map,
         extrusionLayerId,
@@ -475,7 +513,7 @@ function syncExternalNativeLayer(
           type: "fill-extrusion",
           source: fillLayerSpec.source,
           "source-layer": fillLayerSpec["source-layer"],
-          filter: fillLayerSpec.filter,
+          filter: filter ?? undefined,
           ...intersectZoomRange(fillLayerSpec, layer.style),
           paint: fillExtrusionPaint(layer.style, layer.opacity),
           layout: { visibility: layer.visible ? "visible" : "none" },
