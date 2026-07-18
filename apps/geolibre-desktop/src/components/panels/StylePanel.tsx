@@ -26,6 +26,7 @@ import {
   removeTrailingJsonCommas,
   styleValue,
   useAppStore,
+  validateMapExpression,
 } from "@geolibre/core";
 import {
   Button,
@@ -3479,18 +3480,30 @@ export function StylePanel({
   );
 
   // One pass over the override fields for both the rows and the invalid
-  // banner, so each expression is parsed once per render. The `|| ""` guards
-  // against a hand-edited project file storing null for an expression field
-  // (the type says string, but the value comes from untrusted JSON); the
-  // invalid flag surfaces the renderer's silent fallback to the literal
+  // banner, so each expression is validated once per render. The `|| ""`
+  // guards against a hand-edited project file storing null for an expression
+  // field (the type says string, but the value comes from untrusted JSON);
+  // the invalid flag surfaces the renderer's silent fallback to the literal
   // control (the builder's Apply is disabled for invalid expressions, but a
-  // hand-edited file can still carry one).
+  // hand-edited file can still carry one). Validation runs through the style
+  // spec with the row's expected result type, mirroring the builder's own
+  // check, so a type mismatch (e.g. a string-producing size expression) is
+  // flagged too, not just malformed JSON.
   const labelOverrideStates = LABEL_OVERRIDE_PROPERTIES.map((property) => {
     const value = (labels[property.field] || "").trim();
     return {
       property,
       value,
-      invalid: value !== "" && !parseJsonExpression(value),
+      invalid:
+        value !== "" &&
+        !validateMapExpression(value, {
+          expectedType:
+            property.context === "filter"
+              ? "boolean"
+              : property.context === "color"
+                ? "color"
+                : "number",
+        }).ok,
     };
   });
   const labelControls = (
