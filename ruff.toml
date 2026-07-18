@@ -1,0 +1,53 @@
+# Ruff config for the GeoLibre monorepo's Python (python/ + backend/).
+# Scope is deliberately narrow: formatting + import sorting + the basic
+# pyflakes/pep8 error classes. Heavier rule sets (UP, B, SIM) are intentionally
+# left off to avoid a large churny cleanup across the existing codebase, mirroring
+# the same philosophy documented in eslint.config.mjs.
+
+line-length = 100
+# python/ requires >=3.11, backend/geolibre_server requires >=3.10; target the
+# lower bound so neither side gets modern-syntax rewrites it can't run on.
+target-version = "py310"
+
+extend-exclude = [
+  # Bundled web app baked into the Python wheel; generated, not hand-edited.
+  "python/src/geolibre/static",
+  # Staged into JupyterLite by scripts/build-jupyterlite.mjs; generated copies.
+  "apps/geolibre-desktop/jupyterlite",
+  "apps/geolibre-desktop/public/jupyterlite",
+]
+
+[lint]
+# F = Pyflakes (real bugs: unused imports/vars, undefined names).
+# I = isort (import ordering; the repo already groups stdlib/third-party/first-party).
+# W = pycodestyle whitespace warnings.
+# E = pycodestyle errors (E501 line-length kept; see [lint.pycodestyle] below).
+select = ["F", "I", "W", "E"]
+
+[lint.isort]
+# The codebase consistently uses a blank line between stdlib, third-party, and
+# first-party groups (see python/src/geolibre/geolibre.py, backend/.../vector.py).
+lines-after-imports = -1
+known-first-party = ["geolibre", "geolibre_server"]
+
+[lint.per-file-ignores]
+# These files embed long string literals that must NOT be reformatted:
+#   - whitebox.py: a Python script passed as a string to the Whitebox subprocess
+#     (one statement per line; breaking it would change runtime behavior).
+#   - test_map.py: inline GeoJSON FeatureCollection data literals.
+# The formatter already skips string contents; these ignores stop the linter's
+# E501 from flagging lines whose only "violation" is a long string.
+"backend/geolibre_server/geolibre_server/app/whitebox.py" = ["E501"]
+"python/tests/test_map.py" = ["E501"]
+
+[lint.pycodestyle]
+# Let the formatter own line wrapping; the linter should only flag genuinely
+# over-long lines beyond this hard limit.
+max-line-length = 100
+
+[format]
+# The repo uses double-quoted strings throughout (see basemaps.py, vector.py).
+quote-style = "double"
+# Magic trailing comma drives expansion of collection literals across lines,
+# matching the way the repo already formats long call signatures and dict literals.
+skip-magic-trailing-comma = false

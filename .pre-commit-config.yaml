@@ -1,4 +1,7 @@
 ci:
+  # `npm-build` and `eslint` need the full toolchain (node_modules + a build)
+  # so they run via the local npm scripts in dev, not in pre-commit.ci.
+  # The format/lint hooks below ARE run in CI (they are pure checks / auto-fix).
   skip: [npm-build, eslint]
 
 repos:
@@ -19,6 +22,52 @@ repos:
       - id: mixed-line-ending
         args: ["--fix=lf"]
       - id: trailing-whitespace
+
+  # Python formatting + linting via ruff. Implemented as local hooks (rather
+  # than the astral-sh/ruff-pre-commit repo) so pre-commit works offline / behind
+  # restricted networks: pre-commit installs the pinned ruff wheel itself
+  # (language: python + additional_dependencies), so contributors need no
+  # global ruff. Bump the pin in lockstep with .github/workflows/format.yml.
+  # ruff-format rewrites in place (a commit with bad style fails, re-add picks
+  # up the fix); `ruff` lints with --fix for the auto-fixable rules in ruff.toml
+  # (F/I/W/E). CI mirrors these with --write/--fix and commits the result.
+  - repo: local
+    hooks:
+      - id: ruff-format
+        name: ruff format
+        entry: ruff format --config ruff.toml
+        language: python
+        additional_dependencies: [ruff==0.15.22]
+        files: \.(py|ipynb)$
+        # Explicit so ruff also formats Jupyter notebooks (Python cells),
+        # not just .py files.
+        types_or: [python, pyi, jupyter]
+        pass_filenames: true
+      - id: ruff
+        name: ruff check
+        entry: ruff check --config ruff.toml --fix
+        language: python
+        additional_dependencies: [ruff==0.15.22]
+        files: \.(py|ipynb)$
+        types_or: [python, pyi, jupyter]
+        pass_filenames: true
+
+  # JS/TS/JSON/CSS/YAML/TOML formatting (oxfmt, the oxc project's formatter).
+  # All options AND ignore rules live in .oxfmtrc.json's `ignorePatterns`
+  # (oxfmt no longer needs a separate .prettierignore); .gitignore is also read.
+  - repo: local
+    hooks:
+      - id: oxfmt
+        name: oxfmt (JS/TS/JSON/CSS/YAML/TOML)
+        entry: oxfmt --write
+        language: node
+        # Pin in lockstep with the npm pin in .github/workflows/format.yml.
+        additional_dependencies: [oxfmt@0.59.0]
+        # ipynb is deliberately NOT here: ruff owns notebook Python cells, and
+        # oxfmt near them would fight the nbstripout hook below it.
+        # .oxfmtrc.json's ignorePatterns additionally excludes ipynb + lockfiles.
+        types_or: [ts, tsx, javascript, jsx, json, css, yaml, toml]
+        pass_filenames: true
 
   - repo: local
     hooks:

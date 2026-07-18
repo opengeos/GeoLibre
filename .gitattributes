@@ -1,0 +1,47 @@
+# Normalize all text files to LF on checkout and commit, regardless of the
+# contributor's platform. This is the single source of truth for line endings
+# and supersedes per-user core.autocrlf. After changing this file, run
+# `git add --renormalize .` once to migrate the index.
+* text=auto eol=lf
+
+# Binary files: never touch line endings (git's auto-detection is good, but be
+# explicit for formats that ship in this repo so a future blanket rule can't
+# corrupt them).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.svg  binary
+*.tif  binary
+*.tiff binary
+*.bmp  binary
+*.pdf  binary
+*.zip  binary
+*.gz   binary
+*.tar  binary
+*.tgz  binary
+*.7z   binary
+*.ttf  binary
+*.otf  binary
+*.woff binary
+*.woff2 binary
+*.eot  binary
+*.wasm binary
+*.dat  binary
+*.bin  binary
+*.parquet binary
+*.geoparquet binary
+*.geojson.gz binary
+*.snap binary
+*.deb  binary
+*.rpm  binary
+*.msi  binary
+*.AppImage binary
+*.dmg  binary
+*.exe  binary
+*.dll  binary
+*.so   binary
+*.dylib binary
+*.pak  binary

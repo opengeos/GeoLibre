@@ -139,11 +139,26 @@ uploads its report as an artifact on failure.
 
 ### Coding conventions
 
-- The pre-commit hooks enforce TypeScript compile errors (`npm run build`), LF
-  line endings (`mixed-line-ending --fix=lf`), and basic whitespace (the
-  end-of-file and trailing-whitespace fixers). There is no Prettier or ESLint
-  hook, so match the style of the surrounding code and fix any build errors the
-  hooks surface before committing.
+- Automated formatting runs on every commit via pre-commit hooks. CI
+  (`.github/workflows/format.yml`) runs the same formatters with `--write` /
+  `--fix` and pushes a `style: auto-format` commit back to the branch, so
+  anything the hooks missed gets fixed automatically on push and PR. Tooling is
+  split by language:
+  - **Python + Jupyter notebooks (`.py`, `.ipynb`)** — [ruff](https://docs.astral.sh/ruff/)
+    formats and lints (`ruff.toml`, line length 100, rules `F`/`I`/`W`/`E`).
+  - **JS/TS/JSON/CSS/YAML/TOML** — [oxfmt](https://github.com/oxc-project/oxc)
+    (npm, NAPI bindings) formats (`.oxfmtrc.json`, 2-space indent, double
+    quotes, semicolons, width 100).
+    Lockfiles and generated bundles are ignored via `.oxfmtrc.json` (`ignorePatterns`).
+  - **ESLint** enforces the React Hooks rules on TS/JS; a `npm run build`
+    typecheck runs too.
+- All text files are normalized to LF via `.gitattributes` (`* text=auto eol=lf`),
+  so line endings are consistent across platforms; `core.autocrlf` is overridden.
+- The remaining pre-commit hooks enforce LF line endings (`mixed-line-ending
+  --fix=lf`) and basic whitespace (end-of-file and trailing-whitespace fixers).
+  You rarely need to format by hand — commit once, let the hooks rewrite, then
+  `git add` the fixed files and commit again. Install the hooks after cloning
+  with `pre-commit install`.
 - Do not edit files in `node_modules`. If a third-party MapLibre control needs
   app-specific styling, add a scoped override in
   `apps/geolibre-desktop/src/index.css` limited to that control's class.
