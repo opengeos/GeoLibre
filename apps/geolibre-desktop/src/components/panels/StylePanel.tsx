@@ -2475,16 +2475,22 @@ export function StylePanel({
                   {!isGroup ? (
                     <>
                       <div className="grid grid-cols-3 gap-2">
-                        <RuleNumberInput
-                          label={t("style.symbology.ruleStrokeWidth")}
-                          value={rule.strokeWidth}
-                          min={0}
-                          step={0.5}
-                          placeholder={t("style.symbology.ruleInherit")}
-                          onChange={(strokeWidth) =>
-                            updateVectorRule(rule.id, { strokeWidth })
-                          }
-                        />
+                        {strokeWidthUnit !== "meters" ? (
+                          // Per-rule pixel widths do not apply in meters mode
+                          // (the meters width is a zoom interpolation MapLibre
+                          // cannot nest inside a per-rule case), so hide the
+                          // field rather than accept a silent no-op.
+                          <RuleNumberInput
+                            label={t("style.symbology.ruleStrokeWidth")}
+                            value={rule.strokeWidth}
+                            min={0}
+                            step={0.5}
+                            placeholder={t("style.symbology.ruleInherit")}
+                            onChange={(strokeWidth) =>
+                              updateVectorRule(rule.id, { strokeWidth })
+                            }
+                          />
+                        ) : null}
                         <RuleNumberInput
                           label={t("style.symbology.ruleFillOpacity")}
                           value={rule.fillOpacity}

@@ -463,4 +463,36 @@ describe("SLD round-trip of extended rule-based symbology (#1305)", () => {
     assert.ok(warnings.some((warning) => warning.includes("never visible")));
     assert.ok(!sld.includes("Deep zoom"));
   });
+
+  it("a disabled else rule still exports the fallback Other rule with layer colors", () => {
+    const rules: VectorRule[] = [
+      {
+        id: "a",
+        label: "A",
+        filter: '["all", ["==", ["get", "a"], 1], ["==", ["get", "b"], 2]]',
+        color: "#ff0000",
+        isElse: false,
+      },
+      {
+        id: "e",
+        label: "",
+        filter: "",
+        color: "#00ff00",
+        isElse: true,
+        enabled: false,
+      },
+    ];
+    // Matching the live map: unmatched features always draw with the layer
+    // fallback color, so the catch-all rule is exported (SLD has no disabled
+    // state) but with the layer fill rather than the disabled else's color.
+    const input = style({
+      vectorStyleMode: "rule-based",
+      vectorRules: rules,
+      fillColor: "#123456",
+    });
+    const { sld } = buildSld(layer(input), fc("polygon"));
+    assert.ok(sld.includes("<ElseFilter/>"));
+    assert.ok(!sld.includes("#00ff00"));
+    assert.ok(sld.includes("#123456"));
+  });
 });

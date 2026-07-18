@@ -399,8 +399,8 @@ export function vectorColorExpression(
 
 /**
  * A rule-based renderer rule resolved for rendering: the rule tree walked down
- * to a drawable leaf, with the ancestors' filters ANDed in, zoom ranges
- * intersected, and the dash pattern parsed. Only enabled leaves with a valid
+ * to a drawable leaf, with the ancestors' filters ANDed in and zoom ranges
+ * intersected. Only enabled leaves with a valid
  * color and filter appear; group rules (rules other rules name as
  * {@link VectorRule.parentId}) contribute constraints but are not themselves
  * emitted. Shared by the paint compilers, the legend, and the symbology

@@ -476,7 +476,7 @@ function graduatedRenderer(
 
 /**
  * One rule's symbol paint: the layer's base paint with the rule's per-rule
- * overrides (outline color/width, opacity, size, dash) folded in. A per-rule
+ * overrides (outline color/width, opacity, size) folded in. A per-rule
  * circle radius only overrides the marker size when the layer renders plain
  * circles (a shape marker's size is its own setting the rule cannot change).
  */
@@ -532,7 +532,7 @@ function ruleScaleAttributes(rule: VectorRule): string {
  * `parentId`) are written as QGIS's native rule tree; per-rule scale ranges
  * become `scalemindenom`/`scalemaxdenom`; a disabled rule keeps its subtree but
  * gets `checkstate="0"` (the QGIS rule checkbox); per-rule symbol overrides
- * (outline color/width, opacity, size, dash) are folded into each rule's
+ * (outline color/width, opacity, size) are folded into each rule's
  * symbol. The ELSE rule stays a top-level catch-all.
  */
 function ruleRenderer(

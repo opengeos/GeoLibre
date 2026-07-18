@@ -817,7 +817,7 @@ function classifyRenderRules(
 
   // Categorized/graduated can only represent rules whose symbology differs by
   // fill color alone with one shared scale window. Rules with differing
-  // stroke/opacity/size/dash or per-rule scale ranges must stay rule-based or
+  // stroke/opacity/size or per-rule scale ranges must stay rule-based or
   // those per-rule properties would be silently dropped.
   const firstPaint = renderRules[0].paint;
   const firstWindow = ruleZoomWindow(renderRules[0].node);

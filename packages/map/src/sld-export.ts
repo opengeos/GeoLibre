@@ -651,7 +651,7 @@ function graduatedRules(
  * nested rules are flattened (ancestor filters ANDed into each leaf), exactly
  * as the live map draws them; SLD has no rule tree of its own. Per-rule zoom
  * ranges intersect the layer window into per-rule scale denominators, and
- * per-rule symbol overrides (outline color/width, opacity, size, dash) are
+ * per-rule symbol overrides (outline color/width, opacity, size) are
  * folded into each rule's symbolizers.
  */
 function ruleBasedRules(

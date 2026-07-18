@@ -9,6 +9,9 @@ import {
 import { XMLParser } from "fast-xml-parser";
 import { OGC_SCALE_DENOMINATOR_AT_ZOOM_0 } from "./sld-export";
 
+const MIN_LAYER_ZOOM = DEFAULT_LAYER_STYLE.minZoom;
+const MAX_LAYER_ZOOM = DEFAULT_LAYER_STYLE.maxZoom;
+
 /** QGIS SimpleMarker `name` values that map back onto a GeoLibre marker shape. */
 const QGIS_NAME_TO_SHAPE: Record<string, MarkerShape> = {
   square: "square",
@@ -721,8 +724,8 @@ function zoomFromDenominator(
     Math.round(Math.log2(OGC_SCALE_DENOMINATOR_AT_ZOOM_0 / denominator) * 100) /
     100;
   // A bound at (or beyond) the zoom extremes is no constraint at all.
-  if (bound === "min") return zoom > 0 ? zoom : undefined;
-  return zoom < 24 ? zoom : undefined;
+  if (bound === "min") return zoom > MIN_LAYER_ZOOM ? zoom : undefined;
+  return zoom < MAX_LAYER_ZOOM ? zoom : undefined;
 }
 
 /** A per-rule numeric override: the rule symbol's value when it differs from
