@@ -9,8 +9,8 @@ authors:
     email: giswqs@gmail.com
     affiliation: "University of Tennessee, Knoxville, USA"
     orcid: "https://orcid.org/0000-0001-5437-4073"
-version: 2.1.0
-date-released: 2026-07-13
+version: 2.2.0
+date-released: 2026-07-18
 doi: 10.5281/zenodo.20785400
 repository-code: "https://github.com/opengeos/GeoLibre"
 url: "https://geolibre.app"
