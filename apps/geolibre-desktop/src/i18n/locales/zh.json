@@ -2835,7 +2835,7 @@
       "size": "大小 (px)",
       "minZoom": "最小缩放级别",
       "declutter": "隐藏重叠的图表",
-      "truncated": "仅为前 {{count}} 个要素绘制图表。",
+      "truncated": "仅为 {{count}} 个要素绘制图表，其余要素不显示。",
       "atlasFull": "有 {{count}} 个图表在此大小下无法容纳，已被隐藏。请减小图表大小。"
     },
     "symbology": {

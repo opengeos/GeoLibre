@@ -3140,7 +3140,7 @@
       "size": "Size (px)",
       "minZoom": "Minimum zoom",
       "declutter": "Hide overlapping diagrams",
-      "truncated": "Diagrams are drawn for the first {{count}} features only.",
+      "truncated": "Diagrams are drawn for only {{count}} features; the rest are not charted.",
       "atlasFull": "{{count}} diagrams do not fit at this size and are hidden. Reduce the diagram size."
     },
     "symbology": {

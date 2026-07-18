@@ -2720,7 +2720,7 @@
       "size": "Ukuran (px)",
       "minZoom": "Zoom minimum",
       "declutter": "Sembunyikan diagram yang tumpang tindih",
-      "truncated": "Diagram hanya digambar untuk {{count}} fitur pertama.",
+      "truncated": "Diagram hanya digambar untuk {{count}} fitur; sisanya tidak digambarkan.",
       "atlasFull": "{{count}} diagram tidak muat pada ukuran ini dan disembunyikan. Kecilkan ukuran diagram."
     },
     "symbology": {

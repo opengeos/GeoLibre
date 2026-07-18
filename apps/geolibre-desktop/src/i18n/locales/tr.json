@@ -2764,7 +2764,7 @@
       "size": "Boyut (px)",
       "minZoom": "En düşük yakınlaştırma",
       "declutter": "Çakışan diyagramları gizle",
-      "truncated": "Diyagramlar yalnızca ilk {{count}} obje için çizilir.",
+      "truncated": "Diyagramlar yalnızca {{count}} obje için çizilir; geri kalanı gösterilmez.",
       "atlasFull": "{{count}} diyagram bu boyuta sığmadığı için gizlendi. Diyagram boyutunu küçültün."
     },
     "symbology": {

@@ -2764,7 +2764,7 @@
       "size": "Größe (px)",
       "minZoom": "Minimaler Zoom",
       "declutter": "Überlappende Diagramme ausblenden",
-      "truncated": "Diagramme werden nur für die ersten {{count}} Features gezeichnet.",
+      "truncated": "Diagramme werden nur für {{count}} Features gezeichnet; die übrigen werden nicht dargestellt.",
       "atlasFull": "{{count}} Diagramme passen bei dieser Größe nicht und werden ausgeblendet. Verringern Sie die Diagrammgröße."
     },
     "symbology": {

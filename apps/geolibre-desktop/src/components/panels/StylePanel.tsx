@@ -1,6 +1,5 @@
 import {
   DEFAULT_LAYER_STYLE,
-  MAX_DIAGRAM_FEATURES,
   type DiagramField,
   type DiagramSizeMode,
   type DiagramType,
@@ -1279,15 +1278,24 @@ export function StylePanel({
   const diagramStyleSizeProperty = layer
     ? styleValue(layer.style, "diagramSizeProperty")
     : "";
-  const { diagramTruncated, diagramAtlasDropped } = useMemo(() => {
+  const { diagramTruncated, diagramDrawnCount, diagramAtlasDropped } =
+    useMemo(() => {
     if (!layer || !diagramGeojson || diagramStyleType === "none") {
-      return { diagramTruncated: false, diagramAtlasDropped: 0 };
+      return {
+        diagramTruncated: false,
+        diagramDrawnCount: 0,
+        diagramAtlasDropped: 0,
+      };
     }
     // One shared scan feeds both notices; countAtlasDroppedDiagrams reuses it
     // instead of rescanning the features.
     const diagramData = collectDiagramData(diagramGeojson, layer.style);
     return {
       diagramTruncated: diagramData.truncated,
+      // The notice reports the count actually charted: truncation can come
+      // from either the draw cap or the raw-scan cap, so the drawn count is
+      // the only number that is accurate in both cases.
+      diagramDrawnCount: diagramData.data.length,
       diagramAtlasDropped: countAtlasDroppedDiagrams(
         { geojson: diagramGeojson, style: layer.style },
         diagramData,
@@ -2739,7 +2747,7 @@ export function StylePanel({
           />
           {diagramTruncated && (
             <p className="text-xs text-muted-foreground">
-              {t("style.diagrams.truncated", { count: MAX_DIAGRAM_FEATURES })}
+              {t("style.diagrams.truncated", { count: diagramDrawnCount })}
             </p>
           )}
           {diagramAtlasDropped > 0 && (

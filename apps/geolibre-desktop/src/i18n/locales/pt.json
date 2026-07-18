@@ -2764,7 +2764,7 @@
       "size": "Tamanho (px)",
       "minZoom": "Zoom mínimo",
       "declutter": "Ocultar diagramas sobrepostos",
-      "truncated": "Os diagramas são desenhados apenas para as primeiras {{count}} feições.",
+      "truncated": "Os diagramas são desenhados apenas para {{count}} feições; as demais não são representadas.",
       "atlasFull": "{{count}} diagramas não cabem neste tamanho e estão ocultos. Reduza o tamanho do diagrama."
     },
     "symbology": {

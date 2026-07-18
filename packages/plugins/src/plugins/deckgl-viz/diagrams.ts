@@ -11,7 +11,6 @@ import {
 import type { Layer } from "@deck.gl/core";
 import type { FeatureCollection } from "geojson";
 import type { GeoLibreDeckGL } from "../../types";
-import { isDeckVizLayer } from "./store-layer";
 
 /**
  * Diagram symbology (per-feature pie/donut/bar charts) for ordinary vector
@@ -54,8 +53,9 @@ const STACKED_BAR_WIDTH_RATIO = 0.45;
 export function isDiagramLayer(layer: GeoLibreLayer): boolean {
   return (
     !!layer.geojson &&
+    // Deck-viz dataset layers have their own renderer (this also covers
+    // isDeckVizLayer, which requires this type).
     layer.type !== "deckgl-viz" &&
-    !isDeckVizLayer(layer) &&
     // Layers rendered by an external deck path (e.g. DuckDB custom layers)
     // don't get diagrams — the Style Panel hides the controls for them.
     layer.metadata.externalDeckLayer !== true &&

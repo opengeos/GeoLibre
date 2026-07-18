@@ -4,6 +4,7 @@ import type { Feature, FeatureCollection, Polygon } from "geojson";
 import {
   DEFAULT_LAYER_STYLE,
   MAX_DIAGRAM_FEATURES,
+  MAX_DIAGRAM_SCAN_FEATURES,
   MIN_DIAGRAM_SIZE,
   collectDiagramData,
   diagramAnchor,
@@ -251,6 +252,18 @@ describe("collectDiagramData", () => {
     );
     const data = collectDiagramData(collection(many), style());
     assert.equal(data.data.length, MAX_DIAGRAM_FEATURES);
+    assert.equal(data.truncated, true);
+  });
+
+  it("bounds the raw scan on sparse layers and reports it as truncation", () => {
+    // Only a handful of the features are drawable, so the drawn count stays
+    // far below the draw cap — the raw-scan cap must still stop the loop.
+    const sparse = Array.from(
+      { length: MAX_DIAGRAM_SCAN_FEATURES + 10 },
+      (_, i) => pointFeature(i < 3 ? { a: 1, b: 1 } : { a: 0, b: 0 }),
+    );
+    const data = collectDiagramData(collection(sparse), style());
+    assert.equal(data.data.length, 3);
     assert.equal(data.truncated, true);
   });
 });

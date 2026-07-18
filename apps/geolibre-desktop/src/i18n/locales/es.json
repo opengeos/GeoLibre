@@ -2764,7 +2764,7 @@
       "size": "Tamaño (px)",
       "minZoom": "Zoom mínimo",
       "declutter": "Ocultar diagramas superpuestos",
-      "truncated": "Los diagramas se dibujan solo para las primeras {{count}} entidades.",
+      "truncated": "Los diagramas se dibujan solo para {{count}} entidades; el resto no se representa.",
       "atlasFull": "{{count}} diagramas no caben con este tamaño y se ocultan. Reduce el tamaño del diagrama."
     },
     "symbology": {

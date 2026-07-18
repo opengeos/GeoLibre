@@ -2764,7 +2764,7 @@
       "size": "Grootte (px)",
       "minZoom": "Minimale zoom",
       "declutter": "Overlappende diagrammen verbergen",
-      "truncated": "Diagrammen worden alleen getekend voor de eerste {{count}} features.",
+      "truncated": "Diagrammen worden slechts voor {{count}} features getekend; de rest wordt niet weergegeven.",
       "atlasFull": "{{count}} diagrammen passen niet op dit formaat en zijn verborgen. Verklein het diagramformaat."
     },
     "symbology": {

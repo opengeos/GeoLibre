@@ -2764,7 +2764,7 @@
       "size": "Dimensione (px)",
       "minZoom": "Zoom minimo",
       "declutter": "Nascondi i diagrammi sovrapposti",
-      "truncated": "I diagrammi vengono disegnati solo per i primi {{count}} elementi.",
+      "truncated": "I diagrammi vengono disegnati solo per {{count}} elementi; gli altri non sono rappresentati.",
       "atlasFull": "{{count}} diagrammi non entrano con questa dimensione e sono nascosti. Riduci la dimensione dei diagrammi."
     },
     "symbology": {
