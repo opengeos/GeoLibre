@@ -126,6 +126,10 @@ function createMarkerElement(): { root: HTMLDivElement; arrow: HTMLDivElement } 
 
 /** Lazily (re-)register the overlay sources/layers; heals basemap switches. */
 function ensureGpsSources(map: maplibregl.Map): void {
+  // addSource/addLayer throw while a replacement style is still loading; skip
+  // and let the styledata subscription (or the next fix) register them once
+  // the style has settled.
+  if (!map.isStyleLoaded()) return;
   if (!map.getSource(ACCURACY_SOURCE)) {
     map.addSource(ACCURACY_SOURCE, { type: "geojson", data: EMPTY_FC });
   }
@@ -164,11 +168,16 @@ function setSourceData(
 }
 
 function removeGpsSources(map: maplibregl.Map): void {
-  for (const id of [`${ACCURACY_SOURCE}-fill`, `${TRACK_SOURCE}-line`]) {
-    if (map.getLayer(id)) map.removeLayer(id);
-  }
-  for (const id of [ACCURACY_SOURCE, TRACK_SOURCE]) {
-    if (map.getSource(id)) map.removeSource(id);
+  try {
+    for (const id of [`${ACCURACY_SOURCE}-fill`, `${TRACK_SOURCE}-line`]) {
+      if (map.getLayer(id)) map.removeLayer(id);
+    }
+    for (const id of [ACCURACY_SOURCE, TRACK_SOURCE]) {
+      if (map.getSource(id)) map.removeSource(id);
+    }
+  } catch {
+    // Mid-style-switch the overlays are already gone with the old style;
+    // there is nothing left to tear down.
   }
 }
 
@@ -217,9 +226,12 @@ export function GpsTrackingDialog({
   // First fix after starting zooms the map in; later fixes only pan.
   const zoomedRef = useRef(false);
 
-  useEffect(() => {
-    recordingRef.current = recording;
-  }, [recording]);
+  // Update the ref before the state so a fix arriving between a transition
+  // and the re-render is logged (or not) under the new recording state.
+  const changeRecording = useCallback((next: RecordingState) => {
+    recordingRef.current = next;
+    setRecording(next);
+  }, []);
   useEffect(() => {
     followRef.current = follow;
   }, [follow]);
@@ -380,8 +392,8 @@ export function GpsTrackingDialog({
     setGpsStatus(null);
     setLastFix(null);
     lastFixRef.current = null;
-    setRecording((r) => (r === "recording" ? "paused" : r));
-  }, [tracking, clearMapArtifacts, setGpsStatus]);
+    if (recordingRef.current === "recording") changeRecording("paused");
+  }, [tracking, clearMapArtifacts, setGpsStatus, changeRecording]);
 
   // Full teardown on unmount (the component normally stays mounted for the
   // whole session; this covers shell re-composition).
@@ -420,25 +432,25 @@ export function GpsTrackingDialog({
 
   const handleStartRecording = useCallback(() => {
     clearTrack();
-    setRecording("recording");
+    changeRecording("recording");
     setNotice(null);
     if (!tracking) handleStart();
-  }, [clearTrack, tracking, handleStart]);
+  }, [clearTrack, changeRecording, tracking, handleStart]);
 
   const handleDiscardTrack = useCallback(() => {
     clearTrack();
-    setRecording("off");
+    changeRecording("off");
     setNotice(null);
-  }, [clearTrack]);
+  }, [clearTrack, changeRecording]);
 
   const handleResumeRecording = useCallback(() => {
     // A pause/resume boundary starts a new segment, so the stretch travelled
     // while paused is never drawn or measured as if it had been walked.
     const segments = fixesRef.current;
     if (segments[segments.length - 1].length > 0) segments.push([]);
-    setRecording("recording");
+    changeRecording("recording");
     if (!tracking) handleStart();
-  }, [tracking, handleStart]);
+  }, [changeRecording, tracking, handleStart]);
 
   const trackName = useCallback(() => {
     const first = fixesRef.current.flat()[0];
@@ -457,9 +469,9 @@ export function GpsTrackingDialog({
     const id = addGeoJsonLayer(name, trackFeatureCollection(fixesRef.current));
     updateLayer(id, { metadata: { [GPS_TRACK_FLAG]: true } });
     clearTrack();
-    setRecording("off");
+    changeRecording("off");
     setNotice(t("gps.trackSaved", { name }));
-  }, [trackName, addGeoJsonLayer, updateLayer, clearTrack, t]);
+  }, [trackName, addGeoJsonLayer, updateLayer, clearTrack, changeRecording, t]);
 
   const handleExportTrack = useCallback(
     async (format: "gpx" | "geojson") => {
@@ -545,7 +557,7 @@ export function GpsTrackingDialog({
           stats={stats}
           capturedCount={capturedCount}
           onCapture={handleCapturePoint}
-          onPause={() => setRecording("paused")}
+          onPause={() => changeRecording("paused")}
           onResume={handleResumeRecording}
           onOpen={() => onOpenChange(true)}
         />
@@ -613,7 +625,7 @@ export function GpsTrackingDialog({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setRecording("paused")}
+                      onClick={() => changeRecording("paused")}
                     >
                       <Pause className="me-1 h-3.5 w-3.5" />
                       {t("gps.pause")}
@@ -848,12 +860,22 @@ function FloatingPanel({
           {t("gps.capturePoint")}
         </Button>
         {recording === "recording" && (
-          <Button size="sm" variant="outline" onClick={onPause}>
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={t("gps.pause")}
+            onClick={onPause}
+          >
             <Pause className="h-3.5 w-3.5" />
           </Button>
         )}
         {recording === "paused" && (
-          <Button size="sm" variant="outline" onClick={onResume}>
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={t("gps.resume")}
+            onClick={onResume}
+          >
             <Play className="h-3.5 w-3.5" />
           </Button>
         )}

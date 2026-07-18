@@ -116,6 +116,26 @@ describe("gps-tracking fix filtering", () => {
     assert.equal(shouldLogFix(prev, near, s), false);
     assert.equal(shouldLogFix(prev, far, s), true);
   });
+
+  it("requires every active filter to pass when combined (AND semantics)", () => {
+    const s = { ...DEFAULT_GPS_SETTINGS, minTimeS: 10, minDistanceM: 50 };
+    const prev = fix();
+    const farButSoon = fix({
+      lat: prev.lat + 0.001, // ~111 m
+      timestamp: prev.timestamp + 5_000,
+    });
+    const lateButNear = fix({
+      lat: prev.lat + 0.0001, // ~11 m
+      timestamp: prev.timestamp + 20_000,
+    });
+    const farAndLate = fix({
+      lat: prev.lat + 0.001,
+      timestamp: prev.timestamp + 20_000,
+    });
+    assert.equal(shouldLogFix(prev, farButSoon, s), false);
+    assert.equal(shouldLogFix(prev, lateButNear, s), false);
+    assert.equal(shouldLogFix(prev, farAndLate, s), true);
+  });
 });
 
 describe("gps-tracking track shaping", () => {
