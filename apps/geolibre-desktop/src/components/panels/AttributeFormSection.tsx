@@ -175,9 +175,21 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
     [draft, variables],
   );
 
+  // A min above max would make validateAttributeFormField reject every value
+  // with no hint that the configuration itself is broken, so refuse to save it.
+  const draftMin = draft ? numberOrUndefined(draft.min) : undefined;
+  const draftMax = draft ? numberOrUndefined(draft.max) : undefined;
+  const minMaxInvalid =
+    draft !== null &&
+    (draft.widget === "number" || draft.widget === "range") &&
+    draftMin !== undefined &&
+    draftMax !== undefined &&
+    draftMin > draftMax;
+
   const canSave =
     draft !== null &&
     draft.field !== "" &&
+    !minMaxInvalid &&
     constraintValidation?.ok !== false &&
     visibilityValidation?.ok !== false &&
     (draft.widget !== "valueMap" ||
@@ -457,6 +469,11 @@ export function AttributeFormSection({ layer }: AttributeFormSectionProps) {
                 </div>
               )}
             </div>
+          )}
+          {minMaxInvalid && (
+            <p className="text-xs text-destructive">
+              {t("style.attributeForm.minMaxInvalid")}
+            </p>
           )}
           {expressionRow(
             "constraint",

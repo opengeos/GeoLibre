@@ -3002,7 +3002,8 @@
       "remove": "Eliminar configuración del campo",
       "cancel": "Cancelar",
       "save": "Guardar",
-      "noFields": "La capa no tiene campos de atributos para configurar."
+      "noFields": "La capa no tiene campos de atributos para configurar.",
+      "minMaxInvalid": "El mínimo debe ser menor o igual que el máximo."
     }
   },
   "layers": {

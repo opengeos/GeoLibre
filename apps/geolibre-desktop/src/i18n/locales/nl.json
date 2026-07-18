@@ -3002,7 +3002,8 @@
       "remove": "Veldconfiguratie verwijderen",
       "cancel": "Annuleren",
       "save": "Opslaan",
-      "noFields": "De laag heeft geen attribuutvelden om te configureren."
+      "noFields": "De laag heeft geen attribuutvelden om te configureren.",
+      "minMaxInvalid": "Min moet kleiner dan of gelijk aan Max zijn."
     }
   },
   "layers": {

@@ -3002,7 +3002,8 @@
       "remove": "Supprimer la configuration du champ",
       "cancel": "Annuler",
       "save": "Enregistrer",
-      "noFields": "La couche n'a aucun champ d'attribut à configurer."
+      "noFields": "La couche n'a aucun champ d'attribut à configurer.",
+      "minMaxInvalid": "Le minimum doit être inférieur ou égal au maximum."
     }
   },
   "layers": {

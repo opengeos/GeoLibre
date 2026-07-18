@@ -135,6 +135,17 @@ export function coerceAttributeFormValue(
     if (normalized === "false") return false;
     return raw;
   }
+  // A value map whose entries are all numeric codes stores numbers, so an
+  // edited row keeps the same property type as untouched rows (strict-equality
+  // style/filter expressions would otherwise silently miss edited features).
+  if (
+    config.widget === "valueMap" &&
+    config.valueMap?.length &&
+    config.valueMap.every((entry) => Number.isFinite(Number(entry.value)))
+  ) {
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) return parsed;
+  }
   // text, date (ISO yyyy-mm-dd string), and valueMap store the string verbatim.
   return trimmed;
 }

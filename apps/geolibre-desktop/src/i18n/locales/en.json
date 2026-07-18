@@ -3627,7 +3627,8 @@
       "remove": "Remove field configuration",
       "cancel": "Cancel",
       "save": "Save",
-      "noFields": "The layer has no attribute fields to configure."
+      "noFields": "The layer has no attribute fields to configure.",
+      "minMaxInvalid": "Min must be less than or equal to Max."
     }
   },
   "layers": {

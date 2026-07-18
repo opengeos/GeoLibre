@@ -82,6 +82,23 @@ describe("widget value coercion", () => {
     assert.equal(coerceAttributeFormValue(config, ""), null);
   });
 
+  it("stores value-map selections as numbers when every entry is numeric", () => {
+    const numeric = fieldConfig({
+      field: "zone_code",
+      widget: "valueMap",
+      valueMap: [{ value: "1", label: "Residential" }, { value: "2" }],
+    });
+    // All-numeric codes keep the property numerically typed, so edited rows
+    // stay consistent with untouched rows.
+    assert.equal(coerceAttributeFormValue(numeric, "1"), 1);
+    const mixed = fieldConfig({
+      field: "zone",
+      widget: "valueMap",
+      valueMap: [{ value: "1" }, { value: "res" }],
+    });
+    assert.equal(coerceAttributeFormValue(mixed, "1"), "1");
+  });
+
   it("stores text and date strings trimmed, empty as null", () => {
     const config = fieldConfig({ widget: "text" });
     assert.equal(coerceAttributeFormValue(config, "  hi  "), "hi");

@@ -3071,7 +3071,8 @@
       "remove": "移除字段配置",
       "cancel": "取消",
       "save": "保存",
-      "noFields": "该图层没有可配置的属性字段。"
+      "noFields": "该图层没有可配置的属性字段。",
+      "minMaxInvalid": "最小值必须小于或等于最大值。"
     }
   },
   "layers": {

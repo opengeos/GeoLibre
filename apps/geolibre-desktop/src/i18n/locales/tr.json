@@ -3002,7 +3002,8 @@
       "remove": "Alan yapılandırmasını kaldır",
       "cancel": "İptal",
       "save": "Kaydet",
-      "noFields": "Katmanda yapılandırılacak öznitelik alanı yok."
+      "noFields": "Katmanda yapılandırılacak öznitelik alanı yok.",
+      "minMaxInvalid": "Min, Maks değerinden küçük veya ona eşit olmalıdır."
     }
   },
   "layers": {

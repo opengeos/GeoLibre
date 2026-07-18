@@ -224,13 +224,15 @@ export function FieldCollectionDialog({
   // The layer's Attribute Form designer config, narrowed to the collection
   // schema's own fields: a config for a field this form does not capture must
   // not block a save (its required/constraint rules have nothing to bind to).
-  const attributeForm: AttributeFormConfig | undefined = (() => {
+  // Memoized so handleSave's useCallback and CaptureStep's prop keep a stable
+  // identity across unrelated re-renders.
+  const attributeForm: AttributeFormConfig | undefined = useMemo(() => {
     const form = activeLayer?.attributeForm;
     if (!form || !schema) return undefined;
     const keys = new Set(schema.fields.map((field) => field.key));
     const fields = form.fields.filter((field) => keys.has(field.field));
     return fields.length > 0 ? { fields } : undefined;
-  })();
+  }, [activeLayer, schema]);
 
   const getMap = useCallback(
     () => mapControllerRef.current?.getMap() ?? null,
@@ -1083,6 +1085,15 @@ function CaptureStep({
   // Hidden behind a custom trigger button so the photo control shows one
   // localized label rather than the browser's native file-input text (#711).
   const photoInputRef = useRef<HTMLInputElement>(null);
+  // Candidate properties for visibility expressions, computed once per render
+  // instead of per field (visibility updates live as the user types).
+  const candidateProps = useMemo(
+    () =>
+      attributeForm
+        ? buildPropertiesWithForm(schema, values, attributeForm)
+        : null,
+    [schema, values, attributeForm],
+  );
 
   return (
     <div className="space-y-3">
@@ -1143,10 +1154,8 @@ function CaptureStep({
             // the current candidate values so it updates as the user types.
             if (
               config &&
-              !isAttributeFormFieldVisible(
-                config,
-                buildPropertiesWithForm(schema, values, attributeForm),
-              )
+              candidateProps &&
+              !isAttributeFormFieldVisible(config, candidateProps)
             ) {
               return null;
             }

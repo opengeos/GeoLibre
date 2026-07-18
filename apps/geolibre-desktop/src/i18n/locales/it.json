@@ -3002,7 +3002,8 @@
       "remove": "Rimuovi configurazione del campo",
       "cancel": "Annulla",
       "save": "Salva",
-      "noFields": "Il layer non ha campi attributo da configurare."
+      "noFields": "Il layer non ha campi attributo da configurare.",
+      "minMaxInvalid": "Il minimo deve essere minore o uguale al massimo."
     }
   },
   "layers": {

@@ -3002,7 +3002,8 @@
       "remove": "Feldkonfiguration entfernen",
       "cancel": "Abbrechen",
       "save": "Speichern",
-      "noFields": "Die Ebene hat keine Attributfelder zum Konfigurieren."
+      "noFields": "Die Ebene hat keine Attributfelder zum Konfigurieren.",
+      "minMaxInvalid": "Min muss kleiner oder gleich Max sein."
     }
   },
   "layers": {

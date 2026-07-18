@@ -2956,7 +2956,8 @@
       "remove": "Hapus konfigurasi bidang",
       "cancel": "Batal",
       "save": "Simpan",
-      "noFields": "Lapisan tidak memiliki bidang atribut untuk dikonfigurasi."
+      "noFields": "Lapisan tidak memiliki bidang atribut untuk dikonfigurasi.",
+      "minMaxInvalid": "Min harus kurang dari atau sama dengan Maks."
     }
   },
   "layers": {
