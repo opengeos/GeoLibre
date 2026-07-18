@@ -17,6 +17,7 @@ import {
   type LayerStyle,
   type VectorRule,
 } from "@geolibre/core";
+import { markerIconSizeValue } from "../packages/map/src/markers";
 
 function style(patch: Partial<LayerStyle> = {}): LayerStyle {
   return { ...DEFAULT_LAYER_STYLE, ...patch };
@@ -239,6 +240,128 @@ describe("lineWidthValue proportional sizing", () => {
 
   it("keeps the constant pixel width when proportional is off", () => {
     assert.equal(lineWidthValue(style({ strokeWidth: 3 })), 3);
+  });
+});
+
+describe("markerIconSizeValue proportional sizing", () => {
+  it("returns 1 when proportional sizing is disabled", () => {
+    assert.equal(markerIconSizeValue(style({ markerEnabled: true })), 1);
+  });
+
+  it("scales the baked sprite so the icon width matches the circle diameter", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        markerSize: 18,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 0,
+        proportionalSizeMaxValue: 100,
+        proportionalSizeMinRadius: 4,
+        proportionalSizeMaxRadius: 24,
+      }),
+    );
+    // The sprite bakes at the largest proportional diameter (48 px, above the
+    // 18 px markerSize), so outputs are 2 * radius / 48: the max value maps to
+    // exactly 1 (no upscaling) and the min value scales down.
+    assert.deepEqual(result, [
+      "interpolate",
+      ["linear"],
+      ["to-number", ["get", "pop"], 0],
+      0,
+      8 / 48,
+      100,
+      1,
+    ]);
+  });
+
+  it("clamps the grown bake at the canvas-safety maximum (96 px)", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        markerSize: 18,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 0,
+        proportionalSizeMaxValue: 100,
+        proportionalSizeMinRadius: 4,
+        proportionalSizeMaxRadius: 100,
+      }),
+    );
+    // 2 * 100 = 200 px diameter clamps to a 96 px bake, so the max output is a
+    // mild ~2x upscale instead of ~11x on the raw 18 px sprite.
+    assert.deepEqual(result, [
+      "interpolate",
+      ["linear"],
+      ["to-number", ["get", "pop"], 0],
+      0,
+      8 / 96,
+      100,
+      200 / 96,
+    ]);
+  });
+
+  it("returns 1 when the value range is degenerate", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 50,
+        proportionalSizeMaxValue: 50,
+      }),
+    );
+    assert.equal(result, 1);
+  });
+
+  it("returns 1 when no field is chosen", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "  ",
+      }),
+    );
+    assert.equal(result, 1);
+  });
+
+  it("returns 1 when a radius output is non-finite", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 0,
+        proportionalSizeMaxValue: 100,
+        proportionalSizeMinRadius: Number.NaN,
+        proportionalSizeMaxRadius: 24,
+      }),
+    );
+    assert.equal(result, 1);
+  });
+
+  it("clamps negative radii to zero instead of emitting a negative icon-size", () => {
+    const result = markerIconSizeValue(
+      style({
+        markerEnabled: true,
+        markerSize: 20,
+        proportionalSizeEnabled: true,
+        proportionalSizeProperty: "pop",
+        proportionalSizeMinValue: 0,
+        proportionalSizeMaxValue: 100,
+        proportionalSizeMinRadius: -5,
+        proportionalSizeMaxRadius: 10,
+      }),
+    );
+    assert.deepEqual(result, [
+      "interpolate",
+      ["linear"],
+      ["to-number", ["get", "pop"], 0],
+      0,
+      0,
+      100,
+      1,
+    ]);
   });
 });
 
